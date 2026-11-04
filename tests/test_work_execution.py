@@ -30,8 +30,6 @@ from automation.task import (
     NoVerification,
     Question,
     RequestSource,
-    RoutineSource,
-    Source,
     TextAnswer,
     Until,
     Waiting,
@@ -44,7 +42,7 @@ from tests.test_work_actions import claimed
 from tests.test_workspace import live_tree
 
 
-def request(store: TaskStore, identity: str, prompt: str, source: Source | None = None) -> Claim:
+def request(store: TaskStore, identity: str, prompt: str, source: RequestSource | None = None) -> Claim:
     store.submit(identity, "Requested work", prompt, source or RequestSource("chat"), at=time.time())
     claim = store.claim("worker", identity + "-run", at=time.time())
     assert claim is not None
@@ -161,19 +159,15 @@ def test_sdk_history_and_source_drafts_are_scoped_to_the_conversation(tmp_path: 
         assert "ORCHID-471" in endpoint.received[-1].body.decode("utf-8")
         assert adapter.profiles.run(second).conversation.workspace.read("draft.py") == "DRAFT = 'saved for this conversation'\n"
         assert store.finish(second.run, done, at=time.time()) is not None
-        for identity, origin in (
-            ("routine", RoutineSource("meeting-notes", 1, "meeting-one")),
-            ("new-chat", RequestSource("different-chat")),
-        ):
-            other = request(store, identity, "Inspect a separate project.", origin)
-            endpoint.replies = [says("Separate project inspected.")]
-            done = adapter.run_work(other, store, FakeWindow(), threading.Event())
-            assert isinstance(done, Completed)
-            assert "ORCHID-471" not in endpoint.received[-1].body.decode("utf-8")
-            separate = adapter.profiles.run(other).conversation.workspace
-            separate.ensure()
-            assert "draft.py" not in separate.files()
-            assert store.finish(other.run, done, at=time.time()) is not None
+        other = request(store, "new-chat", "Inspect a separate project.", RequestSource("different-chat"))
+        endpoint.replies = [says("Separate project inspected.")]
+        done = adapter.run_work(other, store, FakeWindow(), threading.Event())
+        assert isinstance(done, Completed)
+        assert "ORCHID-471" not in endpoint.received[-1].body.decode("utf-8")
+        separate = adapter.profiles.run(other).conversation.workspace
+        separate.ensure()
+        assert "draft.py" not in separate.files()
+        assert store.finish(other.run, done, at=time.time()) is not None
         later = request(store, "after-restart", "Reopen the draft.")
         restarted = execution(settings, source, errors).profiles.run(later).conversation.workspace
         restarted.ensure()

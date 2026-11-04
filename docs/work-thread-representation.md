@@ -32,8 +32,7 @@ are unresolved. Paused questions retain their context; bursts wait and repeat
 observations do not create duplicate tasks. Browser collection samples currently
 rendered, signed-in Teams, Outlook and Kanban pages at fifteen-second intervals
 between reviews; this is not a mailbox subscription or a guarantee of complete
-application coverage. Completed meeting transcripts wake intake immediately,
-independently of the optional meeting-notes routine.
+application coverage. Completed meeting transcripts wake intake immediately.
 
 A work thread is a container for an ongoing outcome or responsibility. It supplies
 its name, goal, current state and connections; classification does not create a

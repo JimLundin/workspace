@@ -43,8 +43,7 @@ lazy from assistant.lifecycle import Timings
 lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.meeting_browser import TeamsCalls
 lazy from assistant.meeting_detection import PREFERENCE, AutomaticStatus
-lazy from assistant.meeting_events import TranscriptEvents
-lazy from assistant.meeting_store import MeetingArchive
+lazy from assistant.meeting_store import MeetingArchive, MeetingStore
 lazy from assistant.meetings import Meetings
 lazy from assistant.notification_sources import NOTIFICATION_STATE
 lazy from assistant.personal_work_model import Correlator
@@ -78,7 +77,6 @@ lazy from automation.personal_work import (
     UnlinkWork,
     WorkThread,
 )
-lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import Control, RequestKind
 lazy from automation.work_folder import BROWSER_PROFILE, WORK
@@ -233,11 +231,9 @@ class AssistantApp:
             return self.activity.snapshot()
 
         tasks = TaskStore(WORK.journal)
-        routines = RoutineStore(tasks.path)
         saved_context = ContextStore(tasks.path)
         self.agent = WorkAgent(
             tasks,
-            routines,
             saved_context,
             BridgeClient(WORK.root),
             lambda runner: self.ui.agent(
@@ -280,15 +276,12 @@ class AssistantApp:
         self.timings.mark("communications and desktop owners")
         archive = MeetingArchive(DIRECTORY / "meetings")
         self.ui.configure_meetings(archive, self.open_meeting_file)
-        events = TranscriptEvents(archive, routines, on_error=log, on_change=self.refresh_work, on_meeting=self.personal.observe_meeting)
         self.meetings = Meetings(
             self.settings,
             lambda source: recording.MeetingAudio(computer_audio=source == "both"),
             archive=archive,
             on_update=self.recording_changed,
-            on_recovery=events.recover,
-            on_complete=events.completed,
-            on_meeting=events.observe,
+            on_meeting=self.observe_meeting,
         )
         self.automatic_meetings = AutomaticMeetings(
             self.meetings,
@@ -324,6 +317,13 @@ class AssistantApp:
             self.tray.notify("Workspace", f"The AI tools need {', '.join(missing.names)}; the layout works without them.", warning=True)
 
     # ---- running -----------------------------------------------------------------------
+
+    def observe_meeting(self, store: MeetingStore) -> None:
+        """Canvas intake failures must not fail a recording or its transcription."""
+        try:
+            self.personal.observe_meeting(store)
+        except Exception as error:
+            log(f"Meeting canvas intake failed: {error}. The journal is saved; startup will retry intake.")
 
     def create_personal(self, tasks: TaskStore) -> PersonalWork:
         self.ui.configure_work(self.work_command, on_problem=self.problem)
@@ -523,9 +523,6 @@ class AssistantApp:
             "Meeting detection is unavailable. Check the browser connection or choose Record a meeting manually.",
             warning=True,
         )
-
-    def refresh_work(self) -> None:
-        self.agent.refresh()
 
     def review_feed(self, batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
         research = Research(self.settings, self.triage.research_context, self.triage.research_conversation, stop=self.triage.closed)

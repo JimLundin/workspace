@@ -25,7 +25,6 @@ from automation.task import (
     Interrupted,
     Question,
     RequestSource,
-    RoutineSource,
     Running,
     RunRef,
     TaskStatus,
@@ -99,25 +98,6 @@ def test_batch_reads_validate_all_identifiers_and_the_supplied_batch_bound(tmp_p
     for task_ids in (("task", ""), ("task", "bad\0identity"), ("task", "x" * 129), ("task",) * 1_001):
         with TestCase().assertRaises(ValueError):
             store.get_many(task_ids)
-
-
-def test_routine_occurrence_retry_deduplicates_without_changing_accepted_work(tmp_path: Path) -> None:
-    path = tmp_path / "work.sqlite3"
-    origin = RoutineSource("meeting-notes", 3, "transcript-42")
-    first = TaskStore(path)
-    task = first.submit("first-delivery", "Meeting notes", "Extract the agreed actions.", origin, at=10)
-    retry = TaskStore(path).submit("outbox-retry", "A changed title", "Do something different.", origin, at=20)
-    assert retry.id == task.id and retry.prompt == "Extract the agreed actions."
-    assert len(first.list_tasks()) == 1
-    assert first.active_for_routine("meeting-notes") == retry
-    first.control(task.id, Control.PAUSE, at=21)
-    assert first.active_for_routine("meeting-notes") is not None
-    first.control(task.id, Control.CANCEL, at=22)
-    assert first.active_for_routine("meeting-notes") is None
-    changed = first.submit("changed-rule", "New notes", "Include project references.", RoutineSource("meeting-notes", 4, "transcript-42"), at=30)
-    next_event = first.submit("next-event", "Next notes", "Extract the agreed actions.", RoutineSource("meeting-notes", 3, "transcript-43"), at=31)
-    assert {changed.id, next_event.id, task.id} == {item.id for item in first.list_tasks()}
-    assert first.submit("first-delivery", "Original retry", "Ignore this retry body.", origin, at=50).state is TaskStatus.CANCELLED
 
 
 def test_claim_is_atomic_across_independent_connections_and_respects_priority(tmp_path: Path) -> None:
@@ -472,25 +452,26 @@ def test_conversation_stop_reaches_hidden_tasks_and_preserves_other_sources(tmp_
     store = TaskStore(tmp_path / "work.sqlite3")
     seed_tasks(store, tuple(f"selected-{index:03d}" for index in range(105)), RequestSource("selected-chat"), at=0)
     seed_tasks(store, tuple(f"other-{index:04d}" for index in range(1_005)), RequestSource("other-chat"), at=1_000)
-    routine = store.submit("routine", "Background work", "Keep the standing instruction.", RoutineSource("routine", 0, "event"), at=3_000)
+    background = store.submit("background", "Background work", "Keep the background work.", RequestSource("background-chat"), at=3_000)
     assert not any(task.id.startswith("selected-") for task in store.list_tasks(limit=1_000))
     assert store.control_conversation("selected-chat", Control.CANCEL, at=4_000) == 105
     assert store.control_conversation("selected-chat", Control.CANCEL, at=4_001) == 0
     for index in range(105):
         task = store.get(f"selected-{index:03d}")
         assert task is not None and task.state is TaskStatus.CANCELLED
-    assert store.active_for_routine("routine") == routine
+    assert store.get("background") == background
     following = store.claim("worker", "other-run", at=4_002)
     assert following is not None and following.task.source == RequestSource("other-chat")
 
 
 def test_failed_work_can_be_explicitly_retried_but_completion_is_terminal(tmp_path: Path) -> None:
     store = TaskStore(tmp_path / "work.sqlite3")
-    store.submit("task", "Task", "Fetch the project document.", RoutineSource("routine", 1, "event"), at=1)
+    store.submit("task", "Task", "Fetch the project document.", RequestSource("chat"), at=1)
     run = store.claim("worker", "run", at=2)
     assert run is not None
     store.finish(run.run, Failed("The document could not be read."), at=3)
-    assert store.active_for_routine("routine") is None
+    failed = store.get("task")
+    assert failed is not None and isinstance(failed.state, Failed)
     assert store.claim("worker", "automatic-retry", at=4) is None
     assert store.control("task", Control.RESUME, at=5) is not None
     retry = store.claim("worker", "retry", at=6)

@@ -28,10 +28,8 @@ from automation.task import (
     Reply,
     RequestSource,
     Response,
-    RoutineSource,
     Running,
     RunRef,
-    Source,
     State,
     Task,
     TaskStatus,
@@ -75,9 +73,6 @@ _TASK_COLUMNS: tuple[str, ...] = (
     "checkpoint",
     "goal_revision",
     "phase",
-    "routine_id",
-    "routine_revision",
-    "occurrence_id",
     "wake_at",
 )
 _TASK_SELECT = ", ".join(_TASK_COLUMNS)
@@ -88,12 +83,12 @@ _ACTION_COLUMNS = "id, task_id, run_id, specification, started_at, updated_at, o
 # Records are stored in their domain shapes as strict JSON: a variant record's
 # `kind` and a payload-free variant's value identify it, and unknown fields are refused.
 _STORED = ConfigDict(strict=True, extra="forbid")
-_SOURCE = TypeAdapter(Source, config=_STORED)
 _STATE = TypeAdapter(State, config=_STORED)
 _WAIT = TypeAdapter(WaitReason, config=_STORED)
 _REPLY = TypeAdapter(Reply, config=_STORED)
 _CHECKPOINT = TypeAdapter(Checkpoint | None, config=_STORED)
-# A dataclass adapter takes no config; the optional union carries it, and an absent specification is refused.
+# A dataclass adapter takes no config; the optional union carries it, and an absent record is refused.
+_SOURCE = TypeAdapter(RequestSource | None, config=_STORED)
 _SPECIFICATION = TypeAdapter(ActionSpec | None, config=_STORED)
 _OUTCOME = TypeAdapter(ActionOutcome, config=_STORED)
 
@@ -106,6 +101,14 @@ def _decoded[T](adapter: TypeAdapter[T], value: object) -> T:
     return adapter.validate_json(text(value, "stored record", maximum=512_000))
 
 
+def _source(value: object) -> RequestSource:
+    match _decoded(_SOURCE, value):
+        case RequestSource() as source:
+            return source
+        case None:
+            raise ValueError("Invalid stored task source.")
+
+
 def _specification(value: object) -> ActionSpec:
     match _decoded(_SPECIFICATION, value):
         case ActionSpec() as specification:
@@ -115,7 +118,6 @@ def _specification(value: object) -> ActionSpec:
 
 
 def _task_values(task: Task) -> tuple[object, ...]:
-    routine = task.source if isinstance(task.source, RoutineSource) else None
     wake = task.state.reason.at if isinstance(task.state, Waiting) and isinstance(task.state.reason, Until) else None
     return (
         task.id,
@@ -130,9 +132,6 @@ def _task_values(task: Task) -> tuple[object, ...]:
         _stored(_CHECKPOINT, task.checkpoint) if task.checkpoint is not None else None,
         task.goal_revision,
         phase(task.state),
-        routine.routine_id if routine is not None else None,
-        routine.revision if routine is not None else None,
-        routine.occurrence_id if routine is not None else None,
         wake,
     )
 
@@ -144,7 +143,7 @@ def _task(row: tuple[object, ...]) -> Task:
         identifier(row[0], "task identity"),
         text(row[1], "task title", maximum=240),
         text(row[2], "task prompt"),
-        _decoded(_SOURCE, row[3]),
+        _source(row[3]),
         integer(row[4], "task priority", minimum=-10_000, maximum=10_000),
         timestamp(row[5]),
         timestamp(row[6]),
@@ -182,8 +181,7 @@ _SCHEMA = journal.Schema(
         "CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, prompt TEXT NOT NULL, source TEXT NOT NULL, "
         "priority INTEGER NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL, revision INTEGER NOT NULL, "
         "state TEXT NOT NULL, checkpoint TEXT, goal_revision INTEGER NOT NULL, phase TEXT NOT NULL, "
-        "routine_id TEXT, routine_revision INTEGER, occurrence_id TEXT, wake_at REAL)",
-        "CREATE UNIQUE INDEX routine_occurrence ON tasks(routine_id,routine_revision,occurrence_id) WHERE routine_id IS NOT NULL",
+        "wake_at REAL)",
         "CREATE INDEX runnable_work ON tasks(phase,priority DESC,created_at,id)",
         "CREATE TABLE runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), owner TEXT NOT NULL, "
         "started_at REAL NOT NULL, previous_state TEXT NOT NULL, ended_at REAL, disposition TEXT, UNIQUE(id,task_id))",
@@ -258,7 +256,7 @@ class TaskStore:
         if isinstance(previous.state, Waiting) and isinstance(previous.state.reason, (Question, Approval)) and task.state != previous.state:
             connection.execute("UPDATE requests SET closed_at=? WHERE task_id=? AND id=?", (task.updated_at, task.id, previous.state.reason.id))
 
-    def submit(self, id: str, title: str, prompt: str, source: Source, *, at: float, priority: int = 0) -> Task:  # noqa: PLR0913 - task fields plus submission time
+    def submit(self, id: str, title: str, prompt: str, source: RequestSource, *, at: float, priority: int = 0) -> Task:  # noqa: PLR0913 - task fields plus submission time
         task = Task(id, title, prompt, source, priority, at, at, 0, TaskStatus.READY, None)
         with journal.writing(self.path) as connection:
             existing = self._get(connection, id)
@@ -266,13 +264,6 @@ class TaskStore:
                 if existing.source != source:
                     raise ValueError("That task identity already belongs to a different submission.")
                 return existing
-            if isinstance(source, RoutineSource):
-                row = connection.execute(
-                    f"SELECT {_TASK_SELECT} FROM tasks WHERE routine_id=? AND routine_revision=? AND occurrence_id=?",
-                    (source.routine_id, source.revision, source.occurrence_id),
-                ).fetchone()
-                if row is not None:
-                    return self._read_task(connection, row)
             marks = ",".join("?" for _ in _TASK_COLUMNS)
             connection.execute(f"INSERT INTO tasks ({_TASK_SELECT}) VALUES ({marks})", _task_values(task))
             connection.execute("INSERT INTO goals(task_id,revision,prompt,at) VALUES (?,?,?,?)", (task.id, 0, task.prompt, at))
@@ -305,16 +296,6 @@ class TaskStore:
         with journal.reading(self.path) as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks ORDER BY updated_at DESC,id LIMIT ?", (limit,)).fetchall()
             return tuple(self._read_task(connection, row) for row in rows)
-
-    def active_for_routine(self, routine_id: str) -> Task | None:
-        identifier(routine_id, "routine identity")
-        with journal.reading(self.path) as connection:
-            row = connection.execute(
-                f"SELECT {_TASK_SELECT} FROM tasks WHERE routine_id=? AND phase NOT IN ('completed','failed','cancelled') "
-                "ORDER BY created_at,id LIMIT 1",
-                (routine_id,),
-            ).fetchone()
-            return self._read_task(connection, row) if row is not None else None
 
     def claim(self, owner: str, run_id: str, *, at: float) -> Claim | None:
         identifier(owner, "worker owner")
@@ -431,7 +412,7 @@ class TaskStore:
                     return count
                 for row in rows:
                     task = self._read_task(connection, row)
-                    if not isinstance(task.source, RequestSource) or task.source.conversation_id != conversation_id:
+                    if task.source.conversation_id != conversation_id:
                         raise ValueError("The conversation index disagrees with the task source.")
                     result = controlled(task, command, at=at)
                     if result is not None:

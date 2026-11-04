@@ -10,9 +10,6 @@ from assistant.work_commands import (
     AddProjectNote,
     AnswerTask,
     ControlTask,
-    CreateRoutine,
-    DisableRoutine,
-    EnableRoutine,
     FollowUp,
     Redirect,
     RefreshApproval,
@@ -20,7 +17,6 @@ from assistant.work_commands import (
     Submit,
     UpdatePreference,
     UpdateProjectNote,
-    UpdateRoutine,
     WorkCommand,
 )
 from assistant.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapshot
@@ -35,7 +31,6 @@ from automation.ipc import (
     Resync,
     ReviewEvent,
 )
-from automation.routines import RoutineStore
 from automation.store import TaskStore
 from automation.task import (
     Approval,
@@ -45,7 +40,6 @@ from automation.task import (
     Profile,
     Question,
     RequestSource,
-    RoutineSource,
     Running,
     Task,
     Waiting,
@@ -95,20 +89,13 @@ class UnconfirmedSubmission:
 
 
 type TaskCommand = Submit | FollowUp | Redirect | ControlTask | AnswerTask | RefreshApproval
-type RoutineCommand = CreateRoutine | UpdateRoutine | EnableRoutine | DisableRoutine
 type ContextCommand = AddPreference | UpdatePreference | AddProjectNote | UpdateProjectNote | RemoveContext
 
 
 def submission_matches(task: Task, submission: UnconfirmedSubmission) -> bool:
     """The caller resolved this task by ID; verify its remaining submission constraints."""
-    match task.source:
-        case RequestSource(conversation_id, profile):
-            conversation = submission.conversation_id is None or conversation_id == submission.conversation_id
-            return task.prompt == submission.prompt and profile == submission.profile and conversation
-        case RoutineSource():
-            return False
-        case _:
-            assert_never(task.source)
+    conversation = submission.conversation_id is None or task.source.conversation_id == submission.conversation_id
+    return task.prompt == submission.prompt and task.source.profile == submission.profile and conversation
 
 
 def follow_up_prompt(task: Task, prompt: str) -> str:
@@ -131,20 +118,18 @@ class WorkService:
         "connection_status",
         "context",
         "problem",
-        "routines",
         "tasks",
     )
 
     def __init__(
         self,
         tasks: TaskStore,
-        routines: RoutineStore,
         context: ContextStore,
         bridge: WorkBridge,
         *,
         assistant_pid: int,
     ) -> None:
-        self.tasks, self.routines, self.context, self.bridge = tasks, routines, context, bridge
+        self.tasks, self.context, self.bridge = tasks, context, bridge
         self.assistant_pid = assistant_pid
         self._epoch: str | None = None
         self._sequence = 0
@@ -236,11 +221,9 @@ class WorkService:
             existing = self.tasks.get(request.identity)
             source = request.source
             if existing is not None:
-                match existing.source:
-                    case RequestSource(profile=profile) as original if profile == source.profile and existing.prompt == request.prompt.strip():
-                        source = original
-                    case _:
-                        raise ValueError("That task identity already belongs to a different request.")
+                if existing.source.profile != source.profile or existing.prompt != request.prompt.strip():
+                    raise ValueError("That task identity already belongs to a different request.")
+                source = existing.source
             issued = Issued(Submit(request.prompt), request.identity, source, request.context)
         else:
             issued = request
@@ -248,8 +231,6 @@ class WorkService:
         match command:
             case Submit() | FollowUp() | Redirect() | ControlTask() | AnswerTask() | RefreshApproval():
                 self._task_command(issued, command, at=at)
-            case CreateRoutine() | UpdateRoutine() | EnableRoutine() | DisableRoutine():
-                self._routine_command(issued.identity, command, at=at)
             case AddPreference() | UpdatePreference() | AddProjectNote() | UpdateProjectNote() | RemoveContext():
                 self._context_command(issued.identity, command, at=at)
             case _:
@@ -266,7 +247,7 @@ class WorkService:
                 if original is None:
                     raise ValueError("The task for this follow-up no longer exists.")
                 # A follow-up is the person's own request in the original conversation, whatever the original's profile.
-                source = issued.source if not isinstance(original.source, RequestSource) else RequestSource(original.source.conversation_id)
+                source = RequestSource(original.source.conversation_id)
                 self._submit(issued.identity, follow_up_prompt(original, prompt), source, issued.context, at=at)
             case Redirect(task_id, prompt):
                 original = self.tasks.get(task_id)
@@ -301,19 +282,6 @@ class WorkService:
                 if self.tasks.refresh_approval(task_id, request_id, at=at) is None:
                     raise ValueError("That approval has changed. Read its current request before refreshing.")
                 self._reviews.pop(task_id, None)
-            case _:
-                assert_never(command)
-
-    def _routine_command(self, identity: str, command: RoutineCommand, *, at: float) -> None:
-        match command:
-            case CreateRoutine(title, instruction, trigger):
-                self.routines.create(identity, title, instruction, trigger, at=at)
-            case UpdateRoutine(identity, revision, title, instruction, trigger):
-                self.routines.update(identity, title, instruction, trigger, at=at, expected_revision=revision)
-            case EnableRoutine(identity):
-                self.routines.enable(identity, at=at)
-            case DisableRoutine(identity):
-                self.routines.disable(identity, at=at)
             case _:
                 assert_never(command)
 
@@ -425,7 +393,7 @@ class WorkService:
         self._limit_replies(watched)
         return tuple(problem for key, problem in self._replies.items() if key in self._pending_inputs)
 
-    def snapshot(self, *, at: float, watched: frozenset[str] = frozenset(), pending: frozenset[str] = frozenset()) -> WorkSnapshot:
+    def snapshot(self, *, watched: frozenset[str] = frozenset(), pending: frozenset[str] = frozenset()) -> WorkSnapshot:
         self._limit_submissions(watched)
         tasks = self.tasks.list_tasks(limit=1_000)
         current = {task.id: task for task in tasks}
@@ -440,12 +408,10 @@ class WorkService:
                 reviews.append(event.review)
             elif task is None or not isinstance(task.state, Running) or not owns(task, event.run) or task.goal_revision != event.review.goal_revision:
                 self._reviews.pop(identity)
-        routines, context = self.routines.summaries(at), self.context.list()
+        context = self.context.list()
         problems = self._submission_problems(current, watched, pending, confirmed=True)
         reply_problems = self._confirmed_reply_problems(current, watched)
         # Only watched tasks need an action timeline. Bound journal reads and
         # publication size; the task journal retains the complete ledger.
         actions = tuple(islice((action for task in tasks if task.id in watched for action in self.tasks.actions(task.id, limit=16)), 256))
-        return WorkSnapshot(
-            tasks, routines, context, self.problem or self.connection_status, tuple(reviews), problems, reply_problems, actions=actions
-        )
+        return WorkSnapshot(tasks, context, self.problem or self.connection_status, tuple(reviews), problems, reply_problems, actions=actions)

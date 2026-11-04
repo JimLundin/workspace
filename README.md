@@ -9,8 +9,8 @@ It undoes the update by itself if it fails. Four main processes:
   laptop's own ISO keyboard: home row mods, layers, caps word, snippets;
 - **the assistant** (`assistant/`): dictation, app switching, window
   placement, and an agent, all through your company's OpenAI-style endpoint, with a floating control bar and tray controls;
-- **the automation worker** (`automation/`): runs durable tasks, standing
-  instructions, and recovery independently of the conversation window;
+- **the automation worker** (`automation/`): runs durable tasks and recovery
+  independently of the conversation window;
 - **the keeper** (`keeper.py`): runs the other three, restarts them if they crash,
   and installs the agent's changes to them (see *Changing Workspace*).
 
@@ -536,8 +536,8 @@ Subagents cannot spawn further agents.
 
 ## Durable work
 
-Open **Work…** from the tray or conversation menu. Voice requests, typed
-requests, and standing instructions use the same saved task journal. The
+Open **Work…** from the tray or conversation menu. Voice and typed
+requests use the same saved task journal. The
 **Canvas** button beside the floating-toolbar menu opens a dedicated native
 window for ongoing outcomes and responsibilities. Workspace automatically
 connects related emails, Teams conversations and Kanban tickets, with a current summary, suggested next step
@@ -565,10 +565,6 @@ window for execution and supporting context:
 
 - **Agent tasks** shows instructions, progress, questions, results, and verification
   evidence. Pause, resume, cancel, redirect a task, or create a follow-up.
-- **Standing instructions** runs saved instructions once, at an interval, when
-  a selected file changes, or after a transcript finishes. New instructions
-  start disabled. Enable the editable meeting-notes template to produce notes
-  and action items from future completed transcripts.
 - **Context** stores preferences and project notes you choose to save. Notes
   retain their source and expiry; expired text is excluded from fresh context.
 
@@ -743,7 +739,7 @@ All in `%LOCALAPPDATA%\workspace` (tray menu → Open logs folder):
 | File | |
 |---|---|
 | `usage.jsonl` | which features were used, how long they took, whether they failed. Voice uses include held/audio durations, transcription/submission timing, and transcript/requested/submitted character counts; agent uses include preparation, first response and first tool timings. Never what you typed or said. Tray menu → **Usage report** lists every feature by use, and the ones never used, so they can go. |
-| `work/work.sqlite3` | saved tasks, checkpoints, questions, action fingerprints and outcomes, standing instructions, and explicit context |
+| `work/work.sqlite3` | saved tasks, checkpoints, questions, action fingerprints and outcomes, and explicit context |
 | `assistant.log`, `automation.log`, `layout.log` | problems and crashes |
 | `work/worker.log` | bounded work-process diagnostics; automation failures point here |
 | `agent-ui.log` | desktop view startup timing and errors |
@@ -771,7 +767,7 @@ winapi/         typed Win32 bindings: the only ctypes code
 miryoku/        the layout: layout.py (the tables), engine.py (the logic), win.py
 automation/     task.py and store.py (durable work), controller.py (execution),
                 actions.py and execution.py (attempts and verification),
-                routines.py and context.py (standing work and saved knowledge),
+                context.py (saved knowledge),
                 ipc.py, bridge.py, app.py (the supervised worker)
 assistant/      llm.py (the endpoint), features.py (key actions), agent.py,
                 agent_tools.py and *_tools.py (agent tool families),

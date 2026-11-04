@@ -31,7 +31,6 @@ lazy from automation.ipc import (
     LogEvent,
     OwnerRequest,
 )
-lazy from automation.routines import RoutineStore
 lazy from automation.store import TaskStore
 lazy from automation.task import (
     Approval,
@@ -46,7 +45,6 @@ lazy from automation.task import (
     Reply,
     RequestKind,
     RequestSource,
-    RoutineSource,
     Running,
     SelfReview,
     Task,
@@ -77,25 +75,13 @@ class Observe:
 type Job = Issued | IdentifiedSubmission | StopConversation | Observe
 
 
-def conversation_of(task: Task) -> str | None:
-    match task.source:
-        case RequestSource(conversation_id=conversation_id):
-            return conversation_id
-        case RoutineSource():
-            return None
-
-
 def in_conversation(task: Task, conversation_id: str | None) -> bool:
-    return conversation_id is not None and conversation_of(task) == conversation_id
+    return task.source.conversation_id == conversation_id
 
 
 def source_is_automatic(task: Task) -> bool:
     """Notification admission owns this durable identity namespace."""
-    match task.source:
-        case RequestSource(profile=FeedHandoff()):
-            return task.id.startswith("workspace-notification:")
-        case RequestSource() | RoutineSource():
-            return False
+    return isinstance(task.source.profile, FeedHandoff) and task.id.startswith("workspace-notification:")
 
 
 def active(task: Task) -> bool:
@@ -199,7 +185,6 @@ class WorkAgent:
     def __init__(  # noqa: PLR0913 - composition root for the work process
         self,
         tasks: TaskStore,
-        routines: RoutineStore,
         saved_context: ContextStore,
         bridge: WorkBridge,
         create_window: Callable[[WorkAgent], ConversationOutput],
@@ -216,7 +201,7 @@ class WorkAgent:
     ) -> None:
         # Journal/transport, view construction and independent frontend callbacks
         # compose one observer lifetime; owner effects run on its dispatcher.
-        self._service = WorkService(tasks, routines, saved_context, bridge, assistant_pid=os.getpid() if assistant_pid is None else assistant_pid)
+        self._service = WorkService(tasks, saved_context, bridge, assistant_pid=os.getpid() if assistant_pid is None else assistant_pid)
         self._create_window = create_window
         self.on_snapshot, self.on_done, self.report_error, self.on_start = on_snapshot, on_done, report_error, on_start
         self.context, self.clock, self.identity = context, clock, identity
@@ -469,11 +454,11 @@ class WorkAgent:
             self.window.withdraw_input()
 
     def _display(self, task: Task, review: ApprovalReview | None) -> None:
-        match task.source:
-            case RequestSource(profile=FeedHandoff(item, title)):
+        match task.source.profile:
+            case FeedHandoff(item, title):
                 initiation = Initiation.AUTOMATIC if source_is_automatic(task) else Initiation.REQUESTED
                 source: FeedRequest | None = FeedRequest(item, title, initiation=initiation)
-            case RequestSource() | RoutineSource():
+            case _:
                 source = None
         previous = self._displayed
         if task == previous and review == self._displayed_review:
@@ -553,7 +538,7 @@ class WorkAgent:
             self._snapshot = snapshot
             if self._conversation is None:
                 self._conversation = next(
-                    (conversation for task in snapshot.tasks if (conversation := conversation_of(task)) is not None and not terminal(task.state)),
+                    (task.source.conversation_id for task in snapshot.tasks if not terminal(task.state)),
                     None,
                 )
             is_running = self._reported_running = self.running()
@@ -774,7 +759,7 @@ class WorkAgent:
                             previous_context = current_context
                         events = self._service.events(at=self.clock())
                         watched, pending = self._observed_ids()
-                        self._publish(self._service.snapshot(at=self.clock(), watched=watched, pending=pending))
+                        self._publish(self._service.snapshot(watched=watched, pending=pending))
                         for event in events:
                             match event.payload:
                                 case LogEvent() as log:

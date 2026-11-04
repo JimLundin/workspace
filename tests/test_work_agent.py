@@ -17,16 +17,12 @@ from assistant.work_commands import (
     AddProjectNote,
     AnswerTask,
     ControlTask,
-    CreateRoutine,
-    DisableRoutine,
-    EnableRoutine,
     FollowUp,
     Redirect,
     RefreshApproval,
     RemoveContext,
     UpdatePreference,
     UpdateProjectNote,
-    UpdateRoutine,
 )
 from assistant.work_snapshot import WorkSnapshot
 from automation import ipc
@@ -45,7 +41,6 @@ from automation.ipc import (
 )
 from automation.personal_work import Catalog, SourceKind
 from automation.presentation import Answer, Said, StreamState, Succeeded, ToolActivity
-from automation.routines import Every, Once, RoutineStore
 from automation.store import TaskStore
 from automation.task import (
     Approval,
@@ -170,7 +165,6 @@ class WorkRig:
         # Folder, transport, context, startup and publication bind independent
         # fixture effects while preserving the frontend dependency interface.
         self.tasks = TaskStore(folder / "tasks.sqlite3")
-        self.routines = RoutineStore(folder / "routines.sqlite3")
         self.saved_context = ContextStore(folder / "context.sqlite3")
         self.bridge = bridge or RecordingBridge()
         self.clock = Clock()
@@ -182,7 +176,6 @@ class WorkRig:
         self.finished: list[bool] = []
         self.agent = WorkAgent(
             self.tasks,
-            self.routines,
             self.saved_context,
             self.bridge,
             self.create_window,
@@ -260,7 +253,6 @@ def test_canvas_intake_and_questions_continue_when_presentation_is_unavailable(t
     canvas = WorkCanvas(tmp_path / "canvas.sqlite3", submit, lambda _publication: None, autonomous=True)
     agent = WorkAgent(
         tasks,
-        RoutineStore(tasks.path),
         ContextStore(tasks.path),
         bridge,
         unavailable,
@@ -323,7 +315,7 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         rig.agent.voice("And this one")
         rig.refresh()
         second = rig.task("And this one")
-        assert first.source == second.source and isinstance(first.source, RequestSource)
+        assert first.source == second.source
         assert rig.bridge.registrations == [
             (first.id, invocation("First workbook"), 1234),
             (second.id, invocation("Second workbook"), 1234),
@@ -335,9 +327,9 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         assert b"First workbook" not in rig.tasks.path.read_bytes(), "Activity snapshots must remain volatile."
         assert rig.agent.running() and rig.started == [True]
         rig.agent.submit_identified("review-task", "Review the previous task", SelfReview("previous-task"))
-        rig.agent.submit_identified("routine-task", "Run the standing instruction", RequestKind.GENERAL)
+        rig.agent.submit_identified("general-task", "Summarize the second workbook", RequestKind.GENERAL)
         rig.refresh()
-        assert rig.bridge.registrations[-2:] == [("review-task", None, 1234), ("routine-task", invocation("Second workbook"), 1234)]
+        assert rig.bridge.registrations[-2:] == [("review-task", None, 1234), ("general-task", invocation("Second workbook"), 1234)]
     finally:
         rig.close()
 
@@ -618,31 +610,22 @@ def test_approval_and_resumed_action_keep_one_notification_card(tmp_path: Path) 
         assert "stopped" not in rig.panel.all_text().lower()
 
 
-def test_routine_and_context_commands_persist_without_implicit_enablement(tmp_path: Path) -> None:
+def test_context_commands_persist(tmp_path: Path) -> None:
+    # Defect: a context edit is acknowledged but never reaches the durable context journal.
     with work(tmp_path) as rig:
-        rig.agent.command(CreateRoutine("Prepare notes", "Read the completed transcript", Once(1_000)))
         rig.agent.command(AddPreference("Tone", "Concise", "User"))
         rig.agent.command(AddProjectNote("Workspace", "Use the shared journal", "User", 3600))
         snapshot = rig.refresh()
-        routine = snapshot.routines[0].routine
         preference = next(record for record in snapshot.context if isinstance(record, Preference))
         note = next(record for record in snapshot.context if isinstance(record, ProjectNote))
-        assert not routine.enabled
-        rig.agent.command(UpdateRoutine(routine.id, routine.revision, "Prepare daily notes", "Summarize new work", Every(1_000, 3600)))
-        rig.agent.command(EnableRoutine(routine.id))
         rig.agent.command(UpdatePreference(preference.id, "Tone", "Detailed", "User correction"))
         rig.agent.command(UpdateProjectNote(note.id, "Workspace", "Use the durable journal", "User correction", 7200))
         snapshot = rig.refresh()
-        updated = snapshot.routines[0].routine
-        assert updated.enabled and updated.title == "Prepare daily notes"
         assert rig.saved_context.get(preference.id) == next(record for record in snapshot.context if isinstance(record, Preference))
         assert any(isinstance(record, Preference) and record.value == "Detailed" for record in snapshot.context)
         assert any(isinstance(record, ProjectNote) and record.text == "Use the durable journal" for record in snapshot.context)
-        rig.agent.command(DisableRoutine(routine.id))
         rig.agent.command(RemoveContext(note.id))
         rig.refresh()
-        reopened = RoutineStore(tmp_path / "routines.sqlite3").get(routine.id)
-        assert reopened is not None and not reopened.enabled
         assert ContextStore(tmp_path / "context.sqlite3").get(note.id) is None
         assert not rig.errors
 
@@ -659,7 +642,7 @@ def test_follow_up_retains_related_context_and_user_controls_survive_reopening(t
         rig.agent.command(FollowUp(claim.task.id, "Add a one-page summary"))
         rig.refresh()
         follow_up = next(task for task in rig.tasks.list_tasks() if task.id != claim.task.id)
-        assert isinstance(claim.task.source, RequestSource) and claim.task.source.profile == SelfReview("previous-task")
+        assert claim.task.source.profile == SelfReview("previous-task")
         assert follow_up.source == RequestSource(claim.task.source.conversation_id) and "output/report.md" in follow_up.prompt
         assert "Add a one-page summary" in follow_up.prompt
         rig.agent.command(ControlTask(follow_up.id, Control.PAUSE))
@@ -716,7 +699,6 @@ def test_real_bridge_delivers_context_live_output_and_meeting_results_to_the_fro
     server = BridgeServer(folder, epoch="1" * 32, wake=lambda: None, owns=current_run)
     agent = WorkAgent(
         tasks,
-        RoutineStore(tmp_path / "routines.sqlite3"),
         ContextStore(tmp_path / "context.sqlite3"),
         BridgeClient(folder),
         window,

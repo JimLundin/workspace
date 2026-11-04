@@ -133,7 +133,7 @@ def test_only_reviewed_actionable_notifications_activate_work_with_retry(tmp_pat
         triage.observe(feed)
         triage.advance()
         wait_until(lambda: len(tasks.list_tasks()) == 2)
-        assert all(isinstance(task.source, RequestSource) and isinstance(task.source.profile, FeedHandoff) for task in tasks.list_tasks())
+        assert all(isinstance(task.source.profile, FeedHandoff) for task in tasks.list_tasks())
         assert all("already-authorized" in task.prompt and "untrusted" in task.prompt for task in tasks.list_tasks())
     finally:
         triage.close()

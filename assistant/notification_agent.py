@@ -25,7 +25,7 @@ def notification_task(item: Candidate) -> tuple[str, str, FeedHandoff]:
     captured = replace(item, created_at=0, source_time=SourceDateStatus.UNKNOWN)
     prompt = (
         "Review this received notification on the user's behalf. Investigate its relevance using saved work, "
-        "project context, standing instructions and the source application. Carry out already-authorized actions "
+        "project context and the source application. Carry out already-authorized actions "
         "when the existing user instruction supplies sufficient scope and information. Otherwise prepare a concrete "
         "finding, draft or next step, and ask only for a missing decision that prevents progress. "
         "Check related tasks and their outcomes first; continue existing work rather than repeating effects. "

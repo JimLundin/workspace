@@ -40,7 +40,6 @@ from automation.task import (
     Waiting,
     outcome_kind,
     phase,
-    task_profile,
 )
 
 
@@ -91,7 +90,7 @@ def signals(outcome: Outcome, actions: Iterable[Action], revisions: Sequence[Goa
 
 def reviewable(task: Task) -> bool:
     """A review never reviews a review, so reviewing cannot feed itself."""
-    return not isinstance(task_profile(task.source), SelfReview)
+    return not isinstance(task.source.profile, SelfReview)
 
 
 @dataclass(frozen=True, slots=True)

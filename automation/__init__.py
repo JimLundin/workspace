@@ -1,1 +1,1 @@
-"""Persistent work, standing instructions, and coordinated execution for Workspace."""
+"""Persistent work and coordinated execution for Workspace."""

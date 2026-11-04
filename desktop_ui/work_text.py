@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import assert_never
 
 from automation.execution import ApprovalReview, current_review
-from automation.routines import EventTrigger, Every, FileChanged, Once, Trigger
 from automation.task import (
     Approval,
     Blocked,
@@ -12,8 +11,6 @@ from automation.task import (
     Failed,
     Interrupted,
     Question,
-    RequestSource,
-    RoutineSource,
     Running,
     Task,
     TaskStatus,
@@ -45,16 +42,9 @@ def task_label(task: Task) -> str:
 
 
 def task_detail(task: Task, reviews: tuple[ApprovalReview, ...] = ()) -> str:
-    match task.source:
-        case RequestSource():
-            origin = "Your request"
-        case RoutineSource(routine_id=identity):
-            origin = f"Standing instruction · {identity}"
-        case _:
-            assert_never(task.source)
     sections = [
         task.title,
-        f"{task_label(task)} · {origin}\nCreated {when(task.created_at)} · Updated {when(task.updated_at)}",
+        f"{task_label(task)} · Your request\nCreated {when(task.created_at)} · Updated {when(task.updated_at)}",
         f"Instructions\n{task.prompt}",
     ]
     if task.checkpoint is not None:
@@ -92,17 +82,3 @@ def task_detail(task: Task, reviews: tuple[ApprovalReview, ...] = ()) -> str:
         case _:
             assert_never(task.state)
     return "\n\n".join(sections)
-
-
-def trigger_label(trigger: Trigger) -> str:
-    match trigger:
-        case EventTrigger.TRANSCRIPT_COMPLETED:
-            return "After a transcript finishes"
-        case Once(at):
-            return f"Once · {when(at)}"
-        case Every(seconds=seconds):
-            return f"Every {seconds / 60:g} minutes"
-        case FileChanged(path):
-            return f"File changes · {path}"
-        case _:
-            assert_never(trigger)

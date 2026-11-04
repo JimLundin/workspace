@@ -39,7 +39,6 @@ lazy from automation.controller import ControllerSnapshot, Fault, Idle, Runner, 
 lazy from automation.execution import ApprovalReview, Log
 lazy from automation.presentation import LiveMessage, Problem, Progress, Said
 lazy from automation.profile_lease import ProfileLease
-lazy from automation.routines import RoutineStore
 lazy from automation.self_review import ReviewingRunner
 lazy from automation.store import TaskStore
 lazy from automation.task import Claim, Outcome, RunRef, Task, owns
@@ -216,8 +215,7 @@ def run(
         hwnd = windows.create_hidden(title)
         cleanup.callback(windows.destroy, hwnd)
         tasks = TaskStore(work_folder.journal)
-        routines, contexts = RoutineStore(tasks.path), ContextStore(tasks.path)
-        routines.ensure_meeting_notes(at=time.time())
+        contexts = ContextStore(tasks.path)
         shutdown = threading.Event()
         controller: WorkController
 
@@ -253,12 +251,11 @@ def run(
 
         bridge.start()
         controller.start()  # Synchronous exclusive-owner recovery precedes readiness.
-        worker_options: dict[str, object] = {"problem": events.problem}
         thread = threading.Thread(
-            target=maintain_routines,
-            args=(bridge, routines, tasks, controller, shutdown),
-            kwargs=worker_options,
-            name="standing work",
+            target=watch_transport,
+            args=(bridge, shutdown),
+            kwargs={"problem": events.problem},
+            name="work transport watch",
             daemon=True,
         )
         thread.start()
@@ -329,30 +326,9 @@ def warm_sdk(folder: Path) -> None:
         report("The agent SDK could not be warmed; the next task will report its configuration state.", folder=folder)
 
 
-def maintain_routines(  # noqa: PLR0913 - composition-root dependencies
-    bridge: BridgeServer,
-    routines: RoutineStore,
-    tasks: TaskStore,
-    controller: WorkController,
-    shutdown: threading.Event,
-    *,
-    problem: Callable[[str], None],
-) -> None:
-    """Poll this process's transport/store, waking its controller until shutdown.
-
-    These six dependencies bind the worker to the same owned transport, durable
-    routine and task stores, controller, shutdown lifetime and native failure dispatcher.
-    """
+def watch_transport(bridge: BridgeServer, shutdown: threading.Event, *, problem: Callable[[str], None]) -> None:
+    """Report this process's transport exiting before shutdown."""
     while not shutdown.is_set():
-        try:
-            if bridge.wait(0):
-                problem("Work transport exited.")
-                return
-            now = time.time()
-            routines.scan_files(now)
-            if routines.dispatch(tasks, now=now):
-                controller.wake()
-        except Exception:
-            problem("Routine polling failed.")
+        if bridge.wait(1) and not shutdown.is_set():
+            problem("Work transport exited.")
             return
-        shutdown.wait(1)

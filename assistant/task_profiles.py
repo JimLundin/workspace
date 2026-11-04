@@ -37,12 +37,9 @@ from automation.task import (
     Claim,
     FeedHandoff,
     RequestKind,
-    RequestSource,
-    RoutineSource,
     SelfReview,
     Task,
     Waiting,
-    task_profile,
 )
 from keeper import state_for, versions_for
 
@@ -242,18 +239,12 @@ class Profiles:
         self.tools = GeneralTools(workspace.root, general.feed_request, general.lessons, general.landing)
 
     def run(self, claim: Claim) -> GeneralRun:
-        match profile := task_profile(claim.task.source):
+        match profile := claim.task.source.profile:
             case SelfReview():
                 # Each review starts fresh rather than inheriting earlier reviews' history.
                 return GeneralRun(self.conversations.named("task:" + claim.task.id), UNSEEN, self.tools)
             case RequestKind.GENERAL | FeedHandoff():
-                match source := claim.task.source:
-                    case RequestSource(conversation_id=name):
-                        name = "conversation:" + name
-                    case RoutineSource():
-                        name = "task:" + claim.task.id
-                    case _:
-                        assert_never(source)
+                name = "conversation:" + claim.task.source.conversation_id
                 return GeneralRun(self.conversations.named(name), self.general.context(claim.task), self.tools)
             case _:
                 assert_never(profile)

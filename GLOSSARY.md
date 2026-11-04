@@ -1,7 +1,7 @@
 # Workspace work
 
-Workspace carries out requested outcomes and standing instructions across
-conversations and interruptions.
+Workspace carries out requested outcomes across conversations and
+interruptions.
 
 Device connections and distributed workspace access are defined in the
 [Shared Workspace glossary](https://github.com/JimLundin/shared-workspace/blob/main/GLOSSARY.md).
@@ -134,8 +134,7 @@ _Avoid_: Chat turn, command
 What a requested task is for: a general request, a feed handoff or a
 self-review. It owns the task's execution: the conversation its agent continues,
 whether the agent sees the request's desktop context, its tools and
-instructions, and what it recovers before a run. Work for a standing
-instruction runs as a general request.
+instructions, and what it recovers before a run.
 _Avoid_: Task kind, agent mode
 
 **Meeting**:
@@ -147,12 +146,6 @@ _Avoid_: Transcript file, work thread, meeting notes
 The ordered text of a meeting's captured conversation, with time spans within
 its captured audio. Transcription batches do not imply individual speaker turns.
 _Avoid_: Meeting summary, attributed conversation
-
-**Meeting-notes routine**:
-A standing instruction, installed disabled, that writes notes for each
-transcript completed after it is enabled. It responds to one transcript per
-trigger occurrence.
-_Avoid_: Meeting summary
 
 **Journal**:
 A local SQLite file that one owner keeps durably: the work database, each
@@ -210,22 +203,6 @@ _Avoid_: Assumed success
 A bounded account of a task's progress that helps a later run continue from
 known facts.
 _Avoid_: Conversation dump
-
-**Standing instruction**:
-A saved instruction that authorizes work when a specified trigger occurs.
-Enabling it determines when it begins responding to those occurrences.
-_Avoid_: Background prompt, permanent task
-
-**Trigger occurrence**:
-One identifiable event or scheduled time to which a standing instruction
-responds. Repeated delivery of an occurrence refers to the same work.
-_Avoid_: New task
-
-**Accepted handoff**:
-A standing instruction's commitment to carry out a trigger occurrence. Later
-editing or disabling the instruction does not revoke work already accepted;
-that task can be cancelled separately.
-_Avoid_: Unobserved event, pending trigger
 
 **Cancellation**:
 The user's decision to end a task. An effect already underway can still acquire

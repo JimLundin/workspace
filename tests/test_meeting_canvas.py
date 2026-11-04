@@ -4,7 +4,6 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.meeting_events import TranscriptEvents
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from assistant.meetings import Meetings
 from assistant.personal_work_service import PersonalWork
@@ -17,7 +16,6 @@ from assistant.work_canvas_context import context_path
 from assistant.work_canvas_model import CanvasDocument, caption
 from automation.meetings import Ended, InProgress, MeetingConversation, TranscriptState, UnknownEnd
 from automation.personal_work import Association, ListSources, MeetingSource, ReadMeeting, SaveWork, WorkDefinition
-from automation.routines import RoutineStore
 from automation.store import TaskStore
 from tests.feed_fixture import feed_unavailable
 from tests.personal_work_fixture import CapturedSources
@@ -85,19 +83,15 @@ def test_interrupted_meeting_does_not_invent_an_end_at_recovery(tmp_path: Path) 
     assert not capture.opened.is_set()
 
 
-def test_meeting_intake_is_durable_idempotent_and_independent_of_notes_routine(tmp_path: Path) -> None:
-    # Defect: disabled routines prevent native intake, recovery duplicates meetings,
-    # or rereading an unchanged journal unnecessarily changes the catalog revision.
+def test_meeting_intake_is_durable_and_idempotent(tmp_path: Path) -> None:
+    # Defect: reobserving a meeting duplicates it, or rereading an unchanged
+    # journal unnecessarily changes the catalog revision.
     archive = MeetingArchive(tmp_path / "meetings")
     store = archive.create("both", "Planning")
     tasks = TaskStore(tmp_path / "work.sqlite3")
     personal_store = PersonalStore(tasks.path)
     personal = PersonalWork(personal_store, CapturedSources(), lambda view: None, clock=lambda: 20)
-    routines = RoutineStore(personal_store.path)
-    routines.ensure_meeting_notes(at=10)
-    errors: list[str] = []
-    events = TranscriptEvents(archive, routines, on_error=errors.append, on_meeting=personal.observe_meeting)
-    events.recover(archive.journals())
+    personal.observe_meeting(archive.open(store.folder))
     first = personal_store.read()
     assert len(first.sources) == 1 and isinstance(first.sources[0], MeetingSource)
     store.append(SPEECH)
@@ -112,15 +106,36 @@ def test_meeting_intake_is_durable_idempotent_and_independent_of_notes_routine(t
     corrected_clock.observe_meeting(store)
     corrected = personal_store.read().sources[0]
     assert isinstance(corrected, MeetingSource) and corrected.meeting.transcript_state is TranscriptState.COMPLETE
-    events.completed(store)
+    personal.observe_meeting(store)
     observed = personal_store.read()
     personal_store.observe((replace(first.sources[0], observed_at=100),))
     assert personal_store.read() == observed, "A delayed capture snapshot replaced its newer completed event."
-    events.completed(store)
-    events.recover(archive.journals())
+    personal.observe_meeting(store)
+    personal.observe_meeting(archive.open(store.folder))
     assert personal_store.read() == observed
     assert observed.sources[0].id == first.sources[0].id and "Ship on Friday" in observed.sources[0].excerpt
-    assert not routines.pending(30) and not errors
+
+
+def test_startup_recovery_publishes_every_saved_meeting_to_intake(tmp_path: Path) -> None:
+    # Defect: recovery publishes only interrupted captures, so a meeting saved
+    # before a restart never reaches the canvas.
+    archive = MeetingArchive(tmp_path / "meetings")
+    saved = archive.create("both", "Planning")
+    saved.finish_capture()
+    saved.export()
+    observed: list[str] = []
+    recorder = Meetings(
+        settings("https://fixture.invalid/v1"),
+        lambda source: GeneratedCapture(0),
+        archive=archive,
+        on_meeting=lambda store: observed.append(store.folder.name),
+    )
+    try:
+        recorder.start_worker()
+        wait_for(lambda: bool(observed))
+    finally:
+        recorder.close()
+    assert observed[0] == saved.folder.name
 
 
 def test_capture_publishes_native_event_and_completed_conversation_to_intake(tmp_path: Path) -> None:
@@ -130,8 +145,6 @@ def test_capture_publishes_native_event_and_completed_conversation_to_intake(tmp
     tasks = TaskStore(tmp_path / "work.sqlite3")
     store = PersonalStore(tasks.path)
     personal = PersonalWork(store, CapturedSources(), lambda view: None)
-    errors: list[str] = []
-    events = TranscriptEvents(archive, RoutineStore(store.path), on_error=errors.append, on_meeting=personal.observe_meeting)
     capture = GeneratedCapture(1, hold=True)
 
     def transcribe(audio: bytes, *, context: str) -> str:
@@ -142,9 +155,7 @@ def test_capture_publishes_native_event_and_completed_conversation_to_intake(tmp
         lambda source: capture,
         archive=archive,
         transcribe_audio=transcribe,
-        on_meeting=events.observe,
-        on_complete=events.completed,
-        on_recovery=events.recover,
+        on_meeting=personal.observe_meeting,
     )
     try:
         recorder.start(title="Planning event")
@@ -157,7 +168,7 @@ def test_capture_publishes_native_event_and_completed_conversation_to_intake(tmp
         wait_for(lambda: recorder.snapshot().phase == "saved")
         complete = store.read()
         assert len(complete.sources) == 1 and complete.sources[0].id == active.sources[0].id
-        assert len(pending(complete, CanvasDocument(), ())) == 1 and not errors
+        assert len(pending(complete, CanvasDocument(), ())) == 1
     finally:
         recorder.close()
 

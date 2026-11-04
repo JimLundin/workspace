@@ -59,11 +59,7 @@ def settle(store: TaskStore, identity: str, outcome: Outcome, source: RequestSou
 
 
 def reviews(store: TaskStore) -> list[tuple[str, str]]:
-    return sorted(
-        (task.id, task.source.profile.subject)
-        for task in store.list_tasks()
-        if isinstance(task.source, RequestSource) and isinstance(task.source.profile, SelfReview)
-    )
+    return sorted((task.id, task.source.profile.subject) for task in store.list_tasks() if isinstance(task.source.profile, SelfReview))
 
 
 def test_only_settled_runs_with_evidence_of_a_problem_are_reviewed(tmp_path: Path) -> None:
@@ -75,11 +71,7 @@ def test_only_settled_runs_with_evidence_of_a_problem_are_reviewed(tmp_path: Pat
     settle(store, "failed", Failed("The report could not be found."))
     settle(store, "redirected", Completed("Done.", ()), revised="Do it in the Finance folder instead.")
     assert [subject for _, subject in reviews(store)] == ["failed", "redirected"]
-    prompts = {
-        task.source.profile.subject: task.prompt
-        for task in store.list_tasks()
-        if isinstance(task.source, RequestSource) and isinstance(task.source.profile, SelfReview)
-    }
+    prompts = {task.source.profile.subject: task.prompt for task in store.list_tasks() if isinstance(task.source.profile, SelfReview)}
     assert "the task failed" in prompts["failed"] and "the user revised the goal" in prompts["redirected"]
 
 

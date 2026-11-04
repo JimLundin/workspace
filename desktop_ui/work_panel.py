@@ -1,10 +1,8 @@
 """The native work overview. Every widget and draft belongs to the UI thread."""
 
 import math
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from enum import Enum, auto
 from typing import assert_never
 
@@ -17,9 +15,6 @@ lazy from assistant.work_commands import (
     AddProjectNote,
     AnswerTask,
     ControlTask,
-    CreateRoutine,
-    DisableRoutine,
-    EnableRoutine,
     FollowUp,
     Redirect,
     RefreshApproval,
@@ -27,12 +22,10 @@ lazy from assistant.work_commands import (
     Submit,
     UpdatePreference,
     UpdateProjectNote,
-    UpdateRoutine,
 )
 lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.context import ContextRecord, Preference, ProjectNote
 lazy from automation.execution import current_review
-lazy from automation.routines import EventTrigger, Every, FileChanged, Once, Routine, RoutineSummary, Trigger
 lazy from automation.task import (
     Approval,
     ApprovalDecision,
@@ -52,7 +45,7 @@ lazy from desktop_ui.components.paint_ready import PaintReady
 lazy from desktop_ui.components.text import units
 lazy from desktop_ui.components.widgets import Editor, Window, column, replace_text, row, show_window
 lazy from desktop_ui.meeting_panel import MeetingPanel
-lazy from desktop_ui.work_text import task_detail, task_label, trigger_label, when
+lazy from desktop_ui.work_text import task_detail, task_label, when
 lazy from desktop_ui.work_window import WorkWindow
 
 prepare()
@@ -134,7 +127,6 @@ class WorkPanel:
         "refresh",
         "reply",
         "resume",
-        "routines",
         "snapshot",
         "status",
         "tasks",
@@ -142,7 +134,7 @@ class WorkPanel:
         "work",
     )
 
-    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, *, clock: Callable[[], float] = time.time) -> None:
+    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow) -> None:
         self.work = work
         self.meetings: MeetingPanel | None = None
         self.snapshot = WorkSnapshot()
@@ -180,8 +172,6 @@ class WorkPanel:
         content.addWidget(self.question_frame)
         self.prompt_frame, self.prompt_label, self.prompt = composer_widgets(self)
         content.addWidget(self.prompt_frame)
-        self.routines = RoutinesPanel(self.notebook, work, clock)
-        self.notebook.addTab(self.routines.frame, "Standing instructions")
         self.context = ContextPanel(self.notebook, work)
         self.notebook.addTab(self.context.frame, "Context")
         self.tasks.itemSelectionChanged.connect(self.render_task)
@@ -204,12 +194,11 @@ class WorkPanel:
         self.status.setText(snapshot.status or "Tasks stay with you across conversations and restarts.")
         work_tree.rows(self.tasks, tuple((task.id, task.title, (task_label(task),)) for task in snapshot.tasks))
         self.render_task()
-        self.routines.render(snapshot.routines)
         self.context.render(snapshot.context)
 
     def render_task(self) -> None:
         task = self.selected_task()
-        detail = task_detail(task, self.snapshot.reviews) if task is not None else "Start a task or create a standing instruction."
+        detail = task_detail(task, self.snapshot.reviews) if task is not None else "Start a task."
         self.preview_painted = False
         replace_text(self.detail, detail)
         review = current_review(task, self.snapshot.reviews) if task is not None else None
@@ -376,200 +365,6 @@ class WorkPanel:
     def close(self) -> None:
         self.hide()
         self.window.deleteLater()
-
-
-class RoutinesPanel:
-    __slots__ = (
-        "__weakref__",
-        "clock",
-        "editing",
-        "editor",
-        "frame",
-        "instruction",
-        "listing",
-        "message",
-        "parameter",
-        "parameter_label",
-        "records",
-        "summary",
-        "title",
-        "toggle",
-        "trigger",
-        "work",
-    )
-
-    TRIGGERS = ("After a transcript finishes", "At a date and time", "Every interval", "When a file changes")
-
-    def __init__(self, parent: QtWidgets.QTabWidget, work: WorkWindow, clock: Callable[[], float]) -> None:
-        self.work, self.clock = work, clock
-        self.records: tuple[RoutineSummary, ...] = ()
-        self.editing: Routine | None = None
-        self.frame = QtWidgets.QWidget(parent)
-        layout = column(self.frame)
-        layout.setContentsMargins(10, 12, 10, 8)
-        toolbar = row()
-        toolbar.addWidget(button("New instruction", self.create))
-        toolbar.addWidget(button("Edit", self.edit))
-        self.toggle = button("Enable", self.enable)
-        toolbar.addWidget(self.toggle)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
-        body = row()
-        layout.addLayout(body, 1)
-        self.listing = work_tree.tree("State")
-        body.addWidget(self.listing, 2)
-        right = QtWidgets.QWidget()
-        content = column(right)
-        body.addWidget(right, 3)
-        self.summary = Editor(readonly=True)
-        content.addWidget(self.summary, 1)
-        self.editor = QtWidgets.QWidget()
-        editor = column(self.editor)
-        self.title = QtWidgets.QLineEdit()
-        _form(editor, "Name", self.title)
-        self.instruction = Editor()
-        _form(editor, "Standing instruction", self.instruction)
-        self.trigger = QtWidgets.QComboBox()
-        self.trigger.addItems(self.TRIGGERS)
-        _form(editor, "Start when", self.trigger)
-        self.parameter = QtWidgets.QLineEdit()
-        self.parameter_label = _form(editor, "", self.parameter)
-        buttons = row()
-        buttons.addWidget(button("Save", self.save, name="primary"))
-        buttons.addWidget(button("Cancel edit", self.cancel_edit))
-        buttons.addStretch()
-        editor.addLayout(buttons)
-        content.addWidget(self.editor, 1)
-        self.message = label("", "muted")
-        self.message.setWordWrap(True)
-        content.addWidget(self.message)
-        self.editor.hide()
-        self.listing.itemSelectionChanged.connect(self.render_selection)
-        self.trigger.currentIndexChanged.connect(self.trigger_changed)
-
-    def selected(self) -> RoutineSummary | None:
-        identity = work_tree.selected_identity(self.listing)
-        return next((item for item in self.records if item.routine.id == identity), None)
-
-    def render(self, records: tuple[RoutineSummary, ...]) -> None:
-        self.records = records
-        work_tree.rows(
-            self.listing, tuple((item.routine.id, item.routine.title, ("Enabled" if item.routine.enabled else "Disabled",)) for item in records)
-        )
-        self.render_selection()
-
-    def render_selection(self) -> None:
-        item = self.selected()
-        self.toggle.setEnabled(item is not None)
-        self.toggle.setText("Disable" if item is not None and item.routine.enabled else "Enable")
-        if item is None:
-            detail = "Standing instructions start work when their trigger occurs.\n\nSave an instruction, then enable it when ready."
-        else:
-            routine = item.routine
-            detail = (
-                f"{routine.title}\n\n{'Enabled' if routine.enabled else 'Disabled'} · {trigger_label(routine.trigger)}"
-                f"\nNext due: {when(item.next_due)}\n\nInstruction\n{routine.instruction}"
-            )
-            if item.last_firing is not None:
-                detail += "\n\nLast run\n" + (item.last_firing.task_id or "Preparing a task")
-        replace_text(self.summary, detail)
-
-    def enable(self) -> None:
-        item = self.selected()
-        if item is not None:
-            self.work.send(DisableRoutine(item.routine.id) if item.routine.enabled else EnableRoutine(item.routine.id))
-
-    def create(self) -> None:
-        self.editing = None
-        self.open_editor()
-
-    def edit(self) -> None:
-        item = self.selected()
-        if item is not None:
-            self.editing = item.routine
-            self.open_editor()
-
-    def open_editor(self) -> None:
-        self.title.clear()
-        self.instruction.clear()
-        self.parameter.clear()
-        item = self.editing
-        message = "Saving does not enable a new instruction."
-        if item is not None:
-            self.title.setText(item.title)
-            self.instruction.setPlainText(item.instruction)
-        trigger = item.trigger if item is not None else EventTrigger.TRANSCRIPT_COMPLETED
-        match trigger:
-            case EventTrigger.TRANSCRIPT_COMPLETED:
-                self.trigger.setCurrentIndex(0)
-            case Once(at):
-                self.trigger.setCurrentIndex(1)
-                try:
-                    self.parameter.setText(datetime.fromtimestamp(at).isoformat(sep=" ", timespec="seconds"))
-                except ValueError, OverflowError, OSError:
-                    message = "This saved date is outside the local calendar. Choose a date and time before saving."
-            case Every(seconds=seconds):
-                self.trigger.setCurrentIndex(2)
-                self.parameter.setText(f"{seconds / 60:g}")
-            case FileChanged(path):
-                self.trigger.setCurrentIndex(3)
-                self.parameter.setText(path)
-            case _:
-                assert_never(trigger)
-        self.trigger_changed()
-        self.summary.hide()
-        self.editor.show()
-        self.message.setText(message)
-        self.title.setFocus()
-
-    def trigger_changed(self) -> None:
-        index = self.trigger.currentIndex()
-        labels = ("", "Local date and time · YYYY-MM-DD HH:MM", "Interval in minutes", "Absolute path to the file")
-        self.parameter_label.setText(labels[index] if 0 <= index < len(labels) else "")
-        self.parameter_label.setVisible(index != 0)
-        self.parameter.setVisible(index != 0)
-
-    def save(self) -> None:
-        try:
-            title = _required(self.title.text(), "Name", 160)
-            instruction = _required(self.instruction.toPlainText(), "Instruction", 16_000)
-            parameter = self.parameter.text().strip()
-            match self.trigger.currentIndex():
-                case 0:
-                    trigger: Trigger = EventTrigger.TRANSCRIPT_COMPLETED
-                case 1:
-                    try:
-                        at = datetime.fromisoformat(parameter).timestamp()
-                    except (ValueError, OverflowError, OSError) as error:
-                        raise ValueError("Enter a date and time such as 2026-11-01 09:00.") from error
-                    trigger = Once(at)
-                case 2:
-                    seconds = _seconds(parameter, "Interval")
-                    if not 60 <= seconds <= 365 * 24 * 60 * 60:
-                        raise ValueError("Interval must be between one minute and one year.")
-                    existing = self.editing.trigger if self.editing is not None else None
-                    trigger = existing if isinstance(existing, Every) and existing.seconds == seconds else Every(self.clock(), seconds)
-                case 3:
-                    trigger = FileChanged(_required(parameter, "File path", 4096))
-                case _:
-                    raise ValueError("Choose a trigger.")
-            command = (
-                UpdateRoutine(self.editing.id, self.editing.revision, title, instruction, trigger)
-                if self.editing is not None
-                else CreateRoutine(title, instruction, trigger)
-            )
-        except ValueError as error:
-            self.message.setText(str(error))
-            return
-        if self.work.send(command):
-            self.cancel_edit()
-            self.message.setText("Save requested. The list updates when the instruction is saved.")
-
-    def cancel_edit(self) -> None:
-        self.editor.hide()
-        self.summary.show()
-        self.editing = None
-        self.message.clear()
 
 
 class ContextPanel:

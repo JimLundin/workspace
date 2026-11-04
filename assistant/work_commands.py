@@ -1,4 +1,4 @@
-"""Typed task, routine and context commands, plus personal-work commands for views."""
+"""Typed task and context commands, plus personal-work commands for views."""
 
 from dataclasses import dataclass
 
@@ -12,7 +12,6 @@ from automation.personal_work import (
     SaveWork,
     UnlinkWork,
 )
-from automation.routines import Trigger
 from automation.task import Control, Reply
 
 
@@ -50,32 +49,6 @@ class AnswerTask:
 class RefreshApproval:
     task_id: str
     request_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class CreateRoutine:
-    title: str
-    instruction: str
-    trigger: Trigger
-
-
-@dataclass(frozen=True, slots=True)
-class UpdateRoutine:
-    routine_id: str
-    revision: int
-    title: str
-    instruction: str
-    trigger: Trigger
-
-
-@dataclass(frozen=True, slots=True)
-class EnableRoutine:
-    routine_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class DisableRoutine:
-    routine_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,10 +95,6 @@ type WorkCommand = (
     | ControlTask
     | AnswerTask
     | RefreshApproval
-    | CreateRoutine
-    | UpdateRoutine
-    | EnableRoutine
-    | DisableRoutine
     | AddPreference
     | UpdatePreference
     | AddProjectNote

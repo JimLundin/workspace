@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Protocol
 
 # One busy wait for every journal: the work database is shared by the task,
-# routine, context and personal-work owners, so their lock waits must agree.
+# context and personal-work owners, so their lock waits must agree.
 BUSY_SECONDS = 5
 
 

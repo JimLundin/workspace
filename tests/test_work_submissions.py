@@ -12,7 +12,7 @@ from assistant.communications import SourceDate
 from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import Excerpt
 from assistant.notification_agent import NotificationAgent
-from automation.task import Blocked, Completed, FeedHandoff, Question, RequestKind, RequestSource, RoutineSource, TaskStatus, TextAnswer, Waiting
+from automation.task import Blocked, Completed, FeedHandoff, Question, RequestKind, RequestSource, TaskStatus, TextAnswer, Waiting
 from desktop_ui.agent_progress import Progress, advance_progress, visible
 from tests.feed_source_fixture import captured
 from tests.test_external_input import has_pending_input
@@ -51,7 +51,7 @@ def test_notification_replay_uses_the_original_frontend_task_after_restart(tmp_p
         notifications = NotificationAgent(rig.agent.submit_identified, threading.Event())
         assert notifications.activate((source,))
         (original,) = rig.refresh().tasks
-        assert isinstance(original.source, RequestSource) and original.source.profile == FeedHandoff(source.identity, source.title)
+        assert original.source.profile == FeedHandoff(source.identity, source.title)
         assert not rig.errors
     finally:
         rig.close()
@@ -140,18 +140,6 @@ def test_identified_duplicates_reuse_the_original_source_and_invocation_context_
         assert [(problem.task_id, "different request" in problem.reason) for problem in snapshot.submission_problems] == [(original.id, True)]
         # An unrelated row with the same ID cannot clear the failed submission.
         assert rig.refresh().submission_problems == snapshot.submission_problems
-    finally:
-        rig.close()
-
-
-def test_an_identified_request_cannot_attach_a_routine_task_with_the_same_id_and_prompt(tmp_path: Path) -> None:
-    rig = WorkRig(tmp_path)
-    try:
-        original = rig.tasks.submit("collision", "Routine work", "Routine work", RoutineSource("routine", 0, "occurrence"), at=rig.clock())
-        rig.agent.submit_identified("collision", "Routine work", RequestKind.GENERAL)
-        snapshot = rig.refresh()
-        assert rig.tasks.get("collision") == original and rig.bridge.registrations == []
-        assert [problem.task_id for problem in snapshot.submission_problems] == ["collision"]
     finally:
         rig.close()
 
@@ -379,7 +367,7 @@ def test_a_later_confirmed_answer_is_not_reopened_after_a_failed_observation(tmp
 
 
 def test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conversation(tmp_path: Path) -> None:
-    for mismatch in ("prompt", "conversation", "routine"):
+    for mismatch in ("prompt", "conversation"):
         gate = PollHold()
         rig = WorkRig(tmp_path / mismatch, bridge=RecordingBridge(on_poll=gate.poll))
         try:
@@ -391,13 +379,7 @@ def test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conver
                 pending = rig.agent.snapshot().submission_problems
                 assert len(pending) == 1
                 identity = pending[0].task_id
-            source = (
-                RequestSource("another-conversation")
-                if mismatch == "conversation"
-                else RoutineSource("routine", 0, "occurrence")
-                if mismatch == "routine"
-                else original.source
-            )
+            source = RequestSource("another-conversation") if mismatch == "conversation" else original.source
             prompt = "A different request" if mismatch == "prompt" else "The unconfirmed ordinary request"
             rig.tasks.submit(identity, "Externally committed work", prompt, source, at=rig.clock())
             assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]

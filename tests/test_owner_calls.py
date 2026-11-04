@@ -14,7 +14,6 @@ from assistant.work_snapshot import WorkSnapshot
 from automation import ipc
 from automation.bridge import BridgeClient, BridgeServer
 from automation.context import ContextStore
-from automation.routines import RoutineStore
 from automation.store import TaskStore
 from automation.task import Control, RequestSource, RunRef, owns
 from tests.feed_fixture import feed_unavailable, no_canvas, no_personal_work
@@ -179,7 +178,6 @@ def test_real_pipe_redelivery_keeps_the_observer_responsive_and_reports_expired_
     server = BridgeServer(tmp_path, epoch="a" * 32, wake=lambda: None, owns=current)
     agent = WorkAgent(
         tasks,
-        RoutineStore(tasks.path),
         ContextStore(tasks.path),
         BridgeClient(tmp_path),
         window,

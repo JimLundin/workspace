@@ -16,9 +16,9 @@ def seed_tasks(store: TaskStore, identities: Sequence[str], source: RequestSourc
     with closing(sqlite3.connect(store.path)) as database, database:
         database.executemany(
             "INSERT INTO tasks (id, title, prompt, source, priority, created_at, updated_at, revision, state, checkpoint, "
-            "goal_revision, phase, routine_id, routine_revision, occurrence_id, wake_at) "
+            "goal_revision, phase, wake_at) "
             "SELECT ?, title, prompt, source, priority, ?, ?, revision, state, checkpoint, "
-            "goal_revision, phase, routine_id, routine_revision, occurrence_id, wake_at FROM tasks WHERE id=?",
+            "goal_revision, phase, wake_at FROM tasks WHERE id=?",
             ((identity, at + index, at + index, first.id) for index, identity in enumerate(identities[1:], 1)),
         )
 

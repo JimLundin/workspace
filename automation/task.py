@@ -113,33 +113,6 @@ class RequestSource:
 
 
 @dataclass(frozen=True, slots=True)
-class RoutineSource:
-    routine_id: str
-    revision: int
-    occurrence_id: str
-    kind: Literal["routine"] = "routine"
-
-    def __post_init__(self) -> None:
-        identifier(self.routine_id, "routine identity")
-        integer(self.revision, "routine revision")
-        text(self.occurrence_id, "routine occurrence", maximum=512)
-
-
-type Source = RequestSource | RoutineSource
-
-
-def task_profile(source: Source) -> Profile:
-    """A standing instruction's work runs as a general request."""
-    match source:
-        case RequestSource(profile=profile):
-            return profile
-        case RoutineSource():
-            return RequestKind.GENERAL
-        case _:
-            assert_never(source)
-
-
-@dataclass(frozen=True, slots=True)
 class RunRef:
     task_id: str
     run_id: str
@@ -340,7 +313,7 @@ class Task:
     id: str
     title: str
     prompt: str
-    source: Source
+    source: RequestSource
     priority: int
     created_at: float
     updated_at: float
@@ -360,7 +333,7 @@ class Task:
         integer(self.goal_revision, "goal revision")
         if self.updated_at < self.created_at or self.goal_revision > self.revision:
             raise ValueError("Invalid task chronology.")
-        variant(self.source, (RequestSource, RoutineSource), "task source")
+        variant(self.source, RequestSource, "task source")
         variant(self.state, (TaskStatus, Running, Waiting, Interrupted, Completed, Failed), "task state")
         if isinstance(self.state, (Running, Interrupted)) and self.state.run.task_id != self.id:
             raise ValueError("The run belongs to another task.")

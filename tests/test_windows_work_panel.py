@@ -20,21 +20,16 @@ from assistant.work_commands import (
     AddProjectNote,
     AnswerTask,
     ControlTask,
-    CreateRoutine,
-    DisableRoutine,
-    EnableRoutine,
     FollowUp,
     Redirect,
     RefreshApproval,
     RemoveContext,
     Submit,
     UpdatePreference,
-    UpdateRoutine,
     WorkViewCommand,
 )
 from assistant.work_snapshot import WorkSnapshot
 from automation.context import Preference, ProjectNote
-from automation.routines import Disabled, Enabled, Every, Routine, RoutineSummary
 from automation.task import ApprovalDecision, Completed, Control, Question, TaskStatus, TextAnswer, Waiting
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
@@ -86,7 +81,7 @@ class NativeWork:
         assert not self.work.state.status, self.work.state.status
 
     def build(self, work: WorkWindow) -> WorkPanel:
-        self.view = WorkPanel(self.root, work, clock=lambda: 1000.0)
+        self.view = WorkPanel(self.root, work)
         self.view.notebook.setCurrentIndex(0)
         return self.view
 
@@ -248,39 +243,6 @@ def test_background_render_preserves_selection_scroll_draft_and_hidden_state() -
         panel.pump()
         for widget in (view.pause, view.resume, view.cancel, view.follow, view.redirect):
             assert widget.mapTo(view.window, QtCore.QPoint(widget.width(), 0)).x() <= view.window.width()
-
-
-def test_routine_editor_retains_edits_and_validates_before_submitting() -> None:
-    with native_work() as panel:
-        view = panel.view.routines
-        panel.view.notebook.setCurrentWidget(view.frame)
-        routine = Routine("routine", 2, "Read the workbook", "Summarize changes.", Every(100.0, 120), Disabled.DISABLED, 100.0, 200.0)
-        summary = RoutineSummary(routine, None, None)
-        panel.publish(WorkSnapshot(routines=(summary,)))
-        button(view.frame, "Edit").click()
-        enter(view.title, "A revised name")
-        panel.publish(WorkSnapshot(routines=(summary,), status="Background refresh"))
-        assert view.title.text() == "A revised name" and view.parameter.text() == "2"
-        button(view.editor, "Save").click()
-        assert panel.last_command() == UpdateRoutine(routine.id, 2, "A revised name", routine.instruction, Every(100.0, 120))
-        view.toggle.click()
-        assert panel.last_command() == EnableRoutine(routine.id)
-        enabled = replace(summary, routine=replace(routine, state=Enabled(200.0)))
-        panel.publish(WorkSnapshot(routines=(enabled,)))
-        view.toggle.click()
-        assert panel.last_command() == DisableRoutine(routine.id)
-        button(view.frame, "New instruction").click()
-        enter(view.title, "New routine")
-        view.instruction.insertPlainText("Read the latest workbook.")
-        view.trigger.setCurrentIndex(2)
-        enter(view.parameter, "0.5")
-        before = len(panel.commands)
-        button(view.editor, "Save").click()
-        assert len(panel.commands) == before and not view.editor.isHidden()
-        assert "one minute" in view.message.text()
-        enter(view.parameter, "5")
-        button(view.editor, "Save").click()
-        assert panel.last_command() == CreateRoutine("New routine", "Read the latest workbook.", Every(1000.0, 300))
 
 
 def test_context_editor_preserves_source_and_explicit_project_refresh_time() -> None:

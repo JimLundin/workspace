@@ -26,7 +26,6 @@ from automation import ipc
 from automation.bridge import BridgeClient, read_discovery
 from automation.context import ContextStore
 from automation.profile_lease import ProfileLease
-from automation.routines import Disabled, RoutineStore
 from automation.store import TaskStore
 from automation.task import Completed, Interrupted, RequestSource, Running, RunRef, Task
 from automation.work_folder import WorkFolder
@@ -201,7 +200,7 @@ def test_native_worker_recovers_parks_and_restarts_without_ui_or_audio(tmp_path:
         assert not (tmp_path / "worker.json").exists()
 
 
-def test_native_worker_constructs_default_machine_and_disabled_routine(tmp_path: Path) -> None:
+def test_native_worker_constructs_default_machine(tmp_path: Path) -> None:
     with worker(tmp_path, mode="native") as native:
         assert native.receive() == "ready"
         client = BridgeClient(tmp_path)
@@ -210,8 +209,6 @@ def test_native_worker_constructs_default_machine_and_disabled_routine(tmp_path:
             assert client.poll()
         finally:
             client.close()
-        routines = RoutineStore(tmp_path / "work.sqlite3").list()
-        assert len(routines) == 1 and isinstance(routines[0].state, Disabled)
         native.close_window()
         assert native.receive() == "closed"
         assert native.process.wait(timeout=10) == 0
@@ -280,7 +277,6 @@ def test_assistant_submission_runs_in_the_native_worker_and_completes(tmp_path: 
         epoch = read_discovery(tmp_path).epoch
         agent = WorkAgent(
             tasks,
-            RoutineStore(tasks.path),
             ContextStore(tasks.path),
             BridgeClient(tmp_path),
             window,

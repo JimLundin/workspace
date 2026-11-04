@@ -52,9 +52,9 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/agent.py`, `task_profiles.py`, `agent_execution.py` | work | Tool dispatch, approval and observation recording for one durable work claim; each task profile's toolset and execution (conversation, admitted desktop context, recovery and completion check) | `Profiles` selects the profile run and owns its dependencies, per-conversation SDK history and source drafts; `AgentExecution` owns metrics, error reporting and run cleanup; `WorkExecution` owns the claim's effects |
 | `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | shared: `agent_tools.py`, `business_tools.py`, `personal_work_tools.py`; work: other listed tools | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to approval and effect | The agent composes the families over its `Session`; `Screen` and `SelfChange` own the latest screenshot and the source draft's check/install state |
 | `automation/task.py`, `store.py` | shared | Durable task, request profile, agent request, reply, action, and run variants, each tagged by its `kind` or enum value; controls and stale-run decisions | `TaskStore` owns the task journal's queries and stores those records through strict Pydantic adapters; schema version 5 converts version 4 journals in place |
-| `automation/journal.py` | shared | Schema versions: creation, ordered migration steps and refusal of unknown or unversioned journals | Every SQLite owner (task, routine, context, personal-work, canvas and meeting journals) opens its file through one connection interface: write transactions, single read snapshots, rollback on any exception, one busy wait and durability policy, and reads that report an absent journal without creating it |
+| `automation/journal.py` | shared | Schema versions: creation, ordered migration steps and refusal of unknown or unversioned journals | Every SQLite owner (task, context, personal-work, canvas and meeting journals) opens its file through one connection interface: write transactions, single read snapshots, rollback on any exception, one busy wait and durability policy, and reads that report an absent journal without creating it |
 | `automation/controller.py`, `execution.py`, `actions.py` | work: controller; shared: execution/actions | Work outcomes, recovery context, exact operations, observation evidence, reconciliation proof and verification decisions | `WorkController` owns execution lifetime; `Actions` owns cancellable effect coordination |
-| `automation/routines.py`, `context.py` | shared | Trigger occurrences, accepted handoffs, context relevance and freshness | The routine/context stores own persistence; `meeting_events.py` owns transcript delivery and startup scanning |
+| `automation/context.py` | shared | Context relevance and freshness | `ContextStore` owns persistence |
 | `assistant/work_commands.py`, `work_snapshot.py`, `work_text.py`, `work_agent.py`, `work_service.py`, `owner_calls.py` | desktop | Work commands, the published work snapshot, readable task labels, conversation/task selection and volatile owner-call admission/result identities | `WorkAgent` owns frontend observation and asynchronous UI delivery; `WorkService` composes journal/transport calls; `OwnerDispatcher` owns one handler thread, bounded mailboxes and immutable pending/cache snapshots, rechecking the journal before each effect; the frontend observer alone sends replies; `WorkWindow` schedules its native view |
 | `desktop_ui/window_layout.py`, `navigation.py`, `desktop_pager.py` | desktop | Monitor setups, declared window positions, overflow desktops and no-overlap placement; every navigation as one union decided into an effect and a record; the pager view and swipe (see `docs/window-placement.md`) | `ApplicationObserver`'s worker owns window polling, placement, virtual desktops through `winapi/virtual_desktops.py`, navigation effects and slot regions; `DesktopBar` shows its snapshots |
 | `desktop_ui/view_publication.py` | desktop | One view per owner: coalesced renders, lazy creation with retry, a single confirmed close | `AgentWindow` and `WorkWindow` keep their immutable state and post through it; `Ui.close_windows` closes both and waits for each confirmation |
@@ -119,7 +119,7 @@ Screening has no tools, one turn and a twenty-second deadline; its result must
 cover the exact candidate batch. Quiet, hidden and reaction-only sources do not
 enter automatic work. Research investigates actionable candidates, and admission
 uses only current reviewed actions from today's feed. Source content remains
-untrusted evidence: existing tasks and standing instructions supply action scope;
+untrusted evidence: existing tasks supply action scope;
 arrivals themselves supply no new permission. Exact content revisions reuse
 their durable task on polling and restart. Observation times are excluded from
 the captured prompt so reacquiring the source cannot conflict with its saved task.
@@ -137,12 +137,10 @@ thirty seconds of uninterrupted ready observations rearm the next warning.
 `meeting_detection.py` owns those pure transitions, while
 `automatic_meetings.AutomaticAttention` owns callback delivery from poll heartbeats.
 
-Meetings have two paths:
-
 Native meeting intake is shared with the work canvas: `automation/meetings.py`
 owns immutable event periods and conversation batches; `meeting_store.py` owns
-the authoritative journal and bounded snapshots. `meeting_events.py` publishes
-canvas observations independently of routine delivery. `PersonalWork` records
+the authoritative journal and bounded snapshots. `meetings.py` publishes
+canvas observations for every journal at startup and on each update. `PersonalWork` records
 native `MeetingSource` metadata and wakes its worker, while `WorkCanvas` owns
 serialized intake/research dispatch and durable contribution fingerprints.
 The agent reads full conversation pages through `work_items_meeting`; the Qt
@@ -150,10 +148,7 @@ detail owner reads the same journal interface. Neither catalog nor view copies
 audio or the complete transcript. Python, SQLite and Pydantic algorithms are
 trusted; checks cover Workspace's timing, identity, page selection and wiring.
 
-1. Capture: `meeting_tools.py` → `MeetingOperation` in `automation/ipc.py` → `automation/app.py` `OwnerCalls.request` → `AssistantApp.meeting_command` in `assistant/app.py` → `meetings.py`, `meeting_store.py` and `recording_state.py`. `automation/capture.py` names the audio source.
-2. Meeting-notes routine: `meeting_events.py` records published transcript trigger occurrences; `automation/routines.py` `RoutineStore.dispatch` submits enabled routine work.
-
-The Meeting-notes routine uses the publication rule on `recording_state.StoredState.complete`.
+Capture runs `meeting_tools.py` → `MeetingOperation` in `automation/ipc.py` → `automation/app.py` `OwnerCalls.request` → `AssistantApp.meeting_command` in `assistant/app.py` → `meetings.py`, `meeting_store.py` and `recording_state.py`. `automation/capture.py` names the audio source.
 
 Moving these modules into packages remains follow-up work to the process-ownership
 decision in [#54](https://github.com/JimLundin/workspace/issues/54).
@@ -298,14 +293,8 @@ UI, microphone, meeting capture and live
 web-app pages remain with the assistant. The worker owns Teams, native actions
 and its external-browser session; web-app operations cross typed RPC.
 
-Standing instructions start disabled. An atomic accepted handoff separates an
-authorized occurrence from an unaccepted one that disable or edit can invalidate.
-Retrying a handoff submits the same routine occurrence, and missed intervals
-coalesce. Transcript delivery follows final successful export, independently
-of which recording owns the UI. Startup scanning repairs missed delivery and
-baselines pre-existing completed transcripts on first installation. Saved
-preferences and expiring project notes are explicit; fresh retrieval excludes
-expired text while retaining its source for reinspection.
+Saved preferences and expiring project notes are explicit; fresh retrieval
+excludes expired text while retaining its source for reinspection.
 
 Live replies and reasoning summaries carry an identity and stream state; tools
 carry a working, succeeded, failed, or cancelled outcome. The session replaces
