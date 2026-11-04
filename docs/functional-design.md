@@ -102,8 +102,7 @@ publication precedes presentation; presentation failures do not change journal
 or transport availability. The Qt adapter owns prose preparation and rendering.
 Agent execution stays in the
 supervised automation process. Neither the worker nor the keyboard may import
-any `desktop_ui` module, including through package initialization or an allowed
-composition seam. The source architecture review enforces those import routes.
+any `desktop_ui` module, including through package initialization. The source architecture review enforces those import routes.
 Python language features and dependency algorithms remain upstream trust;
 Workspace tests cover its SDK/Qt startup ordering, effect ownership and visible behavior.
 
@@ -545,27 +544,16 @@ Presentation modules live in `desktop_ui`; agent behavior and shared contracts
 live in `assistant`. Exact `headless` declarations reject transitive imports of
 `desktop_ui` and Qt from the work frontend, canvas owner and their domain values. Source review follows both packages after module moves.
 
-The architecture `processes` table names `automation.__main__` as work and
-`assistant.__main__` as desktop. The review computes both static import closures,
-including lazy imports, package initializers and allowed composition seams.
-Every assistant module loaded by work requires an exact `work_only` or `shared`
-declaration; declaring the package does not grant permission to its children.
-Work-only modules cannot enter the desktop closure. Removed consumers make
-work/shared declarations stale, and duplicate or conflicting declarations fail.
-These loading declarations do not move modules or describe which methods run.
-
 The `desktop_only` declaration keeps the entire `desktop_ui` package and
-`assistant/personal_work_store.py` outside the work closure. The
-review reports the import route to an undeclared module or a desktop owner,
-even through composition seams. Shared canvas and catalog contracts remain
-available to worker tools without loading those owners. Isolated policy fixture
-trees may omit process roots; work/shared declarations always require both.
+`assistant/personal_work_store.py` outside the import closure of
+`automation.__main__`, including lazy imports and package initializers. The
+review reports the import route to a desktop owner. Every other module is shared.
 
 Immutable data is the repository default specified in `AGENTS.md`. All source
 dataclasses require frozen slots; concrete mutable collection fields also require
 an exact exception. Configuration records a rule, module, declaration, expression
 and reason. Exceptions match normalized expressions, not shifting line numbers;
-obsolete entries fail. A necessity is distinct from existing migration debt.
+obsolete entries fail.
 The measured keyboard engine buffers and private SDK fragment accumulators have
 specific necessities. The former mailbox, overlay, Windows-key state, tool
 arguments, volatile history and schema migration entries are resolved: decisions

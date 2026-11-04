@@ -254,95 +254,11 @@ headless = [
     "assistant.work_canvas_edits",
 ]
 ui_private = ["assistant.work_agent", "assistant.work_canvas"]
-# Model ownership follows module moves; mutable effect owners are not models.
-models = [
-    "assistant.control_policy",
-    "assistant.hotkeys",
-    "assistant.agent_session",
-    "assistant.communications",
-    "assistant.feed_sources",
-    "assistant.feed_triage",
-    "assistant.notification_sources",
-    "assistant.recording_state",
-    "assistant.work_commands",
-    "assistant.work_snapshot",
-    "automation.task",
-    "winapi.system_notices",
-]
+# Owners the work process (automation.__main__) must never import.
 desktop_only = [
     "desktop_ui",
     "assistant.personal_work_store",
 ]
-# Exact static loading declarations; the package initializer does not grant its children access.
-work_only = [
-    "assistant.agent",
-    "assistant.agent_execution",
-    "assistant.agent_history",
-    "assistant.browser_tools",
-    "assistant.commands",
-    "assistant.desktop_tools",
-    "assistant.feed_agent_tools",
-    "assistant.git_environment",
-    "assistant.machine",
-    "assistant.meeting_execution",
-    "assistant.meeting_tools",
-    "assistant.outlook",
-    "assistant.publishing",
-    "assistant.sdk",
-    "assistant.self_change_tools",
-    "assistant.self_review_tools",
-    "assistant.task_profiles",
-    "assistant.task_tools",
-    "assistant.work_canvas_tools",
-    "assistant.workspace",
-]
-shared = [
-    "assistant",
-    "assistant.action_text",
-    "assistant.agent_tools",
-    "assistant.browser",
-    "assistant.browser_documents",
-    "assistant.browser_dom",
-    "assistant.browser_host",
-    "assistant.browser_requests",
-    "assistant.browser_session",
-    "assistant.browser_tabs",
-    "assistant.browser_values",
-    "assistant.business_tools",
-    "assistant.canvas_activity",
-    "assistant.feed_contracts",
-    "assistant.feed_history",
-    "assistant.feed_origin",
-    "assistant.geometry",
-    "assistant.llm",
-    "assistant.meeting_followup",
-    "assistant.meeting_followup_store",
-    "assistant.meeting_preparation",
-    "assistant.meeting_presentation",
-    "assistant.meeting_store",
-    "assistant.personal_work_tools",
-    "assistant.png",
-    "assistant.recording_state",
-    "assistant.textio",
-    "assistant.uia",
-    "assistant.web_apps",
-    "assistant.work_bridge_contracts",
-    "assistant.work_canvas_commands",
-    "assistant.work_canvas_context",
-    "assistant.work_canvas_model",
-]
-
-[tool.workspace.architecture.processes]
-work = "automation.__main__"
-desktop = "assistant.__main__"
-
-[[tool.workspace.architecture.seams]]
-module = "automation.app"
-reason = "The work process's composition root wires the assistant-side agent execution, machine, browser and meeting adapters into the controller."
-
-[[tool.workspace.architecture.seams]]
-module = "automation.__main__"
-reason = "The work process's entry point reads the endpoint settings the assistant owns before starting the composition root."
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"

@@ -50,9 +50,7 @@ def wait_for(path: Path, condition: str, process: subprocess.Popen[bytes]) -> di
 def write_watch_source(root: Path, output: Path) -> None:
     copy_check_scripts(root, ("watch.py", "check.py"))
     shutil.copyfile(ROOT / "runtime.py", root / "runtime.py")
-    (root / "pyproject.toml").write_text(
-        '[tool.workspace.architecture]\nmodels=[]\n[tool.ruff]\ntarget-version="py315"\n[tool.ruff.lint.pylint]\nmax-args=5\n'
-    )
+    (root / "pyproject.toml").write_text('[tool.workspace.architecture]\n[tool.ruff]\ntarget-version="py315"\n[tool.ruff.lint.pylint]\nmax-args=5\n')
     (root / ".gitignore").write_text("__pycache__/\n.ruff_cache/\n")
     (root / "requirements").mkdir()
     # Source-only keeper snapshots omit dotfiles; the fixture targets this runtime.

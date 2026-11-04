@@ -1,4 +1,4 @@
-"""Source ownership and coding policies, without importing application modules.
+"""Process isolation and coding policies, without importing application modules.
 
 The same inventory works in a Git checkout and a deployed source copy. Callers
 may supply Git-listed names to bind the review to their checked source snapshot.
@@ -65,18 +65,9 @@ class ExceptionSpec:
     declaration: Text
     expression: Text
     reason: Text
-    kind: Literal["necessity", "migration"] = "necessity"
 
     def matches(self, finding: Finding) -> bool:
         return (self.rule, self.module, self.declaration, self.expression) == (finding.rule, finding.module, finding.declaration, finding.expression)
-
-
-@dataclass(frozen=True, slots=True)
-class Seam:
-    """A module allowed to import upward, such as a process's composition root."""
-
-    module: Text
-    reason: Text
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,34 +78,16 @@ class Report:
 
 
 @dataclass(frozen=True, slots=True)
-class Processes:
-    work: Text
-    desktop: Text
-
-
-@dataclass(frozen=True, slots=True)
 class Configuration:
-    """The architecture TOML contract keeps its independent policy declarations together.
+    """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
 
-    Model ownership, exact exceptions, composition seams and process ownership
-    enter the source review as one validated record. Its fields describe
-    independent policies rather than one function's operational inputs.
-    """
-
-    models: tuple[Text, ...]
     exceptions: tuple[ExceptionSpec, ...] = ()
-    seams: tuple[Seam, ...] = ()
-    """Lower-layer modules that may import assistant modules."""
     desktop_only: tuple[Text, ...] = ()
-    """Owners that the work process must never import, including through seams."""
-    work_only: tuple[Text, ...] = ()
-    shared: tuple[Text, ...] = ()
+    """Owners that the work process must never import."""
     headless: tuple[Text, ...] = ()
     """Application logic that cannot import presentation modules or Qt."""
     ui_private: tuple[Text, ...] = ()
     """Effect owners that presentation must access through client contracts."""
-    processes: Processes | None = None
-    """Isolated policy fixtures may omit process roots; production declares both."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,15 +198,6 @@ def _configuration(root: Path) -> Configuration:
     for entry in exceptions:
         if any("*" in value for value in (entry.module, entry.declaration)):
             raise ValueError("Architecture exceptions require a supported rule and an exact declaration.")
-    if len(frozenset(seam.module for seam in configuration.seams)) != len(configuration.seams):
-        raise ValueError("Duplicate layering seam.")
-    owners = (*configuration.desktop_only, *configuration.work_only, *configuration.shared)
-    if len(frozenset(owners)) != len(owners):
-        raise ValueError("Duplicate or conflicting process ownership declaration.")
-    if any("*" in owner for owner in owners):
-        raise ValueError("Process ownership declarations require exact module names.")
-    if configuration.processes is None and (configuration.work_only or configuration.shared):
-        raise ValueError("Work and shared ownership declarations require process roots.")
     return replace(configuration, exceptions=exceptions)
 
 
@@ -241,15 +205,14 @@ def _within(module: str, package: str) -> bool:
     return module == package or module.startswith(package + ".")
 
 
-LOWER_LAYERS: Final = ("automation", "winapi")
-"""Packages the application builds on; they reach no application owner except through declared seams."""
 APPLICATION_LAYERS: Final = ("assistant", "desktop_ui")
 WORKER_ENTRY: Final = "automation.__main__"
 
 
-def worker_isolation(graph: Mapping[str, frozenset[str]], desktop_only: Iterable[str], *, entry: str = WORKER_ENTRY) -> Iterator[Finding]:
-    """Report desktop-only owners reachable from the worker, traversing composition seams."""
+def worker_isolation(graph: Mapping[str, frozenset[str]], desktop_only: Iterable[str]) -> Iterator[Finding]:
+    """Report desktop-only owners reachable from the work process."""
     restricted = frozenset(desktop_only)
+    entry = WORKER_ENTRY
     pending: deque[tuple[str, ...]] = deque([(entry,)])
     visited: set[str] = set()
     while pending:
@@ -298,57 +261,6 @@ def presentation_isolation(graph: Mapping[str, frozenset[str]], owners: Iterable
         for route in _routes(graph, entry):
             if route[-1] in restricted:
                 yield Finding("presentation-isolation", entry, "", "", 0, " → ".join(route))
-
-
-def process_ownership(graph: Mapping[str, frozenset[str]], configuration: Configuration) -> Iterator[Finding]:
-    """Exact work/shared declarations describe both closures, regardless of seams."""
-    processes = configuration.processes
-    if processes is None:
-        return
-    missing = tuple(entry for entry in (processes.work, processes.desktop) if entry not in graph)
-    for entry in missing:
-        yield Finding("process-entry", entry, "", "", 0, "Declared process entry is absent; update its ownership declaration.")
-    if missing:
-        return
-    # Repeated membership checks and route reporting need these bounded snapshots.
-    work = tuple(_routes(graph, processes.work))
-    desktop = tuple(_routes(graph, processes.desktop))
-    work_modules = frozenset(route[-1] for route in work)
-    desktop_modules = frozenset(route[-1] for route in desktop)
-    work_only, shared = frozenset(configuration.work_only), frozenset(configuration.shared)
-    allowed = work_only | shared
-    for route in work:
-        module = route[-1]
-        if _within(module, "assistant") and module not in allowed and not any(_within(module, owner) for owner in configuration.desktop_only):
-            yield Finding("process-declaration", processes.work, "", "", 0, "Declare this work import as work_only or shared: " + " → ".join(route))
-    for route in desktop:
-        if route[-1] in work_only:
-            yield Finding("process-ownership", processes.desktop, "", "", 0, "Desktop imports a work-only module: " + " → ".join(route))
-    for module in sorted(allowed):
-        if module not in work_modules or (module in shared and module not in desktop_modules):
-            yield Finding("stale-process", module, "", "", 0, "Ownership no longer matches the process closures; update its exact declaration.")
-
-
-def layering(graph: Mapping[str, frozenset[str]], seams: Iterable[Seam]) -> Iterator[Finding]:
-    """No lower-layer module reaches application owners, except through a declared seam."""
-    allowed = frozenset(seam.module for seam in seams)
-    starts = (module for module in graph if any(_within(module, layer) for layer in LOWER_LAYERS) and module not in allowed)
-    for start in sorted(starts):
-        pending: deque[tuple[str, ...]] = deque([(start,)])
-        visited: set[str] = set()
-        while pending:
-            route = pending.popleft()
-            module = route[-1]
-            if module in visited:
-                continue
-            visited.add(module)
-            if any(_within(module, layer) for layer in APPLICATION_LAYERS):
-                yield Finding("layering", start, "", "", 0, " → ".join(route))
-                break
-            pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
-    for seam in sorted(allowed):
-        if not any(_within(target, layer) for target in graph.get(seam, frozenset()) for layer in APPLICATION_LAYERS):
-            yield Finding("stale-seam", seam, "", "", 0, "Remove the seam: this module no longer imports an application owner.")
 
 
 def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str]:
@@ -536,7 +448,7 @@ def testing_dependencies(source: Source) -> Iterator[Finding]:
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     sources = python_sources(root, names)
     configuration = _configuration(root)
-    models, exceptions = configuration.models, configuration.exceptions
+    exceptions = configuration.exceptions
     all_source = tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources)
     loaded = tuple(source for source in all_source if not source.name.startswith("tests/"))
     observations = {module_name(source.name): observation(source, cache) for source in loaded}
@@ -544,11 +456,6 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     graph = {module: imported & observations.keys() for module, imported in imports.items()}
     findings = [finding for observed in observations.values() for finding in observed.declarations]
     findings.extend(finding for source in all_source for finding in testing_dependencies(source))
-    findings.extend(
-        Finding("model-coverage", module, "", "", 0, "Declared model module is absent; update its ownership declaration.")
-        for module in models
-        if module not in observations
-    )
     pending: deque[tuple[str, ...]] = deque((module,) for module in sorted(graph) if module == "miryoku" or module.startswith("miryoku."))
     visited: set[str] = set()
     while pending:
@@ -562,10 +469,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             continue
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
-    findings.extend(layering(graph, configuration.seams))
-    entry = configuration.processes.work if configuration.processes is not None else WORKER_ENTRY
-    findings.extend(worker_isolation(graph, configuration.desktop_only, entry=entry))
-    findings.extend(process_ownership(graph, configuration))
+    findings.extend(worker_isolation(graph, configuration.desktop_only))
     findings.extend(ui_isolation(imports, configuration.headless))
     findings.extend(presentation_isolation(graph, configuration.ui_private))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))

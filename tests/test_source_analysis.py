@@ -9,9 +9,9 @@ from tests.test_architecture import write_tree
 from tests.test_quality import development_lint, source_tree
 
 
-def test_cached_policy_review_recomputes_changed_imports_and_whole_graph_ownership(tmp_path: Path) -> None:
+def test_cached_policy_review_recomputes_changed_imports(tmp_path: Path) -> None:
     # Detect an old module observation hiding a new transitive keyboard import,
-    # or a stale graph/configuration report accepting removed declared ownership.
+    # or damaged cache records producing a passing report.
     root = tmp_path / "source"
     root.mkdir()
     write_tree(
@@ -23,16 +23,12 @@ def test_cached_policy_review_recomputes_changed_imports_and_whole_graph_ownersh
             "assistant/__init__.py": "",
             "assistant/model.py": "",
         },
-        models=("bridge",),
     )
     cache = Cache(root, folder=tmp_path / "cache")
     assert review(root, cache=cache) == review(root) and not review(root, cache=cache).failures
     (root / "bridge.py").write_text("from assistant import model\nvalue = 2\n")
     report = review(root, cache=cache)
     assert report == review(root) and any(item.rule == "keyboard-isolation" for item in report.failures)
-    (root / "bridge.py").unlink()
-    report = review(root, cache=cache)
-    assert report == review(root) and any(item.rule == "model-coverage" for item in report.failures)
     # Cache damage must fall back to analysis, never produce a passing report.
     for path in cache.folder.glob("*.json"):
         path.write_text("partial")

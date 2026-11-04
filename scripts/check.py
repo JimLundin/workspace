@@ -318,7 +318,7 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
 
 @contextmanager
 def scratch_directory() -> Generator[Path]:
-    """The tmp_path fixture shared with mutation sessions.
+    """The tmp_path fixture.
 
     Stores nest digest-named folders under it, so it stays shallow enough for
     Windows MAX_PATH; pytest's own tmp_path nests too deep for them.
@@ -391,9 +391,6 @@ def check_architecture(root: Path, current: dict[str, str], cache: Cache) -> Rep
         f"Architecture: {len(report.sources)} Python sources, {len(report.exceptions)} exact exceptions; {time.perf_counter() - started:.2f}s.",
         flush=True,
     )
-    for exception in report.exceptions:
-        if exception.kind == "migration":
-            print(f"  Migration debt: {exception.module}.{exception.declaration}")
     return report
 
 

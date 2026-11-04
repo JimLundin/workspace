@@ -16,7 +16,7 @@ from tests.git_fixture import initialized
 def source_tree(root: Path, text: str) -> None:
     (root / "assistant").mkdir()
     (root / "assistant" / "api.py").write_text(text, encoding="utf-8")
-    (root / "pyproject.toml").write_text("[tool.workspace.architecture]\nmodels = []\n[tool.ruff.lint.pylint]\nmax-args = 5\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text("[tool.workspace.architecture]\n[tool.ruff.lint.pylint]\nmax-args = 5\n", encoding="utf-8")
 
 
 def development_lint() -> None:
