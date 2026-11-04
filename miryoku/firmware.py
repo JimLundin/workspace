@@ -18,12 +18,12 @@ _CHORD_LETTERS: Final[tuple[tuple[Request, str], ...]] = (
     (Tool.DESKTOP_1, "J"), (Tool.DESKTOP_2, "L"), (Tool.DESKTOP_3, "U"), (Tool.DESKTOP_4, "Y"),
     (Tool.DESKTOP_PREVIOUS, "K"), (Tool.DESKTOP_NEXT, "H"),
     (Tool.ZOOM, "M"),
-    # Left-hand letters, tapped while the right hand holds N E I: the Apps layer's app positions.
+    # Left-hand letters, tapped while the right hand holds N E I: config's apps along the top and home rows.
     *zip(APPS[:10], "QWFPBARSTG", strict=False),
     (Tool.PLACEMENT_PAUSE, "X"), (Tool.WINDOW_SWITCHER, "C"), (Tool.PLACE_NOW, "D"), (Tool.MINIMIZE, "V"),
 )  # fmt: skip
 CHORDS: Final[frozendict[Request, str]] = frozendict(_CHORD_LETTERS)
-"""Ctrl+Alt+Shift + the letter, on the firmware keyboard, asks Workspace for the request."""
+"""Ctrl+Alt+Shift + the letter asks Workspace for the request, from the firmware keyboard or the layout's home row mods."""
 
 CHORD_KEYS: Final = frozendict({ord(letter): request for request, letter in CHORDS.items()})
 """Each chord's request by its letter's virtual key, which both keyboards share."""

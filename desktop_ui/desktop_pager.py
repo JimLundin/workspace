@@ -2,9 +2,8 @@
 
 The pager shows one number per desktop with the current one marked, between
 previous and next ends. Its names list the applications placed on each desktop.
-While the Apps layer is held or locked, each target also carries the physical
-keycap that reaches it, read from the layout. While the firmware keyboard holds
-Ctrl+Alt+Shift, each target carries its chord instead, read from the chord table.
+While either keyboard holds Ctrl+Alt+Shift, each target carries its chord letter,
+read from the chord table.
 
 A horizontal scroll over the bar is a swipe: one gesture, however many wheel
 events it produces, steps one desktop.
@@ -12,14 +11,11 @@ events it produces, steps one desktop.
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import Final, assert_never
 
-from desktop_ui.keymap import shortcut
 from desktop_ui.shell_items import WEB_APPS, PinnedApp
 from desktop_ui.window_layout import App, Program
 from miryoku.firmware import CHORDS
-from miryoku.layout import Layer
 from protocol import Tool
 
 JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4)
@@ -27,7 +23,7 @@ JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4)
 
 @dataclass(frozen=True, slots=True)
 class Hints:
-    """The keys reaching each pager target; empty unless a keyboard is ready to reach them."""
+    """The chord letter reaching each pager target; empty unless a keyboard holds Ctrl+Alt+Shift."""
 
     previous: str | None
     next: str | None
@@ -61,36 +57,11 @@ def label(app: App) -> str:
             assert_never(app)
 
 
-class Reach(Enum):
-    """Which keys reach the pager's targets right now."""
+def pager(placed: Sequence[Sequence[App]], current: int, *, chord: bool) -> PagerView:
+    """The pager for these desktops, each with the applications placed on it.
 
-    APPS_LAYER = auto()
-    """The laptop's Apps layer is held or locked: its physical keycaps."""
-    CHORD = auto()
-    """The firmware keyboard holds Ctrl+Alt+Shift: each target's chord."""
-
-
-def reach(layer: str | None, *, chord: bool) -> Reach | None:
-    """The keys reaching the pager now. The bar's layer reading names the layer first, then whether it's locked."""
-    if chord:
-        return Reach.CHORD
-    return Reach.APPS_LAYER if layer is not None and layer.split(" · ")[0] == Layer.APPS.name else None
-
-
-def keycap(tool: Tool, keys: Reach) -> str | None:
-    match keys:
-        case Reach.APPS_LAYER:
-            found = shortcut(tool)
-            return found.tap if found is not None else None
-        case Reach.CHORD:
-            # The hint shows while Ctrl+Alt+Shift are held, so the letter alone completes the chord.
-            return CHORDS.get(tool)
-        case _:
-            assert_never(keys)
-
-
-def pager(placed: Sequence[Sequence[App]], current: int, keys: Reach | None) -> PagerView:
-    """The pager for these desktops, each with the applications placed on it."""
+    The hints show while Ctrl+Alt+Shift are held, so the letter alone completes the chord.
+    """
 
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:
         listed = ", ".join(label(app) for app in apps) or "No placed apps"
@@ -98,10 +69,10 @@ def pager(placed: Sequence[Sequence[App]], current: int, keys: Reach | None) -> 
         return PagerDesktop(str(index + 1), f"Desktop {index + 1}{here} · {listed}", current=index == current)
 
     desktops = tuple(desktop(index, apps) for index, apps in enumerate(placed))
-    if keys is None:
+    if not chord:
         return PagerView(desktops, NO_HINTS)
-    jumps = tuple(keycap(JUMPS[index], keys) if index < len(JUMPS) else None for index in range(len(desktops)))
-    return PagerView(desktops, Hints(keycap(Tool.DESKTOP_PREVIOUS, keys), keycap(Tool.DESKTOP_NEXT, keys), jumps))
+    jumps = tuple(CHORDS.get(JUMPS[index]) if index < len(JUMPS) else None for index in range(len(desktops)))
+    return PagerView(desktops, Hints(CHORDS.get(Tool.DESKTOP_PREVIOUS), CHORDS.get(Tool.DESKTOP_NEXT), jumps))
 
 
 @dataclass(frozen=True, slots=True)

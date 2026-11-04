@@ -676,7 +676,7 @@ def test_pager_offers_each_desktop_and_a_horizontal_scroll_over_the_bar_swipes()
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     chosen: list[Navigation] = []
     try:
-        bar.window.shell_sections.desktops(pager(((TERMINAL,), (EDGE,)), 0, None), chosen.append)
+        bar.window.shell_sections.desktops(pager(((TERMINAL,), (EDGE,)), 0, chord=False), chosen.append)
         buttons = bar.window.shell_sections.pager.buttons
         assert [button.accessibleName() for button in buttons] == [
             "Previous desktop",

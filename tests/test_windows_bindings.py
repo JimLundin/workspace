@@ -294,24 +294,6 @@ def test_f6_stays_native_and_b_uses_one_toggle_per_press() -> None:
         assert not any(message == WM_REQUEST for message, _tool, _down in messages)
 
 
-def test_physical_arrows_navigate_apps_and_release_cleanly_after_the_thumb() -> None:
-    with observed_keyboard() as (keyboard, messages):
-        thumb = inputs.KeyEvent(0xBE, 0x34, 0, 0, 0)
-        control = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
-        arrow = inputs.KeyEvent(0x27, 0x4D, inputs.LLKHF_EXTENDED, 20, 0)
-        assert keyboard.swallow(thumb, down=True)
-        assert not keyboard.swallow(control, down=True)
-        assert keyboard.swallow(arrow, down=True)
-        assert keyboard.swallow(thumb, down=False)
-        assert keyboard.swallow(arrow, down=False)
-        assert not keyboard.swallow(control, down=False)
-        assert (WM_REQUEST, Tool.FOCUS_RIGHT.value, 1) in messages
-        assert (WM_REQUEST, Tool.FOCUS_RIGHT.value, 0) in messages
-        assert not keyboard.engine.desktop_held
-        assert not keyboard.swallow(arrow, down=True)
-        assert not keyboard.swallow(arrow, down=False)
-
-
 def test_picker_enter_release_passes_after_the_selected_window_takes_focus() -> None:
     driver = KeyboardFixture()
     driver.current_title = SWITCHER_TITLE

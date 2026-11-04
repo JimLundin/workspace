@@ -154,7 +154,7 @@ def test_tool_cells_derive_hints_and_short_captions() -> None:
     # Defects: the switcher advertises layer/tap labels instead of physical keys, or a
     # small tile shows a caption that doesn't name its tool.
     tools = [(cell.entry, cell.caption) for cell in entries(RESTING) if cell.face is Face.TOOL]
-    assert tools[0] == (Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), ". X"), "Switch")
+    assert tools[0] == (Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), "⌃⌥⇧ C"), "Switch")
     assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map"]
 
 
