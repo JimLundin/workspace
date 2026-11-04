@@ -1,0 +1,310 @@
+"""Paints the key hints: a keycap badge inside each window's corner and the panel of every chord.
+
+The bar owns the hints and hands this overlay each `HintView`. Every surface is
+a click-through tool window that never activates. Badge windows are pooled and
+the panel is made once, so showing hints only moves, repaints and reveals windows.
+Nothing runs while they're hidden.
+"""
+
+from dataclasses import dataclass, field
+from typing import Final, Protocol, assert_never
+
+lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6.QtCore import Qt
+
+from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Lettering, Look, Scheme, Shade, SolidLook, look
+from desktop_ui.components.bubble import rim_gradient
+from desktop_ui.components.meaning import Tint
+from desktop_ui.components.text import color, face
+from desktop_ui.key_hints import ActionCap, AppCap, DirectionCap, Group, HintView, Keycap
+from desktop_ui.keymap import CHORD_HOLD
+from desktop_ui.navigation import Direction
+from desktop_ui.qt_runtime import prepare
+from winapi.appearance import Contrast, Material, Preference
+
+prepare()
+
+HEIGHT: Final = 26
+"""The bar's 34 px capsule, scaled down to a badge."""
+CAP: Final = 20
+"""A keycap circle, concentric 3 px inside its badge."""
+GAP: Final = 4
+CORNER: Final = 8
+"""Each badge's inset from its window's top-left corner."""
+PANEL_RADIUS: Final = 21
+PADDING: Final = 16
+ROW: Final = 24
+COLUMN_GAP: Final = 24
+ARROWS: Final = {Direction.LEFT: "←", Direction.DOWN: "↓", Direction.UP: "↑", Direction.RIGHT: "→"}
+WHITE: Final = Shade("#ffffff")
+
+
+class HintSurface(Protocol):
+    """The native window effects the overlay needs; `overlay_desktop.NativeOverlayDesktop` provides them."""
+
+    def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int: ...
+    def present(self, window: QtWidgets.QWidget) -> None: ...
+
+
+def letter_face() -> QtGui.QFont:
+    return face(12, 500)
+
+
+def label_face() -> QtGui.QFont:
+    return face(12, 400)
+
+
+def keycap_text(keycap: Keycap) -> str:
+    match keycap:
+        case AppCap(letter=letter) | ActionCap(letter=letter):
+            return letter
+        case DirectionCap(letter=letter, direction=direction):
+            return f"{ARROWS[direction]} {letter}"
+        case _:
+            assert_never(keycap)
+
+
+@dataclass(frozen=True, slots=True)
+class Style:
+    """How the hints read in the user's material."""
+
+    surface: Look
+    contrast: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class Face:
+    """One keycap as painted: its fill, if any, its ink and its text."""
+
+    fill: Shade | None
+    ink: Shade
+    text: str
+
+
+def keycap_face(keycap: Keycap, style: Style) -> Face:
+    """The app's letter sits in a well and the window its next press reaches takes the accent; actions read quietly."""
+    lettering, text = lettering_of(style.surface), keycap_text(keycap)
+    match keycap:
+        case AppCap(next=True) if style.contrast:
+            # High contrast swaps the system colours instead of adding a hue.
+            return Face(lettering.ink, background(style.surface), text)
+        case AppCap(next=True):
+            return Face(Shade(GLASS_ACCENT), WHITE, text)
+        case AppCap():
+            return Face(lettering.hover, lettering.ink, text)
+        case DirectionCap():
+            return Face(None, lettering.ink, text)
+        case ActionCap():
+            return Face(None, lettering.ink if style.contrast else lettering.quiet, text)
+        case _:
+            assert_never(keycap)
+
+
+def background(surface: Look) -> Shade:
+    match surface:
+        case GlassLook(veil=fill) | SolidLook(fill=fill):
+            return Shade(fill.color)
+        case _:
+            assert_never(surface)
+
+
+def style(preference: Preference) -> Style:
+    """Hints float over any window without composition's blur, so glass takes the thicker Qt-painted veil."""
+    surface = look(preference, CanvasBar(Scheme.DARK), Tint.NONE)
+    match preference:
+        case Contrast():
+            return Style(surface, contrast=True)
+        case Material.GLASS | Material.SOLID:
+            return Style(surface, contrast=False)
+        case _:
+            assert_never(preference)
+
+
+def keycap_width(keycap: Keycap, metrics: QtGui.QFontMetricsF) -> float:
+    """A circle, widened into a pill with a 6 px inset when its text needs more room."""
+    return max(float(CAP), metrics.horizontalAdvance(keycap_text(keycap)) + 12)
+
+
+def badge_width(keycaps: tuple[Keycap, ...], metrics: QtGui.QFontMetricsF) -> int:
+    inner = sum(keycap_width(keycap, metrics) for keycap in keycaps) + GAP * (len(keycaps) - 1)
+    return round(inner + (HEIGHT - CAP))
+
+
+def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look) -> None:
+    """Glass without composition: its veil and rim light, painted by Qt; solid and high contrast fill and edge.
+
+    A badge is a capsule; the panel keeps the menu's corners.
+    """
+    radius = min(bounds.height() / 2, PANEL_RADIUS)
+    edge = bounds.adjusted(0.5, 0.5, -0.5, -0.5)
+    outline = QtGui.QPainterPath()
+    outline.addRoundedRect(edge, radius - 0.5, radius - 0.5)
+    match surface:
+        case GlassLook(veil=veil, rim=rim):
+            painter.fillPath(outline, color(veil))
+            painter.setPen(QtGui.QPen(rim_gradient(edge, rim), 1))
+        case SolidLook(fill=fill, edge=line):
+            painter.fillPath(outline, color(fill))
+            painter.setPen(QtGui.QPen(color(line), 1))
+        case _:
+            assert_never(surface)
+    painter.drawPath(outline)
+
+
+def lettering_of(surface: Look) -> Lettering:
+    match surface:
+        case GlassLook(lettering=lettering) | SolidLook(lettering=lettering):
+            return lettering
+        case _:
+            assert_never(surface)
+
+
+def paint_keycap(painter: QtGui.QPainter, bounds: QtCore.QRectF, face: Face) -> None:
+    if face.fill is not None:
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color(face.fill))
+        painter.drawRoundedRect(bounds, bounds.height() / 2, bounds.height() / 2)
+    painter.setPen(color(face.ink))
+    painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, face.text)
+
+
+class BadgeWindow(QtWidgets.QWidget):
+    """One window's badge: a capsule of keycaps."""
+
+    __slots__ = ("keycaps", "look")
+
+    def __init__(self) -> None:
+        super().__init__()
+        prepared(self, "Workspace key hint")
+        self.keycaps: tuple[Keycap, ...] = ()
+        self.look = style(Material.SOLID)
+
+    def draw(self, keycaps: tuple[Keycap, ...], look: Style) -> None:
+        self.keycaps, self.look = keycaps, look
+        self.resize(badge_width(keycaps, QtGui.QFontMetricsF(letter_face())), HEIGHT)
+        self.update()
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        painter.setFont(letter_face())
+        paint_surface(painter, QtCore.QRectF(self.rect()), self.look.surface)
+        metrics = QtGui.QFontMetricsF(letter_face())
+        left = (HEIGHT - CAP) / 2
+        for keycap in self.keycaps:
+            width = keycap_width(keycap, metrics)
+            paint_keycap(painter, QtCore.QRectF(left, (HEIGHT - CAP) / 2, width, CAP), keycap_face(keycap, self.look))
+            left += width + GAP
+
+
+class PanelWindow(QtWidgets.QWidget):
+    """Every chord in four columns: Apps, Desktops, Focus and Window."""
+
+    __slots__ = ("groups", "look")
+
+    def __init__(self) -> None:
+        super().__init__()
+        prepared(self, "Workspace chord panel")
+        self.groups: tuple[Group, ...] = ()
+        self.look = style(Material.SOLID)
+
+    def columns(self) -> tuple[float, ...]:
+        letters, labels = QtGui.QFontMetricsF(letter_face()), QtGui.QFontMetricsF(label_face())
+        return tuple(
+            max(letters.horizontalAdvance(group.section.value), *(CAP + 6 + labels.horizontalAdvance(row.label) for row in group.rows))
+            for group in self.groups
+        )
+
+    def draw(self, groups: tuple[Group, ...], look: Style) -> None:
+        self.groups, self.look = groups, look
+        widths = self.columns()
+        rows = max((len(group.rows) for group in groups), default=0)
+        self.resize(round(sum(widths) + COLUMN_GAP * (len(widths) - 1) + 2 * PADDING), 2 * PADDING + ROW * (rows + 2))
+        self.update()
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        paint_surface(painter, QtCore.QRectF(self.rect()), self.look.surface)
+        lettering = lettering_of(self.look.surface)
+        quiet = color(lettering.ink if self.look.contrast else lettering.quiet)
+        middle = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        painter.setFont(label_face())
+        painter.setPen(quiet)
+        painter.drawText(QtCore.QRectF(PADDING, PADDING, self.width() - 2 * PADDING, ROW), middle, f"Hold {CHORD_HOLD} and press")
+        left = float(PADDING)
+        for group, width in zip(self.groups, self.columns(), strict=True):
+            top = PADDING + ROW
+            painter.setFont(letter_face())
+            painter.setPen(quiet)
+            painter.drawText(QtCore.QRectF(left, top, width, ROW), middle, group.section.value)
+            for row in group.rows:
+                top += ROW
+                painter.setFont(letter_face())
+                paint_keycap(painter, QtCore.QRectF(left, top + (ROW - CAP) / 2, CAP, CAP), keycap_face(AppCap(row.letter, next=False), self.look))
+                painter.setFont(label_face())
+                painter.setPen(color(lettering.ink))
+                painter.drawText(QtCore.QRectF(left + CAP + 6, top, width - CAP - 6, ROW), middle, row.label)
+            left += width + COLUMN_GAP
+
+
+def prepared(window: QtWidgets.QWidget, title: str) -> None:
+    window.setWindowTitle(title)
+    window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+    window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+    window.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+
+def logical(x: int, y: int) -> QtCore.QPoint:
+    """A physical desktop pixel in Qt's coordinates, which keep each screen's native origin and scale within it."""
+    for screen in QtGui.QGuiApplication.screens():
+        geometry, ratio = screen.geometry(), screen.devicePixelRatio()
+        left, top = geometry.x(), geometry.y()
+        if left <= x < left + geometry.width() * ratio and top <= y < top + geometry.height() * ratio:
+            return QtCore.QPoint(left + round((x - left) / ratio), top + round((y - top) / ratio))
+    return QtCore.QPoint(x, y)
+
+
+class KeyHintOverlay:
+    """Shows each `HintView` the bar decides; an unchanged view repaints nothing."""
+
+    __slots__ = ("badges", "panel", "shown", "surface")
+
+    def __init__(self, surface: HintSurface) -> None:
+        self.surface = surface
+        # Pooled native windows, grown to the most badges shown so far and reused.
+        self.badges: tuple[BadgeWindow, ...] = ()
+        self.panel = PanelWindow()
+        self.surface.prepare(self.panel, click_through=True)
+        self.shown: tuple[HintView, Preference] | None = None
+
+    def show(self, view: HintView, preference: Preference) -> None:
+        if self.shown == (view, preference):
+            return
+        self.shown = (view, preference)
+        look = style(preference)
+        while len(self.badges) < len(view.badges):
+            window = BadgeWindow()
+            self.surface.prepare(window, click_through=True)
+            self.badges = (*self.badges, window)
+        for window, badge in zip(self.badges, view.badges, strict=False):
+            window.draw(badge.keycaps, look)
+            window.move(logical(badge.rect.left, badge.rect.top) + QtCore.QPoint(CORNER, CORNER))
+            self.surface.present(window)
+        for window in self.badges[len(view.badges) :]:
+            window.hide()
+        if not view.panel:
+            self.panel.hide()
+            return
+        self.panel.draw(view.panel, look)
+        work = QtGui.QGuiApplication.primaryScreen().availableGeometry()
+        # Above the layer indicator, which sits 28 px over the bottom of the same screen.
+        self.panel.move(work.x() + (work.width() - self.panel.width()) // 2, work.bottom() - self.panel.height() - 80)
+        self.surface.present(self.panel)
+
+    def close(self) -> None:
+        for window in (*self.badges, self.panel):
+            window.close()
+            window.deleteLater()
+        self.badges = ()
