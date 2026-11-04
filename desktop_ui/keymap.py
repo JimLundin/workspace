@@ -124,14 +124,10 @@ TOOL_NAMES: Final = {
     Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
     Tool.SNAP_LEFT: "Snap ←", Tool.SNAP_RIGHT: "Snap →", Tool.MAXIMIZE: "Max", Tool.MINIMIZE: "Min",
     Tool.NEXT_MONITOR: "Monitor →",
-    Tool.TILE_FOCUS_LEFT: "Focus ←", Tool.TILE_FOCUS_DOWN: "Focus ↓", Tool.TILE_FOCUS_UP: "Focus ↑", Tool.TILE_FOCUS_RIGHT: "Focus →",
-    Tool.TILE_FLOAT: "Float", Tool.TILE_PREVIOUS_WORKSPACE: "Space ←", Tool.TILE_NEXT_WORKSPACE: "Space →",
-    Tool.TILE_DIRECTION: "Tile axis", Tool.TILE_PAUSE: "Pause tiles",
     Tool.MEETING_TOGGLE: "Record", Tool.AGENT_VOICE_TOGGLE: "Agent toggle", Tool.COPY_TRANSCRIPT: "Copy speech",
     Tool.DICTATE_TOGGLE: "Dictate toggle",
     Tool.OPEN_INBOX: "Inbox",
-    Tool.WINDOW_SWITCHER: "Windows", Tool.TILE_BALANCE: "Spread tiles",
-
+    Tool.WINDOW_SWITCHER: "Windows",
 }  # fmt: skip
 if set(TOOL_NAMES) != set(Tool):
     raise ImportError("every tool needs a name on the key map")

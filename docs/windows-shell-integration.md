@@ -34,10 +34,8 @@ high-contrast preferences still choose the corresponding accessible fallback.
 Banner suppression uses Windows notification settings, separately from mirroring.
 
 The initial duplicate window-controls segment and tabbed-window prototype were
-removed. Workspace uses ordinary automatic tiling and preserves each application's title bar.
-The tabbed-window prototype was removed after workflow regressions. Keyboard
-navigation uses Apps + arrow keys for tiling focus and Apps + Esc for the window
-switcher.
+removed after workflow regressions. Workspace preserves each application's title
+bar, apart from the pinned web-app slots. Apps + Esc opens the window switcher.
 
 ## Notification access
 

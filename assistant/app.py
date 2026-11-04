@@ -33,7 +33,7 @@ lazy from assistant.communications_browser import TeamsWeb
 lazy from assistant.communications_service import Communications
 lazy from assistant.communications_state import COMMUNICATIONS_STATE
 lazy from assistant.desktop import WinDesktop
-lazy from assistant.features import Assistant, switcher_windows
+lazy from assistant.features import Assistant
 lazy from assistant.feed_contracts import STORED_BOARD
 lazy from assistant.feed_research import Research
 lazy from assistant.feed_sources import Candidate
@@ -49,7 +49,6 @@ lazy from assistant.meeting_preparation import Preparations
 lazy from assistant.meeting_store import MeetingArchive
 lazy from assistant.meeting_workflow import MeetingWorkflow
 lazy from assistant.meetings import Meetings
-lazy from assistant.monitor_layout import MonitorLayout
 lazy from assistant.notification_sources import NOTIFICATION_STATE
 lazy from assistant.personal_work_model import Correlator
 lazy from assistant.personal_work_service import PersonalWork
@@ -59,7 +58,6 @@ lazy from assistant.personal_work_tools import source_request
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
-lazy from assistant.tiling import GlazeWM
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners, answer
 lazy from assistant.work_canvas import WorkCanvas, run_prompt
@@ -196,13 +194,11 @@ class AssistantApp:
         "layout",
         "meetings",
         "mic_event",
-        "monitor_layout",
         "overlay",
         "personal",
         "settings",
         "startup",
         "startup_effects",
-        "tiling",
         "timings",
         "tray",
         "triage",
@@ -229,12 +225,8 @@ class AssistantApp:
         self.tray = Tray(self.window.handle, WM_TRAY)
         self.automatic_attention = AutomaticAttention(self.ui.desktop_automatic, self.warn_automatic_recording)
         self.mic_event = system.create_event()
-        self.tiling = GlazeWM()
-        self.monitor_layout = MonitorLayout(self.tiling, self.problem)
         mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
-        self.desktop = WinDesktop(
-            self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem, tiling=self.tiling
-        )
+        self.desktop = WinDesktop(self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem)
         self.timings.mark("control window and microphone")
         self.settings, missing = configured(settings)
         self.activity: ActivityTracker
@@ -341,7 +333,6 @@ class AssistantApp:
                 self.followups.start,
                 self.meetings.start_worker,
                 self.automatic_meetings.start,
-                self.monitor_layout.start,
             )
         )
         if missing is not None:
@@ -435,8 +426,6 @@ class AssistantApp:
         self.communications.close()
         timings.mark("Teams worker")
         self.automatic_meetings.close()
-        self.monitor_layout.close()
-        timings.mark("monitor layout")
         try:
             self.ui.close_desktop()
         except OSError as error:
@@ -454,22 +443,15 @@ class AssistantApp:
         timings.mark("Qt shutdown")
         self.jobs.put(None)
         self.desktop.close_microphone()
-        try:
-            self.tiling.close()
-        except OSError as error:
-            log(str(error))
         self.tray.remove()
         self.window.destroy()
         system.close_event(self.mic_event)
-        timings.mark("microphone and tiling cleanup")
+        timings.mark("microphone cleanup")
         system.post_quit()
 
     def choose_tool(self, tool: Tool, target: int) -> None:
         """Marshal menu choices from Qt to the assistant's control-thread owner."""
         system.post_message(self.window.handle, control_policy.WM_TOOL_CHOSEN, tool.value, target)
-
-    def balance_windows(self) -> None:
-        threading.Thread(target=self.monitor_layout.balance, name="window redistribution", daemon=True).start()
 
     def open_inbox(self) -> None:
         self.ui.open_inbox()
@@ -486,24 +468,14 @@ class AssistantApp:
     def switch_windows(self) -> None:
         def focus(handle: int) -> None:
             def activate() -> None:
-                try:
-                    if self.tiling.focus(handle):
-                        return
-                except OSError:
-                    pass
                 if not windows.focus(handle):
                     self.problem("That window is no longer available or Windows refused to focus it.")
 
             threading.Thread(target=activate, name="window navigation", daemon=True).start()
 
         def collect() -> None:
-            try:
-                managed = self.tiling.managed_handles()
-            except OSError:
-                managed = frozenset[int]()
-            visible = frozenset(w.handle for w in windows.windows())
-            all_windows = tuple(w for w in windows.windows(include_cloaked=True) if windows.process_id(w.handle) != os.getpid())
-            self.ui.switch_windows(switcher_windows(all_windows, visible, managed), focus)
+            own = os.getpid()
+            self.ui.switch_windows(tuple(w for w in windows.windows() if windows.process_id(w.handle) != own), focus)
 
         threading.Thread(target=collect, name="window list", daemon=True).start()
 

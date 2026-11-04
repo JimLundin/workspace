@@ -5,8 +5,7 @@ their Stop; toggles sit beside Workspace's views; then recording, sound, the
 desktop tools, the system tray's icons and links. Arrows move to the nearest cell in their direction, and
 Up and Down wrap. On the sound slider, Left and Right change the volume. Toggles
 and the slider apply in place and keep the menu open; a choice that opens a view
-or acts on a window closes it. Window tiling opens its own page, which Left or
-Escape closes back onto tiling. A letter jumps to the next cell starting with it.
+or acts on a window closes it. A letter jumps to the next cell starting with it.
 Choosing a window tool or leaving with Escape returns the keyboard to the window
 that had it; opening a Workspace view keeps it there, and a tray icon hands it to
 its application.
@@ -62,7 +61,7 @@ type Choice = Command | ToolChoice | Volume | TrayChoice
 @dataclass(frozen=True, slots=True)
 class Item:
     label: str
-    icon: str  # Empty for a tiling item: it reads under tiling's own symbol.
+    icon: str
     choice: Choice
     key: str = ""  # A shortcut hint, shown quietly at the trailing edge.
 
@@ -102,13 +101,6 @@ class Slider:
 
 
 @dataclass(frozen=True, slots=True)
-class Disclosure:
-    label: str
-    icon: str
-    items: tuple[Item, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class TrayIcon:
     """A system tray application, by its place in the bar's tray snapshot; the bar owns its image."""
 
@@ -116,7 +108,7 @@ class TrayIcon:
     slot: int
 
 
-type Entry = Item | Live | Toggle | Slider | Disclosure | TrayIcon
+type Entry = Item | Live | Toggle | Slider | TrayIcon
 
 
 class Face(Enum):
@@ -147,22 +139,6 @@ class Cell:
     track: int
     tracks: int
     caption: str = ""  # A tile's short name; its entry's label stays its accessible name.
-
-
-TILING: Final = Disclosure(
-    "Window tiling",
-    "grid",
-    (
-        Item("Spread windows across screens", "", ToolChoice(Tool.TILE_BALANCE)),
-        Item("Focus left", "", ToolChoice(Tool.TILE_FOCUS_LEFT)),
-        Item("Focus right", "", ToolChoice(Tool.TILE_FOCUS_RIGHT)),
-        Item("Previous workspace", "", ToolChoice(Tool.TILE_PREVIOUS_WORKSPACE)),
-        Item("Next workspace", "", ToolChoice(Tool.TILE_NEXT_WORKSPACE)),
-        Item("Float or tile the active window", "", ToolChoice(Tool.TILE_FLOAT)),
-        Item("Change split direction", "", ToolChoice(Tool.TILE_DIRECTION)),
-        Item("Pause or resume automatic tiling", "", ToolChoice(Tool.TILE_PAUSE)),
-    ),
-)
 
 
 def automatic_toggle(status: AutomaticStatus) -> Toggle:
@@ -220,7 +196,6 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
     captioned: tuple[tuple[Entry, str], ...] = (
         (tool_item("Switch windows", "search", Tool.WINDOW_SWITCHER), "Switch"),
         (tool_item("Copy latest transcript", "doc", Tool.COPY_TRANSCRIPT), "Transcript"),
-        (TILING, "Tiling"),
         (Item("Keyboard map", "keyboard", Command.KEYMAP), "Key map"),
     )
     tools = tuple(Cell(entry, Face.TOOL, 2 * column, 2, top, 7, caption) for column, (entry, caption) in enumerate(captioned))
@@ -234,29 +209,17 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
     return (*cards, *modules, *record, sound, *tools, *tray, *links)
 
 
-def page(disclosure: Disclosure) -> tuple[Cell, ...]:
-    """A disclosure's own page: a row back to it, then its items."""
-    back = Cell(disclosure, Face.LINK, 0, COLUMNS, 0, 3)
-    return (back, *(Cell(item, Face.LINK, 0, COLUMNS, 3 * (index + 1), 3) for index, item in enumerate(disclosure.items)))
-
-
 @dataclass(frozen=True, slots=True)
 class Menu:
-    """The open menu: its grid, the cell under the keyboard or pointer, and whether tiling's page is open."""
+    """The open menu: its grid and the cell under the keyboard or pointer."""
 
     cells: tuple[Cell, ...]
     selected: int | None = None
-    disclosed: bool = field(default=False, kw_only=True)
-
-
-def shown(menu: Menu) -> tuple[Cell, ...]:
-    """The cells on screen: tiling's page while it's open."""
-    return page(TILING) if menu.disclosed else menu.cells
 
 
 def label(entry: Entry) -> str:
     match entry:
-        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | Disclosure(label=text) | TrayIcon(label=text):
+        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | TrayIcon(label=text):
             return text
         case _:
             assert_never(entry)
@@ -303,7 +266,7 @@ VOLUME_STEP: Final = 0.05
 
 
 def current(menu: Menu) -> Cell | None:
-    cells = shown(menu)
+    cells = menu.cells
     return cells[menu.selected] if menu.selected is not None and menu.selected < len(cells) else None
 
 
@@ -337,7 +300,7 @@ def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
 
 
 def move(menu: Menu, key: Key) -> Menu:
-    cells = shown(menu)
+    cells = menu.cells
     if not cells:
         return menu
     if menu.selected is None or menu.selected >= len(cells):
@@ -348,25 +311,14 @@ def move(menu: Menu, key: Key) -> Menu:
     return menu if target is None else replace(menu, selected=target)
 
 
-def disclose(menu: Menu, *, open_: bool) -> Menu:
-    """Open tiling's page with its first item selected, or close it back onto tiling's cell."""
-    if open_:
-        return replace(menu, disclosed=True, selected=1)
-    return replace(menu, disclosed=False, selected=next((index for index, cell in enumerate(menu.cells) if cell.entry is TILING), None))
-
-
 def sideways(menu: Menu, entry: Entry | None, key: Key) -> Outcome:
-    """Left and Right change the volume on the slider, open and close tiling's page, and otherwise move."""
+    """Left and Right change the volume on the slider and otherwise move."""
     match entry:
         case Slider(level=float() as level):
             step = VOLUME_STEP if key is Key.RIGHT else -VOLUME_STEP
             return Applied(Volume(min(1.0, max(0.0, round(level + step, 2)))))
         case Slider(level=None):
             return menu
-        case Disclosure() if key is Key.RIGHT and not menu.disclosed:
-            return disclose(menu, open_=True)
-        case _ if key is Key.LEFT and menu.disclosed:
-            return disclose(menu, open_=False)
         case _:
             return move(menu, key)
 
@@ -379,8 +331,6 @@ def press(menu: Menu, key: Press) -> Outcome:
             return sideways(menu, entry, key)
         case Key.UP | Key.DOWN:
             return move(menu, key)
-        case Key.ESCAPE if menu.disclosed:
-            return disclose(menu, open_=False)
         case Key.ESCAPE:
             return Dismissed.ESCAPE
         case Key.ENTER:
@@ -399,8 +349,6 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
             return Chosen(stop)
         case Toggle(choice=choice):
             return Applied(choice)
-        case Disclosure():
-            return disclose(menu, open_=not menu.disclosed)
         case TrayIcon(slot=slot):
             return Chosen(TrayChoice(slot))
         case Slider() | None:
@@ -410,7 +358,7 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
 
 
 def jump(menu: Menu, character: str) -> Menu:
-    cells = shown(menu)
+    cells = menu.cells
     start = menu.selected if menu.selected is not None else -1
     order = tuple((start + offset) % len(cells) for offset in range(1, len(cells) + 1))
     target = next((index for index in order if label(cells[index].entry).casefold().startswith(character.casefold())), None)

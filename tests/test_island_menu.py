@@ -5,7 +5,6 @@ from dataclasses import replace
 from assistant.meeting_detection import AutomaticStatus
 from desktop_ui.island_layout import MENU_WIDTH, tiles
 from desktop_ui.island_menu import (
-    TILING,
     Applied,
     Chosen,
     Command,
@@ -28,7 +27,6 @@ from desktop_ui.island_menu import (
     label,
     press,
     restores_focus,
-    shown,
 )
 from protocol import Tool
 
@@ -36,13 +34,13 @@ RESTING = Controls(None, None, sound=Slider("Sound", 0.4, muted=False))
 
 
 def at(menu: Menu, name: str) -> Menu:
-    return replace(menu, selected=next(index for index, cell in enumerate(shown(menu)) if label(cell.entry) == name))
+    return replace(menu, selected=next(index for index, cell in enumerate(menu.cells) if label(cell.entry) == name))
 
 
 def selected(outcome: Outcome) -> str:
     match outcome:
         case Menu(selected=int() as index) as menu:
-            return label(shown(menu)[index].entry)
+            return label(menu.cells[index].entry)
         case other:
             raise AssertionError(f"Expected a menu with a selection, got {other}")
 
@@ -120,7 +118,7 @@ def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     assert selected(press(at(menu, "Your work feed"), Key.LEFT)) == "Windows taskbar"
     assert selected(press(at(menu, "Your work feed"), Key.DOWN)) == "Record a meeting"
     assert selected(press(at(menu, "Record a meeting"), Key.DOWN)) == "Sound"
-    assert selected(press(at(menu, "Copy latest transcript"), Key.RIGHT)) == "Window tiling"
+    assert selected(press(at(menu, "Copy latest transcript"), Key.RIGHT)) == "Keyboard map"
     assert selected(press(at(menu, "Switch windows"), Key.LEFT)) == "Switch windows"
     assert selected(press(at(menu, "All Workspace controls…"), Key.DOWN)) == "Auto-record"
     assert selected(press(at(menu, "Auto-record"), Key.UP)) == "All Workspace controls…"
@@ -139,18 +137,6 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
     assert press(menu, Key.ENTER) == menu
 
 
-def test_tiling_opens_its_page_and_closes_back_onto_its_cell() -> None:
-    # Defects: Right on tiling does nothing, its page stays after Left or Escape, or
-    # closing leaves the selection on a cell that no longer exists.
-    page = opened(press(at(Menu(entries(RESTING)), "Window tiling"), Key.RIGHT))
-    assert selected(page) == "Spread windows across screens"
-    assert [label(cell.entry) for cell in shown(page)] == ["Window tiling", *(item.label for item in TILING.items)]
-    assert press(page, Key.ENTER) == Chosen(ToolChoice(Tool.TILE_BALANCE))
-    for key in (Key.LEFT, Key.ESCAPE):
-        back = opened(press(page, key))
-        assert selected(back) == "Window tiling" and not back.disclosed
-
-
 def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> None:
     # Defects: Enter on a card doesn't stop its activity, Escape chooses something,
     # or a repeated letter stays on its first match.
@@ -167,13 +153,13 @@ def test_tool_cells_derive_hints_and_short_captions() -> None:
     # small tile shows a caption that doesn't name its tool.
     tools = [(cell.entry, cell.caption) for cell in entries(RESTING) if cell.face is Face.TOOL]
     assert tools[0] == (Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), ". X"), "Switch")
-    assert [caption for _, caption in tools] == ["Switch", "Transcript", "Tiling", "Key map"]
+    assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map"]
 
 
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:
-    # Defects: tiling acts on the menu instead of the user's window, or a Workspace
+    # Defects: a window tool acts on the menu instead of the user's window, or a Workspace
     # view that just opened loses the keyboard to the previous window.
-    assert restores_focus(ToolChoice(Tool.TILE_FLOAT)) and restores_focus(Command.TASKBAR)
+    assert restores_focus(ToolChoice(Tool.MINIMIZE)) and restores_focus(Command.TASKBAR)
     assert not restores_focus(Command.CANVAS) and not restores_focus(Command.KEYMAP) and not restores_focus(TrayChoice(0))
 
 

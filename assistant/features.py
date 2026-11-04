@@ -117,7 +117,6 @@ class Controls(Protocol):
     def open_inbox(self) -> None: ...
     def switch_windows(self) -> None: ...
     def toggle_meeting(self) -> None: ...
-    def balance_windows(self) -> None: ...
 
 
 class Outcome(Enum):
@@ -137,12 +136,6 @@ def pick_window(windows: Sequence[Window], app: App, foreground: int) -> int | N
     if not mine:
         return None
     return mine[-1] if foreground in mine else mine[0]
-
-
-def switcher_windows(windows: Sequence[Window], visible: frozenset[int], managed: frozenset[int]) -> tuple[Window, ...]:
-    """Include hidden managed workspaces without exposing the shell's cloaked hosts."""
-    eligible = visible | managed
-    return tuple(window for window in windows if window.handle in eligible)
 
 
 def submit_voice_text(text: str, send: Callable[[str], None], details: dict[str, Detail]) -> None:
@@ -297,8 +290,6 @@ class Assistant:
                 self.controls.switch_windows()
             case Route.MEETING:
                 self.controls.toggle_meeting()
-            case Route.BALANCE:
-                self.controls.balance_windows()
             case _:
                 assert_never(kind)
 

@@ -183,22 +183,15 @@ the Windows clipboard before submission and retained in memory; **Copy latest
 transcript** in the bar menu recovers them if input or clipboard access fails.
 Transcription failures do not replace the saved text.
 
-**Apps + Esc** (hold physical **`.`**, tap physical **X**) opens a searchable list across screens,
-GlazeWM workspaces. Use arrow keys to select, Enter to switch,
+**Apps + Esc** (hold physical **`.`**, tap physical **X**) opens a searchable list of
+windows across screens. Use arrow keys to select, Enter to switch,
 and Escape to cancel. The normal Enter and
-Escape thumb bindings work here. Hidden managed windows reveal their workspace
-when selected; minimized windows restore when focused.
+Escape thumb bindings work here. Minimized windows restore when focused.
 Unbound physical keys are blocked while the layout is enabled. Physical **Shift**, **Ctrl**
-and **arrow keys** remain native, including Shift+arrow selection. While Apps is held,
-physical arrows navigate the desktop instead. All function
+and **arrow keys** remain native, including Shift+arrow selection. All function
 keys, media controls and Windows key's taskbar action also remain native.
 Turning the layout off restores the normal keyboard; other modifier and
 navigation actions are available through the layout's home row and layers.
-
-Tabbed window groups have been removed. Workspace uses ordinary automatic tiling
-and preserves application title bars. Apps + arrow keys moves focus between
-tiles; Apps + Esc opens the keyboard window switcher.
-
 
 The dictation microphone is opened when Workspace starts and kept ready between
 captures, so you can speak as soon as you press a talk key. When the Windows
@@ -236,56 +229,9 @@ would stop the running program), so they don't work there.
 An app key brings the app forward, starts it if it isn't running, and pressed
 again goes through its windows. Change the apps in `config.py`.
 
-The right hand controls automatic tiling: **8 9 0 +** focus left/down/up/right,
-**I** floats or tiles the active window, **K L** switch to the previous/next
-workspace, **Ö** changes split direction and **Ä** pauses/resumes tiling.
-The keyboard map shows these actions too.
-
 **Snippets**: type the trigger and it's replaced: `,,date` `,,time` `,,now`
 `,,week` `,,shrug` `,,thx` `,,mvh` `,,br`. Add your own in `config.py`. Physical navigation, window changes, pointer movement
 and injected workspace text reset a partially typed trigger.
-
-## Automatic window tiling
-
-Workspace starts the separately installed **GlazeWM v3.10.1** with five workspaces
-and automatic tiling. Opening or closing a normal window redistributes the
-space. Tiled windows meet without gaps, outlines or rounded corners and fill
-the screen to its edges. The compact bar overlays them. Workspace overlays,
-ordinary dialogs, Start/Search and browser
-picture-in-picture stay outside the tiling tree. GlazeWM adds no extra toolbar
-or competing global keyboard shortcuts.
-
-Click the bar, then **Window tiling**, to focus windows, switch workspaces,
-float/tile a window, change split direction or pause/resume. While tiling is
-active, the existing snap-left/right keys move managed windows within the tree;
-maximize toggles fullscreen. Paused or unmanaged windows keep native snapping.
-
-On a new Windows machine, run this once from the Workspace folder, then restart
-Workspace:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_tiling.ps1
-```
-
-The script verifies the official standalone MSI's SHA-256 and executable
-signatures, and installs its manager, CLI, watcher and GPL license under
-`%LOCALAPPDATA%\workspace\tools\glazewm-v3.10.1`. It changes no global PATH or
-startup entry. This private installation manages ordinary windows; elevated
-windows can require GlazeWM's official Program Files installation.
-`WORKSPACE_GLAZEWM` can point to that installation's main `glazewm.exe`, alongside
-its `cli` folder. `WORKSPACE_TILING=off` disables Workspace's automatic startup.
-
-Workspace copies its initial configuration to `%LOCALAPPDATA%\workspace\glazewm.yaml`
-once and preserves subsequent edits. Tiled windows reach the top screen edge;
-the compact bar overlays them without reserving a strip across the monitor.
-When the display geometry changes, Workspace spreads visible tiles in proportion
-to usable screen area and stacks portrait screens vertically. Placement stays
-unchanged between display changes; the bar menu can rebalance it explicitly.
-Only a manager started by Workspace receives automatic placement changes.
-A manager already running is borrowed;
-Workspace closes only the exact manager it launched. Exiting reveals windows from
-all tiling workspaces, retaining their current positions. See the
-[integration notes and primary sources](docs/tiling-window-manager.md).
 
 ## Windows notifications
 

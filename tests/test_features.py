@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from typing import cast
 lazy from dataclasses import replace
 
-from assistant.features import Assistant, pick_window, switcher_windows
+from assistant.features import Assistant, pick_window
 from assistant.geometry import Shot
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from automation.json_value import Json
@@ -18,14 +18,6 @@ from winapi.pcm import RATE
 from winapi.shapes import InputRejectedError, Rect, Window
 
 SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
-
-
-def test_window_list_keeps_hidden_managed_windows_and_excludes_cloaked_shell_hosts() -> None:
-    current = Window(1, "Editor", "editor.exe", minimized=False)
-    hidden = Window(2, "Other workspace", "terminal.exe", minimized=False)
-    shell = Window(3, "Settings background host", "systemsettings.exe", minimized=False)
-    visible = Window(4, "Settings", "applicationframehost.exe", minimized=False)
-    assert switcher_windows((current, hidden, shell, visible), frozenset({1, 4}), frozenset({1, 2})) == (current, hidden, visible)
 
 
 def dumps(value: Json) -> str:
@@ -167,9 +159,6 @@ class FakeControls:
 
     def toggle_meeting(self) -> None:
         self.record("MEETING")
-
-    def balance_windows(self) -> None:
-        self.record("BALANCE")
 
 
 def run_immediately(job: Callable[[], None]) -> None:
@@ -684,12 +673,12 @@ def test_menu_window_tool_keeps_its_target_and_records_timed_usage() -> None:
     with fake_endpoint() as endpoint:
         jobs: list[Callable[[], None]] = []
         rig = Rig(endpoint, submit=jobs.append)
-        rig.assistant.handle(Tool.TILE_FLOAT, down=True, target=42)
+        rig.assistant.handle(Tool.MINIMIZE, down=True, target=42)
         assert len(jobs) == 1 and not rig.take() and not rig.used
         jobs[0]()
         assert rig.desktop.log[-1] == "state READY"
-        assert rig.take() == ["arrange tile_float 42"]
-        assert tuple(feature for feature, _ in rig.used) == ("tile_float",) and rig.ok("tile_float")
+        assert rig.take() == ["arrange minimize 42"]
+        assert tuple(feature for feature, _ in rig.used) == ("minimize",) and rig.ok("minimize")
         assert rig.desktop.jobs == [None]
 
 
@@ -699,9 +688,9 @@ def test_desktop_controls_run_on_press_without_worker_submission() -> None:
         # This test owns the bounded queue of submitted effects and never executes them.
         jobs: list[Callable[[], None]] = []
         rig = Rig(endpoint, submit=jobs.append)
-        for tool in (Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER, Tool.MEETING_TOGGLE, Tool.TILE_BALANCE):
+        for tool in (Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER, Tool.MEETING_TOGGLE):
             rig.press(tool)
-        assert rig.agent == ["INBOX", "SWITCHER", "MEETING", "BALANCE"]
+        assert rig.agent == ["INBOX", "SWITCHER", "MEETING"]
         assert not jobs and not rig.used and not rig.desktop.jobs and not rig.take()
 
 
@@ -720,24 +709,6 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
         assert rig.take() == [problem, problem, "launch wt.exe", "arrange snap_left None"]
         assert rig.agent == ["INBOX", "MEETING"]
-        assert endpoint.received == []
-
-
-def test_tiling_commands_use_worker_without_ai_credentials() -> None:
-    with fake_endpoint() as endpoint:
-        jobs: list[Callable[[], None]] = []
-        rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)), submit=jobs.append)
-        for tool in (Tool.TILE_FOCUS_LEFT, Tool.TILE_FLOAT, Tool.TILE_NEXT_WORKSPACE, Tool.TILE_PAUSE):
-            rig.press(tool)
-        assert not rig.take() and len(jobs) == 4
-        for job in jobs:
-            job()
-        assert rig.take() == [
-            "arrange tile_focus_left None",
-            "arrange tile_float None",
-            "arrange tile_next_workspace None",
-            "arrange tile_pause None",
-        ]
         assert endpoint.received == []
 
 

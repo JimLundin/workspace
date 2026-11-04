@@ -226,7 +226,6 @@ Workspace's bar today (`assistant/bar_model.py`, `desktop_ui/ambient.py`,
 | Needs input | "Needs you" in the main capsule | Island expands into the question, then settles into the orange pill |
 | Meeting recording | Separate capsule: timer and Stop | Red dot and timer in the island's trailing slot; detaches beside the island during a moment; the island menu shows Stop. "Starting…", "Stopping…" and "Saving…" replace the timer; "Check recording" tints the pill orange |
 | Keyboard layer or Colemak | Separate capsule | Detached minimal pill on the leading side, like the macOS input menu |
-| Tiling tab strip | Joins the ambient capsule on the primary screen | Out of scope here. The island should stay centred, with the strip running along the edge around it |
 
 ## Sidebar
 

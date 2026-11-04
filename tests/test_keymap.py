@@ -23,7 +23,6 @@ def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first()
     assert shortcut(Tool.OPEN_INBOX) == Shortcut("T", "V")
     assert shortcut(Tool.WINDOW_SWITCHER) == Shortcut("X", ".")
     assert shortcut(Tool.DICTATE) == Shortcut("Space", None)
-    assert shortcut(Tool.TILE_FLOAT) == Shortcut("I", ".")
 
 
 def test_shortcut_hints_share_keycap_notation_and_omit_absent_bindings() -> None:

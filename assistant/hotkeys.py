@@ -17,7 +17,6 @@ class Route(Enum):
     AGENT_SESSION = auto()
     TRANSCRIPT = auto()
     ARRANGE = auto()
-    BALANCE = auto()
     SWITCHER = auto()
     INBOX = auto()
     MEETING = auto()
@@ -43,25 +42,8 @@ def route(tool: Tool) -> Route:
             return Route.AGENT_SESSION
         case Tool.COPY_TRANSCRIPT:
             return Route.TRANSCRIPT
-        case (
-            Tool.SNAP_LEFT
-            | Tool.SNAP_RIGHT
-            | Tool.MAXIMIZE
-            | Tool.MINIMIZE
-            | Tool.NEXT_MONITOR
-            | Tool.TILE_FOCUS_LEFT
-            | Tool.TILE_FOCUS_DOWN
-            | Tool.TILE_FOCUS_UP
-            | Tool.TILE_FOCUS_RIGHT
-            | Tool.TILE_FLOAT
-            | Tool.TILE_PREVIOUS_WORKSPACE
-            | Tool.TILE_NEXT_WORKSPACE
-            | Tool.TILE_DIRECTION
-            | Tool.TILE_PAUSE
-        ):
+        case Tool.SNAP_LEFT | Tool.SNAP_RIGHT | Tool.MAXIMIZE | Tool.MINIMIZE | Tool.NEXT_MONITOR:
             return Route.ARRANGE
-        case Tool.TILE_BALANCE:
-            return Route.BALANCE
         case Tool.WINDOW_SWITCHER:
             return Route.SWITCHER
         case Tool.OPEN_INBOX:
@@ -77,7 +59,7 @@ def needs_settings(kind: Route) -> bool:
     match kind:
         case Route.HOLD | Route.TOGGLE | Route.REWRITE | Route.ASK | Route.SCREEN_TEXT | Route.SCREEN_ASK | Route.AGENT_SESSION:
             return True
-        case Route.STOP | Route.TRANSCRIPT | Route.ARRANGE | Route.BALANCE | Route.SWITCHER | Route.INBOX | Route.MEETING:
+        case Route.STOP | Route.TRANSCRIPT | Route.ARRANGE | Route.SWITCHER | Route.INBOX | Route.MEETING:
             return False
         case _:
             assert_never(kind)

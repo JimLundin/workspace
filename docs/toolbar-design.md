@@ -73,7 +73,7 @@ pattern; tray icons take one column and other tiles span pairs:
 | Settings and views | Auto-record, keyboard overlay and Windows taskbar toggles beside Canvas and Feed tiles |
 | Recording | Record a meeting, absent while one runs |
 | Sound | The speaker level as a slider; its symbol shows mute |
-| Tools | Switch windows, transcript, window tiling and key map as small tiles |
+| Tools | Switch windows, transcript and key map as small tiles |
 | System tray | Each tray application's own icon, eight to a row, absent with no tray |
 | Links | Windows notification settings and all Workspace controls |
 
@@ -81,12 +81,10 @@ The detached agent and recording capsules leave the bar while the menu is open.
 Toggles show their state in an accent circle and words, and apply in place: the
 menu stays open. Dragging or pressing the slider sets the volume; the toolbar's
 status worker applies the latest level, because Windows' audio interfaces need
-a multithreaded COM apartment that Qt's thread cannot join. Window tiling opens
-its own page with a row back to the grid.
+a multithreaded COM apartment that Qt's thread cannot join.
 Arrows move to the nearest cell in their direction; Up and Down wrap. On the
-slider, Left and Right step the volume by 5%. Right on tiling opens its page,
-and Left or Escape closes it. Enter chooses, a letter jumps to the next cell
-starting with it, and Escape closes the menu.
+slider, Left and Right step the volume by 5%. Enter chooses, a letter jumps to
+the next cell starting with it, and Escape closes the menu.
 Menu cells do not inherit an Escape tooltip from the island.
 Opening the menu takes the keyboard; a window tool, a quiet action or Escape hands
 it back to the window that had it, a Workspace view keeps it, and clicking

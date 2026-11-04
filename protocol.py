@@ -89,16 +89,6 @@ class Tool(Enum):
     MINIMIZE = 43
     NEXT_MONITOR = 44
     """Move the window to the next monitor, same place relative to the screen."""
-    TILE_FOCUS_LEFT = 50
-    TILE_FOCUS_DOWN = 51
-    TILE_FOCUS_UP = 52
-    TILE_FOCUS_RIGHT = 53
-    TILE_FLOAT = 54
-    TILE_PREVIOUS_WORKSPACE = 55
-    TILE_NEXT_WORKSPACE = 56
-    TILE_DIRECTION = 57
-    TILE_PAUSE = 58
-    TILE_BALANCE = 59
 
 
 @dataclass(frozen=True, slots=True)

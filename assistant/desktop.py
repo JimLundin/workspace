@@ -12,8 +12,6 @@ from winapi.shapes import Rect, Window
 lazy from assistant.geometry import Shot, fit, half, to_monitor
 lazy from assistant.png import encode_png
 lazy from assistant.textio import paste_text
-lazy from assistant.tiling import GlazeWM
-lazy from assistant.tiling_commands import GLOBAL_TILING, TILING_COMMANDS, WINDOW_COMMANDS
 lazy from desktop_ui.dialogs import AnswerWindow
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.island_model import Job
@@ -40,7 +38,7 @@ def _shortcut(vk: int) -> None:
 
 
 class WinDesktop:
-    __slots__ = ("mic", "mic_follower", "on_notify", "on_problem", "on_state", "owner", "tiling", "ui")
+    __slots__ = ("mic", "mic_follower", "on_notify", "on_problem", "on_state", "owner", "ui")
 
     def __init__(
         self,
@@ -51,7 +49,6 @@ class WinDesktop:
         on_state: Callable[[State], None],
         on_notify: Callable[[str, str], None],
         on_problem: Callable[[str], None],
-        tiling: GlazeWM | None = None,
     ) -> None:
         self.owner = owner
         """The assistant's window: it owns what we put on the clipboard."""
@@ -62,7 +59,6 @@ class WinDesktop:
         self.on_state = on_state
         self.on_notify = on_notify
         self.on_problem = on_problem
-        self.tiling = tiling
 
     # ---- the microphone ----------------------------------------------------------------
 
@@ -158,14 +154,7 @@ class WinDesktop:
 
     def arrange(self, tool: Tool, *, target: int | None = None) -> None:
         hwnd = windows.foreground() if target is None else target
-        if command := TILING_COMMANDS.get(tool):
-            if self.tiling is None:
-                raise OSError("Automatic tiling isn't available.")
-            self.tiling.command(command, None if tool in GLOBAL_TILING else hwnd)
-            return
         if not hwnd:
-            return
-        if self.tiling is not None and (command := WINDOW_COMMANDS.get(tool)) and self.tiling.arrange(command, hwnd):
             return
         match tool:
             case Tool.SNAP_LEFT | Tool.SNAP_RIGHT:

@@ -13,7 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final, assert_never
 
-from desktop_ui.island_menu import COLUMNS, Cell, Menu, shown
+from desktop_ui.island_menu import COLUMNS, Cell, Menu
 from desktop_ui.island_model import Badge, Control, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
 
 # A 34 px capsule with a 3 px inset holds concentric 28 px controls.
@@ -78,7 +78,7 @@ def tiles(menu: Menu) -> tuple[Tile, ...]:
             cell.span * COLUMN - GUTTER,
             cell.tracks * TRACK - GUTTER,
         )
-        for index, cell in enumerate(shown(menu))
+        for index, cell in enumerate(menu.cells)
     )
 
 

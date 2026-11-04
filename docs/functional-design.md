@@ -78,7 +78,6 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/notification_agent.py` | desktop | Reviewed actionable notification evidence, current source-revision/date selection, exact task IDs and stable prompts | `NotificationAgent` owns a separate admission thread for reviewed ACTION sources from Windows notices, Teams activities and unseen messages. Only current eligible revisions and dates enter quick tool-free screening; refused admissions retry on worker ticks. `WorkAgent.submit_identified` owns durable admission, replay and execution with the existing general tools. The agent investigates and executes actions covered by existing user authorization, recording useful findings in their canvas context. |
 | `assistant/card_actions.py` | desktop | Card action variants (open the canvas, decide an approval) and their one `workspace://` encoding; a link that is not exactly one variant parses to nothing | `notification_text.py` and `agent_session.notice_text` build variants; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` matches the parsed variant |
 | `winapi/system_notices.py` | desktop | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns native observations; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations through `Ui.system_notices` to `NotificationSources` and the joined feed; the island has no individual-notice dismissal control |
-| `assistant/monitor_layout.py`, `tiling.py`, `tiling_commands.py` | desktop | Monitor observations, window distribution and native window command mapping | `MonitorLayout` owns automatic redistribution; `GlazeWM` owns manager startup and ordinary window tiling |
 | `desktop_ui/shell_state.py` | desktop | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
 | `desktop_ui/shell_items.py`; `winapi/tray_host.py` | desktop | Pinned Outlook/Teams web-app slots claimed by Edge AppUserModelID, launch dedupe, stable running-app/window grouping, live tray registration updates, callback/version routing and popup geometry | `application_observer.py` reads Edge windows' AppUserModelIDs (`winapi/app_user_model.py`) and copies window icons off Qt; `shell_surface.py` owns scrollable icon sections; `TrayHost` forwards shell traffic to Explorer and owns its hidden proxy; the desktop bar composes their lifetimes and excludes the proxy from taskbar recovery |
 | `assistant/geometry.py`; `desktop_ui/rich_text.py` | shared: geometry; desktop: rich text | Geometry and Markdown values | Native geometry adapters and Qt text views |
@@ -739,14 +738,13 @@ ownership and Windows scheduling require the separate boundary and desktop
 checks described above.
 
 Tabbed window groups were removed on 2026-10-26. Startup, window navigation,
-keyboard commands and desktop surfaces use ordinary GlazeWM windows directly.
+keyboard commands and desktop surfaces use ordinary windows directly.
 Workspace no longer creates native tile slots, hides selected apps, changes their
 caption styles, or runs group polling and crash-recovery companions.
 
 After group removal, the same synthetic workload measured 2.925 µs median
 latency and 9.071 µs median p99, with the same 1,943-byte peak and zero GC
-collections. Tiling startup now belongs to `MonitorLayout`, independently of
-any tab-group controller.
+collections.
 
 
 ## Bootstrap and request-boundary migration

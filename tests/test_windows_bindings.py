@@ -293,24 +293,6 @@ def test_f6_stays_native_and_b_uses_one_toggle_per_press() -> None:
         assert not any(message == WM_REQUEST for message, _tool, _down in messages)
 
 
-def test_physical_arrows_navigate_apps_and_release_cleanly_after_the_thumb() -> None:
-    with observed_keyboard() as (keyboard, messages):
-        thumb = inputs.KeyEvent(0xBE, 0x34, 0, 0, 0)
-        control = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
-        arrow = inputs.KeyEvent(0x27, 0x4D, inputs.LLKHF_EXTENDED, 20, 0)
-        assert keyboard.swallow(thumb, down=True)
-        assert not keyboard.swallow(control, down=True)
-        assert keyboard.swallow(arrow, down=True)
-        assert keyboard.swallow(thumb, down=False)
-        assert keyboard.swallow(arrow, down=False)
-        assert not keyboard.swallow(control, down=False)
-        assert (WM_REQUEST, Tool.TILE_FOCUS_RIGHT.value, 1) in messages
-        assert (WM_REQUEST, Tool.TILE_FOCUS_RIGHT.value, 0) in messages
-        assert not keyboard.engine.desktop_held
-        assert not keyboard.swallow(arrow, down=True)
-        assert not keyboard.swallow(arrow, down=False)
-
-
 def test_picker_enter_release_passes_after_the_selected_window_takes_focus() -> None:
     driver = KeyboardFixture()
     driver.current_title = SWITCHER_TITLE
@@ -969,11 +951,11 @@ def test_control_event_preserves_voice_release_and_rejects_unknown_requests() ->
 def test_menu_tool_message_preserves_the_captured_window_and_rejects_other_requests() -> None:
     # Defects: decoding drops the captured HWND, treats 0 as a real window,
     # accepts a non-Tool wire request, or handles another private message as a choice.
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.TILE_FLOAT.value, 42), APPS) == ChosenTool(Tool.TILE_FLOAT, 42)
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.TILE_FLOAT.value, 0), APPS) == ChosenTool(Tool.TILE_FLOAT, None)
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.MINIMIZE.value, 42), APPS) == ChosenTool(Tool.MINIMIZE, 42)
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.MINIMIZE.value, 0), APPS) == ChosenTool(Tool.MINIMIZE, None)
     assert control_event(WindowInput(WM_TOOL_CHOSEN, 999, 42), APPS) is None
     assert control_event(WindowInput(WM_TOOL_CHOSEN, 1000, 42), APPS) is None
-    assert control_event(WindowInput(0x8056, Tool.TILE_FLOAT.value, 42), APPS) is None
+    assert control_event(WindowInput(0x8056, Tool.MINIMIZE.value, 42), APPS) is None
 
 
 def test_keeper_native_messages_preserve_pointer_sized_payloads() -> None:

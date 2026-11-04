@@ -677,9 +677,8 @@ def test_tool_choice_acts_on_the_window_captured_before_the_menu_opened() -> Non
     try:
         bar.open_menu()
         foreground[0] = 999
-        QTest.mouseClick(menu_row(bar, "Window tiling"), QtCore.Qt.MouseButton.LeftButton)
-        QTest.mouseClick(menu_row(bar, "Float or tile the active window"), QtCore.Qt.MouseButton.LeftButton)
-        assert invoked == [(Tool.TILE_FLOAT, 42)] and focused == [42] and bar.expanded is None
+        QTest.mouseClick(menu_row(bar, "Switch windows"), QtCore.Qt.MouseButton.LeftButton)
+        assert invoked == [(Tool.WINDOW_SWITCHER, 42)] and focused == [42] and bar.expanded is None
     finally:
         closed(app, bar)
 

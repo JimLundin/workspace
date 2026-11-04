@@ -392,13 +392,6 @@ class Keyboard:
                     self.input_failed(error)
         return self.platform.call_next_hook(code, wparam, lparam)
 
-    def desktop_direction(self, key: inputs.KeyEvent, *, down: bool) -> bool:
-        self.busy = True
-        try:
-            return self.engine.native_direction(self.host, Key(key.vk), down=down, now=key.time)
-        finally:
-            self.busy = False
-
     def firmware_voice(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         """Own only explicit voice key presses and their paired physical releases."""
         identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
@@ -473,8 +466,6 @@ class Keyboard:
             if down and not key.flags & inputs.LLKHF_INJECTED:
                 self.native_releases.add(key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0))
             return False
-        if 0x25 <= key.vk <= 0x28 and not key.flags & inputs.LLKHF_INJECTED and self.desktop_direction(key, down=down):
-            return True
         if native_control(key.vk):
             self.engine.typed = ""
             return False

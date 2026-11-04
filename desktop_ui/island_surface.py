@@ -40,7 +40,7 @@ from desktop_ui.island_layout import (
     arrange,
     tiles,
 )
-from desktop_ui.island_menu import Disclosure, Face, Item, Live, Menu, Slider, Toggle, TrayIcon
+from desktop_ui.island_menu import Face, Item, Live, Menu, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
@@ -290,7 +290,7 @@ class MenuCell(QtWidgets.QAbstractButton):
                 name = f"{label}: {detail}"
             case Slider(label=label) as slider:
                 name = f"{label}: {sound_reading(slider)}"
-            case Disclosure(label=label) | TrayIcon(label=label):
+            case TrayIcon(label=label):
                 name = label
             case _:
                 assert_never(self.tile.cell.entry)
@@ -324,7 +324,7 @@ class MenuCell(QtWidgets.QAbstractButton):
                 return self.stop_circle().contains(QtCore.QPointF(pos))
             case Slider():
                 return False  # The slider takes the pointer itself rather than clicking.
-            case Item() | Toggle() | Disclosure() | TrayIcon():
+            case Item() | Toggle() | TrayIcon():
                 return super().hitButton(pos)
             case _:
                 assert_never(self.tile.cell.entry)
@@ -384,19 +384,18 @@ class MenuCell(QtWidgets.QAbstractButton):
                 self.paint_toggle(painter, toggle)
             case Slider() as slider:
                 self.paint_slider(painter, slider)
-            case Item(icon=name) | Disclosure(icon=name) if cell.face is Face.TILE:
+            case Item(icon=name) if cell.face is Face.TILE:
                 self.paint_symbol(painter, name, on=False)
                 painter.setPen(ink)
                 painter.setFont(font(strong=True))
                 painter.drawText(bounds.adjusted(48, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, cell.caption)
-            case Item(icon=name) | Disclosure(icon=name) if cell.face is Face.TOOL:
+            case Item(icon=name) if cell.face is Face.TOOL:
                 self.paint_icon(painter, name, ink, QtCore.QPointF(bounds.width() / 2 - 8, 12))
                 painter.setPen(quiet)
                 painter.setFont(caption_font())
                 painter.drawText(bounds.adjusted(2, 0, -2, -9), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, cell.caption)
             case Item(label=label, icon=name, key=key):
-                if name:
-                    self.paint_icon(painter, name, quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
+                self.paint_icon(painter, name, quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
                 painter.setFont(font(strong=False))
                 painter.setPen(ink)
                 painter.drawText(bounds.adjusted(36, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
@@ -405,12 +404,6 @@ class MenuCell(QtWidgets.QAbstractButton):
                     painter.drawText(bounds.adjusted(0, 0, -12, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
             case TrayIcon(slot=slot):
                 self.paint_tray(painter, slot, bounds)
-            case Disclosure(label=label):
-                # On its own page, tiling's cell leads back to the grid.
-                self.paint_icon(painter, "chevron-left", quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
-                painter.setFont(font(strong=True))
-                painter.setPen(ink)
-                painter.drawText(bounds.adjusted(36, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
             case _:
                 assert_never(cell.entry)
 

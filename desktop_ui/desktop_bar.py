@@ -47,7 +47,6 @@ lazy from desktop_ui.island_menu import (
     Volume,
     entries,
     restores_focus,
-    shown,
 )
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
@@ -342,7 +341,7 @@ class DesktopBar:
             self.render()
 
     def menu(self) -> Menu:
-        """The menu for what's happening now, keeping the current selection and disclosure."""
+        """The menu for what's happening now, keeping the current selection."""
         recorded = capture(self.recording) if self.recording.capturing else None
         working = self.agent if self.agent is not None and not self.agent.waiting else None
         sound = Slider("Sound", self.system.volume, muted=self.system.speakers is Speakers.MUTED)
@@ -361,7 +360,7 @@ class DesktopBar:
         )
         if self.expanded is None:
             return menu
-        return replace(menu, selected=self.expanded.selected, disclosed=self.expanded.disclosed)
+        return replace(menu, selected=self.expanded.selected)
 
     def request_actions(self) -> RequestActions | None:
         return self.actions.requests
@@ -426,7 +425,7 @@ class DesktopBar:
 
     def pick(self, index: int) -> None:
         if self.expanded is not None:
-            self.settle_menu(island_menu.choose(self.expanded, shown(self.expanded)[index].entry))
+            self.settle_menu(island_menu.choose(self.expanded, self.expanded.cells[index].entry))
 
     def key(self, press: island_menu.Press) -> None:
         if self.expanded is not None:
