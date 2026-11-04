@@ -291,7 +291,8 @@ class DesktopBar:
     def poll_shell(self) -> None:
         if self.tray_host is None:
             return
-        previous = self.window.shell_sections.app_snapshot
+        sections = self.window.shell_sections
+        previous = (sections.app_snapshot, sections.pager_view)
         self.window.show_tray(self.tray_host.poll())  # The tick's render rebuilds an open menu's tray cells.
         if self.application_service is not None:
             with suppress(queue.Empty):
@@ -302,8 +303,9 @@ class DesktopBar:
         self.window.shell_sections.desktops(
             pager(arrangement.placed, arrangement.current, reach(self.current_layer, chord=self.chord_held)), self.navigate
         )
-        # A changed snapshot must also publish section geometry when the island is still.
-        if previous != self.window.shell_sections.app_snapshot:
+        # Changed apps or pager targets must also publish section geometry when the island is still,
+        # or a pager that loses its hints keeps its wider capsule.
+        if previous != (sections.app_snapshot, sections.pager_view):
             self.window.presentation = None
 
     def application_click(self, item: Item, click: Click) -> None:
