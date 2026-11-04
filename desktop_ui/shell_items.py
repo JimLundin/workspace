@@ -120,6 +120,6 @@ def caption_clip(outer: Rect, caption: Rect, region: Rect | None) -> Rect | None
     return None if wanted == region else wanted
 
 
-def next_window(windows: Sequence[Window], foreground: int) -> int:
-    handles = tuple(window.handle for window in windows)
+def next_window(handles: Sequence[int], foreground: int) -> int:
+    """The window after the one in front, or the first: repeated presses visit them all."""
     return handles[(handles.index(foreground) + 1) % len(handles)] if foreground in handles else handles[0]

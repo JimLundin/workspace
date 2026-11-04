@@ -800,6 +800,21 @@ def test_f6_remains_a_native_laptop_function() -> None:
     assert t.take() == ""
 
 
+def test_apps_directions_keep_spatial_focus_with_modifiers() -> None:
+    for modifier in ("p", "o"):
+        for direction, tool in (("8", Tool.FOCUS_LEFT), ("9", Tool.FOCUS_DOWN), ("0", Tool.FOCUS_UP), ("-", Tool.FOCUS_RIGHT)):
+            t = Harness()
+            t.d(".")
+            t.timeout_last()
+            t.d(modifier)
+            t.tap(direction)
+            t.u(modifier)
+            t.u(".")
+            requests = [line for line in t.h.log if line.startswith("?")]
+            assert requests == [f"?{tool.name.lower()}+", f"?{tool.name.lower()}-"]
+            assert t.e.layer() is None and not t.e.mods.counts
+
+
 def test_apps_search_is_available_without_the_function_row() -> None:
     t = Harness()
     t.d(".")
@@ -807,6 +822,23 @@ def test_apps_search_is_available_without_the_function_row() -> None:
     t.tap("x")
     t.u(".")
     assert t.take() == "?window_switcher+ ?window_switcher-"
+
+
+def test_physical_arrows_compose_with_pending_apps_and_pair_release_after_layer_exit() -> None:
+    t = Harness()
+    assert not t.e.native_direction(t.h, Key.LEFT, down=True, now=0)
+    t.d(".")
+    assert t.e.native_direction(t.h, Key.RIGHT, down=True, now=10)
+    assert t.e.native_direction(t.h, Key.RIGHT, down=True, now=20)
+    t.u(".")
+    assert t.e.native_direction(t.h, Key.RIGHT, down=False, now=30)
+    assert t.take() == "?focus_right+ ?focus_right-"
+    assert not t.e.desktop_held and t.e.layer() is None
+    t.d(".")
+    assert t.e.native_direction(t.h, Key.DOWN, down=True, now=40)
+    t.e.toggle(t.h)
+    assert t.take() == "?focus_down+ ?focus_down- !OFF"
+    assert not t.e.desktop_held
 
 
 # ---- tools and apps layers ---------------------------------------------------------------
@@ -844,12 +876,12 @@ def test_apps_layer_key_requests_its_app() -> None:
     assert t.take() == "?app:terminal+ ?app:terminal-"
 
 
-def test_window_keys_are_on_the_apps_layer() -> None:
+def test_desktop_keys_are_on_the_apps_layer() -> None:
     t = Harness()
     t.d(".")
-    t.tap("caps")  # bottom row, left: snap left
+    t.tap("caps")  # bottom row, left: the first desktop
     t.u(".")
-    assert t.take() == "?snap_left+ ?snap_left-"
+    assert t.take() == "?desktop_1+ ?desktop_1-"
 
 
 # ---- snippets --------------------------------------------------------------------------

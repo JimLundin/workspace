@@ -37,7 +37,7 @@ prepare()
 
 ROOT = Path(__file__).resolve().parent.parent
 TAB, DELETE, SPACE = 0x2F, 0x34, 0x2E  # the Tools, Apps and Nav thumbs (physical V, . and C)
-FIX, ASK, SCREEN_TEXT, AGENT_TYPED, SNAP_LEFT = 0x0A, 0x19, 0x1A, 0x26, 0x3A  # physical 9, P, \u00c5, L, Caps Lock
+FIX, ASK, SCREEN_TEXT, AGENT_TYPED, MINIMIZE = 0x0A, 0x19, 0x1A, 0x26, 0x21  # physical 9, P, \u00c5, L, F
 
 
 def dumps(value: Json) -> bytes:
@@ -182,13 +182,10 @@ def in_a_text_box(endpoint: FakeEndpoint) -> None:
         inputs.send_scancodes([(SPACE, False)], extra=0)
         assert wait_for(lambda: not lit(bottom), QtWidgets.QApplication.processEvents), "the indicator stayed"
 
-        # Window keys: snap the window to the left half of the screen.
-        chord(DELETE, SNAP_LEFT)
-        work = screen.monitor_of(frame).work
-        assert wait_for(
-            lambda: abs(windows.outer_rect(frame).left - work.left) < 20 and windows.outer_rect(frame).width > work.width // 2 - 40,
-            QtWidgets.QApplication.processEvents,
-        ), root.geometry()
+        # Window keys: minimize the window, which placement then leaves alone.
+        chord(DELETE, MINIMIZE)
+        assert wait_for(lambda: windows.is_minimized(frame), QtWidgets.QApplication.processEvents), root.geometry()
+        windows.show(frame, windows.SW_RESTORE)
 
 
 def screen_text(endpoint: FakeEndpoint, pump: Callable[[], None]) -> None:

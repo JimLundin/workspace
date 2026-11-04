@@ -382,13 +382,13 @@ TOOLS_LAYER: Final[Board[Action]] = Board(
 )
 
 APPS_LAYER: Final[Board[Action]] = Board(
-    # Hold the Delete thumb. Left hand: apps (from config.APPS), then window placement; right hand: modifiers.
-    top=      Row((_APP[0],        _APP[1],       _APP[2],         _APP[3],           _APP[4]      ), (XX, XX, XX, XX, LOCK)),
-    home=     Row((_APP[5],        _APP[6],       _APP[7],         _APP[8],           _APP[9]      ), (XX, SFT, CTL, ALT, GUI )),
-    bottom=   Row((Tool.SNAP_LEFT, Tool.MAXIMIZE, Tool.SNAP_RIGHT, Tool.NEXT_MONITOR, Tool.MINIMIZE),
-                  (XX, XX, XX, XX, Tool.DICTATE_TOGGLE)),
+    # Hold the Delete thumb. Left hand: apps (from config.APPS), then desktops and zoom; right hand: focus and desktops.
+    top=      Row((_APP[0],          _APP[1],   _APP[2],          _APP[3],          _APP[4]      ), (Tool.FOCUS_LEFT, Tool.FOCUS_DOWN, Tool.FOCUS_UP, Tool.FOCUS_RIGHT, LOCK)),
+    home=     Row((_APP[5],          _APP[6],   _APP[7],          _APP[8],          _APP[9]      ), (XX, SFT, CTL, ALT, GUI )),
+    bottom=   Row((Tool.DESKTOP_1,   Tool.ZOOM, Tool.DESKTOP_2,   Tool.DESKTOP_3,   Tool.MINIMIZE),
+                  (Tool.DESKTOP_PREVIOUS, Tool.DESKTOP_NEXT, XX, Tool.PLACEMENT_PAUSE, Tool.DICTATE_TOGGLE)),
     thumbs=Thumbs((Tool.WINDOW_SWITCHER, Tool.COPY_TRANSCRIPT, Tool.MEETING_TOGGLE),
-                  (Tool.AGENT_VOICE_TOGGLE, XX, XX)),
+                  (Tool.AGENT_VOICE_TOGGLE, Tool.PLACE_NOW, XX)),
 )
 # fmt: on
 

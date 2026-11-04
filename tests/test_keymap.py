@@ -80,7 +80,7 @@ def test_tools_and_apps_layers() -> None:
     assert tools["M"] == ("Talk", "hold", Kind.TOOL)
     apps = caps(Layer.APPS)
     assert apps["2"] == ("Terminal", "", Kind.APP)
-    assert apps["Caps"] == ("Snap ←", "", Kind.TOOL)
+    assert apps["Caps"] == ("Desk 1", "", Kind.TOOL)
     assert apps["."][2] is Kind.HELD
 
 

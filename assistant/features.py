@@ -39,11 +39,12 @@ from assistant.text import one_line_command, typed_text, unwrap
 from config import REWRITES
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
+from desktop_ui.navigation import AppKey, Order, Source, keyed
 from diagnostics import failure_info
 from protocol import App, Request, Tool
 from usage import Detail
 from winapi.pcm import RATE
-from winapi.shapes import Rect, Window
+from winapi.shapes import Rect
 
 
 class Answer(Protocol):
@@ -93,13 +94,9 @@ class Desktop(Protocol):
     def problem(self, message: str) -> None:
         """Something went wrong that the user should hear about."""
 
-    def windows(self) -> list[Window]:
-        """Windows on the taskbar, front to back."""
-        ...
+    def navigate(self, order: Order) -> None:
+        """Hand a navigation or placement order to the desktop's window owner."""
 
-    def foreground(self) -> int: ...
-    def focus(self, handle: int) -> bool: ...
-    def launch(self, command: str) -> None: ...
     def arrange(self, tool: Tool, *, target: int | None) -> None:
         """Arrange the captured window, or the foreground window when target is None."""
 
@@ -127,15 +124,6 @@ class Outcome(Enum):
 
 SCREENSHOT_SIZE: Final = 2048
 """Longest side of screenshots sent to the model, in pixels."""
-
-
-def pick_window(windows: Sequence[Window], app: App, foreground: int) -> int | None:
-    """The app's window to bring forward: its front one; or, if one of its windows is
-    already in front, its rearmost, so pressing again goes through all of them."""
-    mine = [w.handle for w in windows if w.exe == app.exe.lower() and app.title.lower() in w.title.lower()]
-    if not mine:
-        return None
-    return mine[-1] if foreground in mine else mine[0]
 
 
 def submit_voice_text(text: str, send: Callable[[str], None], details: dict[str, Detail]) -> None:
@@ -245,7 +233,7 @@ class Assistant:
         match request:
             case App():
                 if down:
-                    self.timed(f"app:{request.name}", lambda: self.switch_to(request))
+                    self.timed(f"app:{request.name}", lambda: self.order(AppKey(request, Source.KEY)))
                 return
             case Tool():
                 kind = route(request)
@@ -274,6 +262,8 @@ class Assistant:
                 self.submit(self.copy_transcript)
             case Route.ARRANGE:
                 self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request, target=target)))
+            case Route.NAVIGATE:
+                self.timed(request.name.lower(), lambda: self.order(keyed(request)))
             case Route.REWRITE:
                 self.submit(lambda: self.timed(request.name.lower(), lambda: self.rewrite(REWRITES[request])))
             case Route.ASK:
@@ -527,11 +517,7 @@ class Assistant:
         question = question or prompts.SCREEN_QUESTION
         return Conversation(self.settings, [Text(question), Image(png)], question, self.desktop, self.submit).run()
 
-    def switch_to(self, app: App) -> Failure | Outcome:
-        foreground = self.desktop.foreground()
-        handle = pick_window(self.desktop.windows(), app, foreground)
-        if handle is None:
-            self.desktop.launch(app.command)
-        elif handle != foreground and not self.desktop.focus(handle):
-            return Failure(f"Windows wouldn't bring {app.name} to the front.")
+    def order(self, order: Order | None) -> Outcome:
+        if order is not None:
+            self.desktop.navigate(order)
         return Outcome.DONE

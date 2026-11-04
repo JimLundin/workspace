@@ -26,17 +26,6 @@ def framed(target: Rect, outer: Rect, visible: Rect) -> Rect:
     )
 
 
-def to_monitor(window: Rect, source: Rect, target: Rect) -> Rect:
-    """The same place and proportions on another monitor's work area, kept on screen."""
-    sx, sy = target.width / source.width, target.height / source.height
-    width, height = min(round(window.width * sx), target.width), min(round(window.height * sy), target.height)
-    left = target.left + round((window.left - source.left) * sx)
-    top = target.top + round((window.top - source.top) * sy)
-    left = min(max(left, target.left), target.right - width)
-    top = min(max(top, target.top), target.bottom - height)
-    return Rect(left, top, left + width, top + height)
-
-
 def fit(width: int, height: int, longest: int) -> tuple[int, int]:
     """A size no wider or taller than `longest`, same shape; never enlarged."""
     scale = min(1.0, longest / max(width, height))

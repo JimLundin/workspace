@@ -188,7 +188,8 @@ windows across screens. Use arrow keys to select, Enter to switch,
 and Escape to cancel. The normal Enter and
 Escape thumb bindings work here. Minimized windows restore when focused.
 Unbound physical keys are blocked while the layout is enabled. Physical **Shift**, **Ctrl**
-and **arrow keys** remain native, including Shift+arrow selection. All function
+and **arrow keys** remain native, including Shift+arrow selection. While Apps is
+held, physical arrows move focus between placed windows instead. All function
 keys, media controls and Windows key's taskbar action also remain native.
 Turning the layout off restores the normal keyboard; other modifier and
 navigation actions are available through the layout's home row and layers.
@@ -224,10 +225,19 @@ would stop the running program), so they don't work there.
 |---|---|---|---|---|---|
 | top **2 3 4 5 6** | terminal | browser | Outlook | Teams | Explorer |
 | home **Q W E R T** | VS Code | Notepad | Excel | Word | PowerPoint |
-| bottom **Caps A S D F** | snap left | maximize/restore | snap right | next monitor | minimize |
+| bottom **Caps A S D F** | desktop 1 | zoom | desktop 2 | desktop 3 | minimize |
+| right top **8 9 0 +** | focus left | focus down | focus up | focus right | |
+| right bottom **K L Ö** | previous desktop | next desktop | | | |
+| right **Ä** | pause or resume window placement | | | | |
+| right thumb **,** | put every window back now | | | | |
 
-An app key brings the app forward, starts it if it isn't running, and pressed
-again goes through its windows. Change the apps in `config.py`.
+An app key switches to the desktop where the app is placed and focuses its
+window; pressed again it goes through the app's windows, and it starts the app
+when it isn't running. Outlook and Teams are the toolbar's pinned web apps.
+Change the apps in `config.py`. The focus keys, and Apps with the physical
+arrow keys, move to the nearest placed window in that direction on the current
+desktop, across monitors. Zoom fills the monitor with the focused window until
+you press it again or focus another window. The desktop keys don't wrap.
 
 **Snippets**: type the trigger and it's replaced: `,,date` `,,time` `,,now`
 `,,week` `,,shrug` `,,thx` `,,mvh` `,,br`. Add your own in `config.py`. Physical navigation, window changes, pointer movement

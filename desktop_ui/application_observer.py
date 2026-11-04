@@ -1,24 +1,36 @@
 """Observe app windows on every virtual desktop, place them where the layout
-declares, copy icons away from Qt's animation/audio thread and hide pinned web-app
-windows' captions.
+declares, carry out navigation, copy icons away from Qt's animation/audio thread
+and hide pinned web-app windows' captions.
 
 One worker owns all of it: placement moves and resizes the same windows whose
-regions hide their captions, so a second owner would race the first.
+regions hide their captions and that navigation focuses, zooms and launches, so a
+second owner would race the first.
 """
 
 import os
 import queue
+import subprocess
 import threading
+import time
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
+from typing import assert_never
 
+import protocol
+from assistant.browser_session import edge_path
 from assistant.geometry import framed
-from desktop_ui.shell_items import EMPTY_SHELF, Shelf, caption_clip, shelf
+from desktop_ui.navigation import Effect, Focus, Launch, Navigated, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, zoom_after
+from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
 from desktop_ui.window_layout import NOWHERE, Placement, Target, groups, managed, place, screens
 from winapi import app_user_model, screen, windows
 from winapi.icon_pixels import window_pixels
 from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
+
+_CREATE_NO_WINDOW = 0x0800_0000
+RECENT = 32
+"""Windows remembered as last in front, for landing on a desktop."""
 
 
 def frame(window: int) -> None:
@@ -47,6 +59,14 @@ def resize(handle: int, target: Target, *, slot: bool) -> None:
     wanted = framed(target.rect, outer, drawn)
     if wanted != outer:
         windows.move(handle, wanted)
+
+
+def focus(handle: int) -> None:
+    """Desktop switches animate; the window can take the keyboard once the switch lets it."""
+    for _ in range(10):
+        if windows.focus(handle):
+            return
+        time.sleep(0.05)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,13 +105,10 @@ class Desktop:
         except OSError:
             self.disconnect()
             connection, state = None, None
-        listed = windows.windows(include_cloaked=True)
         ids = state.ids if state is not None else ()
         found = tuple(
-            (window, ids.index(place_id) if (place_id := connection.window_desktop(window.handle)) in ids else None)
-            if connection is not None
-            else (window, None)
-            for window in listed
+            (window, ids.index(place_id) if connection is not None and (place_id := connection.window_desktop(window.handle)) in ids else None)
+            for window in windows.windows(include_cloaked=True)
         )
         shown = tuple(
             (window, index)
@@ -127,77 +144,215 @@ class Desktop:
                 current, place_id = connection.observe().current, connection.window_desktop(handle)
                 if place_id is not None and place_id != current:
                     connection.switch(place_id)
-        windows.focus(handle)
+        focus(handle)
+
+    def switch(self, index: int) -> bool:
+        if (connection := self.connection) is None:
+            return False
+        try:
+            ids = connection.ids()
+            if index < len(ids):
+                connection.switch(ids[index])
+                return True
+        except OSError:
+            self.disconnect()
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class Arrangement:
+    """What the bar shows: the applications, the desktops and whether placement is paused."""
+
+    shelf: Shelf
+    desktops: int
+    current: int
+    paused: bool = False
+
+
+EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
 
 
 class ApplicationObserver:
-    """One worker owns native polling, placement, desktops and slot-window regions; callers receive immutable shelf snapshots."""
+    """One worker owns native polling, placement, desktops, navigation and slot-window regions; callers receive immutable snapshots."""
 
-    __slots__ = ("requests", "results", "stop", "thread")
+    __slots__ = ("navigated", "problem", "requests", "results", "stop", "thread")
 
-    def __init__(self) -> None:
-        self.results: queue.Queue[Shelf] = queue.Queue(maxsize=1)
-        self.requests: queue.Queue[int | None] = queue.Queue()
-        """Windows to bring forward; None only wakes the worker to stop."""
+    def __init__(self, problem: Callable[[str], None], navigated: Callable[[Navigated], None] = lambda _: None) -> None:
+        self.problem = problem
+        self.navigated = navigated
+        """Receives what every navigation did, on the worker thread."""
+        self.results: queue.Queue[Arrangement] = queue.Queue(maxsize=1)
+        self.requests: queue.Queue[Order | None] = queue.Queue()
+        """Navigation and placement orders; None only wakes the worker to stop."""
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.run, name="application icons", daemon=True)
         self.thread.start()
 
-    def show(self, handle: int) -> None:
-        self.requests.put(handle)
+    def order(self, order: Order) -> None:
+        self.requests.put(order)
 
     def run(self) -> None:
-        framed_slots: frozenset[int] = frozenset()
-        desktop = Desktop()
-        own = os.getpid()
         with app_user_model.apartment():
-            try:
-                previous, placement = EMPTY_SHELF, NOWHERE
-                while not self.stop.is_set():
-                    observed = desktop.observe()
-                    # Only Edge hosts pinned web apps, which bounds the per-second property reads.
-                    app_ids = frozendict(
-                        (window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe"
-                    )
-                    grouped = shelf(observed.windows, app_ids, previous)
-                    slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
-                    current = frozenset(window.handle for window in slots)
-                    if (where := screens(screen.monitors())) is not None and observed.state is not None:
-                        eligible = frozenset(
-                            window.handle
-                            for window in observed.windows
-                            if managed(window, resizable=windows.resizable(window.handle), own=windows.process_id(window.handle) == own)
-                        )
-                        placement = place(where, groups(grouped, eligible), placement)
-                        if not windows.dragging():  # A window being dragged snaps back once it's let go.
-                            desktop.arrange(observed, placement, current)
-                    for window in slots:
-                        if not window.minimized:
-                            frame(window.handle)
-                    release(framed_slots - current)
-                    framed_slots = current
-                    snapshot = replace(
-                        grouped,
-                        running=tuple(
-                            replace(app, image=window_pixels(app.windows[0].handle))
-                            if not self.stop.is_set() and all(old.identity != app.identity for old in previous.running)
-                            else app
-                            for app in grouped.running
-                        ),
-                    )
-                    if snapshot != previous:
-                        with suppress(queue.Empty):
-                            self.results.get_nowait()
-                        self.results.put_nowait(snapshot)
-                    previous = snapshot
-                    with suppress(queue.Empty):
-                        if (handle := self.requests.get(timeout=1)) is not None:
-                            desktop.show(handle)
-            finally:
-                release(framed_slots)
-                desktop.disconnect()
+            Worker(self).run()
 
     def close(self) -> None:
         self.stop.set()
         self.requests.put(None)
         self.thread.join(timeout=5)
+
+
+class Worker:
+    """The observer thread's state: the last placement, zoom, pause, recent windows and pending web-app launches."""
+
+    __slots__ = ("desktop", "framed", "launches", "observer", "paused", "placement", "previous", "recent", "world", "zoomed")
+
+    def __init__(self, observer: ApplicationObserver) -> None:
+        self.observer = observer
+        self.desktop = Desktop()
+        self.framed: frozenset[int] = frozenset()
+        self.previous = EMPTY_ARRANGEMENT
+        self.placement: Placement = NOWHERE
+        self.paused = False
+        self.zoomed: int | None = None
+        self.recent: tuple[int, ...] = ()
+        self.launches: Launches = frozendict()
+        self.world: World | None = None
+
+    def run(self) -> None:
+        try:
+            while not self.observer.stop.is_set():
+                self.poll()
+                with suppress(queue.Empty):
+                    while (order := self.observer.requests.get(timeout=1)) is not None:
+                        if not self.carry(order):
+                            break
+        finally:
+            release(self.framed)
+            self.desktop.disconnect()
+
+    def poll(self) -> None:
+        observed = self.desktop.observe()
+        # Only Edge hosts pinned web apps, which bounds the per-second property reads.
+        app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
+        grouped = shelf(observed.windows, app_ids, self.previous.shelf)
+        self.launches = outstanding(self.launches, grouped)
+        slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
+        current = frozenset(window.handle for window in slots)
+        foreground = windows.foreground()
+        self.zoomed = zoom_after(self.zoomed, foreground)
+        state = observed.state
+        if (where := screens(screen.monitors())) is not None and state is not None:
+            own = os.getpid()
+            eligible = frozenset(
+                window.handle
+                for window in observed.windows
+                if managed(window, resizable=windows.resizable(window.handle), own=windows.process_id(window.handle) == own)
+            )
+            self.placement = place(where, groups(grouped, eligible), self.placement)
+            if not self.paused and not windows.dragging():  # A window being dragged snaps back once it's let go.
+                kept = frozendict((handle, target) for handle, target in self.placement.items() if handle != self.zoomed)
+                self.desktop.arrange(observed, kept, current)
+        for window in slots:
+            if not window.minimized:
+                frame(window.handle)
+        release(self.framed - current)
+        self.framed = current
+        live = frozenset(window.handle for window in observed.windows)
+        candidates = tuple(handle for handle in (foreground, *self.recent) if handle in self.placement and handle in live)
+        self.recent = tuple(handle for index, handle in enumerate(candidates) if handle not in candidates[:index])[:RECENT]
+        self.world = World(
+            len(state.ids) if state is not None else 1,
+            state.ids.index(state.current) if state is not None else 0,
+            foreground,
+            frozendict((group.app, group.windows) for group in groups(grouped, live)),
+            observed.desktops,
+            self.placement,
+            self.recent,
+            self.zoomed,
+        )
+        self.publish(grouped, state)
+
+    def publish(self, grouped: Shelf, state: Desktops | None) -> None:
+        stop = self.observer.stop
+        running = tuple(
+            replace(app, image=window_pixels(app.windows[0].handle))
+            if not stop.is_set() and all(old.identity != app.identity for old in self.previous.shelf.running)
+            else app
+            for app in grouped.running
+        )
+        desktops, current = (len(state.ids), state.ids.index(state.current)) if state is not None else (0, 0)
+        snapshot = Arrangement(replace(grouped, running=running), desktops, current, paused=self.paused)
+        if snapshot != self.previous:
+            with suppress(queue.Empty):
+                self.observer.results.get_nowait()
+            self.observer.results.put_nowait(snapshot)
+        self.previous = snapshot
+
+    def carry(self, order: Order) -> bool:
+        """Carry out one order; False when the next poll should run first."""
+        match order:
+            case Placing.TOGGLE_PAUSE:
+                self.paused = not self.paused
+                return False
+            case Placing.NOW:
+                self.paused, self.zoomed = False, None
+                return False
+            case _:
+                if (world := self.world) is None:
+                    return False
+                fresh = replace(world, foreground=windows.foreground())
+                chosen, record = decide(order, fresh)
+                self.effect(chosen)
+                self.observer.navigated(record)
+                self.world = replace(fresh, current=record.to_desktop)
+                return True
+
+    def effect(self, chosen: Effect) -> None:
+        match chosen:
+            case Focus(window=window):
+                self.desktop.show(window)
+            case Switch(desktop=index, then=then):
+                if self.desktop.switch(index) and then is not None:
+                    focus(then)
+            case Launch(app=app):
+                self.start(app)
+            case ZoomIn(window=window):
+                self.zoomed = window
+                if (target := self.placement.get(window)) is not None:
+                    resize(window, Target(target.desktop, screen.monitor_of(window).work), slot=window in self.framed)
+            case ZoomOut(window=window):
+                self.zoomed = None
+                if (target := self.placement.get(window)) is not None:
+                    resize(window, target, slot=window in self.framed)
+            case None:
+                pass
+            case _:
+                assert_never(chosen)
+
+    def start(self, app: protocol.Installed | PinnedApp) -> None:
+        match app:
+            case protocol.Installed(command=command):
+                try:
+                    os.startfile(command)  # as the Run dialog would: program names, paths, URLs
+                except OSError:
+                    subprocess.Popen(["cmd", "/c", "start", "", command], creationflags=_CREATE_NO_WINDOW)
+            case PinnedApp():
+                self.open_web_app(app)
+            case _:
+                assert_never(app)
+
+    def open_web_app(self, app: PinnedApp) -> None:
+        """Edge opens the slot's app window in the user's own profile; a repeated launch waits for it."""
+        pending = launch(self.launches, app, time.monotonic())
+        if pending is None:
+            return
+        edge = edge_path()
+        if edge is None:
+            self.observer.problem(f"Microsoft Edge is needed to open {WEB_APPS[app].label}.")
+            return
+        try:
+            os.startfile(edge, arguments=f"--app={WEB_APPS[app].url}")
+        except OSError as error:
+            self.observer.problem(f"Could not open {WEB_APPS[app].label}: {error}")
+            return
+        self.launches = pending

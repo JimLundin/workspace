@@ -8,22 +8,22 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Final
 
-from protocol import App, Tool
+from protocol import App, Installed, PinnedWeb, Tool
 
 # ---- Apps layer ------------------------------------------------------------------------
 # Up to ten, in key order: the top row of the left hand, then the home row.
 
 APPS: Final[tuple[App, ...]] = (
-    App("terminal", "windowsterminal.exe", "wt.exe"),
-    App("browser", "msedge.exe", "msedge.exe"),
-    App("outlook", "olk.exe", "olk.exe"),
-    App("teams", "ms-teams.exe", "msteams:"),
-    App("files", "explorer.exe", "explorer.exe"),
-    App("code", "code.exe", "code"),
-    App("notepad", "notepad.exe", "notepad.exe"),
-    App("excel", "excel.exe", "excel.exe"),
-    App("word", "winword.exe", "winword.exe"),
-    App("PowerPoint", "powerpnt.exe", "powerpnt.exe"),
+    App("terminal", Installed("windowsterminal.exe", "wt.exe")),
+    App("browser", Installed("msedge.exe", "msedge.exe")),
+    App("outlook", PinnedWeb("outlook")),
+    App("teams", PinnedWeb("teams")),
+    App("files", Installed("explorer.exe", "explorer.exe")),
+    App("code", Installed("code.exe", "code")),
+    App("notepad", Installed("notepad.exe", "notepad.exe")),
+    App("excel", Installed("excel.exe", "excel.exe")),
+    App("word", Installed("winword.exe", "winword.exe")),
+    App("PowerPoint", Installed("powerpnt.exe", "powerpnt.exe")),
 )
 
 # ---- Snippets --------------------------------------------------------------------------

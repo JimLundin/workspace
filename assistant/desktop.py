@@ -1,20 +1,19 @@
 """The `Desktop` the assistant's features use, done with Windows calls and Qt."""
 
-import os
-import subprocess
 import time
 from collections.abc import Callable
-from typing import Final, Literal
+from typing import Final
 
 from config import TERMINALS
 from winapi import audio, clipboard, inputs, screen, windows
-from winapi.shapes import Rect, Window
-lazy from assistant.geometry import Shot, fit, half, to_monitor
+from winapi.shapes import Rect
+lazy from assistant.geometry import Shot, fit
 lazy from assistant.png import encode_png
 lazy from assistant.textio import paste_text
 lazy from desktop_ui.dialogs import AnswerWindow
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.island_model import Job
+lazy from desktop_ui.navigation import Order
 lazy from desktop_ui.ui import Ui
 lazy from protocol import MAGIC, Tool
 
@@ -137,50 +136,15 @@ class WinDesktop:
 
     # ---- other programs' windows -------------------------------------------------------
 
-    def windows(self) -> list[Window]:
-        return windows.windows()
-
-    def foreground(self) -> int:
-        return windows.foreground()
-
-    def focus(self, handle: int) -> bool:
-        return windows.focus(handle)
-
-    def launch(self, command: str) -> None:
-        try:
-            os.startfile(command)  # as the Run dialog would: program names, paths, URLs, msteams:...
-        except OSError:
-            subprocess.Popen(["cmd", "/c", "start", "", command], creationflags=_CREATE_NO_WINDOW)
+    def navigate(self, order: Order) -> None:
+        self.ui.navigate(order)
 
     def arrange(self, tool: Tool, *, target: int | None = None) -> None:
         hwnd = windows.foreground() if target is None else target
         if not hwnd:
             return
         match tool:
-            case Tool.SNAP_LEFT | Tool.SNAP_RIGHT:
-                if windows.is_maximized(hwnd):
-                    windows.show(hwnd, windows.SW_RESTORE)
-                side: Literal["left", "right"] = "left" if tool is Tool.SNAP_LEFT else "right"
-                windows.move(hwnd, half(screen.monitor_of(hwnd).work, side, windows.outer_rect(hwnd), windows.visible_rect(hwnd)))
-            case Tool.MAXIMIZE:
-                windows.show(hwnd, windows.SW_RESTORE if windows.is_maximized(hwnd) else windows.SW_MAXIMIZE)
             case Tool.MINIMIZE:
                 windows.show(hwnd, windows.SW_MINIMIZE)
-            case Tool.NEXT_MONITOR:
-                self.next_monitor(hwnd)
             case _:
                 raise AssertionError(f"{tool} doesn't arrange windows")
-
-    def next_monitor(self, hwnd: int) -> None:
-        monitors = screen.monitors()
-        if len(monitors) < 2:
-            return
-        current = screen.monitor_of(hwnd)
-        index = next((i for i, m in enumerate(monitors) if m.area == current.area), 0)
-        target = monitors[(index + 1) % len(monitors)]
-        maximized = windows.is_maximized(hwnd)
-        if maximized:
-            windows.show(hwnd, windows.SW_RESTORE)
-        windows.move(hwnd, to_monitor(windows.outer_rect(hwnd), current.work, target.work))
-        if maximized:
-            windows.show(hwnd, windows.SW_MAXIMIZE)

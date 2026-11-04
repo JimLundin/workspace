@@ -87,6 +87,7 @@ lazy from automation.task import Control, RequestKind
 lazy from automation.work_folder import BROWSER_PROFILE, WORK
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap import indicator_text
+lazy from desktop_ui.navigation import Source, SwitcherPick
 lazy from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 lazy from desktop_ui.tray import Tray
 lazy from desktop_ui.ui import Ui
@@ -467,11 +468,7 @@ class AssistantApp:
 
     def switch_windows(self) -> None:
         def focus(handle: int) -> None:
-            def activate() -> None:
-                if not windows.focus(handle):
-                    self.problem("That window is no longer available or Windows refused to focus it.")
-
-            threading.Thread(target=activate, name="window navigation", daemon=True).start()
+            self.ui.navigate(SwitcherPick(handle, Source.KEY))
 
         def collect() -> None:
             own = os.getpid()

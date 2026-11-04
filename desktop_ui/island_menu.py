@@ -30,6 +30,7 @@ class Command(Enum):
     KEYMAP = auto()
     OVERLAY = auto()
     TASKBAR = auto()
+    PLACEMENT = auto()
     NOTIFICATIONS = auto()
     ALL_CONTROLS = auto()
 
@@ -164,6 +165,7 @@ class Controls:
     automatic: AutomaticStatus = AutomaticStatus.OFF
     overlay: bool = field(default=False, kw_only=True)
     taskbar: bool = field(default=False, kw_only=True)
+    placement_paused: bool = field(default=False, kw_only=True)
     sound: Slider = Slider("Sound", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
@@ -180,15 +182,17 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
         automatic_toggle(controls.automatic),
         Toggle("Keyboard overlay", "On" if controls.overlay else "Off", "layers", Command.OVERLAY, on=controls.overlay),
         Toggle("Windows taskbar", "Shown" if controls.taskbar else "Hidden", "table", Command.TASKBAR, on=controls.taskbar),
+        Toggle("Window placement", "Paused" if controls.placement_paused else "On", "grid", Command.PLACEMENT, on=not controls.placement_paused),
     )
     modules = (
         Cell(toggles[0], Face.TOGGLE, 0, 4, top, 4),
-        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 6, "Canvas"),
+        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 8, "Canvas"),
         Cell(toggles[1], Face.TOGGLE, 0, 4, top + 4, 4),
         Cell(toggles[2], Face.TOGGLE, 0, 4, top + 8, 4),
-        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 4, 4, top + 6, 6, "Feed"),
+        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 4, 4, top + 8, 8, "Feed"),
+        Cell(toggles[3], Face.TOGGLE, 0, 4, top + 12, 4),
     )
-    top += 12
+    top += 16
     record = () if controls.recording is not None else (Cell(Item("Record a meeting", "mic", Command.RECORD), Face.WIDE, 0, COLUMNS, top, 5),)
     top += 5 * len(record)
     sound = Cell(controls.sound, Face.SLIDER, 0, COLUMNS, top, 6)
@@ -370,7 +374,15 @@ def restores_focus(choice: Choice) -> bool:
     match choice:
         case ToolChoice() | Volume():
             return True
-        case Command.OVERLAY | Command.TASKBAR | Command.RECORD | Command.STOP_RECORDING | Command.STOP_AGENT | Command.AUTOMATIC_RECORDING:
+        case (
+            Command.OVERLAY
+            | Command.TASKBAR
+            | Command.PLACEMENT
+            | Command.RECORD
+            | Command.STOP_RECORDING
+            | Command.STOP_AGENT
+            | Command.AUTOMATIC_RECORDING
+        ):
             return True
         case Command.CANVAS | Command.FEED | Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
             return False

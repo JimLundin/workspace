@@ -91,6 +91,7 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
         Toggle("Auto-record", "Teams · On", "mic", Command.AUTOMATIC_RECORDING, on=True),
         Toggle("Keyboard overlay", "On", "layers", Command.OVERLAY, on=True),
         Toggle("Windows taskbar", "Hidden", "table", Command.TASKBAR, on=False),
+        Toggle("Window placement", "On", "grid", Command.PLACEMENT, on=True),
     ]
     menu = Menu(cells)
     assert press(at(menu, "Keyboard overlay"), Key.ENTER) == Applied(Command.OVERLAY)

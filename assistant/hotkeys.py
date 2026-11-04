@@ -17,6 +17,7 @@ class Route(Enum):
     AGENT_SESSION = auto()
     TRANSCRIPT = auto()
     ARRANGE = auto()
+    NAVIGATE = auto()
     SWITCHER = auto()
     INBOX = auto()
     MEETING = auto()
@@ -42,8 +43,23 @@ def route(tool: Tool) -> Route:
             return Route.AGENT_SESSION
         case Tool.COPY_TRANSCRIPT:
             return Route.TRANSCRIPT
-        case Tool.SNAP_LEFT | Tool.SNAP_RIGHT | Tool.MAXIMIZE | Tool.MINIMIZE | Tool.NEXT_MONITOR:
+        case Tool.MINIMIZE:
             return Route.ARRANGE
+        case (
+            Tool.ZOOM
+            | Tool.FOCUS_LEFT
+            | Tool.FOCUS_DOWN
+            | Tool.FOCUS_UP
+            | Tool.FOCUS_RIGHT
+            | Tool.DESKTOP_PREVIOUS
+            | Tool.DESKTOP_NEXT
+            | Tool.DESKTOP_1
+            | Tool.DESKTOP_2
+            | Tool.DESKTOP_3
+            | Tool.PLACEMENT_PAUSE
+            | Tool.PLACE_NOW
+        ):
+            return Route.NAVIGATE
         case Tool.WINDOW_SWITCHER:
             return Route.SWITCHER
         case Tool.OPEN_INBOX:
@@ -59,7 +75,7 @@ def needs_settings(kind: Route) -> bool:
     match kind:
         case Route.HOLD | Route.TOGGLE | Route.REWRITE | Route.ASK | Route.SCREEN_TEXT | Route.SCREEN_ASK | Route.AGENT_SESSION:
             return True
-        case Route.STOP | Route.TRANSCRIPT | Route.ARRANGE | Route.SWITCHER | Route.INBOX | Route.MEETING:
+        case Route.STOP | Route.TRANSCRIPT | Route.ARRANGE | Route.NAVIGATE | Route.SWITCHER | Route.INBOX | Route.MEETING:
             return False
         case _:
             assert_never(kind)

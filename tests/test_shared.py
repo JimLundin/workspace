@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import APPS
-from protocol import App, Request, Tool, decode, decode_indicator, encode, encode_indicator
+from protocol import App, Installed, Request, Tool, decode, decode_indicator, encode, encode_indicator
 from usage import record, record_counts, report, summarize
 
 # ---- protocol --------------------------------------------------------------------------
@@ -23,7 +23,7 @@ def test_unknown_codes_decode_to_nothing() -> None:
 
 
 def test_an_app_not_in_the_list_cannot_be_sent() -> None:
-    stranger = App("stranger", "stranger.exe", "stranger.exe")
+    stranger = App("stranger", Installed("stranger.exe", "stranger.exe"))
     try:
         encode(stranger, APPS)
     except ValueError:

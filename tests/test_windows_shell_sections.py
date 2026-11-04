@@ -58,8 +58,9 @@ def test_application_grouping_preserves_icon_order_and_cycles_current_windows() 
     reordered = applications((other, second, first), apps)
     assert tuple(app.identity for app in reordered) == ("editor.exe", "browser.exe")
     assert tuple(window.handle for window in reordered[0].windows) == (11, 12)
-    assert next_window(apps[0].windows, 11) == 12 and next_window(apps[0].windows, 12) == 11
-    assert next_window(apps[0].windows, 99) == 11
+    handles = tuple(window.handle for window in apps[0].windows)
+    assert next_window(handles, 11) == 12 and next_window(handles, 12) == 11
+    assert next_window(handles, 99) == 11
     assert applications((other,), reordered) == (Application("browser.exe", (other,)),)
 
 

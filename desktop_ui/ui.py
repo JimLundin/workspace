@@ -47,6 +47,7 @@ lazy from desktop_ui.dialogs import AnswerWindow, Job, NativePresentation, Prese
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import Indicator
+lazy from desktop_ui.navigation import Order
 lazy from desktop_ui.notifications import Entry
 lazy from desktop_ui.qt_ui import application, later
 lazy from desktop_ui.request_panel import RequestActions
@@ -876,6 +877,9 @@ class Ui:
 
     def desktop_layout(self, *, enabled: bool) -> None:
         self.post(lambda _: self._desktop.layout(enabled=enabled) if self._desktop is not None else None)
+
+    def navigate(self, order: Order) -> None:
+        self.post(lambda _: self._desktop.navigate(order) if self._desktop is not None else None)
 
     def toggle_taskbar(self) -> None:
         self.post(lambda _: self._desktop.toggle_taskbar() if self._desktop is not None else None)

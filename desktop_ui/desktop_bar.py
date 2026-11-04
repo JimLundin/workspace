@@ -22,13 +22,12 @@ lazy from PySide6 import QtCore, QtGui
 from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
 lazy import winapi.ambient
-lazy from assistant.browser_session import edge_path
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from desktop_ui import island_menu
 lazy from desktop_ui.agent_progress import Phase, coalesced, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
-lazy from desktop_ui.application_observer import ApplicationObserver
+lazy from desktop_ui.application_observer import EMPTY_ARRANGEMENT, ApplicationObserver, Arrangement
 lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
@@ -51,10 +50,12 @@ lazy from desktop_ui.island_menu import (
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
+lazy from desktop_ui.navigation import CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
-lazy from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Application, Item, Launches, Pinned, PinnedApp, Shelf, launch, next_window, outstanding
+lazy from desktop_ui.shell_items import EMPTY_SHELF, Application, Item, Pinned, Shelf
+lazy from desktop_ui.window_layout import Program
 lazy from protocol import Tool
 lazy from winapi import appearance, inputs, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable, Speakers
@@ -106,6 +107,7 @@ class DesktopBar:
         "ambient",
         "application_service",
         "applications",
+        "arrangement",
         "audio_meter",
         "audio_timer",
         "automatic_recording",
@@ -121,7 +123,6 @@ class DesktopBar:
         "job",
         "keys",
         "last_frame",
-        "launches",
         "layout_enabled",
         "loop",
         "materials",
@@ -164,8 +165,7 @@ class DesktopBar:
     ) -> None:
         self.actions = actions
         self.applications: Shelf = EMPTY_SHELF
-        # Pinned web apps launched but not yet showing a window, with their deadlines.
-        self.launches: Launches = frozendict()
+        self.arrangement: Arrangement = EMPTY_ARRANGEMENT
         self.application_service: ApplicationObserver | None = None
         self.tray_host: TrayHost | None = None
         self.observations = BarObservations() if observations is None else observations
@@ -244,7 +244,7 @@ class DesktopBar:
         self.status_service = StatusObserver()
         self.controls = shell.AppWindow("workspace shell controls", self.message)
         self.tray_host = TrayHost()
-        self.application_service = ApplicationObserver()
+        self.application_service = ApplicationObserver(self.errors.put)
         self.keys = WindowsKeyObserver(self.controls.handle)
         self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
         self.worker.start()
@@ -274,8 +274,8 @@ class DesktopBar:
         self.window.show_tray(self.tray_host.poll())  # The tick's render rebuilds an open menu's tray cells.
         if self.application_service is not None:
             with suppress(queue.Empty):
-                self.applications = self.application_service.results.get_nowait()
-                self.launches = outstanding(self.launches, self.applications)
+                self.arrangement = self.application_service.results.get_nowait()
+                self.applications = self.arrangement.shelf
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
         # A changed snapshot must also publish section geometry when the island is still.
         if previous != self.window.shell_sections.app_snapshot:
@@ -284,37 +284,19 @@ class DesktopBar:
     def application_click(self, item: Item, click: Click) -> None:
         self.close_menu(restore=False)
         match item:
-            case Pinned(app=app, windows=()):
-                self.open_web_app(app)
-            case Pinned(windows=windows) | Application(windows=windows) if click is Click.RIGHT:
+            case Pinned(windows=windows) | Application(windows=windows) if windows and click is Click.RIGHT:
                 chosen = shell.show_menu(int(self.window.winId()), tuple(shell.MenuItem(window.handle, window.title) for window in windows))
                 if chosen:
-                    self.show_window(chosen)
-            case Pinned(windows=windows) | Application(windows=windows):
-                self.show_window(next_window(windows, self.observations.foreground()))
+                    self.navigate(ShowWindow(chosen, Source.TOOLBAR))
+            case Pinned(app=app):
+                self.navigate(CycleApp(app, Source.TOOLBAR))
+            case Application(identity=identity):
+                self.navigate(CycleApp(Program(identity), Source.TOOLBAR))
 
-    def show_window(self, handle: int) -> None:
-        """The observer owns the desktops: it switches to a window's desktop before focusing it."""
+    def navigate(self, order: Order) -> None:
+        """The application observer owns windows and desktops; it carries out every navigation."""
         if self.application_service is not None:
-            self.application_service.show(handle)
-        else:
-            self.observations.focus(handle)
-
-    def open_web_app(self, app: PinnedApp) -> None:
-        """Edge opens the slot's app window in the user's own profile; a repeated click waits for it."""
-        pending = launch(self.launches, app, time.monotonic())
-        if pending is None:
-            return
-        edge = edge_path()
-        if edge is None:
-            self.actions.problem(f"Microsoft Edge is needed to open {WEB_APPS[app].label}.")
-            return
-        try:
-            os.startfile(edge, arguments=f"--app={WEB_APPS[app].url}")
-        except OSError as error:
-            self.actions.problem(f"Could not open {WEB_APPS[app].label}: {error}")
-            return
-        self.launches = pending
+            self.application_service.order(order)
 
     def tray(self, slot: int, click: Click) -> None:
         """The application gets the click and the keyboard; the menu closes without taking it back."""
@@ -360,6 +342,7 @@ class DesktopBar:
                     self.automatic_recording,
                     overlay=self.overlay_enabled,
                     taskbar=self.taskbar.revealed,
+                    placement_paused=self.arrangement.paused,
                     sound=sound,
                     tray=tuple(entry.tip or "Tray application" for entry in self.window.tray),
                 )
@@ -480,6 +463,8 @@ class DesktopBar:
                 self.actions.overlay()
             case Command.TASKBAR:
                 self.toggle_taskbar()
+            case Command.PLACEMENT:
+                self.navigate(Placing.TOGGLE_PAUSE)
             case Command.NOTIFICATIONS:
                 self.notification_settings()
             case Command.ALL_CONTROLS:

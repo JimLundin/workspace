@@ -5,17 +5,18 @@ from collections.abc import Callable, Mapping
 from typing import cast
 lazy from dataclasses import replace
 
-from assistant.features import Assistant, pick_window
+from assistant.features import Assistant
 from assistant.geometry import Shot
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from automation.json_value import Json
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
-from protocol import App, Tool
+from desktop_ui.navigation import AppKey, Direction, JumpDesktop, Order, Placing, Source, SpatialFocus, StepDesktop, Zoom
+from protocol import App, Installed, Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint, sse
 from usage import Detail
 from winapi.pcm import RATE
-from winapi.shapes import InputRejectedError, Rect, Window
+from winapi.shapes import InputRejectedError, Rect
 
 SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
 
@@ -53,7 +54,7 @@ class FakeAnswer:
 
 
 class FakeDesktop:
-    __slots__ = ("follow_up", "input_error", "jobs", "log", "prompts", "recording_error", "region", "selection", "speech", "windows_open")
+    __slots__ = ("follow_up", "input_error", "jobs", "log", "orders", "prompts", "recording_error", "region", "selection", "speech")
 
     def __init__(self, *, input_error: OSError | None = None, recording_error: OSError | None = None) -> None:
         self.input_error, self.recording_error = input_error, recording_error
@@ -63,7 +64,7 @@ class FakeDesktop:
         self.selection: str | None = None
         self.prompts: list[str | None] = []
         self.region: Rect | None = Rect(0, 0, 100, 50)
-        self.windows_open: list[Window] = []
+        self.orders: list[Order] = []
         self.follow_up: Callable[[str], None] | None = None
 
     def start_listening(self) -> str | None:
@@ -117,18 +118,9 @@ class FakeDesktop:
     def problem(self, message: str) -> None:
         self.log.append(f"problem {message}")
 
-    def windows(self) -> list[Window]:
-        return self.windows_open
-
-    def foreground(self) -> int:
-        return self.windows_open[0].handle if self.windows_open else 0
-
-    def focus(self, handle: int) -> bool:
-        self.log.append(f"focus {handle}")
-        return True
-
-    def launch(self, command: str) -> None:
-        self.log.append(f"launch {command}")
+    def navigate(self, order: Order) -> None:
+        self.orders.append(order)
+        self.log.append("navigate")
 
     def arrange(self, tool: Tool, *, target: int | None) -> None:
         self.log.append(f"arrange {tool.name.lower()} {target}")
@@ -623,48 +615,25 @@ def test_voice_sends_a_task_and_typed_opens_the_agent_session() -> None:
 
 # ---- apps and windows ------------------------------------------------------------------
 
-TERMINAL = App("terminal", "windowsterminal.exe", "wt.exe")
+TERMINAL = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
 
 
-def window(handle: int, exe: str = "windowsterminal.exe", title: str = "PowerShell") -> Window:
-    return Window(handle, title, exe, minimized=False)
-
-
-def test_app_key_focuses_the_app() -> None:
+def test_app_and_navigation_keys_hand_their_orders_to_the_window_owner() -> None:
+    # Defects: an app key no longer reaches the window owner, a desktop key
+    # jumps to the wrong desktop, or placement keys are dropped.
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint)
-        rig.desktop.windows_open = [window(1, "msedge.exe"), window(2)]
-        rig.press(TERMINAL)
-        assert rig.take() == ["focus 2"]
+        for request in (TERMINAL, Tool.DESKTOP_2, Tool.DESKTOP_PREVIOUS, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE):
+            rig.press(request)
+        assert rig.desktop.orders == [
+            AppKey(TERMINAL, Source.KEY),
+            JumpDesktop(1, Source.KEY),
+            StepDesktop(-1, Source.KEY),
+            SpatialFocus(Direction.UP, Source.KEY),
+            Zoom(Source.KEY),
+            Placing.TOGGLE_PAUSE,
+        ]
         assert rig.ok("app:terminal")
-
-
-def test_app_key_starts_the_app_if_it_isnt_running() -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint)
-        rig.press(TERMINAL)
-        assert rig.take() == ["launch wt.exe"]
-
-
-def test_pressing_again_goes_through_the_apps_windows() -> None:
-    windows = [window(1), window(2, "msedge.exe"), window(3), window(4)]  # front to back
-    assert pick_window(windows, TERMINAL, foreground=1) == 4  # the one furthest back: repeated presses visit all
-    assert pick_window(windows, TERMINAL, foreground=2) == 1
-    assert pick_window([window(1)], TERMINAL, foreground=1) == 1
-
-
-def test_app_title_narrows_the_windows() -> None:
-    teams = App("teams", "msedge.exe", "msedge.exe", title="Teams")
-    windows = [window(1, "msedge.exe", "News"), window(2, "msedge.exe", "Chat | Microsoft Teams")]
-    assert pick_window(windows, teams, foreground=0) == 2
-
-
-def test_window_keys_arrange_the_window() -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint)
-        for tool in (Tool.SNAP_LEFT, Tool.MAXIMIZE, Tool.NEXT_MONITOR):
-            rig.press(tool)
-        assert rig.take() == ["arrange snap_left None", "arrange maximize None", "arrange next_monitor None"]
 
 
 def test_menu_window_tool_keeps_its_target_and_records_timed_usage() -> None:
@@ -703,11 +672,11 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
         rig.hold(Tool.DICTATE)
         rig.press(Tool.FIX)
         rig.press(TERMINAL)
-        rig.press(Tool.SNAP_LEFT)
+        rig.press(Tool.MINIMIZE)
         rig.press(Tool.OPEN_INBOX)
         rig.press(Tool.MEETING_TOGGLE)
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
-        assert rig.take() == [problem, problem, "launch wt.exe", "arrange snap_left None"]
+        assert rig.take() == [problem, problem, "navigate", "arrange minimize None"]
         assert rig.agent == ["INBOX", "MEETING"]
         assert endpoint.received == []
 

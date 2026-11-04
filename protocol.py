@@ -7,7 +7,7 @@ to send, and need no admin rights. Plain Python: importable anywhere.
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final
+from typing import Final, Literal
 
 LAYOUT_MAGIC: Final = 0x4D49_5250
 """Layout output: bypass remapping without invalidating its own snippet history."""
@@ -82,27 +82,49 @@ class Tool(Enum):
     WINDOW_SWITCHER = 36
     DICTATE_TOGGLE = 37
     OPEN_INBOX = 38
-    SNAP_LEFT = 40
-    SNAP_RIGHT = 41
-    MAXIMIZE = 42
-    """Maximize the window, or restore it if it already is."""
+    ZOOM = 42
+    """Fill the focused window's monitor until pressed again or focus leaves it."""
     MINIMIZE = 43
-    NEXT_MONITOR = 44
-    """Move the window to the next monitor, same place relative to the screen."""
+    FOCUS_LEFT = 50
+    """Focus the nearest placed window in that direction, across monitors."""
+    FOCUS_DOWN = 51
+    FOCUS_UP = 52
+    FOCUS_RIGHT = 53
+    DESKTOP_PREVIOUS = 55
+    DESKTOP_NEXT = 56
+    PLACEMENT_PAUSE = 58
+    """Pause or resume automatic window placement."""
+    PLACE_NOW = 59
+    """Put every window back where it belongs now."""
+    DESKTOP_1 = 60
+    DESKTOP_2 = 61
+    DESKTOP_3 = 62
 
 
 @dataclass(frozen=True, slots=True)
-class App:
-    """A program an app key brings to the front, starting it if it isn't running.
-    Pressed again while it's in front, it goes to the program's next window."""
+class Installed:
+    """A program started from its command."""
 
-    name: str
     exe: str
     """The program's file name, as Task Manager shows it: `WindowsTerminal.exe`."""
     command: str
     """How to start it: anything the Run dialog (Win+R) accepts."""
-    title: str = ""
-    """Only windows whose title contains this (for programs that host several apps)."""
+
+
+@dataclass(frozen=True, slots=True)
+class PinnedWeb:
+    """One of the toolbar's pinned web apps, opened as an Edge app window like its slot."""
+
+    slot: Literal["outlook", "teams"]
+
+
+@dataclass(frozen=True, slots=True)
+class App:
+    """An application an app key goes to: its placed window, the next one while it's
+    already in front, or starting it when it isn't running."""
+
+    name: str
+    target: Installed | PinnedWeb
 
 
 type Request = Tool | App
