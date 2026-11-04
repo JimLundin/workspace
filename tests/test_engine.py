@@ -604,6 +604,29 @@ def test_same_hand_shortcut_works_after_holding() -> None:
     assert t.take() == "+CTL +z -z -CTL"
 
 
+def test_same_hand_home_row_mods_combine_for_the_other_hand() -> None:
+    # Defect: a second same-hand mod settles the first as a tap, so a quick
+    # Ctrl+Shift needs each mod held past the tapping term.
+    t = Harness()
+    t.d("e")
+    t.d("r")  # s/CTL then t/SFT, same hand
+    t.tap("8")
+    t.u("r")
+    t.u("e")
+    assert t.take() == "+CTL +SFT +j -j -SFT -CTL"
+
+
+def test_same_hand_home_row_mods_without_the_other_hand_are_letters() -> None:
+    # Defect: deferring same-hand mods turns a rolled or nested pair into a shortcut.
+    for releases in (("e", "r"), ("r", "e")):
+        t = Harness()
+        t.d("e")
+        t.d("r")
+        for name in releases:
+            t.u(name)
+        assert t.take() == "+s -s +t -t"
+
+
 def test_layer_thumbs_are_not_affected() -> None:
     t = Harness()
     t.d("c")

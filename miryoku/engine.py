@@ -459,12 +459,17 @@ class Engine:
                             if isinstance(waiting, KeyDown):
                                 return
                             break
-                # The first press on the modifier's own hand is a roll.
+                # The first press on the modifier's own hand is a roll, unless it is
+                # another home row mod: same-hand mods combine, as QMK's Chordal Hold.
                 first_press = not any(isinstance(waiting, KeyDown) for waiting in self.buffer)
                 if first_press and isinstance(p.hold, Mod) and is_left_hand(cell) == is_left_hand(p.cell):
-                    self.resolve(host, Decision.TAP, now=now)
-                    self.event(host, e)
-                    return
+                    match self.configuration.actions[self.layer()][cell]:
+                        case TapHold(hold=Mod()):
+                            pass
+                        case _:
+                            self.resolve(host, Decision.TAP, now=now)
+                            self.event(host, e)
+                            return
             case KeyUp():
                 pass
             case _:
@@ -476,7 +481,11 @@ class Engine:
             return
         self.buffer.append(e)
         if isinstance(e, KeyUp) and any(isinstance(waiting, KeyDown) and waiting.cell == e.cell for waiting in self.buffer):
-            self.resolve(host, Decision.HOLD, now=e.at)
+            # A home row mod holds only for a key on the other hand; a same-hand tap inside it is a roll.
+            across = isinstance(p.hold, Layer) or any(
+                isinstance(waiting, KeyDown) and is_left_hand(waiting.cell) != is_left_hand(p.cell) for waiting in self.buffer
+            )
+            self.resolve(host, Decision.HOLD if across else Decision.TAP, now=e.at)
 
     def timeout(self, host: Host, timer: int) -> None:
         if self.pending is not None and self.pending.timer == timer:
