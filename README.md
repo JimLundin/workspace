@@ -138,9 +138,9 @@ embedded browser are paused; Workspace retains its Windows desktop runtime.
   For agent speech, hold the same modifiers and G.
   These are ordinary Miryoku keys; Space/Enter thumbs change layers when held.
   Releasing D or G finishes dictation or sends to the agent, even if the
-  modifiers were released first. **Ctrl+Alt+Shift** plus a letter reaches the
-  Apps layer's tools; see the firmware keyboard chords below. No firmware
-  update is needed.
+  modifiers were released first. **Ctrl+Alt+Shift** plus a letter reaches
+  navigation and apps, as on the laptop; see the keyboard chords below. No
+  firmware update is needed.
 - **Restart assistant** keeps the keyboard layout and automation running while
   the assistant and floating bar reload. Dictation stops with the assistant;
   unavailable shortcuts give a warning sound, and ordinary typing continues.
@@ -173,7 +173,7 @@ Physical keys are named by their Nordic keycaps.
 | **Spacebar** | push-to-talk dictation, typed where the cursor is on release |
 | **B** | toggle dictation; press again to stop and insert |
 | **N** | hold to speak to the agent; release to send |
-| hold **`.`** + **X** | open the searchable window switcher (Apps + Esc) |
+| **Ctrl+Alt+Shift** + a letter | navigation, apps and the window switcher; see the keyboard chords below |
 | thumbs **X C V** | Esc · Space/**Nav** · Tab/**Tools** |
 | thumbs **M , .** | Enter/**Sym** · Backspace/**Num** · Delete/**Apps** |
 
@@ -185,13 +185,12 @@ the Windows clipboard before submission and retained in memory; **Copy latest
 transcript** in the bar menu recovers them if input or clipboard access fails.
 Transcription failures do not replace the saved text.
 
-**Apps + Esc** (hold physical **`.`**, tap physical **X**) opens a searchable list of
+The **⌃⌥⇧ C** chord opens a searchable list of
 windows across screens. Use arrow keys to select, Enter to switch,
 and Escape to cancel. The normal Enter and
 Escape thumb bindings work here. Minimized windows restore when focused.
 Unbound physical keys are blocked while the layout is enabled. Physical **Shift**, **Ctrl**
-and **arrow keys** remain native, including Shift+arrow selection. While Apps is
-held, physical arrows move focus between placed windows instead. All function
+and **arrow keys** remain native, including Shift+arrow selection. All function
 keys, media controls and Windows key's taskbar action also remain native.
 Turning the layout off restores the normal keyboard; other modifier and
 navigation actions are available through the layout's home row and layers.
@@ -223,39 +222,40 @@ would stop the running program), so they don't work there.
 
 **Apps** (hold the Delete thumb, physical **.**):
 
-| | | | | | |
-|---|---|---|---|---|---|
-| top **2 3 4 5 6** | terminal | browser | Outlook | Teams | Explorer |
-| home **Q W E R T** | VS Code | Notepad | Excel | Word | PowerPoint |
-| bottom **Caps A S D F** | desktop 1 | zoom | desktop 2 | desktop 3 | minimize |
-| right top **8 9 0 +** | focus left | focus down | focus up | focus right | |
-| right bottom **K L Ö** | previous desktop | next desktop | | | |
-| right **Ä** | pause or resume window placement | | | | |
-| right thumb **,** | put every window back now | | | | |
+| | | |
+|---|---|---|
+| thumbs **C V** | copy the latest transcript | start or stop meeting recording |
+| right thumb **M** | agent speech toggle | |
+| right **'** | dictation toggle | |
 
-An app key switches to the desktop where the app is placed and focuses its
-window; pressed again it goes through the app's windows, and it starts the app
-when it isn't running. Outlook and Teams are the toolbar's pinned web apps.
-Change the apps in `config.py`. The focus keys, and Apps with the physical
-arrow keys, move to the nearest placed window in that direction on the current
-desktop, across monitors. Zoom fills the monitor with the focused window until
-you press it again or focus another window. The desktop keys don't wrap.
+Navigation and apps are the keyboard chords below; the Apps layer keeps no
+copy of them.
 
-**Firmware keyboard chords.** While the Charybdis Nano is connected, the Apps
-layer doesn't exist, so Workspace takes **Ctrl+Alt+Shift** plus a letter
-instead. Hold the three home-row mods with one hand: **R S T** on the left or
-**I E N** on the right. Tap the letter with the other hand. The right-hand
-letters follow Miryoku's NAV positions. The left-hand letters take the Apps
-layer's app positions. Letters are the Colemak-DH legends the firmware sends.
-While the chord's modifiers are held, the bar's pager shows each target's chord.
-Workspace swallows the letter's press and release, so no character is typed.
-The modifiers themselves pass through, so none stays held. Other letters and
-other modifier sets keep their usual meaning. Win is never part of a chord,
+**Keyboard chords.** Navigation and apps are **Ctrl+Alt+Shift** plus a letter,
+the same on the laptop layout and the Charybdis Nano. Hold the three home-row
+mods with one hand: **R S T** on the left or **I E N** on the right. Tap the
+letter with the other hand. The right-hand letters follow Miryoku's NAV
+positions. The left-hand letters are the apps from `config.py`, in order.
+Letters are the Colemak-DH letters both layouts type, so the same fingers do
+the same thing on either keyboard. On the laptop, home-row mods on one hand
+combine: press all three together and they wait for a letter from the other
+hand; released without one, they type their letters. The laptop's physical Ctrl
+and Shift keys don't count toward a chord. While the chord's modifiers are
+held, on either keyboard, the bar's pager shows each target's chord. Workspace
+swallows the letter's press and release, so no character is typed. The
+modifiers themselves are released as usual, so none stays held. Other letters
+and other modifier sets keep their usual meaning. Win is never part of a chord,
 because Ctrl+Alt+Shift+Win is the Office key. Windows has no Ctrl+Alt+Shift
-letter shortcuts. From the firmware keyboard, these app shortcuts give way to a
-chord: Word's **S** (Styles pane), Teams' **R** (report a problem), the Teams web
+letter shortcuts. These app shortcuts give way to a chord: Word's **S** (Styles pane), Teams' **R** (report a problem), the Teams web
 app's **C** and **B** (inline code and code block) and Excel for the web's
 accessibility-menu **T** and **H**.
+
+An app chord switches to the desktop where the app is placed and focuses its
+window; pressed again it goes through the app's windows, and it starts the app
+when it isn't running. Outlook and Teams are the toolbar's pinned web apps. The
+focus chords move to the nearest placed window in that direction on the current
+desktop, across monitors. Zoom fills the monitor with the focused window until
+you press it again or focus another window. The desktop chords don't wrap.
 
 | chord | does |
 |---|---|
@@ -296,7 +296,7 @@ monitors: the laptop alone, home (the laptop and a 4K screen) or work (the
 laptop with a landscape and a portrait 2560×1440 screen). Windows never
 overlap; apps that don't fit go on further Windows virtual desktops, which
 Workspace creates when needed. Dragging a window away snaps it back once you
-let go. The bar's pager and the Apps layer's keys switch between desktops. See
+let go. The bar's pager and the desktop chords switch between desktops. See
 [window placement](docs/window-placement.md) for the layouts and rules.
 
 ## Windows notifications
