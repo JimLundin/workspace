@@ -1,4 +1,4 @@
-"""Compact scrollable app and tray sections on the desktop bar."""
+"""The desktop bar's compact scrollable section of running applications."""
 
 from collections.abc import Callable
 from typing import assert_never, override
@@ -8,12 +8,18 @@ lazy from PySide6.QtCore import Qt
 
 from desktop_ui.components.appearance import GlassLook, Lettering, Look, SolidLook
 from desktop_ui.components.text import color
-from desktop_ui.motion import CARD, jump, resting, settle, still, toward
 from desktop_ui.shell_items import Application
 from desktop_ui.vector_icons import icon
 from winapi.icon_pixels import Pixels
-from winapi.shapes import Rect
-from winapi.tray_host import Click, Entry, Located
+from winapi.tray_host import Click
+
+
+def pixmap(image: Pixels) -> QtGui.QPixmap:
+    """A Qt copy of a shell icon's pixels."""
+    copied = QtGui.QImage(image.bgra, image.size, image.size, image.size * 4, QtGui.QImage.Format.Format_ARGB32).copy()
+    converted = QtGui.QPixmap()
+    converted.convertFromImage(copied)
+    return converted
 
 
 class IconButton(QtWidgets.QToolButton):
@@ -36,10 +42,7 @@ class IconButton(QtWidgets.QToolButton):
         self.setToolTip(title)
         self.setAccessibleName(title)
         if image is not None:
-            copied = QtGui.QImage(image.bgra, image.size, image.size, image.size * 4, QtGui.QImage.Format.Format_ARGB32).copy()
-            pixmap = QtGui.QPixmap()
-            pixmap.convertFromImage(copied)
-            self.setIcon(QtGui.QIcon(pixmap))
+            self.setIcon(QtGui.QIcon(pixmap(image)))
         else:
             self.setIcon(icon("window", "#eeeeee", 22))
 
@@ -151,82 +154,12 @@ class Section(QtWidgets.QWidget):
                 assert_never(self.appearance)
 
 
-class TraySection(Section):
-    """Qt owns disclosure; the toggle stays fixed while overflow grows left."""
-
-    def __init__(self, parent: QtWidgets.QWidget, changed: Callable[[], None]) -> None:
-        super().__init__(parent)
-        self.changed = changed
-        self.available: tuple[int, int] = (0, 0)
-        self.width_motion = still(36.0, CARD)
-        self.animate = False
-        self.toggle = QtWidgets.QToolButton(self)
-        self.toggle.setFixedSize(32, 32)
-        self.toggle.setCheckable(True)
-        self.toggle.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle.toggled.connect(self.disclose)
-        self.describe()
-        self.overflow.hide()
-
-    def describe(self) -> None:
-        title = "Collapse system tray" if self.toggle.isChecked() else "Expand system tray"
-        self.toggle.setAccessibleName(title)
-        self.toggle.setToolTip(title)
-        ink = self.appearance.lettering.ink.color if self.appearance is not None else "#eeeeee"
-        self.toggle.setIcon(icon("chevron" if self.toggle.isChecked() else "chevron-left", ink, 16))
-
-    def disclose(self) -> None:
-        if not self.toggle.isChecked() and any(button.hasFocus() for button in self.buttons):
-            self.toggle.setFocus()
-        self.describe()
-        self.place(*self.available)
-        self.changed()
-
-    def apply_look(self, appearance: Look) -> None:
-        super().apply_look(appearance)
-        lettering = appearance.lettering
-        self.toggle.setStyleSheet(
-            "QToolButton {border:0; border-radius:16px; background:transparent;}"
-            f"QToolButton:hover {{background:{lettering.hover.css};}}"
-            f"QToolButton:pressed {{background:{lettering.press.css};}}"
-            f"QToolButton:focus {{border:1px solid {lettering.ink.css};}}"
-        )
-        self.describe()
-
-    def desired_width(self) -> int:
-        return 36 + (self.body.width() + 2 if self.toggle.isChecked() and self.buttons else 0)
-
-    def advance(self, seconds: float, *, animate: bool) -> bool:
-        """The bar's frame loop owns timing and reduced motion, including reversals."""
-        self.animate = animate
-        self.width_motion = settle(self.width_motion, seconds) if animate else jump(self.width_motion, self.width_motion.target)
-        return not resting(self.width_motion)
-
-    def place(self, left: int, right: int) -> None:
-        self.available = (left, right)
-        target = max(0, min(right - left, self.desired_width()))
-        self.width_motion = toward(self.width_motion, float(target), CARD)
-        if not self.animate:
-            self.width_motion = jump(self.width_motion, float(target))
-        width = max(0, min(right - left, round(self.width_motion.value)))
-        self.setGeometry(right - width, 8, width, 34)
-        self.toggle.move(max(2, width - 34), 1)
-        self.overflow.setGeometry(2, 1, max(0, width - 38), 32)
-        self.overflow.setVisible(bool(self.buttons) and width > 38)
-        # Closing icons remain painted but cannot receive pointer or keyboard input.
-        self.overflow.setEnabled(self.toggle.isChecked())
-        self.setVisible(right - left >= 36)
-
-
 class ShellSections:
     """The surface keeps native buttons only for the current immutable snapshot."""
 
-    def __init__(self, parent: QtWidgets.QWidget, changed: Callable[[], None] | None = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
         self.apps = Section(parent)
-        self.tray = TraySection(parent, changed if changed is not None else lambda: None)
         self.app_snapshot: tuple[tuple[Application, ...], int] | None = None
-        self.tray_snapshot: tuple[Entry, ...] | None = None
 
     def applications(self, snapshot: tuple[tuple[Application, ...], int], invoke: Callable[[Application, Click], None]) -> None:
         if snapshot == self.app_snapshot:
@@ -246,40 +179,6 @@ class ShellSections:
         self.apps.finish(tuple(button(app) for app in apps))
         self.app_snapshot = snapshot
 
-    def notifications(self, entries: tuple[Entry, ...], invoke: Callable[[Entry, Click], None]) -> None:
-        if entries == self.tray_snapshot:
-            return
-        self.tray.reset()
-
-        def button(entry: Entry) -> IconButton:
-            created = IconButton(self.tray.body, lambda click: invoke(entry, click))
-            created.display(entry.tip or "Tray application", entry.image, active=False)
-            return created
-
-        self.tray.finish(tuple(button(entry) for entry in entries))
-        self.tray_snapshot = entries
-
-    def place(self, bounds: tuple[int, int], width: int, *, navigation: tuple[int, int] | None = None) -> None:
-        """Apps follow Canvas; the tray anchors before the fixed right cluster."""
-        left, _ = bounds
-        start, fixed_left = (12, width - 6) if navigation is None else navigation
+    def place(self, left: int, width: int, *, start: int = 12) -> None:
+        """Apps follow Canvas from `start`, stopping before the leftmost capsule at `left`."""
         self.apps.place(start, max(start, min(left - 12, width // 3)))
-        end = max(0, fixed_left - 6)
-        self.tray.place(max(start, end - max(36, width // 3)), end)
-
-    def locations(self, outer: Rect, scale: float) -> tuple[Located, ...]:
-        if self.tray_snapshot is None or not self.tray.isVisible() or not self.tray.overflow.isVisible() or not self.tray.toggle.isChecked():
-            return ()
-        parent = self.tray.window()
-
-        def located(entry: Entry, button: IconButton) -> Located:
-            point = button.mapTo(parent, QtCore.QPoint())
-            left, top = outer.left + round(point.x() * scale), outer.top + round(point.y() * scale)
-            return Located(entry, Rect(left, top, left + round(button.width() * scale), top + round(button.height() * scale)))
-
-        viewport = self.tray.overflow.viewport()
-        return tuple(
-            located(entry, button)
-            for entry, button in zip(self.tray_snapshot, self.tray.buttons, strict=True)
-            if viewport.rect().contains(QtCore.QRect(button.mapTo(viewport, QtCore.QPoint()), button.size()))
-        )

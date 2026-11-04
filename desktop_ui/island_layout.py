@@ -1,7 +1,6 @@
 """Where the island bar's capsules sit: a pure frame from measured sizes and presence.
 
 Activity stays centred where space permits; permanent controls anchor right.
-Tray overflow grows left of fixed disclosure without shifting navigation.
 Lead capsules grow leftwards from activity and trail capsules rightwards.
 The gap between two neighbours belongs to the pair: the full gap scaled by
 the less present of the two, so a capsule entering or leaving
@@ -185,7 +184,6 @@ class Metrics:
     width: float
     top: float = 8
     gap: float = 6
-    tray_width: float = 36
 
 
 def present(value: float) -> float:
@@ -209,8 +207,6 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     def zone(name: Zone) -> tuple[Placed, ...]:
         return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
 
-    # Fixed controls never move for tray disclosure. Its icon overflow grows
-    # left of the reserved 36 px toggle, rather than shifting navigation.
     right: tuple[Framed, ...] = ()
     edge = max(0.0, metrics.width - 12)
     left_fixed = tuple(boxed(capsule, 12) for capsule in zone(Zone.LEFT) if shown(capsule) <= max(0.0, metrics.width - 24))
@@ -225,7 +221,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
         edge -= width
         right = (boxed(capsule, edge), *right)
         edge = max(0.0, edge - metrics.gap)
-    boundary = max(0.0, edge - metrics.tray_width - metrics.gap) if right else metrics.width
+    boundary = edge if right else metrics.width
     islands = zone(Zone.ISLAND)
     if not islands:
         dynamic: tuple[Framed, ...] = ()

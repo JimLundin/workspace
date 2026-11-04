@@ -1,7 +1,7 @@
 """The island bar: Workspace's floating capsules at the top of the primary screen.
 
 Activity stays centred and acts on what it shows; persistent navigation and
-status anchor right independently of tray disclosure. `island_model` decides the views, `island_layout` where they sit, and
+status anchor right; the system tray lives in the controls menu. `island_model` decides the views, `island_layout` where they sit, and
 `ui_components.appearance` how they read. This owner observes the desktop and
 publishes each result to the one bar window and its glass.
 """
@@ -42,6 +42,7 @@ lazy from desktop_ui.island_menu import (
     Menu,
     Slider,
     ToolChoice,
+    TrayChoice,
     Volume,
     entries,
     restores_focus,
@@ -50,7 +51,6 @@ lazy from desktop_ui.island_menu import (
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
-lazy from desktop_ui.motion import resting
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
@@ -60,7 +60,7 @@ lazy from winapi import appearance, inputs, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable, Speakers
 lazy from winapi.notifications import NotificationObserver
 lazy from winapi.shapes import Rect
-lazy from winapi.tray_host import Click, Entry, TrayHost
+lazy from winapi.tray_host import Click, TrayHost
 
 prepare()
 
@@ -267,14 +267,14 @@ class DesktopBar:
     def poll_shell(self) -> None:
         if self.tray_host is None:
             return
-        previous = (self.window.shell_sections.app_snapshot, self.window.shell_sections.tray_snapshot)
-        self.window.shell_sections.notifications(self.tray_host.poll(), self.tray_click)
+        previous = self.window.shell_sections.app_snapshot
+        self.window.show_tray(self.tray_host.poll())  # The tick's render rebuilds an open menu's tray cells.
         if self.application_service is not None:
             with suppress(queue.Empty):
                 self.applications = self.application_service.results.get_nowait()
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
         # A changed snapshot must also publish section geometry when the island is still.
-        if previous != (self.window.shell_sections.app_snapshot, self.window.shell_sections.tray_snapshot):
+        if previous != self.window.shell_sections.app_snapshot:
             self.window.presentation = None
 
     def application_click(self, app: Application, click: Click) -> None:
@@ -286,10 +286,12 @@ class DesktopBar:
         else:
             self.observations.focus(next_window(app, self.observations.foreground()))
 
-    def tray_click(self, entry: Entry, click: Click) -> None:
-        if self.tray_host is not None:
-            self.close_menu(restore=False)
-            self.tray_host.click(entry, click, inputs.cursor_position())
+    def tray(self, slot: int, click: Click) -> None:
+        """The application gets the click and the keyboard; the menu closes without taking it back."""
+        self.close_menu(restore=False)
+        entries = self.window.tray
+        if self.tray_host is not None and slot < len(entries):
+            self.tray_host.click(entries[slot], click, inputs.cursor_position())
 
     def press(self, action: Action) -> None:
         match action:
@@ -329,6 +331,7 @@ class DesktopBar:
                     overlay=self.overlay_enabled,
                     taskbar=self.taskbar.revealed,
                     sound=sound,
+                    tray=tuple(entry.tip or "Tray application" for entry in self.window.tray),
                 )
             )
         )
@@ -453,6 +456,8 @@ class DesktopBar:
                 self.actions.menu()
             case Volume(level=level):
                 self.volume(level)
+            case TrayChoice(slot=slot):
+                self.tray(slot, Click.LEFT)
             case _:
                 assert_never(choice)
 
@@ -557,7 +562,7 @@ class DesktopBar:
 
     def draw(self) -> None:
         width = QtGui.QGuiApplication.primaryScreen().geometry().width()
-        metrics = Metrics(width, top=TOP, tray_width=min(self.window.shell_sections.tray.desired_width(), max(36, width // 3)))
+        metrics = Metrics(width, top=TOP)
         framed = frozendict((each.key, each) for each in snap(frame(placed(self.motion), metrics), self.window.devicePixelRatioF()))
         match self.preference:
             case appearance.Contrast():
@@ -592,8 +597,9 @@ class DesktopBar:
                 shell_look=self.style(Tint.NONE, HEIGHT),
             )
         )
-        if self.tray_host is not None:
-            self.tray_host.locate(self.window.shell_sections.locations(windows.outer_rect(int(self.window.winId())), self.window.devicePixelRatioF()))
+        # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
+        if self.tray_host is not None and self.expanded is not None:
+            self.tray_host.locate(self.window.tray_locations())
 
     def style(self, tint: Tint, height: float) -> Look:
         pane = desktop_ui.components.appearance.Menu(self.frost) if height > HEIGHT else desktop_ui.components.appearance.Capsule(self.frost)
@@ -617,18 +623,12 @@ class DesktopBar:
         # A frame after the loop was idle starts the motion now, rather than from the last frame.
         elapsed = now - (self.last_frame if self.last_frame is not None else now)
         self.motion = advance(self.motion, elapsed) if animate else finish(self.motion)
-        tray = self.window.shell_sections.tray
-        tray_moving = tray.advance(elapsed, animate=animate)
-        # Shell geometry and its glass pane must publish even with still capsules.
-        if tray_moving or (self.window.presentation is not None and tray.width() != round(tray.width_motion.value)):
-            self.window.presentation = None
         spinning = animate and self.spinning()
         waving = animate and self.dictating and self.expanded is None
         self.window.wave_progress = min(1.0, max(0.0, (now - self.sampled_at) / 0.05)) if waving and self.sampled_at is not None else 1.0
         self.window.spin_angle = (90 - now * 300) % 360 if spinning else 90.0
         self.draw()
-        # Placement can retarget the tray after a snapshot or available-space change.
-        moving = not settled(self.motion) or not resting(tray.width_motion)
+        moving = not settled(self.motion)
         if self.spinning() or waving:
             for key, capsule in self.window.capsules.items():
                 if key in (Key.ISLAND, Key.STATUS, Key.AGENT, Key.JOB):

@@ -32,7 +32,6 @@ from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
 from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
-from winapi.shapes import Rect
 from winapi.tray_host import Entry
 
 prepare()
@@ -123,8 +122,8 @@ def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     app.processEvents()
 
 
-def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclosure() -> None:
-    # Defects: tray expansion shifts fixed controls, missing readings imply a
+def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
+    # Defects: readings shift fixed controls, missing readings imply a
     # healthy state, or unavailable symbols fall back to a document glyph.
     app = application()
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
@@ -134,16 +133,8 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status_through_disclos
         order = (Key.CANVAS, Key.LAYER, Key.STATUS)
         before = tuple(bar.window.capsules[key].geometry() for key in order)
         assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
-        tray = bar.window.shell_sections.tray
-        toggle_left = tray.mapTo(bar.window, tray.toggle.pos()).x()
         assert before[0].left() == 12
-        assert before[0].right() < toggle_left < before[1].left()
         assert bar.window.shell_sections.apps.x() >= before[0].right() + 6
-        assert tray.toggle.accessibleName() == "Expand system tray"
-        tray.toggle.click()
-        assert tray.toggle.accessibleName() == "Collapse system tray"
-        assert tuple(bar.window.capsules[key].geometry() for key in order) == before
-        assert tray.mapTo(bar.window, tray.toggle.pos()).x() == toggle_left
         for speakers in Speakers:
             for wifi in Wifi:
                 bar.system = SystemStatus(speakers, wifi)
@@ -378,80 +369,44 @@ def test_capsules_spring_between_views_and_the_frame_loop_stops_once_settled() -
         closed(app, bar)
 
 
-def test_tray_frames_reverse_without_jumping_keep_anchors_and_publish_only_visible_hitboxes() -> None:
-    # Defects: disclosure jumps, reversal restarts from an endpoint, tray-only
-    # motion loses its timer/glass publication, or clipped/closing icons are located.
+def test_tray_icons_sit_in_the_menu_and_hand_their_clicks_to_the_application() -> None:
+    # Defects: tray icons stay in the bar, lose their names, are located where
+    # no cell shows them, or a click keeps the menu open or takes focus back.
     app = application()
-    now, motion = [100.0], [True]
+    focused: list[int] = []
     bar = DesktopBar(
         recorded([]),
         native_shell=False,
-        observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0], material=lambda: appearance.Material.GLASS),
+        observations=BarObservations(motion=lambda: False, foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd)),
     )
     try:
         bar.timer.stop()
         bar.visible = True
-        sections, tray = bar.window.shell_sections, bar.window.shell_sections.tray
-        entries = tuple(Entry(1, index, b"", 0x8001, None, str(index)) for index in range(12))
-        sections.notifications(entries, lambda item, click: None)
-        bar.window.presentation = None
+        entries = tuple(Entry(1, index, b"", 0x8001, None, f"Fixture {index}") for index in range(12))
+        bar.window.show_tray(entries)
         bar.render()
+        assert bar.window.tray_locations() == ()
+        bar.open_menu()
         app.processEvents()
-        fixed = tuple(bar.window.capsules[key].geometry() for key in FIXED)
-        anchor = tray.mapTo(bar.window, tray.toggle.pos()).x()
-        outer = Rect(0, 0, bar.window.width(), bar.window.height())
-        tray.toggle.click()
-        assert tray.width() == 36 and bar.loop.timer.isActive()
-        now[0] += 0.08
-        bar.paint_frames()
+        cells = tuple(cell for cell in bar.window.capsules[Key.STATUS].cells if cell.accessibleName().startswith("Fixture"))
+        assert tuple(cell.accessibleName() for cell in cells) == tuple(entry.tip for entry in entries)
+        assert all(cell.toolTip() == cell.accessibleName() for cell in cells)
+        assert len({cell.y() for cell in cells}) == 2 and all(cell.isVisibleTo(bar.window) for cell in cells)
+        scale = bar.window.devicePixelRatioF()
+        outer = windows.outer_rect(int(bar.window.winId()))
+        located = bar.window.tray_locations()
+        assert tuple(each.entry for each in located) == entries
+        for each, cell in zip(located, cells, strict=True):
+            point = cell.mapTo(bar.window, QtCore.QPoint())
+            assert (each.bounds.left, each.bounds.top) == (outer.left + round(point.x() * scale), outer.top + round(point.y() * scale))
+        QTest.mouseClick(cells[3], QtCore.Qt.MouseButton.RightButton)
+        assert bar.expanded is None and focused == []
+        bar.open_menu()
         app.processEvents()
-        intermediate = tray.width()
-        assert 36 < intermediate < tray.desired_width()
-        assert tray.mapTo(bar.window, tray.toggle.pos()).x() == anchor
-        assert tuple(bar.window.capsules[key].geometry() for key in FIXED) == fixed
-        pane = next(pane for pane in bar.window.panes if pane.key == "tray")
-        assert pane.bounds.width == round(intermediate * bar.window.devicePixelRatioF())
-        located = sections.locations(outer, 1)
-        assert 0 < len(located) < len(entries)
-        viewport = tray.overflow.viewport()
-        assert all(
-            viewport.rect().contains(QtCore.QRect(button.mapTo(viewport, QtCore.QPoint()), button.size()))
-            for button in tray.buttons
-            if any(item.entry.tip == button.toolTip() for item in located)
-        )
-        tray.toggle.click()
-        assert tray.width() == intermediate and sections.locations(outer, 1) == ()
-        assert not tray.overflow.isEnabled()
-        now[0] += 0.12
-        bar.paint_frames()
-        assert 36 < tray.width() < intermediate
-        closing = tray.width()
-        tray.toggle.click()
-        assert tray.width() == closing and tray.overflow.isEnabled()
-        now[0] += 2
-        bar.paint_frames()
-        app.processEvents()
-        assert tray.width() == round(tray.width_motion.target)
-        assert tray.mapTo(bar.window, tray.toggle.pos()).x() == anchor
-        assert not bar.loop.timer.isActive() and not bar.resolution.active
-        motion[0] = False
-        assert_reduced_tray_motion(bar, fixed, anchor)
+        QTest.mouseClick(menu_row(bar, "Fixture 0"), QtCore.Qt.MouseButton.LeftButton)
+        assert bar.expanded is None and focused == []
     finally:
         closed(app, bar)
-
-
-def assert_reduced_tray_motion(bar: DesktopBar, fixed: tuple[QtCore.QRect, ...], anchor: int) -> None:
-    """Verify that disabling motion settles disclosure without shifting fixed controls."""
-    tray = bar.window.shell_sections.tray
-    tray.toggle.click()
-    bar.paint_frames()
-    assert tray.width() == 36 and not tray.overflow.isVisible()
-    assert not bar.loop.timer.isActive()
-    tray.toggle.click()
-    assert tray.width() == round(tray.width_motion.target) and tray.width() > 36
-    assert tuple(bar.window.capsules[key].geometry() for key in FIXED) == fixed
-    assert tray.mapTo(bar.window, tray.toggle.pos()).x() == anchor
-    assert not bar.loop.timer.isActive()
 
 
 def test_contrast_paints_system_colours_and_releases_only_its_composition_owner() -> None:

@@ -21,6 +21,8 @@ from desktop_ui.island_menu import (
     Slider,
     Toggle,
     ToolChoice,
+    TrayChoice,
+    TrayIcon,
     Volume,
     entries,
     label,
@@ -66,7 +68,8 @@ def test_running_activities_lead_as_cards_and_recording_replaces_its_start() -> 
 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     # Defect: a track or column offset places one tile over another or past the menu's edge.
-    for controls in (RESTING, Controls("02:05", None), Controls("02:05", "Reading"), replace(RESTING, agent="Reading")):
+    tray = tuple(f"App {index}" for index in range(11))
+    for controls in (RESTING, Controls("02:05", None), Controls("02:05", "Reading"), replace(RESTING, agent="Reading"), replace(RESTING, tray=tray)):
         laid = tiles(Menu(entries(controls)))
         for tile in laid:
             assert tile.x > 0 and tile.x + tile.width < MENU_WIDTH
@@ -171,4 +174,18 @@ def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> No
     # Defects: tiling acts on the menu instead of the user's window, or a Workspace
     # view that just opened loses the keyboard to the previous window.
     assert restores_focus(ToolChoice(Tool.TILE_FLOAT)) and restores_focus(Command.TASKBAR)
-    assert not restores_focus(Command.CANVAS) and not restores_focus(Command.KEYMAP)
+    assert not restores_focus(Command.CANVAS) and not restores_focus(Command.KEYMAP) and not restores_focus(TrayChoice(0))
+
+
+def test_tray_icons_fill_rows_of_eight_after_the_tools_and_click_their_own_slot() -> None:
+    # Defects: an icon lands on the wrong row or slot, the links overlap the tray,
+    # or Enter on an icon clicks another application's icon.
+    menu = Menu(entries(replace(RESTING, tray=tuple(f"App {index}" for index in range(10)))))
+    icons = [cell for cell in menu.cells if cell.face is Face.ICON]
+    assert [cell.entry for cell in icons] == [TrayIcon(f"App {index}", index) for index in range(10)]
+    assert [(cell.column, cell.track - icons[0].track) for cell in icons] == [*((column, 0) for column in range(8)), (0, 4), (1, 4)]
+    assert selected(press(at(menu, "Switch windows"), Key.DOWN)) == "App 0"
+    assert selected(press(at(menu, "App 1"), Key.DOWN)) == "App 9"
+    assert selected(press(at(menu, "App 9"), Key.DOWN)) == "Windows notification settings"
+    assert press(at(menu, "App 9"), Key.ENTER) == Chosen(TrayChoice(9))
+    assert not any(cell.face is Face.ICON for cell in entries(RESTING))

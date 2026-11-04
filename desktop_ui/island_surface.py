@@ -40,18 +40,19 @@ from desktop_ui.island_layout import (
     arrange,
     tiles,
 )
-from desktop_ui.island_menu import Disclosure, Face, Item, Live, Menu, Slider, Toggle
+from desktop_ui.island_menu import Disclosure, Face, Item, Live, Menu, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
 from desktop_ui.request_panel import RequestActions, RequestPanel
-from desktop_ui.shell_surface import ShellSections
+from desktop_ui.shell_surface import ShellSections, pixmap
 from desktop_ui.vector_icons import icon
 from desktop_ui.view_publication import log_view
 from winapi import windows
 from winapi.appearance import Frost, Material
 from winapi.composition import GlassScene, borderless
 from winapi.shapes import Pane, Rect, Veil
+from winapi.tray_host import Click, Entry, Located
 
 prepare()
 
@@ -88,6 +89,7 @@ class Owner(Protocol):
     def select(self, index: int) -> None: ...
     def pick(self, index: int) -> None: ...
     def volume(self, level: float) -> None: ...
+    def tray(self, slot: int, click: Click) -> None: ...
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
     def request_actions(self) -> RequestActions | None: ...
@@ -266,7 +268,7 @@ def sound_reading(slider: Slider) -> str:
 
 class MenuCell(QtWidgets.QAbstractButton):
     """One tile of the expanded capsule. An activity card stops only from its Stop circle;
-    the sound slider sets the volume where it is pressed or dragged."""
+    the sound slider sets the volume where it is pressed or dragged; a tray icon takes right clicks too."""
 
     def __init__(self, capsule: Capsule, tile: Tile) -> None:
         super().__init__(capsule)
@@ -288,12 +290,20 @@ class MenuCell(QtWidgets.QAbstractButton):
                 name = f"{label}: {detail}"
             case Slider(label=label) as slider:
                 name = f"{label}: {sound_reading(slider)}"
-            case Disclosure(label=label):
+            case Disclosure(label=label) | TrayIcon(label=label):
                 name = label
             case _:
                 assert_never(self.tile.cell.entry)
         if self.accessibleName() != name:
             self.setAccessibleName(name)
+        # An icon alone needs its name under the pointer; labelled cells already show theirs.
+        match self.tile.cell.entry:
+            case TrayIcon():
+                tip = name
+            case _:
+                tip = ""
+        if self.toolTip() != tip:
+            self.setToolTip(tip)
 
     def update_tile(self, tile: Tile) -> None:
         if tile != self.tile:
@@ -314,7 +324,7 @@ class MenuCell(QtWidgets.QAbstractButton):
                 return self.stop_circle().contains(QtCore.QPointF(pos))
             case Slider():
                 return False  # The slider takes the pointer itself rather than clicking.
-            case Item() | Toggle() | Disclosure():
+            case Item() | Toggle() | Disclosure() | TrayIcon():
                 return super().hitButton(pos)
             case _:
                 assert_never(self.tile.cell.entry)
@@ -340,6 +350,11 @@ class MenuCell(QtWidgets.QAbstractButton):
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
+        match self.tile.cell.entry:
+            case TrayIcon(slot=slot) if event.button() is Qt.MouseButton.RightButton and self.rect().contains(event.position().toPoint()):
+                self.capsule.window_.owner.tray(slot, Click.RIGHT)
+            case _:
+                pass
         event.accept()
 
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
@@ -388,6 +403,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                 if key:
                     painter.setPen(quiet)
                     painter.drawText(bounds.adjusted(0, 0, -12, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
+            case TrayIcon(slot=slot):
+                self.paint_tray(painter, slot, bounds)
             case Disclosure(label=label):
                 # On its own page, tiling's cell leads back to the grid.
                 self.paint_icon(painter, "chevron-left", quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
@@ -470,6 +487,17 @@ class MenuCell(QtWidgets.QAbstractButton):
         painter.drawEllipse(circle)
         painter.setOpacity(lettering.ink.opacity)
         icon("stop", lettering.ink.color).paint(painter, circle.adjusted(6, 6, -6, -6).toRect())
+
+    def paint_tray(self, painter: QtGui.QPainter, slot: int, bounds: QtCore.QRectF) -> None:
+        """The application's own image at 22 px; one without an image reads as a window."""
+        images = self.capsule.window_.tray_images
+        image = images[slot] if slot < len(images) else None
+        if image is None:
+            self.paint_icon(painter, "window", color(self.capsule.look.lettering.ink), bounds.center() - QtCore.QPointF(8, 8))
+            return
+        target = QtCore.QRectF(0, 0, 22, 22)
+        target.moveCenter(bounds.center())
+        painter.drawPixmap(target.toRect(), image)
 
     def paint_icon(self, painter: QtGui.QPainter, name: str, ink: QtGui.QColor, at: QtCore.QPointF) -> None:
         painter.save()
@@ -788,7 +816,10 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: tuple[Presented, tuple[int, int, int, int], float] | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
-        self.shell_sections = ShellSections(self, self.shell_changed)
+        self.shell_sections = ShellSections(self)
+        # The bar's latest tray snapshot and Qt copies of its images, for the menu's tray cells.
+        self.tray: tuple[Entry, ...] = ()
+        self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()
         self.glass = False
         self.setWindowTitle(BAR_WINDOW)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
@@ -809,10 +840,38 @@ class BarWindow(QtWidgets.QWidget):
         self.deactivation_timer.setSingleShot(True)
         self.deactivation_timer.timeout.connect(self.dismiss_inactive)
 
-    def shell_changed(self) -> None:
-        """Disclosure republishes layout and glass through the owning bar."""
-        self.presentation = None
-        self.owner.render()
+    def show_tray(self, entries: tuple[Entry, ...]) -> None:
+        """Adopt a tray snapshot, repainting open tray cells."""
+        if entries == self.tray:
+            return
+        self.tray = entries
+        self.tray_images = tuple(pixmap(entry.image) if entry.image is not None else None for entry in entries)
+        status = self.capsules.get(Key.STATUS)
+        for cell in status.cells if status is not None else ():
+            cell.update()
+
+    def tray_locations(self) -> tuple[Located, ...]:
+        """Where the open menu shows each tray icon, in device pixels, for applications anchoring their flyouts."""
+        status = self.capsules.get(Key.STATUS)
+        if status is None or not status.isVisible():
+            return ()
+        outer, scale = windows.outer_rect(int(self.winId())), self.devicePixelRatioF()
+
+        def located(cell: MenuCell, slot: int) -> tuple[Located, ...]:
+            if slot >= len(self.tray) or not cell.isVisible():
+                return ()
+            point = cell.mapTo(self, QtCore.QPoint())
+            left, top = outer.left + round(point.x() * scale), outer.top + round(point.y() * scale)
+            return (Located(self.tray[slot], Rect(left, top, left + round(cell.width() * scale), top + round(cell.height() * scale))),)
+
+        def slot(cell: MenuCell) -> tuple[Located, ...]:
+            match cell.tile.cell.entry:
+                case TrayIcon(slot=index):
+                    return located(cell, index)
+                case _:
+                    return ()
+
+        return tuple(found for cell in status.cells for found in slot(cell))
 
     def measure(self, view: CapsuleView) -> Content:
         def width(text: Text) -> float:
@@ -863,18 +922,11 @@ class BarWindow(QtWidgets.QWidget):
             if key not in keys:
                 capsule.hide()
         self.shell_sections.place(
-            (
-                math.floor(min((each.framed.box.x for each in presented.drawn if each.view.key is not Key.CANVAS), default=area.width() / 2)),
-                math.ceil(max((each.framed.box.x + each.framed.box.width for each in presented.drawn), default=area.width() / 2)),
-            ),
+            math.floor(min((each.framed.box.x for each in presented.drawn if each.view.key is not Key.CANVAS), default=area.width() / 2)),
             area.width(),
-            navigation=(
-                next((round(each.framed.box.x + each.framed.box.width) + 6 for each in presented.drawn if each.view.key is Key.CANVAS), 12),
-                min((round(each.framed.box.x) for each in presented.drawn if each.view.key in (Key.LAYER, Key.STATUS)), default=area.width() - 6),
-            ),
+            start=next((round(each.framed.box.x + each.framed.box.width) + 6 for each in presented.drawn if each.view.key is Key.CANVAS), 12),
         )
         self.shell_sections.apps.apply_look(presented.shell_look)
-        self.shell_sections.tray.apply_look(presented.shell_look)
         self.glass = presented.glass
         self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented.frost, scale)) is not None)
         match presented.shell_look:
@@ -883,7 +935,7 @@ class BarWindow(QtWidgets.QWidget):
                     *self.panes,
                     *(
                         Pane(
-                            name,
+                            "applications",
                             Rect(
                                 round(section.x() * scale),
                                 round(section.y() * scale),
@@ -894,7 +946,7 @@ class BarWindow(QtWidgets.QWidget):
                             1,
                             _veil(shell_look, presented.frost),
                         )
-                        for name, section in (("applications", self.shell_sections.apps), ("tray", self.shell_sections.tray))
+                        for section in (self.shell_sections.apps,)
                         if section.isVisibleTo(self)
                     ),
                 )

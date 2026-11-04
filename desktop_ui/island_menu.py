@@ -2,13 +2,14 @@
 
 The status capsule expands into the menu. Ongoing activities lead as cards with
 their Stop; toggles sit beside Workspace's views; then recording, sound, the
-desktop tools and links. Arrows move to the nearest cell in their direction, and
+desktop tools, the system tray's icons and links. Arrows move to the nearest cell in their direction, and
 Up and Down wrap. On the sound slider, Left and Right change the volume. Toggles
 and the slider apply in place and keep the menu open; a choice that opens a view
 or acts on a window closes it. Window tiling opens its own page, which Left or
 Escape closes back onto tiling. A letter jumps to the next cell starting with it.
 Choosing a window tool or leaving with Escape returns the keyboard to the window
-that had it; opening a Workspace view keeps it there.
+that had it; opening a Workspace view keeps it there, and a tray icon hands it to
+its application.
 """
 
 from dataclasses import dataclass, field, replace
@@ -48,7 +49,14 @@ class Volume:
     level: float
 
 
-type Choice = Command | ToolChoice | Volume
+@dataclass(frozen=True, slots=True)
+class TrayChoice:
+    """A tray icon's primary click, by its place in the bar's current tray snapshot."""
+
+    slot: int
+
+
+type Choice = Command | ToolChoice | Volume | TrayChoice
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +108,15 @@ class Disclosure:
     items: tuple[Item, ...]
 
 
-type Entry = Item | Live | Toggle | Slider | Disclosure
+@dataclass(frozen=True, slots=True)
+class TrayIcon:
+    """A system tray application, by its place in the bar's tray snapshot; the bar owns its image."""
+
+    label: str
+    slot: int
+
+
+type Entry = Item | Live | Toggle | Slider | Disclosure | TrayIcon
 
 
 class Face(Enum):
@@ -113,9 +129,11 @@ class Face(Enum):
     SLIDER = auto()
     TOOL = auto()  # A small square with its symbol above a caption.
     LINK = auto()  # A quiet line of text.
+    ICON = auto()  # A tray application's own image, icon-sized.
 
 
-COLUMNS: Final = 4
+# Eight narrow columns: tray icons take one each, the other tiles span pairs.
+COLUMNS: Final = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +189,7 @@ class Controls:
     overlay: bool = field(default=False, kw_only=True)
     taskbar: bool = field(default=False, kw_only=True)
     sound: Slider = Slider("Sound", None, muted=False)
+    tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
 
 def entries(controls: Controls) -> tuple[Cell, ...]:
@@ -187,11 +206,11 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
         Toggle("Windows taskbar", "Shown" if controls.taskbar else "Hidden", "table", Command.TASKBAR, on=controls.taskbar),
     )
     modules = (
-        Cell(toggles[0], Face.TOGGLE, 0, 2, top, 4),
-        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 2, 2, top, 6, "Canvas"),
-        Cell(toggles[1], Face.TOGGLE, 0, 2, top + 4, 4),
-        Cell(toggles[2], Face.TOGGLE, 0, 2, top + 8, 4),
-        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 2, 2, top + 6, 6, "Feed"),
+        Cell(toggles[0], Face.TOGGLE, 0, 4, top, 4),
+        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 6, "Canvas"),
+        Cell(toggles[1], Face.TOGGLE, 0, 4, top + 4, 4),
+        Cell(toggles[2], Face.TOGGLE, 0, 4, top + 8, 4),
+        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 4, 4, top + 6, 6, "Feed"),
     )
     top += 12
     record = () if controls.recording is not None else (Cell(Item("Record a meeting", "mic", Command.RECORD), Face.WIDE, 0, COLUMNS, top, 5),)
@@ -204,13 +223,15 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
         (TILING, "Tiling"),
         (Item("Keyboard map", "keyboard", Command.KEYMAP), "Key map"),
     )
-    tools = tuple(Cell(entry, Face.TOOL, column, 1, top, 7, caption) for column, (entry, caption) in enumerate(captioned))
+    tools = tuple(Cell(entry, Face.TOOL, 2 * column, 2, top, 7, caption) for column, (entry, caption) in enumerate(captioned))
     top += 7
+    tray = tuple(Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + 4 * (slot // COLUMNS), 4) for slot, name in enumerate(controls.tray))
+    top += 4 * ((len(tray) + COLUMNS - 1) // COLUMNS)
     links = (
         Cell(Item("Windows notification settings", "bell", Command.NOTIFICATIONS), Face.LINK, 0, COLUMNS, top, 3),
         Cell(Item("All Workspace controls…", "more", Command.ALL_CONTROLS), Face.LINK, 0, COLUMNS, top + 3, 3),
     )
-    return (*cards, *modules, *record, sound, *tools, *links)
+    return (*cards, *modules, *record, sound, *tools, *tray, *links)
 
 
 def page(disclosure: Disclosure) -> tuple[Cell, ...]:
@@ -235,7 +256,7 @@ def shown(menu: Menu) -> tuple[Cell, ...]:
 
 def label(entry: Entry) -> str:
     match entry:
-        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | Disclosure(label=text):
+        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | Disclosure(label=text) | TrayIcon(label=text):
             return text
         case _:
             assert_never(entry)
@@ -380,6 +401,8 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
             return Applied(choice)
         case Disclosure():
             return disclose(menu, open_=not menu.disclosed)
+        case TrayIcon(slot=slot):
+            return Chosen(TrayChoice(slot))
         case Slider() | None:
             return menu
         case _:
@@ -401,7 +424,7 @@ def restores_focus(choice: Choice) -> bool:
             return True
         case Command.OVERLAY | Command.TASKBAR | Command.RECORD | Command.STOP_RECORDING | Command.STOP_AGENT | Command.AUTOMATIC_RECORDING:
             return True
-        case Command.CANVAS | Command.FEED | Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS:
+        case Command.CANVAS | Command.FEED | Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
             return False
         case _:
             assert_never(choice)

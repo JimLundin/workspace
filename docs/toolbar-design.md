@@ -7,13 +7,12 @@ primary screen, in the Liquid Glass design
 stays centred 8 px below the screen edge where space permits. Its centre contains
 only live activity and is empty at idle. The icon-only Canvas button is the
 furthest-left toolbar control, before the running applications.
-The fixed right cluster reads tray disclosure, icon-only keyboard when relevant,
-volume, Wi-Fi, then clock/power at the far right.
-The disclosure is the leftmost fixed control: a left arrow expands tray icons
-leftwards and a right arrow contracts them. Neither disclosure nor activity
-moves the fixed controls. Tooltips and accessible names preserve their meanings.
-Activity is bounded to the remaining space on narrow screens; unfit capsules
-are omitted rather than overlapping hit targets. Tray/app overflow scrolls.
+The fixed right cluster reads icon-only keyboard when relevant, then volume,
+Wi-Fi and clock/power at the far right. The system tray's icons live in the
+controls menu. Activity never moves the fixed controls. Tooltips and accessible
+names preserve their meanings. Activity is bounded to the remaining space on
+narrow screens; unfit capsules are omitted rather than overlapping hit targets.
+App overflow scrolls.
 
 ## What the bar shows
 
@@ -60,11 +59,12 @@ recording" turns it red and the detached capsule orange.
 Pressing the right-hand clock/power readings expands that capsule into the
 controls menu, still anchored 12 px from the right edge: 320 px wide with a
 21 px radius. Its readings stay in place as its top row, in place of a heading.
-The keyboard icon and tray move left with
+The keyboard icon moves left with
 its widening edge. Dynamic elements keep the centre; a question still expands
 the centre island.
 
-The menu is a grid of tiles on four columns, after the Control Center pattern:
+The menu is a grid of tiles on eight narrow columns, after the Control Center
+pattern; tray icons take one column and other tiles span pairs:
 
 | Section | Cells |
 | --- | --- |
@@ -73,6 +73,7 @@ The menu is a grid of tiles on four columns, after the Control Center pattern:
 | Recording | Record a meeting, absent while one runs |
 | Sound | The speaker level as a slider; its symbol shows mute |
 | Tools | Switch windows, transcript, window tiling and key map as small tiles |
+| System tray | Each tray application's own icon, eight to a row, absent with no tray |
 | Links | Windows notification settings and all Workspace controls |
 
 The detached agent and recording capsules leave the bar while the menu is open.
@@ -110,13 +111,17 @@ Running applications have one icon per executable. Clicking switches to that
 app; further clicks cycle its windows in a stable order. Right-click lists its
 current windows. A background observer refreshes windows once per second and
 copies newly seen icons away from Qt's animation and audio thread. The current
-app has a quiet selection fill. Both sections scroll horizontally when crowded.
-Their foreground stays transparent over the same native glass and rim as the
+app has a quiet selection fill. The section scrolls horizontally when crowded.
+Its foreground stays transparent over the same native glass and rim as the
 island; solid and high-contrast modes use the island's shared surface colours.
 
 Tray icons come from live Windows registration messages, including tooltip,
-image, visibility and callback/version changes. Left, right and double clicks
-route to the registered application. The hidden native tray proxy forwards
+image, visibility and callback/version changes. In the menu, a click or Enter
+sends the registered application a left click and a right click opens its own
+menu; either closes the controls menu without taking the keyboard back, so the
+application receives it. While the menu is open, Workspace answers each icon's
+position query with its cell; after it closes, the last positions stand, so a
+flyout anchors where its icon was. The hidden native tray proxy forwards
 shell messages to Explorer, broadcasts TaskbarCreated at startup/shutdown, and
 is excluded from taskbar hiding and recovery. Closing Workspace removes it.
 Registry history is not used to invent live icons.

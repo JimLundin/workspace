@@ -10,7 +10,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
 - Canvas anchors at the far left before apps; temporary keyboard and the combined
-  volume/Wi-Fi/clock/power capsule anchor right. The tray toggle precedes them and expands left.
+  volume/Wi-Fi/clock/power capsule anchor right. The system tray is in the controls menu.
 - That capsule expands into the controls menu; a question expands the centre island.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """

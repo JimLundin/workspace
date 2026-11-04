@@ -14,9 +14,10 @@ from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.island_model import Agent
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
+from desktop_ui.shell_items import Application
 from winapi import appearance
 from winapi.composition import Glass, GlassScene, stack_behind
-from winapi.shapes import Pane, Rect, Stop, Veil
+from winapi.shapes import Pane, Rect, Stop, Veil, Window
 
 prepare()
 
@@ -60,7 +61,7 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
             raise unittest.SkipTest("Desktop composition is unavailable.")
         published, bounds = scene.published(), scene.bounds
         baseline_keys = {pane.key for pane in published}
-        assert {"CANVAS", "STATUS", "tray"} <= baseline_keys
+        assert {"CANVAS", "STATUS"} <= baseline_keys
         assert not {"VOLUME", "WIFI"} & baseline_keys, "Status controls must share one glass capsule."
         assert "ISLAND" not in baseline_keys and "INBOX" not in baseline_keys
         bar.agent_changed(Agent("Comparing both sheets", waiting=False))
@@ -76,20 +77,24 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
         app.processEvents()
 
 
-def test_first_visible_frame_retains_tray_glass_prepared_while_parent_hidden() -> None:
-    # Defect: global child visibility omits tray glass from the cached first frame.
+def test_first_visible_frame_retains_application_glass_prepared_while_parent_hidden() -> None:
+    # Defect: global child visibility omits the applications' glass from the cached first frame.
     app = application()
     bar = DesktopBar(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
     try:
+        editor = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
+        bar.window.shell_sections.applications(((editor,), 0), lambda item, click: None)
+        bar.window.presentation = None
+        bar.render()
         assert not bar.window.isVisible()
-        assert "tray" in {pane.key for pane in bar.window.panes}
+        assert "applications" in {pane.key for pane in bar.window.panes}
         bar.visible = True
         bar.render()
         app.processEvents()
         scene = bar.window.scene
         if scene is None:
             raise unittest.SkipTest("Desktop composition is unavailable.")
-        assert "tray" in {pane.key for pane in scene.published()}
+        assert "applications" in {pane.key for pane in scene.published()}
     finally:
         bar.close()
         app.processEvents()

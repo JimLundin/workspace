@@ -122,29 +122,22 @@ def test_tray_updates_respect_field_flags_and_version_changes_preserve_registrat
 
 
 def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None:
-    # Defect: buttons lose their app identity, tray right-click becomes left-click,
-    # or excess icons disappear instead of remaining scrollable.
+    # Defect: buttons lose their app identity, or excess icons disappear
+    # instead of remaining scrollable.
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
     sections = ShellSections(parent)
     invoked: list[tuple[str, Click]] = []
     apps = tuple(Application(str(index), (Window(index + 1, "Window", "app.exe", minimized=False),)) for index in range(12))
-    tray = Entry(1, 1, b"", 0x8001, None, "Fixture tray")
     sections.applications((apps, 1), lambda item, click: invoked.append((item.identity, click)))
-    sections.notifications((tray,), lambda item, click: invoked.append((item.tip, click)))
-    sections.place((250, 350), 600)
+    sections.place(250, 600)
     parent.show()
     app.processEvents()
     try:
         QTest.mouseClick(sections.apps.buttons[0], QtCore.Qt.MouseButton.LeftButton)
-        assert sections.tray.toggle.accessibleName() == "Expand system tray"
-        assert sections.locations(Rect(0, 0, 600, 50), 1) == ()
-        QTest.mouseClick(sections.tray.toggle, QtCore.Qt.MouseButton.LeftButton)
-        assert sections.tray.toggle.accessibleName() == "Collapse system tray"
-        QTest.mouseClick(sections.tray.buttons[0], QtCore.Qt.MouseButton.RightButton)
-        assert invoked == [("0", Click.LEFT), ("Fixture tray", Click.RIGHT)]
-        assert sections.tray.buttons[0].accessibleName() == "Fixture tray"
+        QTest.mouseClick(sections.apps.buttons[1], QtCore.Qt.MouseButton.RightButton)
+        assert invoked == [("0", Click.LEFT), ("1", Click.RIGHT)]
         assert sections.apps.overflow.horizontalScrollBar().maximum() > 0
         sections.apps.overflow.horizontalScrollBar().setValue(sections.apps.overflow.horizontalScrollBar().maximum())
         app.processEvents()
@@ -152,39 +145,7 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
             sections.apps.buttons[-1].geometry().right() - sections.apps.overflow.horizontalScrollBar().value()
             < sections.apps.overflow.viewport().width()
         )
-        assert sections.apps.geometry().right() < 250 and sections.tray.geometry().right() == 587
-    finally:
-        parent.close()
-        parent.deleteLater()
-        app.processEvents()
-
-
-def test_tray_overflow_grows_left_of_a_stationary_disclosure_and_right_cluster_anchor() -> None:
-    # Defect: disclosure shifts fixed controls, or refreshed icons reset expansion.
-    app = application()
-    parent = QtWidgets.QWidget()
-    parent.resize(800, 50)
-    sections = ShellSections(parent)
-    entries = tuple(Entry(1, index, b"", 0x8001, None, str(index)) for index in range(12))
-    sections.notifications(entries, lambda item, click: None)
-    sections.place((300, 760), 800, navigation=(54, 500))
-    parent.show()
-    app.processEvents()
-    try:
-        tray = sections.tray
-        before = tray.mapTo(parent, tray.toggle.pos()).x()
-        assert not tray.overflow.isVisible()
-        tray.toggle.click()
-        sections.place((300, 760), 800, navigation=(54, 500))
-        app.processEvents()
-        assert tray.mapTo(parent, tray.toggle.pos()).x() == before
-        assert tray.overflow.isVisible() and tray.overflow.horizontalScrollBar().maximum() > 0
-        sections.notifications(entries[:-1], lambda item, click: None)
-        sections.place((300, 760), 800, navigation=(54, 500))
-        assert tray.toggle.isChecked() and tray.mapTo(parent, tray.toggle.pos()).x() == before
-        assert sections.locations(Rect(0, 0, 800, 50), 1)
-        tray.toggle.click()
-        assert sections.locations(Rect(0, 0, 800, 50), 1) == ()
+        assert sections.apps.geometry().right() < 250
     finally:
         parent.close()
         parent.deleteLater()
@@ -201,7 +162,7 @@ def test_shell_sections_leave_glass_transparent_and_use_the_shared_solid_surface
     sections = ShellSections(parent)
     item = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
     sections.applications(((item,), 0), lambda item, click: None)
-    sections.place((250, 350), 600)
+    sections.place(250, 600)
     sections.apps.apply_look(look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE))
     parent.show()
     app.processEvents()
