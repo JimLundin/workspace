@@ -82,6 +82,32 @@ def rejected(reply: str) -> bool:
             return False
 
 
+# Only fixed owner diagnostics may enter the durable journal. Unknown errors can
+# contain source content, so keep their text private like the rest of the feed.
+_JOURNAL_REJECTIONS: Final = frozenset(
+    (
+        "That proposal has changed. Read the feed again.",
+        "That solution is no longer available. Read the feed again.",
+        "That work item is no longer current. Read the feed again.",
+        "That proposal has changed. Read the feed again before rejecting it.",
+        "That proposal has changed. Read the feed again before replying.",
+        "That reply identity belongs to a different instruction.",
+        "The work agent is unavailable. This request has not been started.",
+        "The work feed is unavailable.",
+    )
+)
+
+
+def feed_outcome(output: Output) -> ActionVerified | ActionNotApplied:
+    """Retain safe refusal evidence so later reviews can diagnose failed updates."""
+    match BRIDGE_RESPONSE.validate_json(output.text):
+        case FeedRejected(error=reason):
+            safe_reason = reason if reason in _JOURNAL_REJECTIONS else "Unclassified feed rejection (details withheld)."
+            return ActionNotApplied("The local feed owner rejected the command before changing state. " + safe_reason)
+        case _:
+            return ActionVerified("Local feed owner committed the requested update.")
+
+
 SPECS: Final = (
     tool_spec(
         "work_feed",
@@ -156,12 +182,4 @@ class Feed:
             reply = self.request(command)
             return Output(reply, ok=not rejected(reply))
 
-        return self.session.effect(
-            args.operation,
-            perform,
-            lambda output: (
-                ActionVerified("Local feed owner committed the requested update.")
-                if output.ok
-                else ActionNotApplied("The local feed owner rejected the command before changing state.")
-            ),
-        )
+        return self.session.effect(args.operation, perform, feed_outcome)
