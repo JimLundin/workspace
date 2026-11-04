@@ -25,7 +25,6 @@ from desktop_ui.qt_runtime import prepare
 from scripts.preview import Files, Preview
 from tests.check_fixture import copy_check_scripts
 from tests.git_fixture import initialized
-from tests.test_quality import migrations
 
 prepare()
 
@@ -52,7 +51,7 @@ def write_watch_source(root: Path, output: Path) -> None:
     copy_check_scripts(root, ("watch.py", "check.py"))
     shutil.copyfile(ROOT / "runtime.py", root / "runtime.py")
     (root / "pyproject.toml").write_text(
-        '[tool.workspace.architecture]\nmodels=[]\n[tool.ruff]\ntarget-version="py315"\n[tool.ruff.lint.pylint]\nmax-args=3\nmax-positional-args=5\n'
+        '[tool.workspace.architecture]\nmodels=[]\n[tool.ruff]\ntarget-version="py315"\n[tool.ruff.lint.pylint]\nmax-args=5\n'
     )
     (root / ".gitignore").write_text("__pycache__/\n.ruff_cache/\n")
     (root / "requirements").mkdir()
@@ -60,7 +59,6 @@ def write_watch_source(root: Path, output: Path) -> None:
     (root / ".python-version").write_text(f"{sys.version_info.major}.{sys.version_info.minor}\n")
     for name in ("windows-py315.lock",):
         shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
-    migrations(root)
     (root / "value.py").write_text("value = 1\n")
     tests = root / "tests"
     tests.mkdir()

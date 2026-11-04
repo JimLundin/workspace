@@ -55,8 +55,8 @@ extend-exclude = ["typings/.workspace-typeshed", ".claude"]
 line-ending = "lf"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF", "PL", "C4", "RET", "TID252"]
-ignore = ["PLR2004", "PLR0911", "PLR0912", "PLR0913"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF", "PL", "C4", "RET", "TID252", "FBT001", "FBT002"]
+ignore = ["PLR2004", "PLR0911", "PLR0912"]
 
 # Required Qt virtual methods and Win32 boundary signatures retain native names.
 [tool.ruff.lint.pep8-naming]
@@ -229,7 +229,7 @@ extend-ignore-names = [
 ]
 
 [tool.ruff.lint.pylint]
-max-args = 3
+max-args = 5
 max-positional-args = 5
 
 [tool.ruff.lint.flake8-tidy-imports]

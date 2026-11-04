@@ -125,7 +125,7 @@ def land_installed(change: Installed, landing: Landing) -> str:
         return f"Merged into {landing.branch} and pushed as {commit}."
 
 
-def publish_source(
+def publish_source(  # noqa: PLR0913 - git publication options and test seams
     live: Path,
     workspace: Path,
     summary: str,

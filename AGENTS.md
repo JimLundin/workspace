@@ -106,14 +106,10 @@ paths, environment variables, control-window identifiers and new artifacts.
 - Boolean parameters on Workspace-owned interfaces must be keyword-only, and
   callers must name them. Apply this to generated record constructors too.
   Preserve required dependency/native signatures in their boundary adapters.
-- Three input parameters is the default function design target, excluding
-  `self`/`cls` and counting keyword-only parameters. A larger signature requires
-  a clear interface reason documented alongside it. Split responsibilities or
-  group a real domain concept; arbitrary options bags and variadic arguments
-  do not resolve the smell. New oversized signatures are review warnings.
-  When changing an existing signature or adding an interface exception, read
-  [docs/code-quality-policies.md](docs/code-quality-policies.md) for the exact migration
-  baseline and checker scope.
+- Functions take at most five inputs, excluding `self`/`cls` and counting
+  keyword-only parameters. Ruff blocks larger signatures. Split
+  responsibilities or group a real domain concept; where a wider signature is
+  genuinely needed, add `# noqa: PLR0913 - <reason>` on the `def` line.
 - Use absolute imports only. Import symbols from their owning module; forwarding
   re-exports are forbidden, including package-level shortcuts and compatibility
   aliases. Review indirect forwarding as well: static checks cannot establish

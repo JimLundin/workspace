@@ -110,7 +110,7 @@ class AgentToasts:
         "work",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
         self,
         root: QApplication,
         agent: AgentWindow,

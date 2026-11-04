@@ -196,11 +196,10 @@ class Actions:
         *,
         clock: Callable[[], float] = time.time,
         identity: Callable[[], str] = lambda: uuid.uuid4().hex,
-        verifier: FileVerifier | None = None,
     ) -> None:
         self.journal, self.run, self.resources = journal, run, resources
         self.clock, self.identity = clock, identity
-        self.verifier = verifier if verifier is not None else FileVerifier()
+        self.verifier = FileVerifier()
 
     def unresolved(self) -> tuple[Action, ...]:
         return self.journal.unresolved_actions(self.run.task_id)

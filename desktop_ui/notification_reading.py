@@ -58,7 +58,7 @@ def advance(state: State, now: float, limit: float, speed: float, *, paused: boo
     return Finished(offset) if offset >= limit else Scrolling(offset, now)
 
 
-def displayed(offset: float, limit: float, viewport: int, line_height: int, *, smooth: bool, origin: float = 0) -> float:
+def displayed(offset: float, limit: float, viewport: int, line_height: int, *, smooth: bool, origin: float = 0) -> float:  # noqa: PLR0913 - scroll geometry inputs
     """Reduced motion changes pages with an overlapping line, without sliding."""
     if smooth or offset >= limit:
         return min(limit, offset)

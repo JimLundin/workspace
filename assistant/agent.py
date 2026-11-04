@@ -87,7 +87,7 @@ class Agent:
         "work",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
         self,
         settings: Settings,
         machine: Machine,

@@ -130,7 +130,7 @@ def completion_phase(saved: StoredState) -> CompletionPhase:
             return "saved"
 
 
-def published(
+def published(  # noqa: PLR0913 - one transition with its optional overrides
     current: RecordingState,
     incoming: Publication,
     *,

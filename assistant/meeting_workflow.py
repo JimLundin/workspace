@@ -333,7 +333,7 @@ class MeetingWorkflow:
         "submit_identified",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected stores and callbacks
         self,
         archive: MeetingArchive,
         preparations: Preparations,

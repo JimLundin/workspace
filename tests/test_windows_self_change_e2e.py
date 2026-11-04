@@ -27,7 +27,7 @@ def keeper_log(home: Path) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
-def change(live: Path, home: Path, summary: str, edit: str, old: str, *, new: str) -> None:
+def change(live: Path, home: Path, summary: str, edit: str, old: str, *, new: str) -> None:  # noqa: PLR0913 - one self-change scenario
     """What the agent does: edit the workspace, then ask the keeper to install it."""
     workspace = Workspace(live, home / "workspace" / "workspace")
     workspace.reset()

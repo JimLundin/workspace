@@ -41,7 +41,6 @@ DIRECT = "direct Python imports"
 POLICY_FILES: Final = frozendict(
     {
         "pyproject.toml": ("tests/test_architecture.py", "tests/test_quality.py"),
-        "docs/quality-migrations.json": ("tests/test_quality.py",),
     }
 )
 """Configuration whose only readers are the policy reviews and their tests."""
@@ -399,8 +398,7 @@ def check_architecture(root: Path, current: dict[str, str], cache: Cache) -> Rep
 
 
 def check_quality(root: Path, current: Mapping[str, str], cache: Cache) -> None:
-    report = quality.check(root, current, cache=cache)
-    if report.failures or report.stale:
+    if quality.check(root, current, cache=cache):
         raise SystemExit(1)
 
 

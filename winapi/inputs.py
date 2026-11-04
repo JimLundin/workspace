@@ -224,7 +224,7 @@ def move_mouse(x: int, y: int, screen: Rect, extra: int) -> None:
     _send([_mouse(dx, dy, 0, _MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK, extra)])
 
 
-def click(x: int, y: int, button: str, count: int, screen: Rect, extra: int) -> None:
+def click(x: int, y: int, button: str, count: int, screen: Rect, extra: int) -> None:  # noqa: PLR0913 - one native click description
     """Moves to (x, y) and clicks `count` times, including auxiliary buttons."""
     down, up = _BUTTON_FLAGS[button]
     dx, dy = _absolute(x, y, screen)

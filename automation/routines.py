@@ -483,7 +483,7 @@ class RoutineStore:
             raise ValueError("The saved routine count exceeds its supported capacity.")
         return tuple(_routine(row) for row in rows)
 
-    def update(
+    def update(  # noqa: PLR0913 - routine fields plus revision guard
         self,
         id: str,
         title: str,

@@ -337,7 +337,7 @@ def expire_in_order(toasts: tuple[Toast, ...], now: float) -> tuple[Toast, ...]:
     return result
 
 
-def advance(
+def advance(  # noqa: PLR0913 - stack transition inputs
     stack: Stack, session: Snapshot, now: float, *, history: bool = False, page: int = 0, reveal: bool = False, limit: int = MAX_VISIBLE
 ) -> Stack:
     if stack.identity != session.identity:
@@ -401,7 +401,7 @@ def advance(
     return Stack(session.identity, tuple(remembered), visible, serial, pages, stack.hidden)
 
 
-def reading_hold(stack: Stack, key: Key, *, reading: bool, now: float, busy: bool, hovered: bool) -> Stack:
+def reading_hold(stack: Stack, key: Key, *, reading: bool, now: float, busy: bool, hovered: bool) -> Stack:  # noqa: PLR0913 - stack transition inputs
     # A keyed reading request, its timestamp and independent owner/pointer
     # observations determine the lifetime; the stack alone cannot supply them.
     toasts: list[Toast] = []

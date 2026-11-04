@@ -66,7 +66,7 @@ Editing checks cache immutable per-file policy findings and import dependencies
 under `%LOCALAPPDATA%\workspace\development\analysis`. Keys bind source content,
 file identity, checkout, Python/Pydantic versions, analysis code and project
 configuration; quality keys also bind fresh Ruff diagnostics. Whole-graph keyboard
-ownership, model membership, migration baselines and exact exceptions are still
+ownership, model membership and exact exceptions are still
 evaluated every run. Source hashes are still checked before and after execution.
 Missing/damaged cached records are recomputed. The protected full selfcheck uses
 no disk cache; CI coverage and runtime pins are unchanged. Shared bounded AST
@@ -131,8 +131,7 @@ explained exceptions declared in `pyproject.toml`. It also rejects patch/mock
 frameworks and monkeypatch fixtures across production and test source; explicit
 test selections cannot bypass this check. Existing migration exceptions
 are followed by the development Ruff signature gate: new Boolean positional
-declarations block checks, and new interfaces over three inputs produce review
-warnings. The gate also rejects relative imports, new aliased imports, inline
+declarations and signatures over five inputs block checks. The gate also rejects relative imports, new aliased imports, inline
 imports and direct forwarding exports.
 Read [code-quality-policies.md](code-quality-policies.md) when changing a
 signature or its exact migration entry. Architecture migration exceptions
@@ -234,8 +233,7 @@ check results are tuples, including the validated native handoff.
    initialization, static dynamic imports and deleted modules. Production
    imports are not followed further: transitive selection ran most of the suite
    for any core edit (56 modules, 250 s for a two-file change; the same kind of
-   change now checks in about 35 s). `pyproject.toml` and the quality baseline
-   select their policy tests. Pin changes, application assets and a missing
+   change now checks in about 35 s). `pyproject.toml` selects their policy tests. Pin changes, application assets and a missing
    baseline fall back to the full source suite. `--full` and CI run everything.
 2. During implementation, narrow further with `--tests tests/test_feed_triage.py`
    (or multiple files). A specific check can be selected with

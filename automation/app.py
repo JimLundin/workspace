@@ -335,7 +335,7 @@ def warm_sdk(folder: Path) -> None:
         report("The agent SDK could not be warmed; the next task will report its configuration state.", folder=folder)
 
 
-def maintain_routines(
+def maintain_routines(  # noqa: PLR0913 - composition-root dependencies
     bridge: BridgeServer,
     routines: RoutineStore,
     tasks: TaskStore,

@@ -749,7 +749,7 @@ class FollowupStore:
             )
         return revision
 
-    def save_draft(
+    def save_draft(  # noqa: PLR0913 - revision key plus content
         self,
         task_id: str,
         version: str,
@@ -768,7 +768,7 @@ class FollowupStore:
         revision = self._save(edit, expected_revision=expected_revision, at=at)
         return self.draft_revision(task_id, version, draft_id, revision)
 
-    def save_action(
+    def save_action(  # noqa: PLR0913 - revision key plus content
         self,
         task_id: str,
         version: str,

@@ -35,7 +35,7 @@ class AgentExecution:
         "settings",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected collaborators and callbacks
         self,
         settings: Settings,
         machine: Machine,
@@ -44,13 +44,12 @@ class AgentExecution:
         record: Callable[[Mapping[str, Detail]], None],
         report_error: Callable[[str], None],
         close_background: BackgroundCleanup,
-        resources: Resources | None = None,
     ) -> None:
         # Settings, machine and profiles supply the run; recording, error reporting,
         # cancellation cleanup and resource ownership are independent run effects.
         self.settings, self.machine, self.profiles = settings, machine, profiles
         self.record, self.report_error, self.close_background = record, report_error, close_background
-        self.resources = resources if resources is not None else Resources()
+        self.resources = Resources()
 
     def run_work(
         self,

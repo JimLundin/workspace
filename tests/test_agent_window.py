@@ -38,7 +38,7 @@ class RecordingWindow(AgentWindow):
 
     __slots__ = ("jobs", "view")
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - mirrors AgentWindow callbacks
         self,
         stop: Callable[[], None],
         *,

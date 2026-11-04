@@ -7,28 +7,15 @@ Do not write tests demonstrating lazy imports or another language feature. A
 checker test must detect a plausible error in our enforcement, such as accepting
 a forbidden interface or issuing a receipt after a policy failure.
 
-The policy lives in `AGENTS.md`: Boolean parameters are keyword-only, and three
-inputs is the default design target. Count positional and keyword-only inputs;
-exclude the bound receiver. A larger interface is a review smell, not an absolute
-ban on a cohesive deep module or a required native callback.
+Boolean parameters are keyword-only, and a function takes at most five inputs.
+Count positional and keyword-only inputs; exclude the bound receiver.
 
-`scripts/quality.py` runs Ruff's FBT001, FBT002 and PLR0913 rules before editing
-tests, including explicit test selections. New positional Boolean declarations
-stop the run before a receipt. New signatures over three inputs produce review
-warnings; document their reason alongside the interface. Both CI profiles that
-run editing/signature checks install Ruff as a development tool. The application
-runtime and protected selfcheck do not acquire a linter dependency.
-
-`quality-migrations.json` records existing findings using an exact source path,
-lexical declaration and hash of the parameter structure. Moving lines does not
-change a key. Changing a signature or adding a declaration cannot inherit its
-entry. Removing an old violation requires removing its stale entry. These entries
-are migration debt, not permission to add more positional Booleans or unrelated
-parameters. An intentional fixed interface needs an exact entry with `kind: "interface"`,
-its specific reviewed reason, and the explanation at its owner. The gate reports
-these separately from `kind: "migration"` debt. Interface status is valid only
-for PLR0913; it cannot excuse positional Booleans or import violations. Both
-kinds become stale when their exact signatures change. Do not suppress whole files.
+Ruff enforces both through FBT001, FBT002 and PLR0913 (`max-args = 5`).
+`scripts/quality.py` also runs those rules before editing tests, including
+explicit test selections, so a violation stops the run before a receipt. A
+signature that genuinely needs more inputs, such as a composition root or a
+native ABI, carries a targeted `# noqa: PLR0913 - <reason>` on its `def` line.
+Never suppress whole files or positional Booleans.
 
 Ruff detects ordinary function annotations, including evident Boolean unions,
 and Boolean defaults. Keyword-only declarations make both literal and variable
@@ -46,13 +33,11 @@ options object or `**kwargs` only hides the original interface problem.
 Use absolute imports from the owning module, using module-qualified names when
 names collide. Ruff's TID252 rule enforces absolute imports during linting; the
 editing/CI gate observes relative imports directly in its AST import walk, so
-explicit test selections cannot bypass the policy. Relative imports have no
-migration exceptions.
+explicit test selections cannot bypass the policy.
 
 The same editing/CI gate rejects new aliased imports, imports inside function or
 class bodies, and direct `__all__` forwarding of imported names. These use Python's existing AST parser; Ruff has
-no rule that covers this complete project policy. Line-independent exact import
-structures join the same migration baseline. Adapters own validation, lifecycle
+no rule that covers this complete project policy. Every finding blocks. Adapters own validation, lifecycle
 or adaptation with an explicit contract; they do not forward dependency
 symbols. Re-exports are forbidden as review policy, including indirect forwarding
 and dynamic exports that static checks cannot reliably detect. Dependency stubs

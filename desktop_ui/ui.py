@@ -440,7 +440,7 @@ class Ui:
         """Shows a message in the indicator for a moment."""
         self.post(lambda root: self._overlay(root).flash(text, work, seconds))
 
-    def agent(
+    def agent(  # noqa: PLR0913 - one callback per window event
         self,
         stop: Callable[[], None],
         *,
@@ -794,7 +794,7 @@ class Ui:
 
     # View navigation, stop, overlay, menu dispatch and error reporting remain
     # distinct effect ports; audio observation and tool dispatch complete bar composition.
-    def desktop(
+    def desktop(  # noqa: PLR0913 - one callback per window event
         self,
         *,
         show_agent: Callable[[], None],

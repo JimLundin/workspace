@@ -101,7 +101,7 @@ class PersonalWork:
         "wake",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
         self,
         store: PersonalStore,
         sources: Sources,

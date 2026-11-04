@@ -39,7 +39,7 @@ def _shortcut(vk: int) -> None:
 class WinDesktop:
     __slots__ = ("mic", "mic_follower", "on_notify", "on_problem", "on_state", "owner", "ui")
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - native owner, devices and event callbacks
         self,
         owner: int,
         mic: audio.Microphone,

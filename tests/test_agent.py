@@ -304,7 +304,7 @@ class ToolRig:
 
     __slots__ = ("agent", "machine", "window")
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - fixture options
         self,
         *,
         work: WorkExecution,

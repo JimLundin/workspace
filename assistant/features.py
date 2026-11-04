@@ -199,7 +199,7 @@ class Assistant:
     )
 
     # Desktop, settings, scheduling, usage and controls form the key-feature composition seam.
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected collaborators and callbacks
         self,
         desktop: Desktop,
         settings: Settings,

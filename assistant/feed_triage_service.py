@@ -113,7 +113,7 @@ def source_evidence(item: Candidate) -> SourceEvidence:
     return SourceEvidence(item.identity, item.revision, item.kind.value, item.title, item.body, created, hint, observed_on)
 
 
-def classify(
+def classify(  # noqa: PLR0913 - injected collaborators and test seams
     settings: Settings,
     batch: tuple[Candidate, ...],
     rules: tuple[str, ...],
@@ -166,7 +166,7 @@ class Triage:
         "work",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
         self,
         store: Store,
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],

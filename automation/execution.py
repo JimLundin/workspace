@@ -217,7 +217,7 @@ class WorkExecution:
         "store",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
         self,
         claim: Claim,
         store: TaskStore,

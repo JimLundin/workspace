@@ -44,11 +44,7 @@ def failures(candidate: Path, base: Path) -> tuple[str, ...]:
         policy = tuple(finding.describe() for finding in reviewed.failures)
     except (ValueError, OSError, SyntaxError) as error:
         policy = (f"Architecture review failed: {error}",)
-    report = quality.compare(quality.scan(candidate), quality.load(candidate / "docs" / "quality-migrations.json"))
-    interfaces = (
-        *(finding.describe() for finding in report.failures),
-        *(f"Stale quality migration; remove its exact baseline entry: {entry}" for entry in report.stale),
-    )
+    interfaces = tuple(finding.describe() for finding in quality.scan(candidate))
     types = tuple(failure.report for failure in check_standards.run(check_standards.changed_types(changed(candidate, base)), candidate))
     return (*lint, *policy, *interfaces, *types)
 

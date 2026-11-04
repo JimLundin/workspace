@@ -100,7 +100,7 @@ class AgentWindow:
         "state",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - one callback per window event
         self,
         stop: Callable[[], None],
         *,

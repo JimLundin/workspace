@@ -197,7 +197,7 @@ class WorkAgent:
         "window",
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - composition root for the work process
         self,
         tasks: TaskStore,
         routines: RoutineStore,

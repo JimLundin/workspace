@@ -344,7 +344,7 @@ class TaskStore:
         if isinstance(previous.state, Waiting) and isinstance(previous.state.reason, (Question, Approval)) and task.state != previous.state:
             connection.execute("UPDATE requests SET closed_at=? WHERE task_id=? AND id=?", (task.updated_at, task.id, previous.state.reason.id))
 
-    def submit(self, id: str, title: str, prompt: str, source: Source, *, at: float, priority: int = 0) -> Task:
+    def submit(self, id: str, title: str, prompt: str, source: Source, *, at: float, priority: int = 0) -> Task:  # noqa: PLR0913 - task fields plus submission time
         task = Task(id, title, prompt, source, priority, at, at, 0, TaskStatus.READY, None)
         with journal.writing(self.path) as connection:
             existing = self._get(connection, id)

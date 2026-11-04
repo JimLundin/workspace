@@ -73,7 +73,7 @@ def test_pins_and_assets_fall_back_to_full_suite_but_policy_files_select_their_r
         assert set(result.tests) == {"tests/test_api.py", "tests/test_other.py"}
     (tmp_path / "tests/test_quality.py").write_text("")
     previous = previous | {"tests/test_quality.py": "before"}
-    assert select(tmp_path, previous | {"docs/quality-migrations.json": "after"}, previous).tests == ("tests/test_quality.py",)
+    assert select(tmp_path, previous | {"pyproject.toml": "after"}, previous).tests == ("tests/test_quality.py",)
     # Repository configuration and type stubs have no test readers.
     assert select(tmp_path, previous | {".gitattributes": "after", "typings/lib.pyi": "after"}, previous).tests == ()
     assert select(tmp_path, previous, previous).tests == ()

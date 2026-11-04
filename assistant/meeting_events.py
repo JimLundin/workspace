@@ -17,7 +17,7 @@ from automation.routines import MAX_TRANSCRIPTS, RoutineStore, TranscriptReady
 class TranscriptEvents:
     __slots__ = ("archive", "clock", "on_change", "on_error", "on_meeting", "routines")
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - injected stores and callbacks
         self,
         archive: MeetingArchive,
         routines: RoutineStore,
