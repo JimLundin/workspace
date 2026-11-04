@@ -291,9 +291,6 @@ preserve its next deadline. Reduced motion shows samples directly and holds
 spinners still. No frame timer runs at rest. Native menu activation settles for
 one frame before an inactive window dismisses its menu.
 
-See [the native animation investigation](qt-animation-performance.md) for the
-shared scheduling, text-layout and activation fixes and their measured limits.
-
 ## References
 
 - [Apple: Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars):

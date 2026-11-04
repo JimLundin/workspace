@@ -611,8 +611,6 @@ tables in built-in `frozendict`, freezes snippet definitions, validates timing,
 and precomputes the longest trigger. The default configuration is built once.
 Event handling reads it without rebuilding tables or wrapping each event in a
 new controller state. An empty snippet set keeps the typing buffer empty.
-See [testing through explicit dependencies](testing-dependencies.md) for the
-replacement tests and before/after keyboard measurements.
 
 ## Keyboard and audio performance
 
@@ -623,8 +621,7 @@ reasoning spans before posting immutable observations to Qt; native documents
 remain with their views. These frontend threads still share Python's heap, GIL
 and collector with Qt. Each process has its own heap and collector, so assistant
 collections cannot stop the keyboard interpreter, although the processes still
-share CPU and other operating-system resources. See
-[native animation measurements](qt-animation-performance.md).
+share CPU and other operating-system resources.
 
 The keeper owns independent child restarts. Its protected event loop consumes
 typed keeper requests (install, undo, keep, restart) and pause/resume commands

@@ -10,8 +10,7 @@ copied or rebuilt for development. Keep the Downloads client separate so edits
 and test execution do not replace files in a running application.
 
 Use `main` in this single development checkout. `/home/jim/workspace` links to it.
-The previous Linux tree is saved in the [consolidation archive](repository-consolidation.md);
-use Windows tools for ongoing work. The same eighteen native checks took 34.8 seconds from WSL source
+Use Windows tools for ongoing work. The same eighteen native checks took 34.8 seconds from WSL source
 and 13.3 seconds from identical Windows-local source in a paired measurement.
 
 ```powershell
@@ -103,14 +102,12 @@ can still be identified from its record. Evidence excludes source/response
 content, tracebacks and environment variables. It is separate from the
 success-only deployment receipt.
 Runner startup before its timer, report-writing cost, early preflight failures
-and interrupted processes are outside this accounting. See the [full-suite investigation](test-speed-investigation.md)
-for measured portable costs and the limits of current full-run attribution.
+and interrupted processes are outside this accounting.
 
 Broad native editing checks run twenty-eight explicitly reviewed isolated test modules
 through four standard-library process workers before the single sequential
 desktop-test lane. Their private files, localhost transports and fake desktop
-adapters allow that overlap; [execution ownership](test-execution-ownership.md)
-records the additional resource review; new modules stay sequential until reviewed.
+adapters allow that overlap; new modules stay sequential until reviewed.
 All native fixtures and the strict overall-deadline HTTP
 module run after the workers exit, avoiding contention during provider startup
 and short elapsed budgets. Properties still run first, before SDK/native imports,
@@ -178,7 +175,7 @@ their extra tabs/groups are removed before continuing. Required persistence and
 mode-change restarts, cancellation, and native ownership assertions remain.
 Run the groups with native Python directly:
 `python -m scripts.check --native --tests tests/test_windows_browser.py`.
-See [browser ownership and timing evidence](browser-test-lifetimes.md). UIA
+UIA
 truncation uses a boundary-sized quote-heavy value rather than 10,000 WPF lines;
 short multiline input and independent process readback remain. Pagination
 catalogs batch irrelevant verified action rows; important effects and durable
@@ -269,8 +266,7 @@ work/meeting tools and their domain checks remain. Ordinary Windows tests attach
 to a private desktop before their fixtures import, so real Qt/WPF/browser windows
 do not flash on the user's screen. Native children share that desktop. The
 explicit desktop E2E opt-in retains its interactive behavior; selection and the
-protected full gate are unchanged. See the [UI ownership audit](native-ui-test-audit.md)
-for retained surfaces and the removed unused review dialog. Keep native checks
+protected full gate are unchanged. Keep native checks
 sequential because other session resources are still shared.
 
 ## Mutation checks

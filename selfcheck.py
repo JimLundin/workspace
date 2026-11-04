@@ -161,8 +161,7 @@ WORKERS = 4
 # portable modules. An explicit inventory, rather than filename inference, keeps
 # new/native tests sequential until their effects have been reviewed; it lives
 # in this protected file so a change cannot widen it for its own install check.
-# Heavier modules lead the queue. docs/test-execution-ownership.md records the
-# reviewed resource owners. The full sequential suite outgrew the keeper's
+# Heavier modules lead the queue. The full sequential suite outgrew the keeper's
 # check limit, so installs failed before any test could fail.
 PORTABLE = (
     "tests/test_agent.py",

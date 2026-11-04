@@ -601,10 +601,6 @@ an instruction prevents new handoffs. A handoff already accepted remains a
 saved task that can be cancelled separately. Meeting-note outputs live under
 `%LOCALAPPDATA%\workspace\work\work-results`, each in its task's folder.
 
-The [interactive architecture](docs/agentic-pc.html) explains the work flow.
-The [implementation guide](docs/agentic-implementation.md) records the interfaces
-and verification requirements.
-
 ## Changing Workspace
 
 Ask the agent, by voice or typed: "add a snippet for my email address", "make
@@ -818,8 +814,7 @@ their libraries' storage. Tests exercise Workspace behavior and integration wiri
 On this laptop, develop in `C:\Users\Jim.Lundin\Projects\workspace` and use
 `Dev.cmd` as described in [the iteration pipeline](docs/iteration-pipeline.md).
 Use `main` in that single development checkout. The Linux path
-`/home/jim/workspace` redirects to it. Retired checkouts and branch history are
-saved in the [consolidation archive](docs/repository-consolidation.md).
+`/home/jim/workspace` redirects to it.
 
 Use `Dev.cmd watch` for affected tests on save, or narrow with
 `Dev.cmd watch --tests tests/test_bar_model.py`. `Dev.cmd preview` restarts a real
@@ -877,9 +872,6 @@ which tests detect it. Timeouts and collection failures are reported separately.
 Use `--function NAME` to narrow the scope and `--replace BEFORE AFTER` to seed a
 specific regression. Native desktop tests require `--workers 1`. Mutation runs
 are an explicit audit command; they do not slow editing checks or installation.
-See the [test audit](docs/testing-audit.md) for measurements and surviving
-mutations, and the [dependency inventory](docs/testing-dependencies.md) for the
-implemented interfaces, replacement tests, and remaining native instrumentation.
 
 Inside an extracted Windows bundle, use `py -3.15 selfcheck.py` to run
 checks with the installed interpreter. The bundle builder runs on Windows or
