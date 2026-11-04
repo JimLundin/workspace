@@ -8,11 +8,12 @@ from dataclasses import replace
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows shell sections")
 
-lazy from PySide6 import QtCore, QtWidgets
+lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
 
 from desktop_ui.components.appearance import Capsule, look
 from desktop_ui.components.meaning import Tint
+from desktop_ui.desktop_pager import pager
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.shell_items import (
@@ -30,7 +31,9 @@ from desktop_ui.shell_items import (
     outstanding,
     shelf,
 )
-from desktop_ui.shell_surface import ShellSections
+from desktop_ui.shell_surface import ShellSections, page_font
+from desktop_ui.ui import Ui
+from desktop_ui.vector_icons import icon
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import pixels
 from winapi.shapes import Rect, Window
@@ -247,3 +250,49 @@ def test_shell_sections_leave_glass_transparent_and_use_the_shared_solid_surface
         parent.close()
         parent.deleteLater()
         app.processEvents()
+
+
+def ink(image: QtGui.QImage) -> tuple[int, int]:
+    """The width and height, in device pixels, of the image's opaque-enough ink."""
+    inked = tuple((x, y) for y in range(image.height()) for x in range(image.width()) if image.pixelColor(x, y).alpha() >= 128)
+    columns, rows = {x for x, _ in inked}, {y for _, y in inked}
+    return (max(columns) - min(columns) + 1, max(rows) - min(rows) + 1) if inked else (0, 0)
+
+
+def test_pager_faces_keep_their_declared_size_inside_the_workspace_process() -> None:
+    # Defect: the process-wide control stylesheet pads and re-fonts the bar's
+    # buttons, squeezing each pager digit and chevron into a 2 px content box.
+    ui = Ui()
+    parent = QtWidgets.QWidget()
+    parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+    parent.resize(600, 50)
+    sections = ShellSections(parent)
+    chosen = look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE)
+    sections.desktops(pager(((), (), ()), 0, None), lambda _: None)
+    sections.place(12, 600)
+    sections.pager.apply_look(chosen)
+    parent.show()
+    application().processEvents()
+    try:
+        scale = parent.devicePixelRatioF()
+        ink_colour = QtGui.QColor(chosen.lettering.ink.color)
+        digit = QtGui.QImage(round(32 * scale), round(32 * scale), QtGui.QImage.Format.Format_ARGB32_Premultiplied)
+        digit.setDevicePixelRatio(scale)
+        digit.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(digit)
+        painter.setFont(page_font())
+        painter.setPen(ink_colour)
+        painter.drawText(QtCore.QRectF(0, 0, 32, 32), QtCore.Qt.AlignmentFlag.AlignCenter, "3")
+        painter.end()
+        chevron = icon("chevron", chosen.lettering.ink.color, 16).pixmap(QtCore.QSize(16, 16), scale).toImage()
+        three, following = sections.pager.buttons[3], sections.pager.buttons[4]
+        for (width, height), (expected_width, expected_height) in (
+            (ink(three.grab().toImage()), ink(digit)),
+            (ink(following.grab().toImage()), ink(chevron)),
+        ):
+            assert abs(width - expected_width) <= 1 and abs(height - expected_height) <= 1, (width, height, expected_width, expected_height)
+    finally:
+        parent.close()
+        parent.deleteLater()
+        ui.close()
+        ui.run()
