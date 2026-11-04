@@ -100,7 +100,7 @@ def test_concurrent_activity_has_distinct_indicators_and_stable_agent_stop() -> 
 
 
 def test_dictation_detaches_every_other_activity_without_persistent_facts() -> None:
-    observed = replace(RESTING, dictating=True, agent=WORKING, job=Job.ANSWERING, recording=RECORDING, inbox=2)
+    observed = replace(RESTING, dictating=True, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING, inbox=2)
     dynamic = tuple(each for each in island(observed) if each.zone not in (Zone.LEFT, Zone.RIGHT))
     assert tuple(each.key for each in dynamic) == (Key.AGENT, Key.JOB, Key.ISLAND, Key.RECORDING, Key.INBOX)
     assert dynamic[0].slots == ((Spinner("Agent: Comparing both sheets"), Control("stop", "Stop agent work", Action.STOP_AGENT)),)
@@ -121,7 +121,7 @@ def test_the_status_capsule_expands_into_the_menu_and_a_question_into_the_island
     # Defects: the menu opens as the centre island instead of the capsule that
     # opened it, that capsule loses its readings while open, a question expands
     # the status capsule, or activity stays in the centre while the menu lists it.
-    busy = replace(RESTING, agent=WORKING, job=Job.ANSWERING, recording=RECORDING, inbox=2)
+    busy = replace(RESTING, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING, inbox=2)
     opened = island(busy, expanded=Expansion.MENU)
     assert tuple(each.key for each in opened) == (Key.INBOX, Key.CANVAS, Key.STATUS)
     readings = view(busy, Key.STATUS).slots

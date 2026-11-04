@@ -41,15 +41,14 @@ lazy from desktop_ui.agent_toasts import AgentToasts
 lazy from desktop_ui.agent_window import AgentWindow
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
 lazy from desktop_ui.components.canvas_loading import CanvasLoading
-lazy from desktop_ui.components.widgets import show_window, window_style
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
-lazy from desktop_ui.dialogs import AnswerWindow, Job, NativePresentation, Presentation, RegionPicker, bring_forward, near_pointer
+lazy from desktop_ui.dialogs import Job, bring_forward, near_pointer
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import Indicator
 lazy from desktop_ui.navigation import Order
 lazy from desktop_ui.notifications import Entry
-lazy from desktop_ui.qt_ui import application, later
+lazy from desktop_ui.qt_ui import application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.vector_icons import icon
 lazy from desktop_ui.window_switcher import WindowSwitcher
@@ -59,11 +58,6 @@ lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
 
 prepare()
-
-
-@dataclass(frozen=True, slots=True)
-class _Answer[T]:
-    value: T
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +115,6 @@ class Ui:
         "_canvas_session",
         "_closed",
         "_desktop",
-        "_dialogs",
         "_draining",
         "_feed",
         "_indicator",
@@ -133,7 +126,6 @@ class Ui:
         "_meetings",
         "_notifications",
         "_overlay_enabled",
-        "_pending_inputs",
         "_poll_timer",
         "_recording",
         "_root",
@@ -145,18 +137,11 @@ class Ui:
         "_work_connection",
         "_work_lock",
         "_work_view",
-        "presentation",
     )
 
-    def __init__(
-        self,
-        *,
-        presentation: Presentation | None = None,
-        views: Views | None = None,
-    ) -> None:
-        # Ui owns independent dialog, toolbar and feed lifetimes; their concrete
+    def __init__(self, *, views: Views | None = None) -> None:
+        # Ui owns independent toolbar and feed lifetimes; their concrete
         # factories and native effects enter here before any view is created.
-        self.presentation: Presentation = NativePresentation() if presentation is None else presentation
         self._views: Views = Views() if views is None else views
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
@@ -197,8 +182,6 @@ class Ui:
         self._draining = False
         self._closed, self._inputs_closed = threading.Event(), False
         self._input_lock = threading.Lock()
-        self._pending_inputs: set[Callable[[], None]] = set()
-        self._dialogs: list[QtWidgets.QWidget] = []
         self._thread = threading.current_thread()
         self._root = application()
         self._root.setStyleSheet(tooltip_style(tokens(scheme())))
@@ -254,9 +237,6 @@ class Ui:
     def _close_inputs(self) -> None:
         with self._input_lock:
             self._inputs_closed = True
-            pending = tuple(self._pending_inputs)
-        for cancel_input in pending:
-            cancel_input()
 
     def drain(self) -> None:
         """Yield after 4 ms of queued work; call only on the Qt thread.
@@ -295,96 +275,6 @@ class Ui:
         """Runs a job on the Qt thread, soon; doesn't wait."""
         if not self._closed.is_set():
             self._jobs.put(job)
-
-    def _ask[T](
-        self,
-        build: Callable[[QtWidgets.QApplication, Callable[[T], None]], None],
-        *,
-        on_close: Callable[[], T] | None = None,
-    ) -> T:
-        """Builds a window on the Qt thread and waits for the answer it gives."""
-        answers: queue.Queue[_Answer[T] | Exception] = queue.Queue()
-
-        def finish(result: _Answer[T] | Exception) -> None:
-            with self._input_lock:
-                if cancel_input not in self._pending_inputs:
-                    return
-                self._pending_inputs.remove(cancel_input)
-            answers.put(result)
-
-        def cancel_input() -> None:
-            if on_close is not None:
-                finish(_Answer(on_close()))
-            else:
-                finish(OSError("The Qt UI is closed."))
-
-        def job(root: QtWidgets.QApplication) -> None:
-            with self._input_lock:
-                if cancel_input not in self._pending_inputs:
-                    return
-            try:
-                build(root, lambda value: finish(_Answer(value)))
-            except Exception as error:
-                finish(error)
-
-        with self._input_lock:
-            if self._inputs_closed:
-                if on_close is not None:
-                    return on_close()
-                raise OSError("The Qt UI is closed.")
-            self._pending_inputs.add(cancel_input)
-        self.post(job)
-        try:
-            result = answers.get()
-        finally:
-            with self._input_lock:
-                self._pending_inputs.discard(cancel_input)
-        match result:
-            case Exception():
-                raise result
-            case _Answer(value):
-                return value
-
-    # ---- a text box --------------------------------------------------------------------
-
-    def prompt(self, title: str) -> str | None:
-        def build(root: QtWidgets.QApplication, done: Callable[[str | None], None]) -> None:
-            dialog = QtWidgets.QInputDialog()
-            dialog.setWindowTitle("Workspace")
-            dialog.setLabelText(title)
-            dialog.setInputMode(QtWidgets.QInputDialog.InputMode.TextInput)
-            dialog.setStyleSheet(window_style(tokens(scheme())))
-            dialog.setContentsMargins(9, 7, 9, 5)  # around the dialog's own layout margins, as the kit's sheets breathe
-            self._dialogs.append(dialog)
-
-            def finish(result: int) -> None:
-                done(dialog.textValue().strip() if result == QtWidgets.QDialog.DialogCode.Accepted else None)
-                self._dialogs.remove(dialog)
-                dialog.deleteLater()
-
-            dialog.finished.connect(finish)
-            self.presentation.position(dialog, 640, 140)
-            dialog.open()
-            self.presentation.reveal(dialog, dialog)
-
-        return self._ask(build, on_close=lambda: None)
-
-    def choose_region(self, screen: Rect) -> Rect | None:
-        def build(root: QtWidgets.QApplication, done: Callable[[Rect | None], None]) -> None:
-            picker = RegionPicker(screen, lambda value: later(root, 150, lambda: done(value)))
-            self._dialogs.append(picker)
-            picker.destroyed.connect(lambda: self._dialogs.remove(picker))
-            show_window(picker, focus=True)
-
-        return self._ask(build, on_close=lambda: None)
-
-    # ---- an answer, with follow-ups ----------------------------------------------------
-
-    def answer(self, title: str, follow_up: Callable[[str], None]) -> AnswerWindow:
-        def build(root: QtWidgets.QApplication, done: Callable[[AnswerWindow], None]) -> None:
-            done(AnswerWindow(self, title, follow_up))
-
-        return self._ask(build)
 
     # ---- the key map and the layer indicator ------------------------------------------
 

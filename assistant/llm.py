@@ -1,15 +1,14 @@
-"""The AI endpoint: settings, transcription, and chat (plain, streamed, with tools
-and images), against any OpenAI-style API. Pydantic validates incoming JSON.
+"""The AI endpoint: settings, transcription, and chat (plain or with tools),
+against any OpenAI-style API. Pydantic validates incoming JSON.
 Every call returns its result or a `Failure`; none
 raise for network or server problems."""
 
-import base64
 import io
 import urllib.error
 import urllib.request
 import uuid
 import wave
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from http.client import HTTPException, HTTPResponse
@@ -150,19 +149,6 @@ def wav(pcm: bytes, rate: int) -> bytes:
 
 
 @dataclass(frozen=True, slots=True)
-class Text:
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Image:
-    png: bytes
-
-
-type Part = Text | Image
-
-
-@dataclass(frozen=True, slots=True)
 class ToolCall:
     id: str
     name: str
@@ -177,7 +163,7 @@ class SystemMessage:
 
 @dataclass(frozen=True, slots=True)
 class UserMessage:
-    content: str | tuple[Part, ...]
+    content: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,8 +185,8 @@ def system_message(text: str) -> SystemMessage:
     return SystemMessage(text)
 
 
-def user_message(content: str | Sequence[Part]) -> UserMessage:
-    return UserMessage(content if isinstance(content, str) else tuple(content))
+def user_message(content: str) -> UserMessage:
+    return UserMessage(content)
 
 
 def assistant_message(text: str, tool_calls: tuple[ToolCall, ...] = ()) -> AssistantMessage:
@@ -240,29 +226,11 @@ class Failure:
 
 @dataclass(frozen=True, slots=True)
 class CompletionRequest:
-    """One immutable chat exchange: messages, model, tools and response mode."""
+    """One immutable chat exchange: messages, model and tools."""
 
     messages: tuple[Message, ...]
     model: str | None = None
     tools: tuple[ToolSpec, ...] = ()
-    streaming: bool = field(default=False, kw_only=True)
-
-
-class WireText(TypedDict):
-    type: Literal["text"]
-    text: str
-
-
-class ImageLocation(TypedDict):
-    url: str
-
-
-class WireImage(TypedDict):
-    type: Literal["image_url"]
-    image_url: ImageLocation
-
-
-type WirePart = WireText | WireImage
 
 
 class WireCallFunction(TypedDict):
@@ -283,7 +251,7 @@ class WireSystem(TypedDict):
 
 class WireUser(TypedDict):
     role: Literal["user"]
-    content: str | tuple[WirePart, ...]
+    content: str
 
 
 class WireAssistant(TypedDict):
@@ -316,20 +284,9 @@ class WireCompletion(TypedDict):
     model: str
     messages: tuple[WireMessage, ...]
     tools: NotRequired[tuple[WireTool, ...]]
-    stream: NotRequired[Literal[True]]
 
 
 _COMPLETION = TypeAdapter(WireCompletion)
-
-
-def _part(part: Part) -> WirePart:
-    match part:
-        case Text(text):
-            return {"type": "text", "text": text}
-        case Image(png):
-            return {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64.b64encode(png).decode()}"}}
-        case _:
-            assert_never(part)
 
 
 def _call(call: ToolCall) -> WireCall:
@@ -341,7 +298,7 @@ def _message(message: Message) -> WireMessage:
         case SystemMessage(text):
             return {"role": "system", "content": text}
         case UserMessage(content):
-            return {"role": "user", "content": content if isinstance(content, str) else tuple(_part(part) for part in content)}
+            return {"role": "user", "content": content}
         case AssistantMessage(text, calls):
             out: WireAssistant = {"role": "assistant", "content": text}
             if calls:
@@ -475,8 +432,6 @@ def _chat_body(settings: Settings, request: CompletionRequest) -> bytes:
     }
     if request.tools:
         body["tools"] = tuple(_tool(tool) for tool in request.tools)
-    if request.streaming:
-        body["stream"] = True
     return _COMPLETION.dump_json(body)
 
 
@@ -500,44 +455,7 @@ def chat(
     return Reply(_str(message, "content"), calls)
 
 
-def _events(response: HTTPResponse) -> Iterator[Json]:
-    """The JSON payloads of a server-sent event stream, up to `[DONE]`."""
-    for raw in response:
-        line = raw.decode("utf-8", errors="replace").strip()
-        if not line.startswith("data:"):
-            continue
-        data = line.removeprefix("data:").strip()
-        if data == "[DONE]":
-            return
-        yield _json(data.encode())
-
-
-def stream(
-    settings: Settings,
-    messages: Sequence[Message],
-    on_text: Callable[[str], object],
-    *,
-    model: str | None = None,
-    timeout_s: float = 120,
-) -> str | Failure:
-    """The model's answer, passed to `on_text` piece by piece as it's written; all of it at the end."""
-    body = _chat_body(settings, CompletionRequest(tuple(messages), model, streaming=True))
-    response = _open(_request(settings, "/chat/completions", body, "application/json"), timeout_s)
-    if isinstance(response, Failure):
-        return response
-    pieces: list[str] = []
-    try:
-        with response:
-            for event in _events(response):
-                if piece := _str(event, "choices", 0, "delta", "content"):
-                    pieces.append(piece)
-                    on_text(piece)
-    except (OSError, HTTPException) as error:
-        return Failure(f"connection dropped: {error}")
-    return "".join(pieces)
-
-
-def ask(settings: Settings, instructions: str, content: str | Sequence[Part], *, model: str | None = None) -> str | Failure:
+def ask(settings: Settings, instructions: str, content: str, *, model: str | None = None) -> str | Failure:
     """One question, one answer."""
     reply = chat(settings, [system_message(instructions), user_message(content)], model=model)
     return reply if isinstance(reply, Failure) else reply.text

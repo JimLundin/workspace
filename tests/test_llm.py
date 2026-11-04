@@ -1,5 +1,5 @@
-"""The AI endpoint client: settings, transcription, chat (plain, streamed, with
-tools and images). Against a local fake endpoint; runs anywhere."""
+"""The AI endpoint client: settings, transcription, chat (plain or with tools).
+Against a local fake endpoint; runs anywhere."""
 
 import json
 from typing import cast
@@ -8,17 +8,14 @@ import tests.fake_endpoint
 from assistant.llm import (
     AgentClass,
     Failure,
-    Image,
     Missing,
     Models,
     Reply,
     Settings,
-    Text,
     ToolCall,
     assistant_message,
     chat,
     settings_from,
-    stream,
     system_message,
     tool_result,
     tool_spec,
@@ -26,7 +23,7 @@ from assistant.llm import (
     user_message,
     wav,
 )
-from tests.fake_endpoint import fake_endpoint, sse
+from tests.fake_endpoint import fake_endpoint
 from winapi.pcm import RATE
 
 ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
@@ -192,7 +189,6 @@ def test_chat_sends_messages_and_returns_the_answer() -> None:
             assert body["model"] == model_id
             assert body["messages"] == [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Say hi"}]
         assert "tools" not in body
-        assert "stream" not in body
 
 
 def test_chat_can_use_another_model() -> None:
@@ -200,22 +196,6 @@ def test_chat_can_use_another_model() -> None:
         endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
         chat(settings(endpoint.url), [user_message("hi")], model="agent-model")
         assert body_json(endpoint.last.body)["model"] == "agent-model"
-
-
-def test_chat_sends_images_as_data_urls() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
-        chat(settings(endpoint.url), [user_message([Text("What is this?"), Image(b"\x89PNG")])])
-        expected: object = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What is this?"},
-                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw=="}},
-                ],
-            }
-        ]
-        assert body_json(endpoint.last.body)["messages"] == expected
 
 
 def test_chat_with_tools_returns_tool_calls() -> None:
@@ -253,19 +233,3 @@ def test_tool_calls_and_results_go_back_to_the_model() -> None:
             {"role": "tool", "tool_call_id": "call_1", "content": "file contents"},
         ]
         assert body_json(endpoint.last.body)["messages"] == expected
-
-
-def test_stream_passes_text_on_as_it_arrives() -> None:
-    chunks = [f'{{"choices": [{{"delta": {{"content": "{piece}"}}}}]}}' for piece in ("Hej", " då", "!")]
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [sse('{"choices": [{"delta": {"role": "assistant"}}]}', *chunks)]
-        pieces: list[str] = []
-        assert stream(settings(endpoint.url), [user_message("hi")], pieces.append) == "Hej då!"
-        assert pieces == ["Hej", " då", "!"]
-        assert body_json(endpoint.last.body)["stream"] is True
-
-
-def test_stream_reports_failures() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(b'{"error": {"message": "model not found"}}', status=404)]
-        assert stream(settings(endpoint.url), [user_message("hi")], print) == Failure("HTTP 404: model not found")

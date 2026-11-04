@@ -124,7 +124,6 @@ class Job(Enum):
     """A quick job Workspace runs for you after a key press."""
 
     TRANSCRIBING = auto()  # speech to text after dictation
-    ANSWERING = auto()  # a rewrite, a question about the selection or the screen
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,8 +194,6 @@ def job_label(job: Job) -> str:
     match job:
         case Job.TRANSCRIBING:
             return "Transcribing"
-        case Job.ANSWERING:
-            return "Answering"
         case _:
             assert_never(job)
 

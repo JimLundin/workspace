@@ -43,9 +43,3 @@ class Shot:
     def to_screen(self, x: int, y: int) -> tuple[int, int]:
         """A point in the image as a point on the screen."""
         return self.area.left + round(x * self.area.width / self.width), self.area.top + round(y * self.area.height / self.height)
-
-
-def region(start: tuple[int, int], end: tuple[int, int]) -> Rect:
-    """The rectangle dragged out between two points, both included."""
-    (x1, y1), (x2, y2) = start, end
-    return Rect(min(x1, x2), min(y1, y2), max(x1, x2) + 1, max(y1, y2) + 1)
