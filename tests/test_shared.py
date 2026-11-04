@@ -3,9 +3,10 @@
 from datetime import datetime
 from pathlib import Path
 
+from assistant.report import report, summarize
 from config import APPS
 from protocol import App, Installed, Request, Tool, decode, decode_indicator, encode, encode_indicator
-from usage import record, record_counts, report, summarize
+from usage import record, record_counts
 
 # ---- protocol --------------------------------------------------------------------------
 
