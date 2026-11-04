@@ -36,6 +36,7 @@ from config import APPS
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from keeper import Stage, WindowsUser32
 from keeper_control import STATUS, Control, Pause, Paused, Resume, Resumed, submit
+from miryoku import hook_watch
 from miryoku.engine import Indicator
 from miryoku.layout import AGENT, DICTATE_TOGGLE, ESCAPE, TALK, Key, Layer, Mod, Scancode
 from miryoku.win import Keyboard, WinHost, release_keyboard
@@ -351,6 +352,48 @@ def test_toggle_and_input_failure_clear_held_keys() -> None:
         assert not keyboard.pressed
         assert (WM_KEY_STATE, 0, 0) in messages[-3:]
         assert not bool(keyboard.engine.enabled)
+
+
+def test_reinstalling_a_dead_hook_ends_voice_capture_and_a_held_escape() -> None:
+    # Defects: real input the hook missed is never probed or reinstalled, dictation
+    # stays captured, or the stale Escape press quits the layout on the next tap.
+    driver = KeyboardFixture()
+    keyboard = Keyboard(driver)
+    for key in (inputs.KeyEvent(0x20, TALK, 0, 1_000, 0), inputs.KeyEvent(0xC0, ESCAPE, 0, 1_010, 0)):
+        driver.key = key
+        keyboard.hook_proc(0, system.WM_KEYDOWN, 0)
+    # Windows drops the hook, so both key-ups reach only raw input.
+    keyboard.watch = hook_watch.keyboard_input(keyboard.watch, 5_000)
+    assert keyboard.watch_hook(5_300) is None
+    assert driver.output[-2:] == [(Key.MENU_MASK, True), (Key.MENU_MASK, False)]
+    outage = hook_watch.Reinstall(5_000, 1_010)
+    assert keyboard.watch_hook(6_300) == outage
+    sent = len(driver.messages)
+    keyboard.hook_reinstalled(outage, 6_400)
+    assert driver.messages[sent:] == [(WM_REQUEST, Tool.DICTATE.value, 0), (WM_KEY_STATE, 0, 0)]
+    assert dict(driver.recoveries[-1]) == {"phase": "hook_reinstall", "ok": True, "outage_ms": 1_400, "hook_silent_ms": 5_390}
+    for wparam, tick in ((system.WM_KEYDOWN, 7_000), (system.WM_KEYUP, 7_050)):
+        driver.key = inputs.KeyEvent(0xC0, ESCAPE, 0, tick, 0)
+        keyboard.hook_proc(0, wparam, 0)
+    assert not keyboard.engine.enabled  # the tap toggles; the stale press would quit
+
+
+def test_a_refused_probe_keeps_the_hook_and_its_held_keys() -> None:
+    # Defect: typing into an elevated window or on the lock screen, where Windows
+    # refuses the probe, reads as a dead hook and drops held keys.
+    driver = KeyboardFixture()
+    keyboard = Keyboard(driver)
+    driver.key = inputs.KeyEvent(0x20, TALK, 0, 1_000, 0)
+    keyboard.hook_proc(0, system.WM_KEYDOWN, 0)
+    driver.send_error = OSError("Windows accepted 0 of 1 input events.")
+    verdicts: list[hook_watch.Reinstall | None] = []
+    for tick in range(5_000, 20_000, 200):
+        keyboard.watch = hook_watch.keyboard_input(keyboard.watch, tick - 100)
+        verdicts.append(keyboard.watch_hook(tick))
+    assert verdicts == [None] * len(verdicts)
+    assert driver.output.count((Key.MENU_MASK, True)) > 1
+    assert keyboard.engine.voice_held
+    assert not driver.recoveries
 
 
 def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> None:

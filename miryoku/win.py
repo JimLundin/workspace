@@ -14,6 +14,7 @@ import usage
 from components import ASSISTANT, LAYOUT, ready
 from config import APPS
 from diagnostics import FailureInfo, failure_info
+from miryoku import hook_watch
 from miryoku.engine import QUIET, Engine, Indicator, Signal, Verdict
 from miryoku.firmware import MODIFIER_KEYS, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, Modifiers, connected, modifiers, shortcut
 from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
@@ -203,6 +204,7 @@ class Keyboard:
         "fault_phase",
         "firmware",
         "foreground",
+        "hook_tick",
         "host",
         "native_releases",
         "picker_active",
@@ -212,6 +214,7 @@ class Keyboard:
         "recovery_errors",
         "recovery_ticks",
         "shortcuts",
+        "watch",
     )
 
     def __init__(self, platform: KeyboardSystem | None = None) -> None:
@@ -236,6 +239,9 @@ class Keyboard:
         self.recovery_errors = 0
         self.recovery_ticks = 0
         """Set while the engine runs; a re-entrant call lets its key through."""
+        self.hook_tick: int | None = None
+        """The newest key time the hook has seen; the hook's only watchdog cost."""
+        self.watch: hook_watch.Watch = hook_watch.Answered.ANSWERED
 
     def on_message(self, message: int) -> None:
         """Tray requests; toggling uses the same re-entrancy guard as physical keys."""
@@ -390,13 +396,58 @@ class Keyboard:
         if code == 0 and wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN, system.WM_KEYUP, system.WM_SYSKEYUP):
             down = wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN)
             try:
-                if self.swallow(self.platform.read_key_event(lparam), down=down):
+                key = self.platform.read_key_event(lparam)
+                self.hook_tick = key.time
+                if self.swallow(key, down=down):
                     return 1
             except Exception as error:
                 # A bug must never eat the keyboard: report it and let the key through.
                 with contextlib.suppress(Exception):
                     self.input_failed(error)
         return self.platform.call_next_hook(code, wparam, lparam)
+
+    def watch_hook(self, now: int) -> hook_watch.Reinstall | None:
+        """Probe a hook suspected dead; the hook's owner acts on a reinstall."""
+        match hook_watch.assess(self.watch, self.hook_tick, now):
+            case hook_watch.Probe() as probe:
+                self.watch = hook_watch.probed(probe, now, sent=self.probe_hook())
+            case hook_watch.Reinstall() as reinstall:
+                self.watch = hook_watch.Answered.ANSWERED
+                return reinstall
+            case watch:
+                self.watch = watch
+        return None
+
+    def probe_hook(self) -> bool:
+        """Tap the unassigned mask key, which a live hook sees and lets through."""
+        try:
+            self.host.send(Key.MENU_MASK, down=True)
+            self.host.send(Key.MENU_MASK, down=False)
+        except OSError:
+            with contextlib.suppress(Exception):
+                self.host.release_owned()
+            return False
+        return True
+
+    def hook_reinstalled(self, outage: hook_watch.Reinstall, now: int) -> None:
+        """The dead hook dropped every key-up: end all holds and record the gap."""
+        self.busy = True
+        try:
+            self.release_shortcuts()
+            self.engine.release_all(self.host)
+        except Exception as error:
+            self.input_failed(error, phase="hook_reinstall")
+        finally:
+            self.busy = False
+        self.shortcuts = ()
+        self.native_releases.clear()
+        self.engine.escape_down_at = None
+        with contextlib.suppress(Exception):
+            self.observe_chord()
+            self.clear_pressed()
+        silent = {} if outage.last_hook is None else {"hook_silent_ms": hook_watch.offset(now, outage.last_hook)}
+        with contextlib.suppress(OSError):
+            self.platform.record_recovery({"phase": "hook_reinstall", "ok": True, "outage_ms": hook_watch.offset(now, outage.since), **silent})
 
     def desktop_direction(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         self.busy = True
@@ -539,47 +590,72 @@ def run() -> Exit:
         hook = inputs.set_keyboard_hook(keyboard.hook_proc)
         if hook is None:
             return Exit.HOOK_REFUSED
+        with contextlib.suppress(OSError):  # without raw input the hook just goes unwatched
+            keyboard_devices.watch_input(window)
         languages = open_languages(firmware_connected=keyboard.firmware is not None)
-        language_timer = system.set_timer(200)
-        flush_timer = system.set_timer(USAGE_FLUSH_MS)
-        ready()  # tells the keeper this version came up
-        layout_state: LayoutState = LayoutState.ON if keyboard.engine.enabled else LayoutState.OFF
-        keyboard.host.tell_assistant(WM_LAYOUT_STATE, layout_state.value, 0)
-        # Nothing here creates reference cycles, so the cycle collector has nothing to
-        # do; turning it off means it can never pause the hook mid-keypress.
-        gc.collect()
-        gc.freeze()
-        gc.disable()
-        try:
-            # Windows only delivers hook calls and timer ticks while this loop waits.
-            for message in system.messages():
-                if message.message == system.WM_TIMER:
-                    if message.wparam == language_timer:
-                        maintain_keyboard(keyboard, languages)
-                    elif message.wparam == flush_timer:
-                        keyboard.host.flush_usage()
-                    else:
-                        try:
-                            keyboard.engine.timeout(keyboard.host, message.wparam)
-                        except Exception as error:
-                            keyboard.input_failed(error, phase="tap_hold_timer")
-                elif message.message == LAYOUT.quit_message:
-                    break
-                else:
-                    keyboard.on_message(message.message)
-        finally:
-            inputs.remove_hook(hook)
-            system.kill_timer(language_timer)
-            system.kill_timer(flush_timer)
-            if languages is not None:
-                with contextlib.suppress(OSError):
-                    languages.close()
-            release_keyboard(keyboard)
-            gc.enable()
-        return Exit.QUIT
+        return serve(keyboard, hook, languages)
     finally:
+        keyboard_devices.stop_watching_input()
         windows.destroy(window)
         system.release_lock(lock)
+
+
+def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.KeyboardLanguages | None) -> Exit:
+    """Run the message loop, then remove whichever hook is installed by then."""
+    outcome = Exit.QUIT
+    language_timer = system.set_timer(200)
+    flush_timer = system.set_timer(USAGE_FLUSH_MS)
+    ready()  # tells the keeper this version came up
+    layout_state: LayoutState = LayoutState.ON if keyboard.engine.enabled else LayoutState.OFF
+    keyboard.host.tell_assistant(WM_LAYOUT_STATE, layout_state.value, 0)
+    # Nothing here creates reference cycles, so the cycle collector has nothing to
+    # do; turning it off means it can never pause the hook mid-keypress.
+    gc.collect()
+    gc.freeze()
+    gc.disable()
+    try:
+        # Windows only delivers hook calls and timer ticks while this loop waits.
+        for message in system.messages():
+            if message.message == keyboard_devices.WM_INPUT:
+                keyboard.watch = hook_watch.keyboard_input(keyboard.watch, message.time)
+            elif message.message == system.WM_TIMER:
+                if message.wparam == language_timer:
+                    maintain_keyboard(keyboard, languages)
+                    if (outage := keyboard.watch_hook(system.tick_count())) is not None:
+                        if (replacement := replace_hook(keyboard, hook, outage)) is None:
+                            outcome = Exit.HOOK_REFUSED
+                            break
+                        hook = replacement
+                elif message.wparam == flush_timer:
+                    keyboard.host.flush_usage()
+                else:
+                    try:
+                        keyboard.engine.timeout(keyboard.host, message.wparam)
+                    except Exception as error:
+                        keyboard.input_failed(error, phase="tap_hold_timer")
+            elif message.message == LAYOUT.quit_message:
+                break
+            else:
+                keyboard.on_message(message.message)
+    finally:
+        inputs.remove_hook(hook)
+        system.kill_timer(language_timer)
+        system.kill_timer(flush_timer)
+        if languages is not None:
+            with contextlib.suppress(OSError):
+                languages.close()
+        release_keyboard(keyboard)
+        gc.enable()
+    return outcome
+
+
+def replace_hook(keyboard: Keyboard, dead: inputs.Hook, outage: hook_watch.Reinstall) -> inputs.Hook | None:
+    """Install the replacement before removing the old hook, so no key goes unhooked."""
+    replacement = inputs.set_keyboard_hook(keyboard.hook_proc)
+    if replacement is not None:
+        inputs.remove_hook(dead)
+        keyboard.hook_reinstalled(outage, system.tick_count())
+    return replacement
 
 
 def maintain_keyboard(keyboard: Keyboard, languages: keyboard_language.KeyboardLanguages | None) -> None:
