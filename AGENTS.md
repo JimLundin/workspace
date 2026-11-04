@@ -1,194 +1,86 @@
 # Project scope
 
-The active development checkout is `C:\Users\Jim.Lundin\Projects\workspace`
-(`/mnt/c/Users/Jim.Lundin/Projects/workspace` from WSL). Edit this checkout and
-run its native Windows tools. Use `main` in this single development checkout.
-`/home/jim/workspace` links to it.
-
 Workspace owns the Windows keyboard, dictation, assistant, floating desktop bar,
 automation and the native Qt work canvas
 ([docs/work-thread-representation.md](docs/work-thread-representation.md)).
-Preserve its Python/Qt runtime. The embedded workspace browser belongs to
-[Shared Workspace](https://github.com/JimLundin/shared-workspace), which is paused.
+Keep its Python/Qt runtime. The embedded browser belongs to the paused
+[Shared Workspace](https://github.com/JimLundin/shared-workspace) project.
+Use `workspace` for installation and data paths, environment variables, window
+identifiers and new artifacts.
 
-Workspace is in the trial phase. Refactor around current product behavior and
-explicit ownership. Remove retired features, unused interfaces and their tests;
-legacy data and backwards compatibility are not requirements for cleanup.
+The active checkout is `C:\Users\Jim.Lundin\Projects\workspace`
+(`/mnt/c/Users/Jim.Lundin/Projects/workspace` from WSL; `/home/jim/workspace`
+links to it). Work on `main` there and run its native Windows tools. WSL git
+cannot read worktrees created by Windows git; use `git.exe` for those.
 
-Iteration speed is a primary design constraint. Keep tests that detect meaningful
-behavioral failures, consolidate overlapping coverage, and use focused mutation
-campaigns to assess changed decisions. Investigate survivors before adding tests;
-equivalent mutations and impossible inputs do not justify new coverage. Use
-affected tests while editing, and keep broad native checks for broad changes.
+Workspace is in its trial phase. Delete retired features, unused interfaces and
+their tests. Legacy data and backwards compatibility are not requirements.
 
-Tests must exercise behavior or policy owned by Workspace. Do not test Python's
-language semantics, built-ins, standard library, or a dependency's own behavior.
-We trust Python and dependencies to test their own implementations. Do not add
-tests to demonstrate that features such as lazy imports, generators, pattern
-matching or dataclasses work. Record that trust as an assumption, not a test.
-Use those tools in tests of our decisions, validation, integration wiring and
-effect ownership. A test is justified by a plausible failure in our code; if it
-only calls an external implementation and asserts its documented behavior,
-remove it. Apply this rule when adding, reviewing or consolidating tests.
-Before writing a test, name the plausible defect in Workspace code it detects;
-if there is no such defect, omit the test.
+# Tests
 
-Patches and mocks are disallowed throughout the codebase, including tests.
-Pass explicit typed dependencies into effect owners; test decisions with pure
-inputs, real local resources, or concrete adapters implementing those interfaces.
-Do not replace imported functions, module globals, native bindings or instance
-methods to control behavior. Assert observable behavior through the same interface
-used by callers. The architecture review enforces the framework ban for every
-source file, including explicit test selections.
-
-Before maintaining custom general-purpose functionality, check whether a focused
-dependency provides it. Assess its complete dependency footprint, supported
-runtime and integration cost. Prefer a suitable small dependency; keep custom
-code when available libraries require disproportionate overhead or broader
-behavior changes. Test our domain decisions and adapters, leaving the library's
-own algorithms to its upstream tests. For generated properties, use Hypothesis
-with bounded valid inputs; read [docs/property-testing.md](docs/property-testing.md)
-when adding a property or revisiting the audio-library decision.
-
-Workspace is the product and repository name. Use `workspace` for installation/data
-paths, environment variables, control-window identifiers and new artifacts.
+- A test must catch a plausible defect in Workspace code. Name that defect in a
+  comment before writing the test; if there is none, do not write it.
+- Do not test Python, the standard library or a dependency's documented behavior.
+- Patches and mocks are banned everywhere, tests included. Pass typed
+  dependencies into effect owners and test with pure inputs, real local
+  resources or concrete adapters. The architecture review enforces the ban.
+- Use Hypothesis with bounded valid inputs for generated properties; see
+  [docs/property-testing.md](docs/property-testing.md).
 
 # Design
 
-- Immutable data is the default throughout code we write. Use frozen, slotted
-  records, tuples and immutable mappings/sets; preserve immutability inside
-  records too. Return new values instead of changing inputs or shared domain
-  state. A frozen record containing a mutable collection is not immutable.
-  Mutation requires a specific necessity, such as measured performance needs,
-  native ownership constraints, or significant algorithmic overhead from an
-  immutable implementation. Document the exact owner and necessity alongside
-  its implementation, and record checker-covered exceptions in
-  `tool.workspace.architecture.exceptions` in `pyproject.toml`. Convenience and
-  existing usage alone are not necessities. Existing violations may have exact
-  migration entries during the agreed gradual rollout; these are cleanup debt,
-  not permission for new mutable data. Keep necessary mutation local to its
-  owner and publish immutable observations. When introducing or changing an
-  exception, read [docs/functional-design.md](docs/functional-design.md).
-- Model domain alternatives like Rust enums: use unions of frozen, slotted
-  dataclasses for variants with payloads and `Enum` for variants without payloads.
-  Handle variants with `match` and `typing.assert_never` where exhaustive handling
-  matters. Use `Literal` for fixed values in external contracts.
-- Put decisions and state transitions in pure functions. Pass timestamps and
-  observations in; return immutable values. Keep threads, locks, files, network
-  calls, and UI updates in the modules that own those effects.
-- Validate external data when it enters a typed interface. Use the variant's
-  fields to express required data instead of unrelated flags and empty defaults.
-- Application code works with typed domain values. Prefer Pydantic `TypeAdapter`
-  over existing typed shapes for serialization, deserialization and validation
-  at IO boundaries; introduce a model class only when it owns a real contract.
-  JSON is a wire/storage format only; hand-built JSON contracts and direct
-  `json.loads`/`json.dumps` in application code are forbidden. Existing uses are
-  migration debt; replace them when changing their boundary.
-- Use explicitly typed attributes and direct attribute access. Initialize fields
-  in `__init__` and model optional state with typed unions. Do not use `hasattr`,
-  `getattr`, or other string-based attribute access to work around missing types.
-  Adapt external and native data into validated, typed interfaces at the boundary.
-- Outside tests, forbid `typing.cast`, `Any`, custom `TypeIs`/`TypeGuard` assertions,
-  type-checker suppressions and
-  disabling type checks. Establish types through runtime validation and concrete
-  interfaces. For a poorly typed dependency, write a local stub for only the API
-  we consume; describe its actual contract, and validate unknown data before
-  constructing domain values. Keep stubs under `typings/`, configured for both
-  checkers. Existing production escapes are migration debt, not permission to
-  add more. Tests may use narrowly scoped casts for fixtures.
-- Prefer `match` for structural validation and domain alternatives. Destructure
-  required fields and handle variants explicitly instead of introducing bare
-  `isinstance` checks or predicate wrappers that assert a type.
-- Input types require only the capabilities a function consumes: prefer
-  `Iterable`, `Sequence`, `Mapping` or a small protocol over concrete containers.
-  Return the most specific truthful type, including exact immutable records and
-  variants. External observations remain `object` until validated.
-- Boolean parameters on Workspace-owned interfaces must be keyword-only, and
-  callers must name them. Apply this to generated record constructors too.
-  Preserve required dependency/native signatures in their boundary adapters.
-- Functions take at most five inputs, excluding `self`/`cls` and counting
-  keyword-only parameters. Ruff blocks larger signatures. Split
-  responsibilities or group a real domain concept; where a wider signature is
-  genuinely needed, add `# noqa: PLR0913 - <reason>` on the `def` line.
-- Use absolute imports only. Import symbols from their owning module; forwarding
-  re-exports are forbidden, including package-level shortcuts and compatibility
-  aliases. Review indirect forwarding as well: static checks cannot establish
-  every symbol's ownership. Avoid self-alias imports and cosmetic prefixes such
-  as `Request as ConsoleRequest`;
-  use module-qualified names to resolve collisions. A boundary adapter must own
-  real validation, lifecycle or adaptation with an explicit contract. When
-  changing an import exception or introducing an adapter, read
+- Keep the keyboard process isolated: `miryoku/` and everything it imports use
+  only the standard library, `winapi` and the stdlib-only top-level modules
+  (`config`, `protocol`, `usage`, `components`, `diagnostics`), never
+  `assistant`, `desktop_ui`, `automation` or third-party packages. Measure key-event latency, allocation
+  and GC with `scripts/benchmark_keyboard.py` before and after changing the
+  hook, the engine or their shared dependencies.
+- Validate external data where it enters a typed interface. Use a Pydantic
+  `TypeAdapter` over existing typed shapes at IO boundaries instead of
+  `json.loads`/`json.dumps` (the keyboard-side `usage.py` writer is the exception).
+- No `Any`, `typing.cast`, `TypeIs`/`TypeGuard` assertions or type-checker
+  suppressions in production code. For a poorly typed dependency, add a stub
+  for only the API we use under `typings/`. Tests may cast fixtures narrowly.
+- Model alternatives as unions of frozen, slotted dataclasses (or `Enum` without
+  payloads) and handle them with `match` and `assert_never`.
+- Prefer immutable values; mutate only inside the owner that needs it. Put
+  decisions in pure functions and keep threads, files, network and UI in the
+  modules that own those effects.
+- Use direct typed attributes, not `getattr`/`hasattr`.
+- Use absolute imports from the owning module, at module level. Use `lazy import`
+  to defer loading. No re-exports or cosmetic aliases.
+- Boolean parameters are keyword-only. Functions take at most five inputs; Ruff
+  blocks more. Where a wider signature is genuinely needed, add
+  `# noqa: PLR0913 - <reason>` on the `def` line. See
   [docs/code-quality-policies.md](docs/code-quality-policies.md).
-- Declare imports at module level. Use Python 3.15's `lazy import` and
-  `lazy from` when loading must wait for first use; inline imports inside
-  functions or classes are forbidden. Keep required initialization order
-  explicit at the effect owner. Launchers run directly on Python 3.15.
-- Prefer generators and lazy pipelines when callers can consume values
-  incrementally. Return `Iterator[T]` from generators. Materialize when the
-  owner needs indexing, repeated traversal or an immutable snapshot; measure
-  performance-critical choices rather than assuming lazy iteration is faster.
-- Preserve the keyboard process's isolation from the assistant. Its bounded
-  mutable buffers and direct updates use the same variant definitions as the
-  rest of the code: convert native event flags to variants once, then reuse those
-  events during buffering and replay. Measure key-event latency,
-  allocation peaks, and GC with `scripts/benchmark_keyboard.py` before and after
-  changing the hook, engine, or their shared dependencies. Keep GC enabled during
-  measurement and keep event data acyclic: the live hook disables cyclic GC.
-  Apply the same care to audio sample loops and buffer copying.
-- Prefer Python 3.15's native annotation and type-alias syntax throughout,
-  including launchers and runtime activation.
-- When changing domain models or profiling input, read
-  [docs/functional-design.md](docs/functional-design.md) for the module map and
-  measurement scope.
+- Before writing general-purpose code, check for a small focused dependency and
+  prefer it when its footprint and integration cost are reasonable.
+- Pyright (strict) is the only type checker. Read
+  [docs/functional-design.md](docs/functional-design.md) when changing domain
+  models or the module map.
 
-# Iteration checks
+# Checking
 
-For editing checks and Windows deployment, read
-[docs/iteration-pipeline.md](docs/iteration-pipeline.md). Use
-`Dev.cmd check` in Windows to select affected source tests; include
-meaningful native checks for native behavior, sequentially on the shared desktop.
-Use `--full` for broad changes. After final edits, write a source-bound receipt
-with `--receipt "$env:TEMP\workspace-check.json"` and deploy with
-`Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`.
-Keep the protected selfcheck gate and full CI checks unchanged. Do not rebuild the
-runtime bundle or use the old temporary deployment helper for source-only edits.
+Read [docs/iteration-pipeline.md](docs/iteration-pipeline.md). Use
+`Dev.cmd check` for affected tests while editing and `--full` for broad changes.
+Run native checks sequentially on the shared desktop. After the final edit,
+write a receipt with `--receipt "$env:TEMP\workspace-check.json"`. Do not
+change the protected selfcheck gate or CI's full checks.
 
-# Committing work
+# Committing and deploying
 
-Work is not done until it is committed and pushed. After the final check passes,
-commit the checked working tree on the current branch, deploy, and push. Never
-report a task as done, finished or ready while any part of it is uncommitted or
-unpushed; report exactly what remains uncommitted and why.
+Work is done only when it is committed, deployed and pushed.
 
-- Commit in small steps that each describe one change. End every message with
-  the attribution trailer the session provides.
-- Work done in worktrees or by subagents is complete only once the coordinator
-  has merged it into the user's branch, committed and pushed. Remove finished
-  worktrees and merged branches; never leave the only copy of finished work in a
-  worktree, a stash or an unpushed branch.
-- When uncommitted work from earlier sessions is present, commit it as its own
-  snapshot before committing new work on top, so both are recorded.
-
-# Windows deployment
-
-After each completed change, update the Windows Downloads copy as part of the
-task. The user has authorized this sync and a reload whenever Workspace is already
-running; no separate confirmation is needed.
-
-- Deploy the checked working tree to
-  `C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace`
-  (`/mnt/c/Users/Jim.Lundin/Downloads/workspace-sdk/workspace` from WSL).
-- Refresh `C:\Users\Jim.Lundin\Downloads\workspace-sdk-python315-win64.zip` too.
-  Use the installed Windows Python 3.15; the archive contains no interpreter.
-  Preserve `.runtime` when `.python-version` and the dependency lock in
-  `requirements/` are unchanged; rebuild dependencies with `scripts/bundle.py`
-  when either pin changes.
-- Use the deployment coordinator's component plan and pause/resume handshake
-  when that copy is running. Preserve unchanged children and the keeper; require
-  clean exits from selected children before replacing their source. Supervisor,
-  implicit asset or bootstrap changes use full `WM_CLOSE` shutdown and relaunch
-  `workspace.pyw` with the installed Python's `pythonw.exe`. Leave a stopped copy stopped.
-- Clear replaced modules' bytecode caches. Verify the deployed files and ZIP
-  match the working tree. Verify fresh markers for restarted children and exact
-  retained identities/markers for preserved children. Report any deployment or
-  reload failure explicitly.
+- Commit in small steps, one change each, ending with the session's attribution
+  trailer. Commit leftover uncommitted work from earlier sessions as its own
+  snapshot first.
+- Merge work from worktrees and subagents into the user's branch, then remove
+  finished worktrees and branches. Never leave the only copy in a worktree, a
+  stash or an unpushed branch.
+- Deploy with `Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`.
+  It updates `C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace` and
+  `workspace-sdk-python315-win64.zip`, reloading a running copy; the user has
+  authorized this without asking. Run `scripts/bundle.py` only when
+  `.python-version` or the `requirements/` lock changes. Report any deployment
+  or reload failure.
+- Report exactly what remains uncommitted, undeployed or unpushed, and why.
