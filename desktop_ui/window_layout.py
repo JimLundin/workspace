@@ -50,8 +50,8 @@ EXTERNALS: frozendict[Setup, frozendict[tuple[int, int], Role]] = frozendict(
 """Each setup's external screens beside the laptop's own panel, by physical size."""
 
 
-DARK_WHEN_LOCKED: frozendict[Setup, frozenset[Role]] = frozendict({Setup.HOME: frozenset({Role.MAIN})})
-"""Each setup's external screens that turn dark while the session is locked: the home 4K screen is an OLED."""
+DARK_WHEN_AWAY: frozendict[Setup, frozenset[Role]] = frozendict({Setup.HOME: frozenset({Role.MAIN})})
+"""Each setup's external screens that turn dark while nobody is at the machine: the home 4K screen is an OLED."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,11 +88,11 @@ def screens(monitors: Sequence[Monitor]) -> Screens | None:
             return None
 
 
-def dark_when_locked(monitors: Sequence[Monitor]) -> frozenset[Monitor]:
+def dark_when_away(monitors: Sequence[Monitor]) -> frozenset[Monitor]:
     """The recognized setup's protected external screens; an unrecognized set protects none."""
     match assigned(monitors):
         case (setup, roles):
-            return frozenset(monitor for role, monitor in roles.items() if role in DARK_WHEN_LOCKED.get(setup, frozenset()))
+            return frozenset(monitor for role, monitor in roles.items() if role in DARK_WHEN_AWAY.get(setup, frozenset()))
         case None:
             return frozenset()
 

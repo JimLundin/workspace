@@ -14,7 +14,7 @@ def known_features() -> Iterator[str]:
     """Everything either program can log, as `source/feature`."""
     yield from (f"assistant/{tool.name.lower()}" for tool in Tool if tool is not Tool.STOP)
     yield from (f"assistant/app:{app.name}" for app in APPS)
-    yield from ("assistant/agent", "assistant/dark_when_locked", "assistant/dark_when_locked_toggle")
+    yield from ("assistant/agent", "assistant/dark_when_away", "assistant/dark_when_away_toggle")
     for layer, actions in TABLE.items():
         if layer is not None:
             yield from sorted({f"layout/{layer.name.lower()}:{describe(a)}" for a in actions if a is not Command.NOTHING})

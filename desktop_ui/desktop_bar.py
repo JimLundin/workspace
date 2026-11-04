@@ -25,11 +25,13 @@ lazy import usage
 lazy import winapi.ambient
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
+lazy from config import DARK_WHEN_IDLE_MINUTES
 lazy from desktop_ui import island_menu
 lazy from desktop_ui.agent_progress import Phase, coalesced, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
 lazy from desktop_ui.application_observer import EMPTY_ARRANGEMENT, ApplicationObserver, Arrangement
 lazy from desktop_ui.audio_meter import AudioMeter
+lazy from desktop_ui.away_screens import AwayScreens
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
@@ -52,7 +54,6 @@ lazy from desktop_ui.island_menu import (
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
-lazy from desktop_ui.locked_screens import LockedScreens
 lazy from desktop_ui.navigation import BarScroll, CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
@@ -115,6 +116,7 @@ class DesktopBar:
         "audio_meter",
         "audio_timer",
         "automatic_recording",
+        "away_screens",
         "chord_held",
         "closed",
         "controls",
@@ -129,7 +131,6 @@ class DesktopBar:
         "keys",
         "last_frame",
         "layout_enabled",
-        "locked_screens",
         "loop",
         "materials",
         "menu_target",
@@ -202,7 +203,7 @@ class DesktopBar:
         self.errors: queue.Queue[str] = queue.Queue()
         self.taskbar = TaskbarControl()
         self.controls: shell.AppWindow | None = None
-        self.locked_screens: LockedScreens | None = None
+        self.away_screens: AwayScreens | None = None
         self.keys: WindowsKeyObserver | None = None
         self.worker: threading.Thread | None = None
         self.loop = EventLoop(application(), self.paint_frames)
@@ -253,7 +254,7 @@ class DesktopBar:
         self.notification_service = NotificationObserver()
         self.status_service = StatusObserver()
         self.controls = shell.AppWindow("workspace shell controls", self.message)
-        self.locked_screens = LockedScreens(self.record_usage)
+        self.away_screens = AwayScreens(self.record_usage)
         try:
             session.subscribe(self.controls.handle)
         except OSError as error:
@@ -274,8 +275,8 @@ class DesktopBar:
         if message == TASKBAR_TOGGLE:
             self.toggle_taskbar()
             return 0
-        if self.locked_screens is not None:
-            self.locked_screens.message(message, wparam)
+        if self.away_screens is not None:
+            self.away_screens.message(message, wparam)
         return None
 
     def record_usage(self, feature: str, details: Mapping[str, Detail]) -> None:
@@ -375,7 +376,7 @@ class DesktopBar:
                     overlay=self.overlay_enabled,
                     taskbar=self.taskbar.revealed,
                     placement_paused=self.arrangement.paused,
-                    dark_when_locked=self.locked_screens is not None and self.locked_screens.enabled,
+                    dark_when_away=DARK_WHEN_IDLE_MINUTES if self.away_screens is not None and self.away_screens.setting.enabled else None,
                     sound=sound,
                     tray=tuple(entry.tip or "Tray application" for entry in self.window.tray),
                 )
@@ -498,9 +499,9 @@ class DesktopBar:
                 self.toggle_taskbar()
             case Command.PLACEMENT:
                 self.navigate(Placing.TOGGLE_PAUSE)
-            case Command.DARK_WHEN_LOCKED:
-                if self.locked_screens is not None:
-                    self.locked_screens.toggle()
+            case Command.DARK_WHEN_AWAY:
+                if self.away_screens is not None:
+                    self.away_screens.toggle()
             case Command.NOTIFICATIONS:
                 self.notification_settings()
             case Command.ALL_CONTROLS:
@@ -702,6 +703,8 @@ class DesktopBar:
         while not self.errors.empty():
             self.actions.problem(self.errors.get_nowait())
         self.poll_notifications()
+        if self.away_screens is not None:
+            self.away_screens.poll(recording=self.recording.capturing)
         now = self.observations.clock()
         self.poll_shell()
         if now >= self.next_power:
@@ -775,8 +778,8 @@ class DesktopBar:
             if self.worker is not None:
                 self.worker.join(timeout=6)
         finally:
-            if self.locked_screens is not None:
-                self.locked_screens.close()
+            if self.away_screens is not None:
+                self.away_screens.close()
             if self.controls is not None:
                 session.unsubscribe(self.controls.handle)
                 self.controls.destroy()

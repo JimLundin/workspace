@@ -85,14 +85,14 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
 
 def test_toggles_show_their_state_and_apply_in_place() -> None:
     # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
-    cells = entries(Controls(None, None, AutomaticStatus.READY, overlay=True, taskbar=False, dark_when_locked=False))
+    cells = entries(Controls(None, None, AutomaticStatus.READY, overlay=True, taskbar=False, dark_when_away=2))
     toggles = [cell.entry for cell in cells if cell.face is Face.TOGGLE]
     assert toggles == [
         Toggle("Auto-record", "Teams · On", "mic", Command.AUTOMATIC_RECORDING, on=True),
         Toggle("Keyboard overlay", "On", "layers", Command.OVERLAY, on=True),
         Toggle("Windows taskbar", "Hidden", "table", Command.TASKBAR, on=False),
         Toggle("Window placement", "On", "grid", Command.PLACEMENT, on=True),
-        Toggle("Dark when locked", "Off", "lock", Command.DARK_WHEN_LOCKED, on=False),
+        Toggle("Dark when away", "External · 2 min idle", "lock", Command.DARK_WHEN_AWAY, on=True),
     ]
     menu = Menu(cells)
     assert press(at(menu, "Keyboard overlay"), Key.ENTER) == Applied(Command.OVERLAY)
