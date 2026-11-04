@@ -125,7 +125,7 @@ ready for a navigation log.
 - **The pager** after the toolbar's pinned slots shows each desktop and marks the
   current one. Its names list the apps placed there. While the Apps layer is up,
   each target shows its keycap; while the firmware keyboard holds Ctrl+Alt+Shift,
-  each shows its chord, such as **⌃⌥⇧ L**. A horizontal scroll over the bar steps one
+  each shows its chord's letter, such as **L**, since the held Ctrl+Alt+Shift completes it. A horizontal scroll over the bar steps one
   desktop per gesture.
 - **Firmware chords**: with the Charybdis Nano connected there is no Apps
   layer. Ctrl+Alt+Shift plus a letter sends the same tool or app request

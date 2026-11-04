@@ -627,7 +627,7 @@ def test_firmware_chord_reaches_navigation_and_swallows_the_letter_press_and_rel
     for key in (ctrl, shift, alt):
         assert not keyboard.swallow(key, down=True)
     assert driver.messages == [(WM_CHORD, 1, 0)]
-    letter = inputs.KeyEvent(0x4C, 0x26, 0, 20, 0)  # L
+    letter = inputs.KeyEvent(0x4A, 0x24, 0, 20, 0)  # J
     assert keyboard.swallow(letter, down=True)
     assert keyboard.swallow(letter, down=True)
     assert driver.output == [(Key.MENU_MASK, True), (Key.MENU_MASK, False)]

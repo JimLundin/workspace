@@ -21,18 +21,17 @@ def test_pager_hints_follow_the_keyboard_that_reaches_its_targets() -> None:
     # Defects: hints show on another layer, a desktop past the direct keys gets
     # one, a hint is a literal that a remapped key wouldn't update, or the
     # firmware chord shows laptop keycaps.
-    keys = tuple(
-        found.tap for tool in (Tool.DESKTOP_PREVIOUS, Tool.DESKTOP_NEXT, Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3) if (found := shortcut(tool))
-    )
-    assert keys == ("K", "L", "Caps", "S", "D")
+    jumps = (Tool.DESKTOP_PREVIOUS, Tool.DESKTOP_NEXT, Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4)
+    keys = tuple(found.tap for tool in jumps if (found := shortcut(tool)))
+    assert keys == ("K", "L", "Caps", "S", "D", "I")
     assert reach("APPS", chord=False) is Reach.APPS_LAYER
     assert reach("APPS · locked", chord=False) is Reach.APPS_LAYER
     assert reach("NAV", chord=False) is None
     assert reach(None, chord=False) is None
     assert reach(None, chord=True) is Reach.CHORD
-    placed = ((), (), (), ())
-    assert pager(placed, 0, Reach.APPS_LAYER).hints == Hints("K", "L", ("Caps", "S", "D", None))
-    assert pager(placed, 0, Reach.CHORD).hints == Hints("⌃⌥⇧ K", "⌃⌥⇧ H", ("⌃⌥⇧ L", "⌃⌥⇧ U", "⌃⌥⇧ Y", None))
+    placed = ((), (), (), (), ())
+    assert pager(placed, 0, Reach.APPS_LAYER).hints == Hints("K", "L", ("Caps", "S", "D", "I", None))
+    assert pager(placed, 0, Reach.CHORD).hints == Hints("K", "H", ("J", "L", "U", "Y", None))
     assert pager(placed, 0, None).hints == NO_HINTS
 
 

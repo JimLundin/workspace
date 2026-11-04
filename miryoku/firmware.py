@@ -14,12 +14,13 @@ FIRMWARE_KEYBOARD: Final = ("VID_A8F8", "PID_1832")
 _CHORD_LETTERS: Final[tuple[tuple[Request, str], ...]] = (
     # Right-hand letters, tapped while the left hand holds R S T, follow Miryoku's NAV positions.
     (Tool.FOCUS_LEFT, "N"), (Tool.FOCUS_DOWN, "E"), (Tool.FOCUS_UP, "I"), (Tool.FOCUS_RIGHT, "O"),
-    (Tool.DESKTOP_1, "L"), (Tool.DESKTOP_2, "U"), (Tool.DESKTOP_3, "Y"),
+    # The top row J L U Y counts desktops 1 to 4 from the inner index finger.
+    (Tool.DESKTOP_1, "J"), (Tool.DESKTOP_2, "L"), (Tool.DESKTOP_3, "U"), (Tool.DESKTOP_4, "Y"),
     (Tool.DESKTOP_PREVIOUS, "K"), (Tool.DESKTOP_NEXT, "H"),
-    (Tool.ZOOM, "M"), (Tool.PLACEMENT_PAUSE, "J"),
+    (Tool.ZOOM, "M"),
     # Left-hand letters, tapped while the right hand holds N E I: the Apps layer's app positions.
     *zip(APPS[:10], "QWFPBARSTG", strict=False),
-    (Tool.WINDOW_SWITCHER, "C"), (Tool.PLACE_NOW, "D"), (Tool.MINIMIZE, "V"),
+    (Tool.PLACEMENT_PAUSE, "X"), (Tool.WINDOW_SWITCHER, "C"), (Tool.PLACE_NOW, "D"), (Tool.MINIMIZE, "V"),
 )  # fmt: skip
 CHORDS: Final[frozendict[Request, str]] = frozendict(_CHORD_LETTERS)
 """Ctrl+Alt+Shift + the letter, on the firmware keyboard, asks Workspace for the request."""

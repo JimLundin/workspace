@@ -263,13 +263,13 @@ accessibility-menu **T** and **H**.
 | ⌃⌥⇧ **E** | Focus ↓ |
 | ⌃⌥⇧ **I** | Focus ↑ |
 | ⌃⌥⇧ **O** | Focus → |
-| ⌃⌥⇧ **L** | Desk 1 |
-| ⌃⌥⇧ **U** | Desk 2 |
-| ⌃⌥⇧ **Y** | Desk 3 |
+| ⌃⌥⇧ **J** | Desk 1 |
+| ⌃⌥⇧ **L** | Desk 2 |
+| ⌃⌥⇧ **U** | Desk 3 |
+| ⌃⌥⇧ **Y** | Desk 4 |
 | ⌃⌥⇧ **K** | Desk ← |
 | ⌃⌥⇧ **H** | Desk → |
 | ⌃⌥⇧ **M** | Zoom |
-| ⌃⌥⇧ **J** | Pause place |
 | ⌃⌥⇧ **Q** | Terminal |
 | ⌃⌥⇧ **W** | Browser |
 | ⌃⌥⇧ **F** | Outlook |
@@ -280,6 +280,7 @@ accessibility-menu **T** and **H**.
 | ⌃⌥⇧ **S** | Excel |
 | ⌃⌥⇧ **T** | Word |
 | ⌃⌥⇧ **G** | PowerPoint |
+| ⌃⌥⇧ **X** | Pause place |
 | ⌃⌥⇧ **C** | Windows |
 | ⌃⌥⇧ **D** | Re-place |
 | ⌃⌥⇧ **V** | Min |

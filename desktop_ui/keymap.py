@@ -6,7 +6,6 @@ from enum import Enum, auto
 from typing import Final
 
 from assistant.hotkeys import Route, route
-from miryoku.firmware import CHORDS
 from miryoku.layout import (
     BASE,
     COPY,
@@ -31,7 +30,7 @@ from miryoku.layout import (
     character,
     slot,
 )
-from protocol import App, Request, Tool
+from protocol import App, Tool
 
 
 def _row(first: int, names: str) -> tuple[tuple[Scancode, str], ...]:
@@ -72,16 +71,6 @@ def shortcut(tool: Tool) -> Shortcut | None:
             if binding is tool:
                 return Shortcut(PHYSICAL_NAMES[physical[cell]], PHYSICAL_NAMES[physical[held]])
     return None
-
-
-CHORD_MODIFIERS: Final = "\u2303\u2325\u21e7"
-"""Ctrl, Alt and Shift as keycap symbols: the firmware keyboard's Workspace chord."""
-
-
-def chord_hint(request: Request) -> str | None:
-    """The firmware keyboard's chord for the request, as the pager shows it."""
-    letter = CHORDS.get(request)
-    return f"{CHORD_MODIFIERS} {letter}" if letter is not None else None
 
 
 def shortcut_hint(binding: Shortcut | None, *, compact: bool = False) -> str:
@@ -136,7 +125,7 @@ TOOL_NAMES: Final = {
     Tool.ZOOM: "Zoom", Tool.MINIMIZE: "Min",
     Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",
     Tool.DESKTOP_PREVIOUS: "Desk ←", Tool.DESKTOP_NEXT: "Desk →",
-    Tool.DESKTOP_1: "Desk 1", Tool.DESKTOP_2: "Desk 2", Tool.DESKTOP_3: "Desk 3",
+    Tool.DESKTOP_1: "Desk 1", Tool.DESKTOP_2: "Desk 2", Tool.DESKTOP_3: "Desk 3", Tool.DESKTOP_4: "Desk 4",
     Tool.PLACEMENT_PAUSE: "Pause place", Tool.PLACE_NOW: "Re-place",
     Tool.MEETING_TOGGLE: "Record", Tool.AGENT_VOICE_TOGGLE: "Agent toggle", Tool.COPY_TRANSCRIPT: "Copy speech",
     Tool.DICTATE_TOGGLE: "Dictate toggle",

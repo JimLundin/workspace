@@ -15,13 +15,14 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Final, assert_never
 
-from desktop_ui.keymap import chord_hint, shortcut
+from desktop_ui.keymap import shortcut
 from desktop_ui.shell_items import WEB_APPS, PinnedApp
 from desktop_ui.window_layout import App, Program
+from miryoku.firmware import CHORDS
 from miryoku.layout import Layer
 from protocol import Tool
 
-JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3)
+JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +83,8 @@ def keycap(tool: Tool, keys: Reach) -> str | None:
             found = shortcut(tool)
             return found.tap if found is not None else None
         case Reach.CHORD:
-            return chord_hint(tool)
+            # The hint shows while Ctrl+Alt+Shift are held, so the letter alone completes the chord.
+            return CHORDS.get(tool)
         case _:
             assert_never(keys)
 

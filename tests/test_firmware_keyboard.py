@@ -24,14 +24,15 @@ def test_ctrl_alt_shift_letters_reach_navigation_and_the_apps_layer_app_position
     # order, one side's modifiers are missed, or voice and chord letters collide.
     for held in ({CTRL, ALT, SHIFT}, {RIGHT_CTRL, RIGHT_ALT, RIGHT_SHIFT}):
         assert [shortcut(ord(letter), held) for letter in "NEIO"] == [Tool.FOCUS_LEFT, Tool.FOCUS_DOWN, Tool.FOCUS_UP, Tool.FOCUS_RIGHT]
-        assert [shortcut(ord(letter), held) for letter in "LUYKH"] == [
+        assert [shortcut(ord(letter), held) for letter in "JLUYKH"] == [
             Tool.DESKTOP_1,
             Tool.DESKTOP_2,
             Tool.DESKTOP_3,
+            Tool.DESKTOP_4,
             Tool.DESKTOP_PREVIOUS,
             Tool.DESKTOP_NEXT,
         ]
-        assert [shortcut(ord(letter), held) for letter in "MJCDV"] == [
+        assert [shortcut(ord(letter), held) for letter in "MXCDV"] == [
             Tool.ZOOM,
             Tool.PLACEMENT_PAUSE,
             Tool.WINDOW_SWITCHER,
@@ -47,7 +48,7 @@ def test_other_letters_and_modifier_sets_keep_their_application_meaning() -> Non
     # Defects: matching a partial modifier set, accepting the Office key's Win,
     # or swallowing an unassigned letter or punctuation.
     chord = {CTRL, ALT, SHIFT}
-    for vk in (ord("Z"), ord("X"), 0xBC, 0x31):
+    for vk in (ord("Z"), 0xBC, 0x31):
         assert shortcut(vk, chord) is None
     for held in (set[int](), {CTRL}, {CTRL, ALT}, {ALT, SHIFT}, {CTRL, SHIFT}, {CTRL, ALT, SHIFT, WIN}, {CTRL, ALT, SHIFT, 0x15C}):
         assert shortcut(ord("L"), held) is None

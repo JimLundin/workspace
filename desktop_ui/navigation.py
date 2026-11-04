@@ -132,6 +132,8 @@ def keyed(tool: protocol.Tool) -> Order | None:
             return JumpDesktop(1, Source.KEY)
         case protocol.Tool.DESKTOP_3:
             return JumpDesktop(2, Source.KEY)
+        case protocol.Tool.DESKTOP_4:
+            return JumpDesktop(3, Source.KEY)
         case protocol.Tool.ZOOM:
             return Zoom(Source.KEY)
         case protocol.Tool.PLACEMENT_PAUSE:
