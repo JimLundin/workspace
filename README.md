@@ -624,11 +624,13 @@ edits stay available for follow-up requests in the same conversation, then:
 4. **Install and restart**: the keeper saves the current version and durable
    recovery state, installs the checked copy, clears old bytecode, and restarts
    the layout, assistant, and automation worker. File-write failures restore the previous version.
-5. **A ten-minute trial** offers Keep and Undo, usable with the mouse. Startup
-   failure or a crash undoes the change. Quitting/rebooting during the trial also
-   restores the previous version on the next launch; choose Keep before quitting
-   if you want the update to stay.
-6. **Later**, tray menu → Undo the last update still works after restarting.
+5. **A ten-minute trial**: a startup failure or a crash undoes the change, and
+   quitting or rebooting during the trial restores the previous version on the
+   next launch. After ten minutes without a crash the change stays.
+6. **Merge**: the task commits the installed source to `main` in a fresh clone
+   and pushes it. It refuses when `main` moved since the install's snapshot;
+   the change then stays installed but unmerged until you merge it by hand.
+7. **Later**, tray menu → Undo rolls back the last update, even after restarting.
    Repeated crashes restore the previous version too.
 
 The last 20 versions are kept in `%LOCALAPPDATA%\workspace\versions`. The agent
@@ -641,13 +643,12 @@ your account permissions.
 
 ## Publishing the agent's changes to GitHub
 
-Ask the agent to "make the change and publish it to GitHub". It has a
-`publish_changes` tool: it freezes its workspace, runs the runtime checks,
-commits, and pushes a new
-`workspace/agent-*` branch. It never force-pushes or updates `main`. Publishing does
-not install the change; ask it to publish before applying, since installation
-restarts the agent. In optional approval mode it asks you to approve the diff
-and destination first. Merge the branch on GitHub after review.
+Installed self-changes land on `main` automatically (step 6 above). For a change
+you want to review first, ask the agent to "publish it to GitHub for review". Its
+`publish_changes` tool freezes the workspace, runs the runtime checks, commits,
+and pushes a new `workspace/agent-*` branch without installing it. That path never
+force-pushes or updates `main`. In optional approval mode it asks you to approve
+the diff and destination first. Merge the branch on GitHub after review.
 
 Publishing requires **Git for Windows on PATH** and credentials already set up
 for the repository (for example through Git Credential Manager). The Windows bundle includes the SDK dependencies for the other features. A missing Git installation,
