@@ -133,7 +133,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
     try:
         bar.timer.stop()
         bar.layout(enabled=False)
-        order = (Key.CANVAS, Key.LAYER, Key.STATUS)
+        order = (Key.CANVAS, Key.STATUS)
         before = tuple(bar.window.capsules[key].geometry() for key in order)
         assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
         assert before[0].left() == 12
@@ -144,8 +144,8 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
                 bar.render()
                 capsule = bar.window.capsules[Key.STATUS]
                 assert capsule.view is not None
-                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
-                assert capsule.controls == ()
+                assert capsule.view.slots[1] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
+                assert [button.control.icon for button in capsule.controls] == ["keyboard"]
                 assert capsule.isVisibleTo(bar.window)
                 for name, label in (
                     (bar.system.speaker_icon, bar.system.speaker_description),
@@ -234,8 +234,9 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         bar.agent_changed(Agent("Which sheet?", waiting=True))
         press(bar, Key.ISLAND)
         bar.layout(enabled=False)
-        assert "Colemak" in bar.window.capsules[Key.LAYER].accessibleName()
-        press(bar, Key.LAYER)
+        (keys,) = bar.window.capsules[Key.STATUS].controls
+        assert keys.control.icon == "keyboard" and "Colemak" in keys.accessibleName()
+        keys.click()
         bar.inbox_changed(120)
         assert "120 clarifications" in bar.window.capsules[Key.INBOX].accessibleName()
         press(bar, Key.INBOX)

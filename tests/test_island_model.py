@@ -69,13 +69,15 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                 replace(baseline, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING),
             ):
                 for expanded in (None, Expansion.MENU, Expansion.REQUEST):
-                    # The open menu is the status capsule itself; the other fixed controls stay.
-                    for key in (Key.CANVAS, Key.LAYER) if expanded is Expansion.MENU else (Key.CANVAS, Key.LAYER, Key.STATUS):
-                        assert view(observed, key, expanded=expanded) == view(baseline, key)
+                    # The open menu is the status capsule itself; its row, keyboard state included, stays.
+                    assert view(observed, Key.CANVAS, expanded=expanded) == view(baseline, Key.CANVAS)
+                    fixed = view(observed, Key.STATUS, expanded=expanded)
+                    assert fixed.slots == view(baseline, Key.STATUS).slots
+                    assert expanded is Expansion.MENU or fixed == view(baseline, Key.STATUS)
                     activity = (each for each in island(observed, expanded=expanded) if each.zone not in (Zone.LEFT, Zone.RIGHT))
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
             status = view(baseline, Key.STATUS)
-            assert status.slots[0] == (Glyph(baseline.system.speaker_icon), Glyph(baseline.system.wifi_icon))
+            assert status.slots[-2] == (Glyph(baseline.system.speaker_icon), Glyph(baseline.system.wifi_icon))
             assert status.action is Action.OPEN_MENU
             assert baseline.system.speaker_description in status.label
             assert baseline.system.wifi_description in status.label
@@ -141,13 +143,16 @@ def test_inbox_only_exists_while_pending_and_keeps_exact_count_in_label() -> Non
     assert view(replace(RESTING, inbox=1), Key.INBOX).label.startswith("1 clarification needs your input")
 
 
-def test_keyboard_is_temporary_icon_only_with_state_in_accessible_label() -> None:
+def test_keyboard_is_temporary_icon_only_leading_the_fixed_cluster_with_state_in_its_label() -> None:
+    # Defects: the keyboard state shows while irrelevant, leaves the fixed cluster,
+    # loses its key-map press, or its press opens the controls menu instead.
     assert keyboard(enabled=True, layer=None) is None
     assert keyboard(enabled=False, layer=None) == "Colemak"
     assert keyboard(enabled=True, layer="NAV · locked") == "NAV · locked"
-    layer = view(replace(RESTING, keyboard="NAV"), Key.LAYER)
-    assert (layer.zone, layer.action, layer.slots) == (Zone.RIGHT, Action.OPEN_KEYMAP, ((Glyph("keyboard"),),))
-    assert "NAV" in layer.label
+    status = view(replace(RESTING, keyboard="NAV"), Key.STATUS)
+    assert status.slots[0] == (Control("keyboard", "NAV · Open key map", Action.OPEN_KEYMAP),)
+    assert status.slots[1:] == view(RESTING, Key.STATUS).slots
+    assert status.action is Action.OPEN_MENU
 
 
 def test_recording_phases_read_and_stop_as_capture_allows() -> None:

@@ -247,10 +247,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     edge = max(0.0, metrics.width - 12)
     left_fixed = tuple(boxed(capsule, 12) for capsule in zone(Zone.LEFT) if shown(capsule) <= max(0.0, metrics.width - 24))
     minimum = max((each.box.x + each.box.width + metrics.gap for each in left_fixed), default=0.0)
-    for key in (Key.STATUS, Key.LAYER):
-        capsule = next((c for c in zone(Zone.RIGHT) if c.key is key), None)
-        if capsule is None:
-            continue
+    for capsule in reversed(zone(Zone.RIGHT)):
         width = shown(capsule)
         if width > edge:
             continue  # Omit an unfit capsule rather than overlap another hit target.
