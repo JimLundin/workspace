@@ -51,6 +51,7 @@ SLOW: Final = frozenset(
         "tests/test_self_review.py::test_history_tool_pages_day_and_recent_then_drills_into_diagnostics",
         "tests/test_selfcheck.py::test_a_change_runs_only_the_tests_that_import_it",
         "tests/test_selfcheck.py::test_fast_checks_defer_native_tests_but_the_default_install_gate_runs_them",
+        "tests/test_selfcheck.py::test_fast_checks_still_compile_native_tests_and_import_production_modules",
         "tests/test_selfcheck.py::test_worker_modules_report_their_passes_and_failures",
         "tests/test_source_analysis.py::test_cached_quality_cannot_accept_changed_boolean_signature_or_import_ownership",
         "tests/test_work_execution.py::test_cancelling_a_check_terminates_its_candidate_process",
