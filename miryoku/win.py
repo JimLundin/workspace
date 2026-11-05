@@ -18,6 +18,7 @@ from miryoku import hook_watch
 from miryoku.engine import QUIET, Engine, Indicator, Signal, Verdict
 from miryoku.firmware import MODIFIER_KEYS, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, Modifiers, connected, modifiers, shortcut
 from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
+from miryoku.windows_key import WindowsKeyTap
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
@@ -29,6 +30,7 @@ from protocol import (
     WM_QUERY_LAYOUT_STATE,
     WM_REQUEST,
     WM_TOGGLE_LAYOUT,
+    WM_WINDOWS_KEY_TAP,
     LayoutState,
     Request,
     encode,
@@ -220,6 +222,7 @@ class Keyboard:
         "recovery_ticks",
         "shortcuts",
         "watch",
+        "windows_key",
     )
 
     def __init__(self, platform: KeyboardSystem | None = None) -> None:
@@ -247,6 +250,8 @@ class Keyboard:
         self.hook_tick: int | None = None
         """The newest key time the hook has seen; the hook's only watchdog cost."""
         self.watch: hook_watch.Watch = hook_watch.Answered.ANSWERED
+        self.windows_key = WindowsKeyTap()
+        """Bare Windows-key taps toggle the assistant's taskbar."""
 
     def on_message(self, message: int) -> None:
         """Tray requests; toggling uses the same re-entrancy guard as physical keys."""
@@ -403,6 +408,7 @@ class Keyboard:
             try:
                 key = self.platform.read_key_event(lparam)
                 self.hook_tick = key.time
+                self.observe_windows_key(key, down=down)
                 if self.swallow(key, down=down):
                     return 1
             except Exception as error:
@@ -410,6 +416,11 @@ class Keyboard:
                 with contextlib.suppress(Exception):
                     self.input_failed(error)
         return self.platform.call_next_hook(code, wparam, lparam)
+
+    def observe_windows_key(self, key: inputs.KeyEvent, *, down: bool) -> None:
+        """Physical keys and the layout's own output (a home row Win) count; other injected input does not."""
+        if (not key.flags & inputs.LLKHF_INJECTED or key.extra == LAYOUT_MAGIC) and self.windows_key.key(key.vk, down=down):
+            self.host.tell_assistant(WM_WINDOWS_KEY_TAP, 0, 0)
 
     def watch_hook(self, now: int) -> hook_watch.Reinstall | None:
         """Probe a hook suspected dead; the hook's owner acts on a reinstall."""
@@ -580,6 +591,8 @@ def run() -> Exit:
     if lock is None:
         return Exit.ALREADY_RUNNING
     window = windows.create_hidden(LAYOUT.window.title)  # receives control requests from the assistant and keeper
+    with contextlib.suppress(OSError):  # without it the hook still works, only more slowly under load
+        system.keep_responsive()
     try:
         keyboard = Keyboard()
         keyboard.update_devices()

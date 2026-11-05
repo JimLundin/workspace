@@ -86,7 +86,7 @@ lazy from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 lazy from desktop_ui.tray import Tray
 lazy from desktop_ui.ui import Ui
 lazy from miryoku.layout import Layer
-lazy from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode_indicator
+lazy from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, WM_WINDOWS_KEY_TAP, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
 lazy from winapi.pcm import RATE
 lazy from winapi.shapes import Rect, Window
@@ -684,6 +684,9 @@ class AssistantApp:
                 return 0
             if message == WM_CHORD:
                 self.ui.desktop_chord(held=bool(wparam))
+                return 0
+            if message == WM_WINDOWS_KEY_TAP:
+                self.ui.toggle_taskbar()
                 return 0
             if message == system.WM_CLOSE:  # the keeper asks: it's restarting or installing
                 self.quit()

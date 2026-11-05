@@ -1,6 +1,5 @@
 """Native shell behavior with isolated views and controlled Windows boundaries."""
 
-import ctypes
 import sys
 import unittest
 
@@ -11,11 +10,11 @@ lazy from PySide6 import QtCore, QtGui
 
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
-from desktop_ui.shell_controls import TaskbarControl, WindowsKeyDispatch, WindowsKeyEffects
+from desktop_ui.shell_controls import TaskbarControl
 from miryoku.win import Keyboard, maintain_keyboard
-from protocol import LAYOUT_MAGIC, WM_TOGGLE_LAYOUT
+from protocol import WM_TOGGLE_LAYOUT
 from tests.test_windows_bindings import KeyboardFixture
-from winapi import inputs, keyboard_language, system
+from winapi import keyboard_language
 lazy from desktop_ui.window_switcher import WindowSwitcher
 lazy from winapi.shapes import Window
 
@@ -160,28 +159,6 @@ def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown()
 
 def assert_language_restored(desktop: LanguageDesktop) -> None:
     assert desktop.activations[-1] == 0xF002041D and desktop.requests[-1] == (22, 0xF002041D)
-
-
-def test_windows_key_observer_preserves_input_and_ignores_other_injected_keys() -> None:
-    toggled: list[int] = []
-    forwarded: list[tuple[int, int, int]] = []
-
-    def forward(code: int, message: int, pointer: int) -> int:
-        forwarded.append((code, message, pointer))
-        return 123
-
-    # Read real native structures; only delivery to the next hook and Qt is inert.
-    dispatch = WindowsKeyDispatch(99, WindowsKeyEffects(forward=forward, toggle=toggled.append))
-    for extra, flags, expected in ((0, inputs.LLKHF_INJECTED, 0), (0, 0, 1), (LAYOUT_MAGIC, inputs.LLKHF_INJECTED, 2)):
-        event = inputs.KBDLLHOOKSTRUCT(0x5B, 0x5B, flags, 0, extra)
-        pointer = ctypes.addressof(event)
-        for message in (system.WM_KEYDOWN, system.WM_KEYUP):
-            assert dispatch.observe(0, message, pointer) == 123
-            assert forwarded[-1] == (0, message, pointer)
-        assert toggled == [99] * expected
-    assert dispatch.observe(-1, system.WM_KEYDOWN, 0) == 123
-    assert dispatch.observe(0, 0, 0) == 123
-    assert len(forwarded) == 8 and toggled == [99, 99]
 
 
 def test_window_switcher_search_navigation_and_activation() -> None:

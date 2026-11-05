@@ -32,12 +32,24 @@ _MessageBeep = fn(user32, "MessageBeep", wintypes.BOOL, wintypes.UINT)
 _MessageBoxW = fn(user32, "MessageBoxW", ctypes.c_int, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT)
 _GetCurrentThreadId = fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
 _GetTickCount = fn(kernel32, "GetTickCount", wintypes.DWORD)
+_GetCurrentProcess = fn(kernel32, "GetCurrentProcess", wintypes.HANDLE)
+_SetPriorityClass = fn(kernel32, "SetPriorityClass", wintypes.BOOL, wintypes.HANDLE, wintypes.DWORD)
+_SetProcessInformation = fn(kernel32, "SetProcessInformation", wintypes.BOOL, wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
 _CreateMutexW = fn(kernel32, "CreateMutexW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
 _CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _CreateEventW = fn(kernel32, "CreateEventW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR)
 _WaitForMultipleObjects = fn(
     kernel32, "WaitForMultipleObjects", wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE), wintypes.BOOL, wintypes.DWORD
 )
+
+_HIGH_PRIORITY_CLASS: Final = 0x0080
+_PROCESS_POWER_THROTTLING: Final = 4  # PROCESS_INFORMATION_CLASS.ProcessPowerThrottling
+_THROTTLE_EXECUTION_SPEED: Final = 0x1
+
+
+class _PowerThrottling(ctypes.Structure):
+    _fields_ = (("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG))
+
 
 Lock = NewType("Lock", int)
 EventHandle = NewType("EventHandle", int)
@@ -156,3 +168,20 @@ def wait_any(events: Sequence[EventHandle], timeout_ms: int | None = None) -> in
     if index == 0x102:  # WAIT_TIMEOUT
         return None
     raise last_error()
+
+
+def keep_responsive() -> None:
+    """Run this process at high priority and out of Windows 11's efficiency mode.
+
+    A process with no visible window counts as background work, so Windows may
+    put it on slow cores and let busier programs take its CPU. A low-level hook
+    that answers late misses Windows' deadline, and the key it meant to swallow
+    reaches the application anyway.
+    """
+    process = _GetCurrentProcess()
+    if not _SetPriorityClass(process, _HIGH_PRIORITY_CLASS):
+        raise last_error()
+    # Control execution speed and set its state to off: never throttle.
+    state = _PowerThrottling(1, _THROTTLE_EXECUTION_SPEED, 0)
+    if not _SetProcessInformation(process, _PROCESS_POWER_THROTTLING, ctypes.byref(state), ctypes.sizeof(state)):
+        raise last_error()

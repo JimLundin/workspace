@@ -1,104 +1,14 @@
-"""Native taskbar ownership and a Windows-key observer, independent of any canvas."""
+"""Native taskbar ownership, independent of any canvas. The layout observes the Windows key."""
 
 import os
 import subprocess
 import sys
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from desktop_ui.shell_state import WindowsKeyTap
-from protocol import LAYOUT_MAGIC
-from winapi import desktop_shell, inputs, system
-
-TASKBAR_TOGGLE = 0x8055
-
-
-def toggle_taskbar(hwnd: int) -> None:
-    system.post_message(hwnd, TASKBAR_TOGGLE, 0, 0)
-
-
-@dataclass(frozen=True, slots=True)
-class WindowsKeyEffects:
-    read: Callable[[int], inputs.KeyEvent] = inputs.read_key_event
-    forward: inputs.HookProc = inputs.call_next_hook
-    toggle: Callable[[int], None] = toggle_taskbar
-
-
-class WindowsKeyDispatch:
-    """Own tap recognition while the hook adapter owns input observation and delivery."""
-
-    __slots__ = ("effects", "hwnd", "state")
-
-    def __init__(self, hwnd: int, effects: WindowsKeyEffects | None = None) -> None:
-        self.hwnd = hwnd
-        self.effects = effects if effects is not None else WindowsKeyEffects()
-        self.state = WindowsKeyTap()
-
-    def observe(self, code: int, wparam: int, lparam: int) -> int:
-        if code == 0 and wparam in (system.WM_KEYDOWN, system.WM_KEYUP, system.WM_SYSKEYDOWN, system.WM_SYSKEYUP):
-            key = self.effects.read(lparam)
-            if not key.flags & inputs.LLKHF_INJECTED or key.extra == LAYOUT_MAGIC:
-                down = wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN)
-                self.state, toggle = self.state.key(key.vk, down=down)
-                if toggle:
-                    self.effects.toggle(self.hwnd)
-        return self.effects.forward(code, wparam, lparam)
-
-
-class WindowsKeyObserver:
-    """Own the global keyboard hook on a message thread independent of Qt painting."""
-
-    __slots__ = ("dispatch", "error", "hook", "ready", "stopped", "thread")
-
-    def __init__(self, hwnd: int) -> None:
-        self.dispatch = WindowsKeyDispatch(hwnd)
-        self.hook: inputs.Hook | None = None
-        self.error: OSError | None = None
-        self.ready = threading.Event()
-        self.stopped = threading.Event()
-        self.thread = threading.Thread(target=self.run, name="taskbar keyboard messages", daemon=True)
-        self.thread.start()
-        self.wait_ready()
-
-    def wait_ready(self) -> None:
-        if not self.ready.wait(timeout=3):
-            self.close()
-            raise OSError("The taskbar keyboard observer did not become ready.")
-        if self.error is not None:
-            self.close()
-            raise self.error
-
-    def run(self) -> None:
-        timer: int | None = None
-        try:
-            self.hook = inputs.set_keyboard_hook(self.dispatch.observe)
-            if self.hook is None:
-                raise OSError("Windows could not register the taskbar key. Its taskbar remains available.")
-            timer = system.set_timer(50)
-            if not timer:
-                raise OSError("Windows could not start the taskbar keyboard message loop.")
-            self.ready.set()
-            for _ in system.messages():
-                if self.stopped.is_set():
-                    break
-        except OSError as error:
-            self.error = error
-        finally:
-            if timer is not None:
-                system.kill_timer(timer)
-            if self.hook is not None:
-                inputs.remove_hook(self.hook)
-                self.hook = None
-            self.ready.set()
-
-    def close(self) -> None:
-        self.stopped.set()
-        self.thread.join(timeout=3)
-        if self.thread.is_alive():
-            raise OSError("The taskbar keyboard observer did not release its hook.")
+from winapi import desktop_shell
 
 
 class TaskbarDesktop(Protocol):

@@ -7,10 +7,8 @@ seconds; that's why it only runs when asked: `WORKSPACE_E2E=1 pytest tests/test_
 import ctypes
 import json
 import os
-import queue
 import subprocess
 import sys
-import threading
 import time
 import unittest
 from collections.abc import Callable, Generator
@@ -24,8 +22,7 @@ from desktop_ui.qt_runtime import prepare
 from protocol import MAGIC
 from tests.json_fixture import json_value
 lazy from desktop_ui.qt_ui import application
-lazy from desktop_ui.shell_controls import WindowsKeyObserver
-lazy from winapi import inputs, shell, system, windows
+lazy from winapi import inputs, system, windows
 lazy from winapi._core import fn, kernel32, user32
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -141,67 +138,6 @@ def input_response(body: bytes) -> int | str:
     if isinstance(value, str) and len(value) <= 1024:
         return value
     raise ValueError("Invalid native input-fixture response.")
-
-
-def test_taskbar_observer_keeps_keyboard_responsive_while_creator_waits() -> None:
-    assert not layout_running(), "Preserve a running keyboard layout."
-    fixture = subprocess.Popen(
-        [sys.executable, "-m", "tests.test_windows_e2e", "--input-fixture"],
-        cwd=ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        creationflags=subprocess.CREATE_NO_WINDOW,
-    )
-    stream = fixture.stdout
-    assert stream is not None
-    responses: queue.Queue[int | str] = queue.Queue(maxsize=128)
-
-    def read() -> None:
-        for line in stream:
-            responses.put_nowait(input_response(line))
-
-    reader = threading.Thread(target=read, name="native input observations", daemon=True)
-    reader.start()
-    handle = responses.get(timeout=8)
-    assert isinstance(handle, int)
-    owner = shell.AppWindow("Workspace input-check owner", lambda _h, _m, _w, _l: None)
-    observer: WindowsKeyObserver | None = None
-    sender: threading.Thread | None = None
-    try:
-        focus_fixture(handle)
-        inputs.type_text("x", MAGIC)
-        assert responses.get(timeout=2) == "x"
-        observer = WindowsKeyObserver(owner.handle)
-
-        def send() -> None:
-            inputs.type_text("y", MAGIC)
-
-        sender = threading.Thread(target=send, name="native input sender", daemon=True)
-        started = time.monotonic()
-        sender.start()
-        # The independent text field keeps pumping while the toolbar's creator waits.
-        try:
-            response = responses.get(timeout=0.2)
-        except queue.Empty as error:
-            raise AssertionError("Typing stalled behind the taskbar hook.") from error
-        assert response == "xy"
-        assert time.monotonic() - started < 0.2, "Typing stalled behind the taskbar hook."
-    finally:
-        if observer is not None:
-            observer.close()
-        owner.destroy()
-        if sender is not None:
-            sender.join(timeout=2)
-        system.post_message(handle, system.WM_CLOSE, 0, 0)
-        try:
-            fixture.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            fixture.terminate()  # This test owns the disposable input process.
-            fixture.wait(timeout=3)
-        reader.join(timeout=2)
-        for pipe in (fixture.stdout, fixture.stderr):
-            if pipe is not None:
-                pipe.close()
 
 
 def test_mapped_typing_and_unicode_dictation_reach_a_real_console(tmp_path: Path) -> None:

@@ -61,7 +61,7 @@ lazy from desktop_ui.navigation import CycleApp, Order, Placing, ShowWindow, Sou
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
-lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
+lazy from desktop_ui.shell_controls import TaskbarControl
 lazy from desktop_ui.shell_items import EMPTY_SHELF, Application, Item, Pinned, Shelf
 lazy from desktop_ui.window_layout import Program
 lazy from protocol import Tool
@@ -134,7 +134,6 @@ class DesktopBar:
         "hovered",
         "inbox",
         "job",
-        "keys",
         "last_frame",
         "layout_enabled",
         "loop",
@@ -210,7 +209,6 @@ class DesktopBar:
         self.taskbar = TaskbarControl()
         self.controls: shell.AppWindow | None = None
         self.away_screens: AwayScreens | None = None
-        self.keys: WindowsKeyObserver | None = None
         self.worker: threading.Thread | None = None
         self.loop = EventLoop(application(), self.paint_frames)
         self.materials = appearance.FrostSampler()
@@ -271,7 +269,6 @@ class DesktopBar:
         self.tray_host = TrayHost()
         self.application_service = ApplicationObserver(self.errors.put)
         self.hints = KeyHintOverlay(NativeOverlayDesktop())
-        self.keys = WindowsKeyObserver(self.controls.handle)
         self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
         self.worker.start()
 
@@ -282,9 +279,6 @@ class DesktopBar:
             self.errors.put(str(error))
 
     def message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
-        if message == TASKBAR_TOGGLE:
-            self.toggle_taskbar()
-            return 0
         if self.away_screens is not None:
             self.away_screens.message(message, wparam)
         return None
@@ -860,8 +854,6 @@ class DesktopBar:
         if self.application_service is not None:
             self.application_service.close()
         try:
-            if self.keys is not None:
-                self.keys.close()
             self.taskbar.close()
             if self.worker is not None:
                 self.worker.join(timeout=6)
