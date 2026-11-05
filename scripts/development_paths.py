@@ -14,7 +14,7 @@ else:
     USER = Path.home()
     LOCAL = USER / ".local" / "share"
 
-LIVE = USER / "Downloads" / "workspace-sdk" / "workspace"
+LIVE = USER / "AppData" / "Local" / "Programs" / "workspace-sdk" / "workspace"
 TEMP = LOCAL / "Temp"
 PROFILE = LOCAL / "workspace"
 PYTHON = LOCAL / "Programs" / "Python" / "Python315" / "python.exe"

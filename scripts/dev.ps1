@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $python = Join-Path $root '.venv\Scripts\python.exe'
 if (-not (Test-Path $python)) { throw 'Create the Windows .venv before running development commands.' }
-$env:WORKSPACE_BUNDLED_RUNTIME = Join-Path $env:USERPROFILE 'Downloads\workspace-sdk\workspace\.runtime'
+$env:WORKSPACE_BUNDLED_RUNTIME = Join-Path $env:LOCALAPPDATA 'Programs\workspace-sdk\workspace\.runtime'
 $env:PATH = "C:\Program Files\Git\cmd;$env:PATH"
 Push-Location $root
 try {

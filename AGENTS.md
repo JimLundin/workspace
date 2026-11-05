@@ -81,7 +81,7 @@ Work is done only when it is committed, deployed and pushed.
   stash or an unpushed branch.
 - Deploy with `Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`.
   The running keeper installs it into
-  `C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace` and restarts only
+  `C:\Users\Jim.Lundin\AppData\Local\Programs\workspace-sdk\workspace` and restarts only
   what changed; a stopped copy just receives the files. The user has authorized
   this without asking. The ZIP changes only with `scripts/bundle.py`, which a
   `.python-version` or `requirements/` lock change requires. Report any refusal
