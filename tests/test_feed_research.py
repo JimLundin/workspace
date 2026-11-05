@@ -82,7 +82,7 @@ def test_screening_rejects_missing_duplicate_and_unknown_sources_before_research
         with fake_endpoint() as endpoint:
             endpoint.replies = [screening_reply(items)]
             with TestCase().assertRaises(ValueError):
-                classify(Settings(endpoint.url, "fixture", "transcribe", "", ""), (first, second), ())
+                classify(Settings(endpoint.url, "fixture", "transcribe", ""), (first, second), ())
             assert len(endpoint.received) == 1
 
 
@@ -124,7 +124,7 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
                 calls(("write_file", {"path": str(path), "text": "modified"})),
                 says(output(([batch[0].identity], "action"))),
             ]
-            settings = Settings(endpoint.url, "fixture", "transcribe", "", "", agent_reasoning_effort="high")
+            settings = Settings(endpoint.url, "fixture", "transcribe", "", agent_reasoning_effort="high")
             research = Research(settings, triage.research_context, triage.research_conversation, stop=triage.closed)
             review = classify(settings, batch, (), research=research, clock=lambda: 50)
             requests = tuple(_OBJECT.validate_json(item.body) for item in endpoint.received[1:])
@@ -218,7 +218,7 @@ def test_public_research_supplies_findings_or_an_explicit_access_gap_without_los
                 return endpoint.replies.pop(0)
 
             endpoint.respond = respond
-            settings = Settings(endpoint.url, "fixture", "transcribe", "", "", fast_model="quick", agent_model="agent")
+            settings = Settings(endpoint.url, "fixture", "transcribe", "", fast_model="quick", agent_model="agent")
             review = classify(settings, batch, ())
             assert len(decode(review, batch)) == 1 and len(endpoint.received) == 4
             evidence = endpoint.last.body.decode()
@@ -230,7 +230,7 @@ def test_shutdown_cancels_a_pending_model_request_without_waiting_for_network_ti
     # provider timeout, or publishes a recommendation after cancellation.
     entered, release, stop = threading.Event(), threading.Event(), threading.Event()
     with fake_endpoint() as endpoint:
-        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "")
         endpoint.replies = [says('{"items": []}')]
         request = ReviewInput("2026-11-02T10:00:00+00:00", (), "")
         Research(settings).review(request, INSTRUCTIONS)

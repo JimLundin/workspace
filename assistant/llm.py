@@ -38,8 +38,6 @@ class Settings:
     transcribe_model: str
     vocabulary: str
     """Names and terms to expect when transcribing; helps with jargon. Empty: none."""
-    language: str
-    """An ISO code such as `sv` or `en` for transcription. Empty: detected."""
     fast_model: str = FAST_MODEL
     """Quick jobs: tidying dictation and screening notifications."""
     agent_model: str = AGENT_MODEL
@@ -67,9 +65,8 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
     return Settings(
         base_url=env["OPENAI_BASE_URL"].rstrip("/"),
         api_key=env["OPENAI_API_KEY"],
-        transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
+        transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-transcribe"),
         vocabulary=env.get("WORKSPACE_VOCABULARY", ""),
-        language=env.get("WORKSPACE_LANGUAGE", ""),
         fast_model=env.get("WORKSPACE_FAST_MODEL", FAST_MODEL),
         agent_model=env.get("WORKSPACE_AGENT_MODEL", AGENT_MODEL),
         agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
@@ -196,7 +193,6 @@ def transcribe(settings: Settings, audio: bytes, *, timeout_s: float = 60, conte
                 file=("speech.wav", audio, "audio/wav"),
                 response_format="json",
                 prompt=prompt or omit,
-                language=settings.language or omit,
             ).content
     except (APIStatusError, APIConnectionError) as error:
         return _failure(settings, error)

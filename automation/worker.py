@@ -298,7 +298,7 @@ def native_runner(  # noqa: PLR0913 - the execution's independent owners
         saved = select_context(contexts.list(), task.prompt[:20_000], time.time()).describe()
         return RequestContext(worker.invocation(task.id), saved, context)
 
-    usable = settings if isinstance(settings, Settings) else Settings("", "", "", "", "")
+    usable = settings if isinstance(settings, Settings) else Settings("", "", "", "")
     landing = Landing(os.environ.get("WORKSPACE_GIT_REMOTE", DEFAULT_REMOTE), os.environ.get("WORKSPACE_GIT_BASE", "main"))
     try:
         execution = AgentExecution(

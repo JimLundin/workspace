@@ -240,7 +240,6 @@ class Rig:
             "k",
             "transcribe",
             "",
-            "",
             agent_reasoning_effort=effort,
         )
         agent = Agent(
@@ -285,7 +284,7 @@ class ToolRig:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
         self.agent = Agent(
-            Settings("", "", "", "", ""),
+            Settings("", "", "", ""),
             self.machine,
             self.window,
             threading.Event(),
@@ -680,7 +679,7 @@ def test_stop_prevents_actions(tmp_path: Path) -> None:
     stopped.set()
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", ""),
+        Settings("", "", "", ""),
         machine,
         FakeWindow(),
         stopped,

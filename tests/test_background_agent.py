@@ -43,7 +43,7 @@ def test_stopped_agent_cannot_start_recording(tmp_path: Path) -> None:
     # recording owner after the user stopped the work.
     machine, cancel = FakeMachine(), threading.Event()
     agent = Agent(
-        Settings("", "", "", "", ""),
+        Settings("", "", "", ""),
         machine,
         FakeWindow(),
         cancel,
@@ -83,7 +83,7 @@ def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -
     # instance through its arguments.
     machine = FakeMachine()
     agent = Agent(
-        Settings("", "", "", "", ""),
+        Settings("", "", "", ""),
         machine,
         FakeWindow(),
         threading.Event(),
@@ -104,7 +104,7 @@ def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -
 def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(tmp_path: Path) -> None:
     machine, window, cancel = FakeMachine(), FakeWindow(), threading.Event()
     agent = Agent(
-        Settings("", "", "", "", ""),
+        Settings("", "", "", ""),
         machine,
         window,
         cancel,
