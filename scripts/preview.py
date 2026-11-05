@@ -5,6 +5,7 @@ import inspect
 import json
 import os
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -18,15 +19,16 @@ from runtime import activate
 lazy from assistant.recording_state import RecordingState
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.island_model import Agent, Job
+lazy from desktop_ui.island_moment import Notice
 lazy from desktop_ui.qt_ui import application
 lazy from winapi import screen
 
 prepare()
 
-SCENARIOS = ("Idle", "Agent working", "Recording", "Keyboard mode", "Needs input", "Transcribing", "Dictating", "Everything at once")
+SCENARIOS = ("Idle", "Agent working", "Recording", "Keyboard mode", "Needs input", "Transcribing", "Dictating", "Everything at once", "Agent reply")
 
 
-WORKING: Final = Agent("Comparing both sheets", waiting=False)
+WORKING: Final = Agent("Comparing both sheets", waiting=False, steps=("Read file", "Checking the plans", "PowerShell"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +141,11 @@ class Preview:
             self.bar.agent_changed(WORKING if index in (1, 7) else asking if index == 4 else None)
             self.bar.job_changed(Job.TRANSCRIBING if index in (5, 7) else None)
             self.bar.dictation(active=index in (6, 7))
+            if index == 8:
+                # A fresh identity announces the sample again each time it is chosen.
+                at = time.time()
+                text = "Revenue is up 4% against the approved figures; travel is 12% over the Q3 forecast."
+                self.bar.notices_changed((Notice(f"reply:preview:{at}", "Compare the budget sheets", text, None, at),))
         self.status.setText("Sample state: " + SCENARIOS[index])
 
     def tick(self) -> None:
