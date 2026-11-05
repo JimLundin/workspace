@@ -35,7 +35,7 @@ lazy from desktop_ui.away_screens import AwayScreens
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
-lazy from desktop_ui.desktop_pager import Swipe, pager, swipe
+lazy from desktop_ui.desktop_pager import pager
 lazy from desktop_ui.island_layout import HEIGHT, Content, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import (
     Applied,
@@ -57,7 +57,7 @@ lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, 
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import PANEL_DELAY, hints
-lazy from desktop_ui.navigation import BarScroll, CycleApp, Order, Placing, ShowWindow, Source
+lazy from desktop_ui.navigation import CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
@@ -157,7 +157,6 @@ class DesktopBar:
         "sample_bounds",
         "sampled_at",
         "status_service",
-        "swipe",
         "system",
         "taskbar",
         "timer",
@@ -181,7 +180,6 @@ class DesktopBar:
         self.actions = actions
         self.applications: Shelf = EMPTY_SHELF
         self.arrangement: Arrangement = EMPTY_ARRANGEMENT
-        self.swipe: Swipe | None = None
         self.application_service: ApplicationObserver | None = None
         self.tray_host: TrayHost | None = None
         self.observations = BarObservations() if observations is None else observations
@@ -332,11 +330,6 @@ class DesktopBar:
                 self.navigate(CycleApp(app, Source.TOOLBAR))
             case Application(identity=identity):
                 self.navigate(CycleApp(Program(identity), Source.TOOLBAR))
-
-    def scroll(self, delta: int) -> None:
-        self.swipe, step = swipe(self.swipe, delta, self.observations.clock())
-        if step:
-            self.navigate(BarScroll(step, Source.SCROLL))
 
     def navigate(self, order: Order) -> None:
         """The application observer owns windows and desktops; it carries out every navigation."""

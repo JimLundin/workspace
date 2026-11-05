@@ -14,7 +14,7 @@ from typing import Final
 
 import protocol
 from desktop_ui.keymap import describe
-from desktop_ui.navigation import AppKey, Direction, Focus, JumpDesktop, Source, SpatialFocus, StepDesktop, World, effect, identity, keyed, launcher
+from desktop_ui.navigation import AppKey, Direction, Focus, JumpDesktop, Source, SpatialFocus, World, effect, identity, keyed, launcher
 from miryoku.firmware import CHORDS
 from protocol import Request, Tool
 from winapi.shapes import Rect
@@ -95,7 +95,7 @@ def section(request: Request) -> Section:
             match keyed(request):
                 case SpatialFocus():
                     return Section.FOCUS
-                case StepDesktop() | JumpDesktop():
+                case JumpDesktop():
                     return Section.DESKTOPS
                 case _:
                     return Section.WINDOW

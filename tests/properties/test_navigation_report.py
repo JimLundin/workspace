@@ -11,7 +11,7 @@ from desktop_ui.window_layout import LAYOUTS, App, Setup
 from tests.properties.generation import cases, property_test
 
 APPS = ("windowsterminal.exe", "code.exe", "msedge.exe", "outlook", "teams", "notepad.exe", None)
-CAUSES: tuple[Cause, ...] = ("key", "pager", "scroll", "toolbar", "alt_tab", "mouse", "other")
+CAUSES: tuple[Cause, ...] = ("key", "pager", "toolbar", "alt_tab", "mouse", "other")
 CLOCK = datetime(2026, 11, 4, 9, 30, tzinfo=timezone(timedelta(hours=1)))
 
 

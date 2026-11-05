@@ -10,7 +10,7 @@ from assistant.llm import MAX_SECONDS, Missing, Settings
 from automation.json_value import Json
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
-from desktop_ui.navigation import AppKey, Direction, JumpDesktop, Order, Placing, Source, SpatialFocus, StepDesktop, Zoom
+from desktop_ui.navigation import AppKey, Direction, JumpDesktop, Order, Placing, Source, SpatialFocus, Zoom
 from protocol import App, Installed, Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
 from usage import Detail
@@ -472,12 +472,11 @@ def test_app_and_navigation_keys_hand_their_orders_to_the_window_owner() -> None
     # jumps to the wrong desktop, or placement keys are dropped.
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint)
-        for request in (TERMINAL, Tool.DESKTOP_2, Tool.DESKTOP_PREVIOUS, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE):
+        for request in (TERMINAL, Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE):
             rig.press(request)
         assert rig.desktop.orders == [
             AppKey(TERMINAL, Source.KEY),
             JumpDesktop(1, Source.KEY),
-            StepDesktop(-1, Source.KEY),
             SpatialFocus(Direction.UP, Source.KEY),
             Zoom(Source.KEY),
             Placing.TOGGLE_PAUSE,

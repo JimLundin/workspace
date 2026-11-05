@@ -19,7 +19,7 @@ from desktop_ui.components.appearance import GlassLook, Look, SolidLook
 from desktop_ui.components.text import color
 from desktop_ui.desktop_pager import PagerView
 from desktop_ui.island_layout import CONTROL, HEIGHT, ICON, PART_GAP
-from desktop_ui.navigation import Navigation, PagerClick, Source, StepDesktop
+from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.shell_items import WEB_APPS, Application, Item, Pinned, Shelf
 from desktop_ui.vector_icons import icon
 from winapi.icon_pixels import Pixels
@@ -145,13 +145,13 @@ class ShellButton(KeyboardFocus):
 
 
 class HorizontalScroll(QtWidgets.QScrollArea):
-    """Qt owns overflow; vertical wheel input moves the horizontal icon strip, and a horizontal swipe goes on to the bar."""
+    """Qt owns overflow; vertical wheel input moves the horizontal icon strip, as horizontal input does natively."""
 
     @override
     def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
         delta = event.angleDelta()
         if delta.x() or event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            event.ignore()
+            super().wheelEvent(event)
             return
         self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.y())
         event.accept()
@@ -259,7 +259,7 @@ class ShellSections:
         return self.pinned, self.pager, self.apps
 
     def desktops(self, view: PagerView, invoke: Callable[[Navigation], None]) -> None:
-        """Previous, each desktop, then next; a pager of one desktop stays hidden."""
+        """Each desktop, reached directly; a pager of one desktop stays hidden."""
         if view == self.pager_view:
             return
         hints = view.hints
@@ -268,18 +268,14 @@ class ShellSections:
             return pager_click(lambda: invoke(PagerClick(index, Source.PAGER)))
 
         def pages() -> tuple[Target, ...]:
-            return (
-                Target("Previous desktop", hints.previous or Glyph("chevron-left"), pager_click(lambda: invoke(StepDesktop(-1, Source.PAGER)))),
-                *(
-                    Target(
-                        desktop.name,
-                        (hints.desktops[index] if index < len(hints.desktops) else None) or desktop.label,
-                        jump(index),
-                        active=desktop.current,
-                    )
-                    for index, desktop in enumerate(view.desktops)
-                ),
-                Target("Next desktop", hints.next or Glyph("chevron"), pager_click(lambda: invoke(StepDesktop(1, Source.PAGER)))),
+            return tuple(
+                Target(
+                    desktop.name,
+                    (hints.desktops[index] if index < len(hints.desktops) else None) or desktop.label,
+                    jump(index),
+                    active=desktop.current,
+                )
+                for index, desktop in enumerate(view.desktops)
             )
 
         self.pager.show_targets(pages() if len(view.desktops) > 1 else ())

@@ -75,9 +75,6 @@ class Owner(Protocol):
     def pick(self, index: int) -> None: ...
     def volume(self, level: float) -> None: ...
     def tray(self, slot: int, click: Click) -> None: ...
-    def scroll(self, delta: int) -> None:
-        """A horizontal wheel event over the bar, in eighths of a degree."""
-
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
     def request_actions(self) -> RequestActions | None: ...
@@ -905,15 +902,6 @@ class BarWindow(QtWidgets.QWidget):
         created = Capsule(self, key)
         self.capsules = frozendict({**self.capsules, key: created})
         return created
-
-    @override
-    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
-        """A horizontal scroll over any capsule swipes between desktops; Shift turns the vertical wheel sideways."""
-        delta = event.angleDelta()
-        sideways = delta.x() or (delta.y() if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 0)
-        if sideways:
-            self.owner.scroll(sideways)
-        event.accept()
 
     def present(self, presented: Presented) -> None:
         """Show exactly these capsules where their frames put them; other pooled capsules hide."""

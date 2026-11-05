@@ -39,8 +39,6 @@ def route(tool: Tool) -> Route:
             | Tool.FOCUS_DOWN
             | Tool.FOCUS_UP
             | Tool.FOCUS_RIGHT
-            | Tool.DESKTOP_PREVIOUS
-            | Tool.DESKTOP_NEXT
             | Tool.DESKTOP_1
             | Tool.DESKTOP_2
             | Tool.DESKTOP_3

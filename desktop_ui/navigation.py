@@ -1,6 +1,6 @@
 """Every way the user moves between windows and desktops, as one union decided purely.
 
-Keys, the pager, scrolling over the bar, toolbar clicks and the window switcher
+Keys, the pager, toolbar clicks and the window switcher
 each produce a navigation. `decide` turns it and the current world into one
 effect for the application observer to carry out, and into the record of what
 happened: which desktop and application the user came from and went to, and
@@ -20,7 +20,6 @@ from winapi.shapes import Rect
 class Source(Enum):
     KEY = auto()
     PAGER = auto()
-    SCROLL = auto()
     TOOLBAR = auto()
 
 
@@ -68,13 +67,6 @@ class SpatialFocus:
 
 
 @dataclass(frozen=True, slots=True)
-class StepDesktop:
-    step: int
-    """-1 for the previous desktop, 1 for the next; the ends don't wrap."""
-    source: Source
-
-
-@dataclass(frozen=True, slots=True)
 class JumpDesktop:
     desktop: int
     source: Source
@@ -87,19 +79,13 @@ class PagerClick:
 
 
 @dataclass(frozen=True, slots=True)
-class BarScroll:
-    step: int
-    source: Source
-
-
-@dataclass(frozen=True, slots=True)
 class Zoom:
     """Fill the focused window's monitor until pressed again or focus leaves it."""
 
     source: Source
 
 
-type Navigation = AppKey | CycleApp | ShowWindow | SwitcherPick | SpatialFocus | StepDesktop | JumpDesktop | PagerClick | BarScroll | Zoom
+type Navigation = AppKey | CycleApp | ShowWindow | SwitcherPick | SpatialFocus | JumpDesktop | PagerClick | Zoom
 
 
 class Placing(Enum):
@@ -122,10 +108,6 @@ def keyed(tool: protocol.Tool) -> Order | None:
             return SpatialFocus(Direction.UP, Source.KEY)
         case protocol.Tool.FOCUS_DOWN:
             return SpatialFocus(Direction.DOWN, Source.KEY)
-        case protocol.Tool.DESKTOP_PREVIOUS:
-            return StepDesktop(-1, Source.KEY)
-        case protocol.Tool.DESKTOP_NEXT:
-            return StepDesktop(1, Source.KEY)
         case protocol.Tool.DESKTOP_1:
             return JumpDesktop(0, Source.KEY)
         case protocol.Tool.DESKTOP_2:
@@ -304,8 +286,6 @@ def effect(navigation: Navigation, world: World) -> Effect:
         case SpatialFocus(direction=direction):
             target = nearest(world, direction)
             return Focus(target) if target is not None else None
-        case StepDesktop(step=step) | BarScroll(step=step):
-            return arrive(world, world.current + step)
         case JumpDesktop(desktop=desktop) | PagerClick(desktop=desktop):
             return arrive(world, desktop)
         case Zoom():

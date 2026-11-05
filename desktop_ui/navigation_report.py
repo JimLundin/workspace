@@ -40,7 +40,7 @@ from desktop_ui.window_layout import (
 )
 from miryoku.firmware import CHORDS
 
-EFFORT: Final[frozendict[Cause, int]] = frozendict({"key": 1, "pager": 4, "scroll": 4, "toolbar": 4, "alt_tab": 3, "mouse": 4, "other": 0})
+EFFORT: Final[frozendict[Cause, int]] = frozendict({"key": 1, "pager": 4, "toolbar": 4, "alt_tab": 3, "mouse": 4, "other": 0})
 """What one navigation costs by its cause; `other` is a program taking focus, not the user's effort."""
 DESKTOP_SWITCH: Final = 1
 """Added to an effortful navigation that lands on another desktop."""
@@ -49,7 +49,7 @@ AWAY_MS: Final = 4 * 60 * 60 * 1000
 TOP_PAIRS: Final = 10
 TOP_SUGGESTIONS: Final = 5
 UNKNOWN: Final = "(unknown)"
-WITHOUT_CHORD: Final[tuple[Cause, ...]] = ("mouse", "alt_tab", "pager", "toolbar", "scroll")
+WITHOUT_CHORD: Final[tuple[Cause, ...]] = ("mouse", "alt_tab", "pager", "toolbar")
 """The causes of a navigation the user made without a chord."""
 
 

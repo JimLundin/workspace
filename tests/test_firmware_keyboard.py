@@ -25,14 +25,7 @@ def test_ctrl_alt_shift_letters_reach_navigation_and_the_configured_apps() -> No
     # order, one side's modifiers are missed, or voice and chord letters collide.
     for held in ({CTRL, ALT, SHIFT}, {RIGHT_CTRL, RIGHT_ALT, RIGHT_SHIFT}):
         assert [shortcut(ord(letter), held) for letter in "NEIO"] == [Tool.FOCUS_LEFT, Tool.FOCUS_DOWN, Tool.FOCUS_UP, Tool.FOCUS_RIGHT]
-        assert [shortcut(ord(letter), held) for letter in "JLUYKH"] == [
-            Tool.DESKTOP_1,
-            Tool.DESKTOP_2,
-            Tool.DESKTOP_3,
-            Tool.DESKTOP_4,
-            Tool.DESKTOP_PREVIOUS,
-            Tool.DESKTOP_NEXT,
-        ]
+        assert [shortcut(ord(letter), held) for letter in "JLUY"] == [Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4]
         assert [shortcut(ord(letter), held) for letter in "MXCDV"] == [
             Tool.ZOOM,
             Tool.PLACEMENT_PAUSE,

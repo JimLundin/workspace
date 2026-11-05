@@ -16,7 +16,6 @@ _CHORD_LETTERS: Final[tuple[tuple[Request, str], ...]] = (
     (Tool.FOCUS_LEFT, "N"), (Tool.FOCUS_DOWN, "E"), (Tool.FOCUS_UP, "I"), (Tool.FOCUS_RIGHT, "O"),
     # The top row J L U Y counts desktops 1 to 4 from the inner index finger.
     (Tool.DESKTOP_1, "J"), (Tool.DESKTOP_2, "L"), (Tool.DESKTOP_3, "U"), (Tool.DESKTOP_4, "Y"),
-    (Tool.DESKTOP_PREVIOUS, "K"), (Tool.DESKTOP_NEXT, "H"),
     (Tool.ZOOM, "M"),
     # Left-hand letters, tapped while the right hand holds N E I: config's apps along the top and home rows.
     *zip(APPS[:10], "QWFPBARSTG", strict=False),

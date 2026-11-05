@@ -90,8 +90,6 @@ letter, a panel lists every chord.
 | ⌃⌥⇧ **L** | Desk 2 |
 | ⌃⌥⇧ **U** | Desk 3 |
 | ⌃⌥⇧ **Y** | Desk 4 |
-| ⌃⌥⇧ **K** | Desk ← |
-| ⌃⌥⇧ **H** | Desk → |
 | ⌃⌥⇧ **M** | Zoom |
 | ⌃⌥⇧ **Q** | Terminal |
 | ⌃⌥⇧ **W** | Browser |

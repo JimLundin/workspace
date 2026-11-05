@@ -1,10 +1,9 @@
-"""Navigation decisions: spatial focus, desktop steps, zoom, and app keys."""
+"""Navigation decisions: spatial focus, desktop jumps, zoom, and app keys."""
 
 from dataclasses import replace
 
 from desktop_ui.navigation import (
     AppKey,
-    BarScroll,
     Direction,
     Focus,
     JumpDesktop,
@@ -12,7 +11,6 @@ from desktop_ui.navigation import (
     Navigated,
     Source,
     SpatialFocus,
-    StepDesktop,
     Switch,
     World,
     Zoom,
@@ -82,18 +80,16 @@ def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors
     assert focused(replace(home, foreground=99), Direction.LEFT) is None
 
 
-def test_desktop_steps_stop_at_the_ends_and_land_on_the_last_window_used_there() -> None:
-    # Defects: stepping wraps or leaves the existing desktops, a jump to the
-    # current desktop switches anyway, or arriving ignores the last window used.
+def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_used_there() -> None:
+    # Defects: a jump leaves the existing desktops, a jump to the current
+    # desktop switches anyway, or arriving ignores the last window used.
     home = world(HOME_APPS)
-    assert decide(StepDesktop(-1, Source.KEY), home)[0] is None
-    assert decide(BarScroll(1, Source.SCROLL), replace(home, current=2))[0] is None
     assert decide(JumpDesktop(3, Source.KEY), home)[0] is None
     assert decide(JumpDesktop(0, Source.KEY), home)[0] is None
-    assert decide(StepDesktop(1, Source.KEY), home)[0] == Switch(1, 5)
-    assert decide(StepDesktop(1, Source.KEY), replace(home, recent=(1, 6, 5)))[0] == Switch(1, 6)
+    assert decide(JumpDesktop(1, Source.KEY), home)[0] == Switch(1, 5)
+    assert decide(JumpDesktop(1, Source.KEY), replace(home, recent=(1, 6, 5)))[0] == Switch(1, 6)
     assert decide(JumpDesktop(2, Source.KEY), home)[0] == Switch(2, None)
-    assert decide(StepDesktop(1, Source.KEY), home)[1] == Navigated(StepDesktop(1, Source.KEY), 0, 1, TERMINAL, EDGE)
+    assert decide(JumpDesktop(1, Source.KEY), home)[1] == Navigated(JumpDesktop(1, Source.KEY), 0, 1, TERMINAL, EDGE)
 
 
 def test_zoom_exempts_the_window_in_front_until_pressed_again_or_focus_leaves() -> None:

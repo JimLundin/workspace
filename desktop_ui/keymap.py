@@ -128,7 +128,6 @@ TOOL_NAMES: Final = {
     Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
     Tool.ZOOM: "Zoom", Tool.MINIMIZE: "Min",
     Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",
-    Tool.DESKTOP_PREVIOUS: "Desk ←", Tool.DESKTOP_NEXT: "Desk →",
     Tool.DESKTOP_1: "Desk 1", Tool.DESKTOP_2: "Desk 2", Tool.DESKTOP_3: "Desk 3", Tool.DESKTOP_4: "Desk 4",
     Tool.PLACEMENT_PAUSE: "Pause place", Tool.PLACE_NOW: "Re-place",
     Tool.MEETING_TOGGLE: "Record", Tool.AGENT_VOICE_TOGGLE: "Agent toggle", Tool.COPY_TRANSCRIPT: "Copy speech",

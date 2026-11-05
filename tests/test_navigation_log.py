@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from desktop_ui.navigation import AppKey, CycleApp, Focus, Launch, Navigated, Source, StepDesktop, Switch, World
+from desktop_ui.navigation import AppKey, CycleApp, Focus, JumpDesktop, Launch, Navigated, Source, Switch, World
 from desktop_ui.navigation_log import (
     ENTRY,
     NAVIGATION_LOG,
@@ -81,12 +81,12 @@ def test_workspace_navigation_and_its_foreground_echo_are_one_entry() -> None:
 
 
 def test_the_shell_passing_focus_during_a_desktop_switch_is_not_a_navigation() -> None:
-    decided = (Switch(1, 4), Navigated(StepDesktop(1, Source.KEY), 0, 1, TERMINAL, EDGE))
+    decided = (Switch(1, 4), Navigated(JumpDesktop(1, Source.KEY), 0, 1, TERMINAL, EDGE))
     tracker, first = navigated(front(1), decided, at(1))
     tracker, later = run(tracker, (1.1, came(2)), (1.3, came(4, 1)), (5, came(1)))
 
     assert summary((*first, *later)) == (
-        ("step_desktop", "key", "windowsterminal.exe", "msedge.exe", 1000),
+        ("jump_desktop", "key", "windowsterminal.exe", "msedge.exe", 1000),
         ("external", "other", "msedge.exe", "windowsterminal.exe", 3700),
     )
     assert (first[0].from_desktop, first[0].to_desktop, first[0].other_desktop) == (0, 1, True)

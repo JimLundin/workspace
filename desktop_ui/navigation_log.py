@@ -21,7 +21,6 @@ from pydantic import TypeAdapter
 
 from desktop_ui.navigation import (
     AppKey,
-    BarScroll,
     CycleApp,
     Effect,
     Focus,
@@ -33,7 +32,6 @@ from desktop_ui.navigation import (
     ShowWindow,
     Source,
     SpatialFocus,
-    StepDesktop,
     Switch,
     SwitcherPick,
     World,
@@ -69,14 +67,12 @@ type Kind = Literal[
     "show_window",
     "switcher_pick",
     "spatial_focus",
-    "step_desktop",
     "jump_desktop",
     "pager_click",
-    "bar_scroll",
     "zoom",
     "external",
 ]
-type Cause = Literal["key", "pager", "scroll", "toolbar", "alt_tab", "mouse", "other"]
+type Cause = Literal["key", "pager", "toolbar", "alt_tab", "mouse", "other"]
 type SetupName = Literal["laptop_only", "home", "work"]
 
 
@@ -208,14 +204,10 @@ def kind(navigation: Navigation) -> Kind:
             return "switcher_pick"
         case SpatialFocus():
             return "spatial_focus"
-        case StepDesktop():
-            return "step_desktop"
         case JumpDesktop():
             return "jump_desktop"
         case PagerClick():
             return "pager_click"
-        case BarScroll():
-            return "bar_scroll"
         case Zoom():
             return "zoom"
         case _:
@@ -228,8 +220,6 @@ def cause(source: Source) -> Cause:
             return "key"
         case Source.PAGER:
             return "pager"
-        case Source.SCROLL:
-            return "scroll"
         case Source.TOOLBAR:
             return "toolbar"
         case _:

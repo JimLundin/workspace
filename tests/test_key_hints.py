@@ -84,9 +84,9 @@ def test_the_panel_lists_every_chord_once_in_its_section() -> None:
     letters = [row.letter for group in PANEL for row in group.rows]
     assert sorted(letters) == sorted(CHORDS.values())
     assert [group.section for group in PANEL] == [Section.APPS, Section.DESKTOPS, Section.FOCUS, Section.WINDOW]
-    remapped = panel({Tool.MINIMIZE: "Z", Tool.FOCUS_LEFT: "Q", Tool.DESKTOP_NEXT: "X"})
+    remapped = panel({Tool.MINIMIZE: "Z", Tool.FOCUS_LEFT: "Q", Tool.DESKTOP_2: "X"})
     assert remapped == (
-        Group(Section.DESKTOPS, (Row("X", "Desk →"),)),
+        Group(Section.DESKTOPS, (Row("X", "Desk 2"),)),
         Group(Section.FOCUS, (Row("Q", "Focus ←"),)),
         Group(Section.WINDOW, (Row("Z", "Min"),)),
     )

@@ -76,8 +76,6 @@ class Tool(Enum):
     FOCUS_DOWN = 51
     FOCUS_UP = 52
     FOCUS_RIGHT = 53
-    DESKTOP_PREVIOUS = 55
-    DESKTOP_NEXT = 56
     PLACEMENT_PAUSE = 58
     """Pause or resume automatic window placement."""
     PLACE_NOW = 59
