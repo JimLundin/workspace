@@ -12,7 +12,7 @@ from unittest import TestCase
 
 from assistant.llm import Failure
 from assistant.meeting_store import BacklogFullError, MeetingArchive, MeetingStore
-from assistant.meetings import Meetings
+from assistant.meetings import Meetings, Spool, SpoolFullError
 from assistant.recording_state import RecordingState, RetryPolicy
 from automation.capture import AudioSource
 from tests.fake_endpoint import Received, Reply, fake_endpoint
@@ -222,6 +222,85 @@ def test_recording_uses_the_configured_endpoint_and_saves_incremental_text(tmp_p
             assert any(state.phase == "recording" for state in states)
         finally:
             service.close()
+
+
+def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> None:
+    # Defect: the capture thread writes the journal itself, so another connection
+    # holding the meeting journal stalls the device drain and ends the recording.
+    handed: list[float] = []
+
+    class LockingCapture:
+        __slots__ = ()
+
+        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None:
+            ready()
+            holder = sqlite3.connect(next(tmp_path.glob("*/session.sqlite3")), isolation_level=None)
+            try:
+                holder.execute("BEGIN EXCLUSIVE")
+                for _ in range(31):
+                    began = time.monotonic()
+                    consume(SPEECH)
+                    handed.append(time.monotonic() - began)
+            finally:
+                holder.rollback()
+                holder.close()
+
+    with fake_endpoint() as endpoint:
+        service = Meetings(settings(endpoint.url), lambda source: LockingCapture(), archive=MeetingArchive(tmp_path))
+        try:
+            service.start()
+            wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
+            state = service.snapshot()
+            assert state.phase == "saved", state.detail
+            assert state.seconds == 31 and len(handed) == 31
+            assert max(handed) < 1, "Handing audio to the journal waited for storage."
+        finally:
+            service.close()
+
+
+def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(tmp_path: Path) -> None:
+    # Defect: on_update runs under the service lock, so a view that waits for
+    # another thread reading snapshot() deadlocks the recorder; or every
+    # journaled second publishes, running reads and view work once a second.
+    capturing: list[RecordingState] = []
+    blocked: list[RecordingState] = []
+    service: Meetings | None = None
+
+    def update(state: RecordingState) -> None:
+        assert service is not None
+        reader = threading.Thread(target=service.snapshot)
+        reader.start()
+        reader.join(5)
+        if reader.is_alive():
+            blocked.append(state)
+        if state.capturing and state.seconds:
+            capturing.append(state)
+
+    capture = GeneratedCapture(31, hold=True)
+    with fake_endpoint() as endpoint:
+        service = Meetings(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=update)
+        try:
+            service.start()
+            wait_for(lambda: bool(service.snapshot().path))
+            store = MeetingStore(Path(service.snapshot().path).parent)
+            wait_for(lambda: store.state().frames == RATE * 31)
+            service.stop()
+            wait_for(lambda: service.snapshot().phase == "saved")
+            assert not blocked, "A view reading the recording state from another thread waited for the publisher."
+            assert len(capturing) < 10, [state.seconds for state in capturing]
+        finally:
+            service.close()
+
+
+def test_a_full_spool_refuses_audio_and_says_the_recording_stopped() -> None:
+    # Defect: a hung journal lets capture memory grow without bound, or a full
+    # spool silently drops audio while the recording appears to continue.
+    spool = Spool(limit=8)
+    spool.put(bytes(8))
+    with TestCase().assertRaisesRegex(SpoolFullError, "Recording stopped"):
+        spool.put(bytes(2))
+    assert spool.take(0).pcm == bytes(8)
+    spool.put(bytes(8))
 
 
 def test_a_tiny_final_fragment_is_padded_for_upload_without_changing_recorded_duration(tmp_path: Path) -> None:

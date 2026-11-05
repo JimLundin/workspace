@@ -1,18 +1,22 @@
 """Explicit long-running recording, independent of dictation, model work and the UI.
 
-Capture journals one second at a time. A separate worker transcribes 20-30 second
-chunks, retries outages, and resumes pending text work after a restart. Restarting
-Workspace never resumes microphone or computer-audio capture.
+The real-time capture thread only hands audio to a bounded in-memory spool. A
+journal thread writes it one second at a time and publishes progress every few
+seconds. A separate worker transcribes 20-30 second chunks, retries outages, and
+resumes pending text work after a restart. Restarting Workspace never resumes
+microphone or computer-audio capture.
 """
 
 import contextlib
 import queue
 import sqlite3
 import threading
+import time
+from collections import deque
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Protocol
+from typing import Final, Protocol
 
 from assistant.llm import Failure, Settings, transcribe, wav
 from assistant.meeting_store import MeetingArchive, MeetingStore
@@ -30,34 +34,142 @@ class Capture(Protocol):
     def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None: ...
 
 
-class _Writer:
-    __slots__ = ("buffer", "changed", "store")
+SPOOL_SECONDS: Final = 60
+"""Audio the capture thread may hand over while the journal is slow (a busy disk or a long reader)."""
+PUBLISH_SECONDS: Final = 2.0
+"""At most one progress publication per interval while capturing; storage, not the UI, paces capture."""
 
-    def __init__(self, store: MeetingStore, changed: Callable[[], None]) -> None:
-        self.store, self.changed = store, changed
+
+class SpoolFullError(OSError):
+    """The journal fell further behind capture than the spool holds; capture must end."""
+
+
+@dataclass(frozen=True, slots=True)
+class Handover:
+    """What the journal thread takes from the spool in one wake."""
+
+    pcm: bytes
+    flagged: bool = False
+    closed: bool = False
+
+
+class Spool:
+    """A bounded handover from the real-time capture thread to the journal thread.
+
+    `put` never waits for storage: it holds the lock only to append. A block that
+    would exceed the bound is refused, which ends the recording.
+    """
+
+    __slots__ = ("_blocks", "_closed", "_condition", "_flagged", "_size", "limit")
+
+    def __init__(self, limit: int = RATE * 2 * SPOOL_SECONDS) -> None:
+        self.limit = limit
+        self._condition = threading.Condition()
+        self._blocks: deque[bytes] = deque()
+        self._size = 0
+        self._flagged = self._closed = False
+
+    def put(self, pcm: bytes) -> None:
+        if len(pcm) % 2:
+            raise ValueError("The capture device returned an invalid audio block.")
+        with self._condition:
+            if self._size + len(pcm) > self.limit:
+                raise SpoolFullError(
+                    f"Recording stopped: saving fell more than {self.limit // (RATE * 2)} s behind the audio devices. "
+                    "The captured part has been saved."
+                )
+            self._blocks.append(pcm)
+            self._size += len(pcm)
+            self._condition.notify()
+
+    def flag(self) -> None:
+        """Ask the journal thread to publish the current state soon."""
+        with self._condition:
+            self._flagged = True
+            self._condition.notify()
+
+    def close(self) -> None:
+        with self._condition:
+            self._closed = True
+            self._condition.notify()
+
+    def take(self, timeout: float) -> Handover:
+        with self._condition:
+            self._condition.wait_for(lambda: self._blocks or self._flagged or self._closed, timeout)
+            pcm = b"".join(self._blocks)
+            self._blocks.clear()
+            self._size = 0
+            taken = Handover(pcm, flagged=self._flagged, closed=self._closed)
+            self._flagged = False
+            return taken
+
+
+class _Writer:
+    """Cut handed-over audio into the journal's one-second blocks."""
+
+    __slots__ = ("buffer", "store")
+
+    def __init__(self, store: MeetingStore) -> None:
+        self.store = store
         self.buffer = bytearray()
 
-    def feed(self, pcm: bytes) -> None:
-        if len(pcm) % 2 or len(pcm) > RATE * 4:
-            raise ValueError("The capture device returned an invalid audio block.")
+    def feed(self, pcm: bytes) -> bool:
         self.buffer.extend(pcm)
+        appended = False
         while len(self.buffer) >= RATE * 2:
             block = bytes(self.buffer[: RATE * 2])
             del self.buffer[: RATE * 2]
             self.store.append(block)
-            self.changed()
+            appended = True
+        return appended
 
     def finish(self) -> None:
         block = bytes(self.buffer)
         self.buffer.clear()
         self.store.append(block)
-        self.changed()
+
+
+class _Journal:
+    """The capture's storage owner: writes spooled audio and paces its publication."""
+
+    __slots__ = ("changed", "problem", "publish", "spool", "store")
+
+    def __init__(self, store: MeetingStore, spool: Spool, changed: Callable[[], None], publish: Callable[[], None]) -> None:
+        self.store, self.spool, self.changed, self.publish = store, spool, changed, publish
+        self.problem = ""
+
+    def run(self, stop: threading.Event) -> None:
+        writer = _Writer(self.store)
+        published, dirty = time.monotonic() - PUBLISH_SECONDS, False
+        try:
+            while True:
+                due = published + PUBLISH_SECONDS - time.monotonic()
+                taken = self.spool.take(max(0.0, due) if dirty else PUBLISH_SECONDS)
+                if writer.feed(taken.pcm):
+                    self.changed()
+                    dirty = True
+                now = time.monotonic()
+                # A phase change publishes even when capture has already ended.
+                if taken.flagged or (dirty and now - published >= PUBLISH_SECONDS and not taken.closed):
+                    self.publish()
+                    published, dirty = now, False
+                if taken.closed:
+                    writer.finish()
+                    self.changed()
+                    return
+        except (OSError, ValueError, sqlite3.Error) as error:
+            self.problem = str(error)
+        except Exception:
+            self.problem = "Recording stopped unexpectedly. The captured part is saved in the meetings folder."
+        # Saving failed: end capture, and never store audio captured after the failure.
+        stop.set()
 
 
 class Meetings:
     __slots__ = (
         "_capture",
         "_closing",
+        "_emitting",
         "_lock",
         "_paused",
         "_queue",
@@ -102,6 +214,9 @@ class Meetings:
         self.on_update = on_update
         self.on_meeting = on_meeting
         self._lock = threading.RLock()
+        # Serializes publications in state order without holding `_lock`: the
+        # view takes its own locks, and capture or snapshot() must never wait for them.
+        self._emitting = threading.RLock()
         self._state = RecordingState()
         self._stop, self._quit, self._wake = threading.Event(), threading.Event(), threading.Event()
         self._queue: queue.Queue[MeetingStore | None] = queue.Queue()
@@ -185,10 +300,12 @@ class Meetings:
             raise OSError("The meeting recorder did not stop in time; already journaled audio and text are saved locally.")
 
     def _emit(self) -> None:
-        with self._lock:
-            if self._closing or self.on_update is None:
-                return
-            self.on_update(self._state)
+        with self._emitting:
+            with self._lock:
+                if self._closing or self.on_update is None:
+                    return
+                state, update = self._state, self.on_update
+            update(state)
 
     def _observe_meeting(self, store: MeetingStore) -> None:
         if self.on_meeting is not None:
@@ -214,7 +331,9 @@ class Meetings:
 
     def _record(self, source: AudioSource, title: str, stop: threading.Event) -> None:
         store: MeetingStore | None = None
-        writer: _Writer | None = None
+        journal: _Journal | None = None
+        thread: threading.Thread | None = None
+        spool = Spool()
         problem = ""
         try:
             store = self.archive.create(source, title)
@@ -223,30 +342,30 @@ class Meetings:
                 self._state = replace(self._state, identity=store.folder.name, path=str(store.transcript))
             self._publish(store)
             self._schedule(store)
-
-            def changed() -> None:
-                self._wake.set()
-                self._publish(store)
+            journal = _Journal(store, spool, self._wake.set, lambda: self._publish(store))
+            thread = threading.Thread(target=journal.run, args=(stop,), name="meeting journal", daemon=True)
+            thread.start()
 
             def ready() -> None:
+                # The capture thread only marks the phase; the journal thread publishes it.
                 with self._lock:
                     self._state = replace(self._state, phase="recording")
-                self._emit()
+                spool.flag()
 
-            writer = _Writer(store, changed)
-            self.factory(source).record(stop, writer.feed, ready)
+            self.factory(source).record(stop, spool.put, ready)
         except (OSError, ValueError, sqlite3.Error) as error:
             problem = str(error)
         except Exception:
             problem = "Recording stopped unexpectedly. The captured part is saved in the meetings folder."
         finally:
+            spool.close()
+            if thread is not None:
+                thread.join()
+            if journal is not None:
+                # A storage failure stops capture; report it, not the stop it caused.
+                problem = journal.problem or problem
             if store is not None:
                 try:
-                    if writer is not None:
-                        try:
-                            writer.finish()
-                        except (OSError, ValueError, sqlite3.Error) as error:
-                            problem = problem or str(error)
                     store.finish_capture(problem)
                     self._observe_meeting(store)
                     self._publish(store)
