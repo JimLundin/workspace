@@ -1,4 +1,4 @@
-"""The desktop bar's compact sections: pinned slots, the desktop pager and the scrollable running applications.
+"""The desktop bar's compact sections: Canvas with the pinned slots, the desktop pager and the scrollable running applications.
 
 Each target is a round control the bar paints itself, as the island's own
 controls are, so no stylesheet can pad, re-font or restyle it.
@@ -245,11 +245,31 @@ def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
     return invoke
 
 
-class ShellSections:
-    """The surface keeps native buttons only for the current immutable snapshot."""
+def canvas_target(open_canvas: Callable[[], None]) -> Target:
+    """Canvas opens on a left click; it has no menu, and a double-click's second press doesn't open it again."""
 
-    def __init__(self, parent: QtWidgets.QWidget) -> None:
+    def invoke(click: Click) -> None:
+        match click:
+            case Click.LEFT:
+                open_canvas()
+            case Click.RIGHT | Click.DOUBLE:
+                pass
+            case _:
+                assert_never(click)
+
+    return Target("Canvas · Open your work canvas", Glyph("canvas"), invoke)
+
+
+class ShellSections:
+    """The surface keeps native buttons only for the current immutable snapshot.
+
+    Canvas leads the pinned web-app slots in one capsule; it shows even before the shell reports applications.
+    """
+
+    def __init__(self, parent: QtWidgets.QWidget, open_canvas: Callable[[], None]) -> None:
+        self.canvas = canvas_target(open_canvas)
         self.pinned = Section(parent)
+        self.pinned.show_targets((self.canvas,))
         self.pager = Section(parent)
         self.apps = Section(parent)
         self.app_snapshot: tuple[Shelf, int] | None = None
@@ -310,14 +330,14 @@ class ShellSections:
                 case _:
                     assert_never(item)
 
-        self.pinned.show_targets(tuple(target(item) for item in current.pinned))
+        self.pinned.show_targets((self.canvas, *(target(item) for item in current.pinned)))
         self.apps.show_targets(tuple(target(item) for item in current.running))
         self.app_snapshot = snapshot
 
-    def place(self, left: int, width: int, *, start: int = 12) -> None:
-        """Pinned slots follow Canvas from `start`, then the pager and running apps, stopping before the leftmost capsule at `left`."""
-        self.pinned.place(start, left - 12)
-        after = start if self.pinned.isHidden() else start + self.pinned.width() + 6
+    def place(self, left: int, width: int) -> None:
+        """Canvas and the pinned slots from the screen's edge, then the pager and running apps, stopping before the leftmost capsule at `left`."""
+        self.pinned.place(12, left - 12)
+        after = 12 if self.pinned.isHidden() else 12 + self.pinned.width() + 6
         self.pager.place(after, left - 12)
         after = after if self.pager.isHidden() else after + self.pager.width() + 6
         self.apps.place(after, max(after, min(left - 12, width // 3)))

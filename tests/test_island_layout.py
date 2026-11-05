@@ -47,24 +47,19 @@ def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
     assert all(abs(edge * 1.25 - round(edge * 1.25)) < 1e-9 for edge in edges)
 
 
-def test_fixed_right_order_survives_activity_changes() -> None:
-    # Defect: activity shifts fixed controls or overlaps the cluster.
-    fixed = (
-        Placed(Key.CANVAS, Zone.LEFT, 36, 34),
-        Placed(Key.STATUS, Zone.RIGHT, 216, 34),
-    )
+def test_the_fixed_right_cluster_survives_activity_changes() -> None:
+    # Defect: activity shifts the fixed cluster or overlaps it.
+    fixed = (Placed(Key.STATUS, Zone.RIGHT, 216, 34),)
     for screen in (480, 1000):
         baseline = frame(fixed, Metrics(screen))
-        assert tuple(each.key for each in baseline) == (Key.CANVAS, Key.STATUS)
+        assert tuple(each.key for each in baseline) == (Key.STATUS,)
         assert baseline[-1].box.x + baseline[-1].box.width == screen - 12
         framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), Metrics(screen))
         assert tuple(each for each in framed if each.key is not Key.ISLAND) == baseline
-        assert baseline[0].box.x == 12
         assert all(0 <= each.box.x <= each.box.x + each.box.width <= screen for each in framed)
         activity = next((each for each in framed if each.key is Key.ISLAND), None)
         if activity is not None:
-            assert activity.box.x >= baseline[0].box.x + baseline[0].box.width + 6
-            assert activity.box.x + activity.box.width <= baseline[1].box.x - 6
+            assert activity.box.x + activity.box.width <= baseline[0].box.x - 6
 
 
 def test_the_keyboard_state_entering_the_fixed_cluster_leaves_the_other_controls_in_place() -> None:

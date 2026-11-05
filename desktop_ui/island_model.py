@@ -10,9 +10,9 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
-- Canvas anchors at the far left before apps. One fixed capsule anchors right:
-  the keyboard state when relevant, then volume, Wi-Fi, clock and power. The
-  system tray is in the controls menu.
+- Canvas leads the pinned web apps at the far left (the shell sections own that capsule).
+  One fixed capsule anchors right: the keyboard state when relevant, then
+  volume, Wi-Fi, clock and power. The system tray is in the controls menu.
 - That capsule expands into the controls menu; a question or the bell's list expands the centre island.
 - Under the pointer, agent work reveals its recent steps below its phase, at the same width.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
@@ -37,7 +37,6 @@ class Key(Enum):
     ISLAND = auto()
     RECORDING = auto()
     INBOX = auto()
-    CANVAS = auto()
     STATUS = auto()
 
 
@@ -45,7 +44,6 @@ class Zone(Enum):
     LEAD = auto()
     ISLAND = auto()
     TRAIL = auto()
-    LEFT = auto()  # Canvas precedes the application strip at the screen's left edge.
     RIGHT = auto()  # The fixed keyboard state and readings, independent of activity.
 
 
@@ -270,7 +268,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
     """The capsules to show, in left-to-right order, with their contents and press actions.
 
     The right-hand readings expand into the controls menu, where ongoing activities
-    become live rows, so they leave the bar; Canvas, the keyboard state and the inbox stay.
+    become live rows, so they leave the bar; the keyboard state and the inbox stay.
     A question expands the centre island instead.
     """
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
@@ -302,7 +300,6 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         facts(observed.ambient),
     )
     persistent = (
-        CapsuleView(Key.CANVAS, Zone.LEFT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
         if expanded is Expansion.MENU
         else CapsuleView(
