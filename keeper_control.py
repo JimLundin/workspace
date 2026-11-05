@@ -1,19 +1,15 @@
-"""The keeper's typed files: its inbox, its rollback target and the deployment pause.
+"""The keeper's typed files: its inbox, its install results and its rollback target.
 
-Other programs ask the keeper for installs, undo and restarts through its
-inbox folder; a request it can't read is refused, never silently dropped. The
-keeper owns a deployment pause until an explicit matching resume, so a failed
-coordinator never starts children against a partly replaced tree. It runs
-directly on the installed Python 3.15 with the keeper.
+The agent and `Dev.cmd deploy` ask the keeper for installs, and the tray for
+undo and restarts, through its inbox folder; a request it can't read is refused,
+never silently dropped. It runs directly on the installed Python 3.15 with the keeper.
 """
 
-import contextlib
-import os
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Protocol
+from typing import Final, Literal
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -30,6 +26,8 @@ class Install:
     checked: str | None
     """The source digest whose fast selfcheck passed, or None. When the keeper's frozen
     candidate has exactly this digest, only the deferred native modules run."""
+    source: str | None = None
+    """A deploy's staged folder, which may change protected files; None is the agent's workspace."""
     action: Literal["install"] = "install"
 
 
@@ -55,47 +53,6 @@ class Malformed:
     reason: str
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class Rollback:
-    """The version the last install replaced; pending means restore it before starting."""
-
-    version: str | None
-    pending: bool
-
-
-@dataclass(frozen=True, slots=True)
-class Pause:
-    token: str
-    components: tuple[Component, ...]
-    action: Literal["pause"] = "pause"
-
-
-@dataclass(frozen=True, slots=True)
-class Resume:
-    token: str
-    action: Literal["resume"] = "resume"
-
-
-@dataclass(frozen=True, slots=True)
-class Paused:
-    token: str
-    components: tuple[Component, ...]
-    phase: Literal["paused"] = "paused"
-
-
-@dataclass(frozen=True, slots=True)
-class Resumed:
-    token: str
-    phase: Literal["resumed"] = "resumed"
-
-
-@dataclass(frozen=True, slots=True)
-class Refused:
-    token: str
-    reason: str
-    phase: Literal["refused"] = "refused"
-
-
 @dataclass(frozen=True, slots=True)
 class InstallChecking:
     """The keeper accepted the install request and is checking its candidate."""
@@ -106,12 +63,12 @@ class InstallChecking:
 
 @dataclass(frozen=True, slots=True)
 class InstallStarted:
-    """The checked candidate is installed and its programs were started on trial."""
+    """The checked candidate is installed and the programs it restarted came up; its trial runs."""
 
     digest: str
     summary: str
     version: str
-    """The snapshot of the source this install replaced, under the keeper's versions folder."""
+    """The commit of the version this install replaced, in the keeper's version store."""
     stage: Literal["installed"] = "installed"
 
 
@@ -129,16 +86,36 @@ type InstallResult = InstallChecking | InstallStarted | InstallRefused
 
 
 @dataclass(frozen=True, slots=True)
-class Capability:
-    keeper_pid: int
-    version: Literal[1] = 1
+class Kept:
+    """Nothing to recover; `version` is what Undo restores, if anything."""
+
+    version: str | None
+    phase: Literal["kept"] = "kept"
+
+
+@dataclass(frozen=True, slots=True)
+class Pending:
+    """An install or trial was interrupted: restore `version` before starting any program."""
+
+    version: str
+    phase: Literal["pending"] = "pending"
+
+
+@dataclass(frozen=True, slots=True)
+class Trial:
+    """The keeper relaunched into a fresh install: start it on trial, undoing to `version`."""
+
+    version: str
+    started: InstallStarted
+    """Published once the relaunched programs are ready."""
+    phase: Literal["trial"] = "trial"
+
+
+type Rollback = Kept | Pending | Trial
 
 
 REQUEST = TypeAdapter[Request](Install | Undo | Restart)
-ROLLBACK = TypeAdapter[Rollback](Rollback)
-COMMAND = TypeAdapter[Pause | Resume](Pause | Resume)
-STATUS = TypeAdapter[Paused | Resumed | Refused](Paused | Resumed | Refused)
-CAPABILITY = TypeAdapter[Capability](Capability)
+ROLLBACK = TypeAdapter[Rollback](Kept | Pending | Trial)
 INSTALL_RESULT = TypeAdapter[InstallResult](InstallChecking | InstallStarted | InstallRefused)
 INSTALL_RESULT_FILE: Final = "install-result.json"
 
@@ -157,11 +134,6 @@ def install_result(folder: Path) -> InstallResult | None:
         return INSTALL_RESULT.validate_json((folder / INSTALL_RESULT_FILE).read_bytes(), strict=True)
     except OSError, ValidationError:
         return None
-
-
-class Supervisor(Protocol):
-    def suspend(self, components: tuple[Component, ...]) -> bool: ...
-    def resume(self, now: float) -> None: ...
 
 
 def ask(folder: Path, request: Request) -> None:
@@ -186,79 +158,3 @@ def take(folder: Path) -> Iterator[Request | Malformed]:
         except ValidationError as error:
             received = Malformed(path.name, str(error))
         yield received
-
-
-def submit(folder: Path, request: Pause | Resume) -> None:
-    """Publish one complete command; an existing command belongs to its sender."""
-    temporary = folder / "component-command.pending"
-    with temporary.open("xb") as stream:
-        stream.write(COMMAND.dump_json(request))
-    try:
-        destination = folder / "component-command.json"
-        if destination.exists():
-            raise RuntimeError("Another component command is pending.")
-        temporary.rename(destination)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
-class Control:
-    """Own command consumption and the current deployment's exclusive pause."""
-
-    __slots__ = ("folder", "paused", "pending")
-
-    def __init__(self, folder: Path) -> None:
-        self.folder = folder
-        self.paused: Paused | None = None
-        # Retain the immutable acknowledgment after effects commit, so a
-        # Windows reader blocking replacement cannot cause repeated effects.
-        self.pending: Paused | Resumed | Refused | None = None
-        folder.mkdir(parents=True, exist_ok=True)
-        capability = folder / "component-capability.pending"
-        capability.write_bytes(CAPABILITY.dump_json(Capability(os.getpid())))
-        capability.replace(folder / "component-capability.json")
-
-    def publish(self) -> bool:
-        if self.pending is None:
-            return True
-        temporary = self.folder / "component-status.pending"
-        try:
-            temporary.write_bytes(STATUS.dump_json(self.pending))
-            temporary.replace(self.folder / "component-status.json")
-        except PermissionError:
-            return False
-        self.pending = None
-        return True
-
-    def poll(self, supervisor: Supervisor, now: float) -> None:
-        if not self.publish():
-            return
-        path = self.folder / "component-command.json"
-        if not path.exists():
-            return
-        try:
-            request = COMMAND.validate_json(path.read_bytes(), strict=True)
-            path.unlink()
-        except ValidationError:
-            with contextlib.suppress(PermissionError, FileNotFoundError):
-                path.unlink()
-            return
-        except FileNotFoundError, PermissionError:
-            return
-        status: Paused | Resumed | Refused
-        match request:
-            case Pause(token=token, components=components):
-                if self.paused is not None or not supervisor.suspend(components):
-                    status = Refused(token, "The keeper is busy or the component selection is invalid.")
-                else:
-                    status = Paused(token, components)
-                    self.paused = status
-            case Resume(token=token):
-                if self.paused is None or self.paused.token != token:
-                    status = Refused(token, "This coordinator does not own the pause.")
-                else:
-                    supervisor.resume(now)
-                    self.paused = None
-                    status = Resumed(token)
-        self.pending = status
-        self.publish()

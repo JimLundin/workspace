@@ -507,22 +507,24 @@ and collector with Qt. Each process has its own heap and collector, so assistant
 collections cannot stop the keyboard interpreter, although the processes still
 share CPU and other operating-system resources.
 
-The keeper owns independent child restarts. Its protected event loop consumes
-typed keeper requests (install, undo, keep, restart) and pause/resume commands
-through `keeper_control.py`, refusing unreadable requests visibly; source replacement
-keeps the keeper and unaffected children alive. The protected, standard-library
-`components.py` catalogue names each child once, with its entry module, control
-window, quit message, shutdown budget and readiness marker; the keeper, the
-release owner and each child read it. `scripts/deploy_policy.py` makes
-the restart selection from immutable manifests and both versions' import graphs.
-The release owner verifies clean selected exits and retained process identities,
-then requires every readiness marker to name the observed process (id and
-creation time) of its component, replaced or retained. A child writes its
+The keeper owns independent child restarts and is the only writer of the
+installed copy. Its protected event loop consumes typed keeper requests
+(install, undo, restart) through `keeper_control.py`, refusing unreadable
+requests visibly. The protected, standard-library `components.py` catalogue
+names each child once, with its entry module, control window, quit message,
+shutdown budget and readiness marker; the keeper and each child read it. The
+protected `restart_plan.py` selects the restarts from both versions' import
+graphs before any file changes: only children whose closure changed restart,
+other assets restart every child, and a protected file or the keeper's own
+closure relaunches the keeper through `workspace.pyw --relaunch`, which waits
+for the old keeper's lock and continues the trial. `Versions` in `keeper.py`
+records each version as a commit in a bare repository it owns, so the
+installed copy needs no checkout. A child writes its
 marker in place, so a reader sees no marker, an empty one or the complete one;
 readers poll and treat an empty or unreadable marker as not yet ready. Renaming
 a finished temporary file over the name is avoided: on Windows a reader that
-opens the name while the rename still holds it gets a sharing violation. Failed
-replacement restores only changed source before resuming. The protected full
+opens the name while the rename still holds it gets a sharing violation. A
+failed install restores the recorded version. The protected full
 selfcheck and trial-based agent update path keep their checks and rollback: an
 agent install whose exact source digest passed the agent's affected check
 repeats only its native modules, and any other install runs the full selfcheck.

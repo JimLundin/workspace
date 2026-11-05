@@ -1,6 +1,6 @@
 """The programs the keeper supervises, and how each one proves it is up.
 
-The keeper, the deployment coordinator and every child read this one catalogue.
+The keeper, its restart plan and every child read this one catalogue.
 It is protected with the keeper and uses only the standard library, so the
 keyboard process announces readiness without importing the keeper.
 
@@ -65,7 +65,7 @@ CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry f
 """In startup order; shutdown reverses it."""
 
 BAR_WINDOW: Final = "Workspace floating bar"
-"""The assistant's visible surface; a deployment restores it when it was showing."""
+"""The assistant's visible surface."""
 
 
 def shutdown_budget(names: Iterable[Component]) -> float:

@@ -52,8 +52,8 @@ live communications. `watch --preview` runs the same preview beside the tests.
 3. With `--standards`, which `Dev.cmd check` always passes, it runs whole-tree
    `ruff check` and `ruff format --check` before tests, and Pyright over the
    changed Python files alongside the tests. `--full` and CI type the whole tree.
-4. It runs the selected tests. Without `--tests` it compares source with the last
-   deployed manifest and selects the test modules that import a changed module,
+4. It runs the selected tests. Without `--tests` it compares source with the
+   installed copy and selects the test modules that import a changed module,
    directly or through test helpers. Pin changes, application assets and a
    missing baseline select the full source suite.
 
@@ -79,20 +79,17 @@ After the final edit, write a receipt with
 broad change) and deploy with
 `Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`. The receipt
 must match every source byte in the Git-listed working tree, and a receipt
-written without the standards is refused. Use `scripts/bundle.py` only when
-`.python-version` or `requirements/windows-py315.lock` changes.
+written without the standards is refused. A changed runtime pin
+(`.python-version` or `requirements/windows-py315.lock`) is refused too: rebuild
+the bundle with `scripts/bundle.py` instead.
 
-The deployment coordinator stages the checked source in Windows Temp, then
-computes which components the change affects from both versions' imports.
-Assistant-only changes keep the keyboard and automation running. Supervisor,
-bootstrap or implicit asset changes stop everything with `WM_CLOSE` and relaunch
-`workspace.pyw`. For a selective deployment the keeper pauses only the selected
-children, requires their clean exits, and blocks other requests until resume.
-The coordinator replaces only changed managed files, clears their bytecode,
-verifies them, restarts or resumes, waits for fresh readiness markers, and then
-publishes the new ZIP. A failure before launch restores the previous files and
-relaunches the previous copy. A stopped copy stays stopped.
-
-Receipts in each stage record clean exits, changed and removed files, readiness
-markers, preserved process identities and phase timings. Reverify a completed
-stage with `python -m scripts.deploy verify --stage <stage path>`.
+Deploy copies the checked files to a fresh folder in Windows Temp and sends the
+running keeper the same install request the agent uses, naming that folder. The
+keeper checks a frozen copy (the receipt stands for the portable tests, so only
+the affected native modules run), records the running copy as a version, installs
+the files and restarts only the programs the change affects. A change to a
+protected file relaunches the keeper. Deploy waits for the keeper's result and
+reports it; a refusal or undo fails the command. When no keeper is running,
+deploy takes the keeper's lock and installs the files through the same version
+store, and the copy stays stopped. The Downloads ZIP changes only when
+`scripts/bundle.py` rebuilds it.

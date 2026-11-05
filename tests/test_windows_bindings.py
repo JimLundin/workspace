@@ -34,8 +34,7 @@ from assistant.control_policy import (
 from components import LAYOUT
 from config import APPS
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
-from keeper import Stage, WindowsUser32
-from keeper_control import STATUS, Control, Pause, Paused, Resume, Resumed, submit
+from keeper import WindowsUser32
 from miryoku import hook_watch
 from miryoku.engine import Indicator
 from miryoku.layout import AGENT, DICTATE_TOGGLE, ESCAPE, TALK, Key, Layer, Mod, Scancode
@@ -56,7 +55,6 @@ from protocol import (
     decode_indicator,
 )
 from tests.test_engine import Harness
-from tests.test_keeper import World, running
 from usage import Detail
 from winapi import inputs, shell, system, windows
 from winapi._core import LRESULT, fn, user32
@@ -198,33 +196,6 @@ def test_assistant_outage_keeps_remapping_and_reconnects_without_replaying_short
         (Tool.DICTATE.value, 0),
     ]
     assert keyboard.engine.enabled
-
-
-def test_component_handshake_retries_file_sharing_without_repeating_restarts(tmp_path: Path) -> None:
-    # Detect losing a pause command or its acknowledgment when a Windows reader
-    # temporarily denies deletion/replacement, or repeating committed effects.
-    world = World()
-    keeper = running(world)
-    control = Control(tmp_path)
-    submit(tmp_path, Pause("deployment", ("assistant",)))
-    with (tmp_path / "component-command.json").open("rb"):
-        control.poll(keeper, 5)
-        initial = keeper.stage
-        assert initial is Stage.RUNNING and world.take() == []
-    control.poll(keeper, 6)
-    assert world.take() == ["stop assistant"]
-    status = tmp_path / "component-status.json"
-    assert STATUS.validate_json(status.read_bytes(), strict=True) == Paused("deployment", ("assistant",))
-    submit(tmp_path, Resume("deployment"))
-    with status.open("rb"):
-        control.poll(keeper, 7)
-        control.poll(keeper, 8)
-        assert world.take() == ["start assistant"]
-        pending = control.pending
-        assert pending == Resumed("deployment")
-    control.poll(keeper, 9)
-    assert world.take() == [] and control.pending is None
-    assert STATUS.validate_json(status.read_bytes(), strict=True) == Resumed("deployment")
 
 
 def test_generated_and_extended_input_does_not_light_physical_keys() -> None:

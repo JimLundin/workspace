@@ -25,7 +25,8 @@ lazy from concurrent.futures import ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
 
-from scripts.architecture import Report, dependencies, module_name, python_sources, review
+from restart_plan import module_name
+from scripts.architecture import Report, dependencies, python_sources, review
 from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, json_record, read, sha, source_map, write, write_receipt
 from scripts.development_paths import LIVE, PROFILE
@@ -439,8 +440,7 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
 
 
 def choose(args: Options, current: Mapping[str, str], parser: argparse.ArgumentParser) -> Selection:
-    deployed = PROFILE / "deployment" / "source.json"
-    baseline = args.baseline if args.baseline.is_file() else deployed if args.baseline == LIVE and deployed.is_file() else None
+    baseline = args.baseline if args.baseline.is_file() else None
     if baseline is not None:
         previous = source_map(read(baseline))
     else:

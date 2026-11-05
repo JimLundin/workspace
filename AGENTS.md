@@ -78,9 +78,10 @@ Work is done only when it is committed, deployed and pushed.
   finished worktrees and branches. Never leave the only copy in a worktree, a
   stash or an unpushed branch.
 - Deploy with `Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`.
-  It updates `C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace` and
-  `workspace-sdk-python315-win64.zip`, reloading a running copy; the user has
-  authorized this without asking. Run `scripts/bundle.py` only when
-  `.python-version` or the `requirements/` lock changes. Report any deployment
-  or reload failure.
+  The running keeper installs it into
+  `C:\Users\Jim.Lundin\Downloads\workspace-sdk\workspace` and restarts only
+  what changed; a stopped copy just receives the files. The user has authorized
+  this without asking. The ZIP changes only with `scripts/bundle.py`, which a
+  `.python-version` or `requirements/` lock change requires. Report any refusal
+  or undo.
 - Report exactly what remains uncommitted, undeployed or unpushed, and why.

@@ -1,53 +1,31 @@
-"""Stage a checked tree and deploy source while preserving the Windows runtime.
+"""Install checked source into the Downloads copy of Workspace through its keeper.
 
-python -m scripts.deploy deploy --check-receipt /tmp/workspace-check.json
-A stage can be inspected/reverified with --stage after completion. Bundle rebuilds
-remain a separate command for runtime pin changes.
+python -m scripts.deploy --check-receipt %TEMP%\\workspace-check.json
+
+The receipt must match every Git-listed source byte. The checked files are
+staged in Temp and the running keeper installs them as it installs the agent's
+changes, restarting only the programs they affect. With no keeper running, the
+same version store takes the files and the copy stays stopped. Rebuild the
+bundle with scripts/bundle.py instead when a runtime pin changes.
 """
 
 import argparse
-import contextlib
-import inspect
-import os
+import hashlib
 import shutil
 import subprocess
+import sys
 import time
-import zipfile
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal
 
-from scripts.deploy_files import HELPERS, PINS, RUNTIME, CheckReceipt, checked_sources, files, read, read_receipt, sha, source_map, write, zip_files
-from scripts.deploy_values import CONFIG, Config
-from scripts.development_paths import LIVE, PROFILE, PYTHON, TEMP
-lazy from scripts.check import source_files
-lazy from scripts.deploy_windows import run
+import keeper
+from keeper_control import Install, InstallChecking, InstallRefused, InstallStarted, ask, install_result
+from scripts.check import source_files
+from scripts.deploy_files import PINS, CheckReceipt, checked_sources, read_receipt, sha
+from scripts.development_paths import LIVE, TEMP
 
 WORKSPACE = Path(__file__).resolve().parent.parent
-
-
-@dataclass(frozen=True, slots=True)
-class Options:
-    action: Literal["stage", "verify", "deploy"]
-    stage: Path | None
-    check_receipt: Path | None
-
-
-def win(path: Path) -> str:
-    if os.name == "nt":
-        absolute = path.absolute()
-        if absolute.drive.upper() != "C:":
-            raise ValueError("Windows deployment paths must reside on the C drive.")
-        return str(absolute)
-    value = path.absolute().as_posix()
-    if not value.startswith("/mnt/c/"):
-        raise ValueError("Windows deployment paths must reside on the C drive.")
-    return "C:\\" + value.removeprefix("/mnt/c/").replace("/", "\\")
-
-
-def workspace_files() -> dict[str, str]:
-    return source_map({"files": source_files(WORKSPACE)})
+WAIT_S = keeper.CHECK_S + keeper.START_S + 120
 
 
 def deployable(receipt: Path) -> CheckReceipt:
@@ -58,174 +36,80 @@ def deployable(receipt: Path) -> CheckReceipt:
     return checked
 
 
-def stage_source(receipt: Path, stage: Path | None = None) -> Path:
+def stage_source(receipt: Path, stage: Path, *, checkout: Path = WORKSPACE) -> dict[str, str]:
+    """Copy exactly the checked files into a fresh `stage`; the working tree must still match them."""
     wanted = checked_sources(deployable(receipt).files)
-    if workspace_files() != wanted:
+    if source_files(checkout) != wanted:
         raise RuntimeError("The working tree differs from the checked source; rerun checks.")
-    stage = stage or TEMP / f"workspace-source-{time.time_ns()}"
-    if not stage.name.startswith("workspace-source-"):
-        raise ValueError("Use a fresh workspace-source-* stage.")
-    win(stage)
-    stage.mkdir(exist_ok=False)
-    (stage / "scripts").mkdir()
-    (stage / "scripts" / "__init__.py").write_text("", encoding="utf-8")
-    hashes: dict[str, str] = {}
-    for name in HELPERS:
+    stage.mkdir(parents=True, exist_ok=False)
+    for name in wanted:
         destination = stage / name
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(WORKSPACE / name, destination)
-        hashes[name] = sha(stage / name)
-    with zipfile.ZipFile(stage / "source.zip", "x", zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
-        for name in wanted:
-            archive.write(WORKSPACE / name, "workspace/" + name)
-    # The payload is checked against the receipt; the working tree is compared
-    # once more after deployment.
-    if zip_files(stage / "source.zip") != wanted:
-        raise RuntimeError("Source changed while the release was staged.")
-    shutil.copyfile(receipt, stage / "checked.json")
-    write(stage / "source.json", {"files": wanted})
-    write(
-        stage / "release.json",
-        {
-            "kind": "workspace-source-only-v2",
-            "stage_id": stage.name,
-            "live_windows": win(LIVE),
-            "archive_windows": win(LIVE.parent.parent / "workspace-sdk-python315-win64.zip"),
-            "profile_windows": win(PROFILE),
-            "helpers": hashes,
-            "source_manifest_sha256": sha(stage / "source.json"),
-            "payload_sha256": sha(stage / "source.zip"),
-            "check_sha256": sha(stage / "checked.json"),
-            "pins": {name: wanted[name] for name in PINS},
-            "created_at_ns": time.time_ns(),
-        },
-    )
-    print(f"Staged {len(wanted)} checked source files: {stage}", flush=True)
-    return stage
+        shutil.copyfile(checkout / name, destination)
+    if {name: sha(stage / name) for name in wanted} != wanted:
+        raise RuntimeError("Source changed while it was staged; rerun checks.")
+    return wanted
 
 
-def checked_config(stage: Path) -> tuple[Config, dict[str, str]]:
-    config = CONFIG.validate_json((stage / "release.json").read_bytes(), strict=True)
-    if (
-        config.get("kind") != "workspace-source-only-v2"
-        or config.get("stage_id") != stage.name
-        or not stage.name.startswith("workspace-source-")
-        or set(config["helpers"]) != set(HELPERS)
-    ):
-        raise RuntimeError("Invalid source release stage.")
-    for name, expected in config["helpers"].items():
-        if sha(stage / name) != expected or sha(WORKSPACE / name) != expected:
-            raise RuntimeError("A checked deployment helper changed.")
-    if sha(stage / "source.json") != config["source_manifest_sha256"] or sha(stage / "checked.json") != config["check_sha256"]:
-        raise RuntimeError("The checked source manifest or receipt changed.")
-    wanted = source_map(read(stage / "source.json"))
-    if dict(deployable(stage / "checked.json").files) != wanted or {name: wanted[name] for name in PINS} != config["pins"]:
-        raise RuntimeError("The staged source differs from the check receipt or runtime pins.")
-    return config, wanted
+def changed_pins(wanted: Mapping[str, str], live: Path) -> tuple[str, ...]:
+    """Runtime pins the installed bundle doesn't match: its dependencies would be wrong."""
+    return tuple(name for name in PINS if not (live / name).is_file() or hashlib.sha256((live / name).read_bytes()).hexdigest() != wanted[name])
 
 
-def arguments(parser: argparse.ArgumentParser) -> Options:
-    match dict(inspect.getmembers(parser.parse_args())):
-        case {"action": str() as action, "stage": (Path() | None) as stage, "check_receipt": (Path() | None) as receipt}:
-            match action:
-                case "stage" | "verify" | "deploy":
-                    return Options(action, stage, receipt)
-                case _:
-                    pass
-        case _:
-            pass
-    return parser.error("Invalid deployment arguments.")
+def summary(checkout: Path) -> str:
+    head = subprocess.run(["git", "log", "-1", "--format=%h %s"], cwd=checkout, capture_output=True, text=True, check=False).stdout.strip()
+    return f"Deploy {head}" if head else "Deploy"
 
 
-def coordinate_native(stage: Path, operation: Callable[[], None], unchanged: Callable[[], bool] | None = None) -> None:
-    """Own the native coordinator's working folder and checked source lifetime.
-
-    The caller has already compared the working tree with the checked source.
-    """
-    with contextlib.chdir(stage):
-        operation()
-    if unchanged is not None and not unchanged():
-        raise RuntimeError("Source changed during deployment; the installed stage must be reconciled.")
-
-
-def installed_drift(deployed: Mapping[str, str], installed: Mapping[str, str], wanted: Mapping[str, str]) -> tuple[str, ...]:
-    """Installed files something other than a deployment changed and this release would replace.
-
-    The keeper installs agent changes straight into the installed copy. A deployment
-    from a checkout without them silently reverted those installs.
-    """
-    return tuple(
-        sorted(
-            name
-            for name in deployed
-            if installed.get(name) != deployed[name] and installed.get(name) != wanted.get(name) and (name in installed or name in wanted)
-        )
-    )
+def wait_for(digest: str, *, deadline: float) -> InstallStarted | InstallRefused:
+    reported = False
+    while time.monotonic() < deadline:
+        match install_result(keeper.STATE):
+            case InstallStarted(digest=installed) as result if installed == digest:
+                return result
+            case InstallRefused(digest=refused) as result if refused == digest:
+                return result
+            case InstallChecking(digest=checking) if checking == digest and not reported:
+                print("The keeper is checking the change.", flush=True)
+                reported = True
+            case _:
+                pass
+        time.sleep(1)
+    raise SystemExit(f"The keeper reported no result within {WAIT_S / 60:.0f} minutes; see keeper.log.")
 
 
-def unmerged_installs(live: Path, wanted: Mapping[str, str]) -> tuple[str, ...]:
-    """Installed files an agent changed that this checkout's history has never contained.
-
-    A version that appears anywhere in the file's Git history was merged; the
-    checkout's later edits to it are intentional. Only unseen versions would be lost.
-    """
-    deployed = PROFILE / "deployment" / "source.json"
-    if not deployed.is_file():
-        return ()
-    installed = files(live, skip_roots=RUNTIME, ignore_extra_bytecode=True)
-    return tuple(name for name in installed_drift(source_map(read(deployed)), installed, wanted) if not merged(live, name))
-
-
-def merged(live: Path, name: str) -> bool:
-    if not (live / name).is_file():
-        return False
-    blob = git("hash-object", "--no-filters", str(live / name))
-    history = git("log", "--all", "--no-abbrev", "--format=", "--raw", "--", name)
-    return any(line.split()[3] == blob for line in history.splitlines() if line.startswith(":") and len(line.split()) > 3)
-
-
-def git(*arguments: str) -> str:
-    return subprocess.run(["git", *arguments], cwd=WORKSPACE, capture_output=True, text=True, check=True).stdout.strip()
+def deploy(receipt: Path, live: Path) -> None:
+    stage = TEMP / f"workspace-source-{time.time_ns()}"
+    try:
+        wanted = stage_source(receipt, stage)
+        if changed := changed_pins(wanted, live):
+            raise SystemExit("A runtime pin changed (" + ", ".join(changed) + "); rebuild the bundle with scripts/bundle.py.")
+        digest, title = keeper.source_digest(stage), summary(WORKSPACE)
+        with keeper.exclusive(keeper.STATE) as stopped:
+            if stopped:
+                previous = keeper.install_stopped(stage, live, title, state=keeper.STATE, versions=keeper.VERSIONS)
+                print(f"Workspace isn't running: installed the files over version {previous[:12]}; it stays stopped.", flush=True)
+                return
+        ask(keeper.REQUESTS, Install(title, digest, digest, str(stage)))
+        print("Asked the running keeper to install the change.", flush=True)
+        match wait_for(digest, deadline=time.monotonic() + WAIT_S):
+            case InstallStarted(version=version):
+                print(f"Installed; the affected programs are running. Undo restores version {version[:12]}.", flush=True)
+            case InstallRefused(reason=reason):
+                raise SystemExit(reason)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("stage", "verify", "deploy"))
-    parser.add_argument("--stage", type=Path)
-    parser.add_argument("--check-receipt", type=Path)
-    args = arguments(parser)
-    stage = args.stage
-    if stage is None:
-        if args.check_receipt is None:
-            parser.error("--check-receipt is required to create a source stage")
-        # Staging compares the working tree with the receipt.
-        stage = stage_source(args.check_receipt)
-    if args.action == "stage":
-        return
-    config, wanted = checked_config(stage)
-    if os.name == "nt" and args.action == "deploy" and (unmerged := unmerged_installs(Path(config["live_windows"]), wanted)):
-        raise SystemExit(
-            "The installed copy has agent changes this checkout has never contained. Deploying would erase them. "
-            "Pull or merge them, check again and redeploy: " + ", ".join(unmerged)
-        )
-    source_checkout = stage.resolve() != WORKSPACE
-    if source_checkout and args.stage is not None and workspace_files() != wanted:
-        raise RuntimeError("Source changed after staging; rerun checks.")
-    if os.name == "nt":
-        # The venv shares the installed interpreter. Keep one coordinator so
-        # an installed Python parent is not mistaken for an unowned workload.
-        def coordinate() -> None:
-            run(args.action, stage, config, wanted)
-
-        def unchanged() -> bool:
-            return workspace_files() == wanted
-
-        coordinate_native(stage, coordinate, unchanged if source_checkout else None)
-        return
-    result = subprocess.run([str(PYTHON), "-B", "-m", "scripts.deploy", args.action, "--stage", win(stage)], cwd=stage, check=False)
-    if result.returncode == 0 and workspace_files() != wanted:
-        raise RuntimeError("Source changed during deployment; the installed stage must be reconciled.")
-    raise SystemExit(result.returncode)
+    parser.add_argument("--check-receipt", type=Path, required=True)
+    receipt = parser.parse_args().check_receipt
+    if not isinstance(receipt, Path):
+        parser.error("--check-receipt names the receipt file")
+    if sys.platform != "win32":
+        parser.error("Deploy from Windows with Dev.cmd deploy.")
+    deploy(receipt, LIVE)
 
 
 if __name__ == "__main__":

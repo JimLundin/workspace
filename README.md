@@ -559,9 +559,10 @@ edits stay available for follow-up requests in the same conversation, then:
 3. **Verify**: the keeper checks its own frozen copy of the source: every module
    imports and the full suite, including Windows integrations, passes. Failed
    checks or changes to the candidate during checks prevent installation.
-4. **Install and restart**: the keeper saves the current version and durable
-   recovery state, installs the checked copy, clears old bytecode, and restarts
-   the layout, assistant, and automation worker. File-write failures restore the previous version.
+4. **Install and restart**: the keeper records the running copy as a version,
+   saves durable recovery state, installs the checked copy, clears old bytecode,
+   and restarts only the programs whose imports changed: an assistant change
+   leaves the keyboard running. File-write failures restore the previous version.
 5. **A ten-minute trial**: a startup failure or a crash undoes the change, and
    quitting or rebooting during the trial restores the previous version on the
    next launch. After ten minutes without a crash the change stays.
@@ -571,9 +572,14 @@ edits stay available for follow-up requests in the same conversation, then:
 7. **Later**, tray menu → Undo rolls back the last update, even after restarting.
    Repeated crashes restore the previous version too.
 
-The last 20 versions are kept in `%LOCALAPPDATA%\workspace\versions`. The agent
-can't change the protected keeper, runtime activation, checker, dialogs or component-control
-modules. The keeper's protected dialogs use the pinned Qt dependency; its typed
+Every version is a commit in the keeper's own Git repository,
+`%LOCALAPPDATA%\workspace\versions.git`; the installed copy itself is not a
+checkout. Undo checks out the version an install replaced. `Dev.cmd deploy`
+installs through the same keeper request (see
+[the iteration pipeline](docs/iteration-pipeline.md)), so the keeper is the only
+writer of the installed copy. The agent can't change the protected keeper,
+restart plan, runtime activation, checker, dialogs or component-control
+modules; a deploy that changes one relaunches the keeper. The keeper's protected dialogs use the pinned Qt dependency; its typed
 request inbox, rollback record and component-control transport use Pydantic.
 A request it can't read is refused with a notice. The `.runtime` dependency directory is also
 protected and stay outside source snapshots and updates. Code and tests run with
@@ -692,7 +698,8 @@ payloads, screenshots, credentials, encrypted reasoning, or raw SDK history.
 ## How it's built
 
 ```
-keeper.py       runs the programs; installs, tries and undoes changes (protected)
+keeper.py       runs the programs; installs, tries and undoes versions (protected)
+restart_plan.py which programs a change restarts, from its imports (protected)
 selfcheck.py    compile, import, test: the gate every change passes (protected)
 protocol.py     what the layout and the assistant say to each other (window messages)
 config.py       your settings: apps, snippets, agent limits

@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -31,7 +32,7 @@ from automation.actions import Change, Classification, Observation, Operation, t
 from automation.json_value import Json
 from automation.store import TaskStore
 from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Until, Waiting
-from keeper import CHECK_S, START_S, copy_source, source_digest
+from keeper import CHECK_S, START_S, Versions, copy_source, source_digest
 from keeper_control import InstallRefused, InstallStarted, install_result
 
 MAX_SOURCE_CHARS: Final = 60_000
@@ -124,7 +125,7 @@ class InstalledCopy:
     state: Path
     """Where the keeper reports each install."""
     versions: Path
-    """The keeper's snapshots of replaced versions."""
+    """The keeper's version repository; the assistant only reads it."""
     landing: Landing | None
     """None leaves installs unmerged: only for configurations without a repository."""
 
@@ -164,8 +165,10 @@ def verified_installation(store: TaskStore, claim: Claim, installed: InstalledCo
                     # deployment. The action stays unverified until it lands; landing
                     # again after a success finds it already merged.
                     try:
-                        merged = " " + land_installed(Installed(installed.live, installed.versions / version, summary), installed.landing)
-                    except PublishError as error:
+                        with tempfile.TemporaryDirectory(prefix="workspace-base-") as base:
+                            Versions(installed.versions, installed.live).export(version, Path(base))
+                            merged = " " + land_installed(Installed(installed.live, Path(base), summary), installed.landing)
+                    except (OSError, PublishError) as error:
                         return Waiting(Blocked(f"The change is installed but was not merged into the repository: {error}"[:8_000]))
                 verified = ActionVerified("The keeper installed the checked change; the running source matches its SHA-256 digest." + merged)
                 if store.finish_action(action.id, verified, at=now) is None:

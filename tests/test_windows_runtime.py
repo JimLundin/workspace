@@ -13,17 +13,16 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bundle integration")
 
-from components import ASSISTANT, Window, read_marker
+from components import ASSISTANT, Window
 from keeper import Process, WindowsUser32
 from runtime import activate
-from scripts.deploy_processes import inventory
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_keeper_allows_owned_cleanup_longer_than_five_seconds(tmp_path: Path) -> None:
-    # Defect: the keeper kills a responsive assistant/automation child while
-    # its legitimate cleanup is still running, blocking checked deployment.
+    # Defect: the keeper kills a responsive assistant while its legitimate
+    # cleanup is still running.
     ready = tmp_path / "ready"
     title = "workspace delayed cleanup " + tmp_path.name
     script = tmp_path / "cleanup_child.py"
@@ -57,43 +56,6 @@ def test_keeper_allows_owned_cleanup_longer_than_five_seconds(tmp_path: Path) ->
                 if handle := boundary.FindWindowW(None, title):
                     boundary.PostMessageW(handle, 0x0010, 0, 0)
                 process.wait(timeout=15)
-
-
-def test_shared_installed_python_processes_are_bound_to_workspace_ownership(tmp_path: Path) -> None:
-    # Detect missing native children after removing .python, or including an
-    # unrelated process that happens to use the same installed interpreter.
-    python = Path(sys.base_prefix) / "pythonw.exe"
-    stop = tmp_path / "stop"
-    ready = tmp_path / "ready"
-    wait = "from pathlib import Path; import time\nwhile not Path('stop').exists(): time.sleep(0.01)\n"
-    (tmp_path / "child_fixture.py").write_text(wait)
-    script = tmp_path / "workspace.pyw"
-    script.write_text(
-        "from pathlib import Path; import subprocess,sys\n"
-        "child=subprocess.Popen([sys.executable,'-m','child_fixture'])\n"
-        # Written in place, as components.write_marker does: renaming a finished
-        # file over the name lets a reader open it while the rename still holds it.
-        "Path('ready').write_text(f'{child.pid} 0', encoding='ascii')\nchild.wait()\n"
-    )
-    with (
-        subprocess.Popen([str(python), str(script)], cwd=tmp_path) as parent,
-        subprocess.Popen([str(python), "-c", wait, str(script)], cwd=tmp_path) as unrelated,
-    ):
-        try:
-            deadline = time.monotonic() + 10
-            while (marker := read_marker(ready)) is None:
-                if time.monotonic() >= deadline:
-                    raise AssertionError("The installed-interpreter fixture did not start")
-                time.sleep(0.01)
-            child = marker.pid
-            rows = inventory(tmp_path)
-            assert {row.pid for row in rows} == {parent.pid, child}
-            assert unrelated.pid not in {row.pid for row in rows}
-            assert all(Path(row.executable) == python for row in rows)
-        finally:
-            stop.write_text("stop")
-            parent.wait(timeout=10)
-            unrelated.wait(timeout=10)
 
 
 def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path: Path) -> None:

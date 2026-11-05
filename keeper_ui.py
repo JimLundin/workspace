@@ -4,14 +4,13 @@ Import this only after runtime activation. The keeper uses installed Python
 3.15; Qt is the pinned GUI dependency.
 """
 
-import msvcrt
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
-from keeper_control import Control, Supervisor
+from keeper import exclusive
 
 # Resolve Python 3.15's deferred executor export before Qt inspects imports.
 _executor = ThreadPoolExecutor
@@ -26,25 +25,14 @@ QPushButton:focus { border: 1px solid #b8d2ff; }
 
 
 class KeeperUi:
-    __slots__ = (
-        "__weakref__",
-        "app",
-        "components",
-        "timer",
-        "windows",
-    )
+    __slots__ = ("__weakref__", "app", "timer", "windows")
 
-    def __init__(self, state: Path) -> None:
-        self.components = Control(state)
+    def __init__(self) -> None:
         self.app = QtWidgets.QApplication([])
         self.app.setQuitOnLastWindowClosed(False)
         self.app.setStyleSheet(STYLE)
         self.windows: list[QtWidgets.QDialog] = []
         self.timer = QtCore.QTimer()
-
-    def poll_components(self, supervisor: Supervisor, now: float) -> None:
-        """The keeper event loop owns typed file commands alongside its dialogs."""
-        self.components.poll(supervisor, now)
 
     def dialog(self, title: str, text: str) -> tuple[QtWidgets.QDialog, QtWidgets.QVBoxLayout]:
         dialog = QtWidgets.QDialog()
@@ -97,12 +85,11 @@ class KeeperUi:
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
 
 
-def launch(state: Path, run: Callable[[KeeperUi], None]) -> None:
-    """Own the singleton lock before creating Qt or starting any child."""
-    state.mkdir(parents=True, exist_ok=True)
-    with (state / "keeper.lock").open("a+b") as lock_file:
-        try:
-            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return
-        run(KeeperUi(state))
+def launch(state: Path, run: Callable[[KeeperUi], None], *, wait_s: float = 0) -> None:
+    """Own the singleton lock before creating Qt or starting any child.
+
+    A relaunching keeper waits up to `wait_s` for the keeper it replaces to exit.
+    """
+    with exclusive(state, wait_s=wait_s) as owned:
+        if owned:
+            run(KeeperUi())

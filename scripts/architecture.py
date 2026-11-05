@@ -19,6 +19,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import StrictStr, StringConstraints, TypeAdapter
 
+from restart_plan import call_name, import_aliases, imports, module_name
 from scripts.source_analysis import Cache, Source, parse
 
 type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -119,65 +120,12 @@ def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str,
     )
 
 
-def module_name(name: str) -> str:
-    parts = Path(name).with_suffix("").parts
-    return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
-
-
-def _call_name(node: ast.AST, aliases: Mapping[str, str]) -> str:
-    match node:
-        case ast.Name(id=name):
-            return aliases.get(name, name)
-        case ast.Attribute(value=value, attr=attribute):
-            return _call_name(value, aliases) + "." + attribute
-        case _:
-            return ""
-
-
-def _aliases(tree: ast.AST) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for node in ast.walk(tree):
-        match node:
-            case ast.Import(names=names):
-                result.update({alias.asname or alias.name.split(".")[0]: alias.name if alias.asname else alias.name.split(".")[0] for alias in names})
-            case ast.ImportFrom(module=module, level=0, names=names) if module:
-                result.update({alias.asname or alias.name: module + "." + alias.name for alias in names})
-            case _:
-                pass
-    return result
-
-
-def _imports(name: str, tree: ast.AST) -> frozenset[str]:
-    result: set[str] = set()
-    aliases = _aliases(tree)
-    package = module_name(name).split(".") if name.endswith("/__init__.py") else module_name(name).split(".")[:-1]
-    for node in ast.walk(tree):
-        match node:
-            case ast.Import(names=names):
-                result.update(alias.name for alias in names)
-            case ast.ImportFrom(module=base, level=level, names=names):
-                prefix = ".".join(package[: len(package) - level + 1]) if level else ""
-                target = ".".join(value for value in (prefix, base) if value)
-                result.add(target)
-                result.update(".".join(value for value in (target, alias.name) if value) for alias in names if alias.name != "*")
-            case ast.Call(func=function, args=[ast.Constant(value=str(value)), *_]) if _call_name(function, aliases) in (
-                "importlib.import_module",
-                "__import__",
-                "builtins.__import__",
-            ):
-                result.add(value)
-            case _:
-                pass
-    # Importing a submodule executes its ancestor package initializers too.
-    return frozenset(".".join(value.split(".")[:index]) for value in result for index in range(1, len(value.split(".")) + 1))
-
-
 def dependencies(name: str, text: str, *, cache: Cache | None = None) -> frozenset[str]:
     source = Source(name, text)
     key = cache.key("dependencies", source) if cache is not None else ""
     if cache is not None and (saved := cache.read(key, DEPENDENCIES)) is not None:
         return saved
-    result = _imports(name, parse(source))
+    result = imports(name, parse(source))
     if cache is not None:
         cache.write(key, result, DEPENDENCIES)
     return result
@@ -255,7 +203,7 @@ def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str
             case ast.ImportFrom(module=base, level=0, names=names) if base:
                 local.update({alias.asname or alias.name: base + "." + alias.name for alias in names})
             case ast.Assign(targets=[ast.Name(id=name)], value=value):
-                resolved = _call_name(value, local)
+                resolved = call_name(value, local)
                 if resolved in REFLECTION or resolved in {"builtins." + item for item in REFLECTION}:
                     local[name] = resolved
             case _:
@@ -287,7 +235,7 @@ def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Ma
                         flags = {keyword.arg: keyword.value for keyword in keywords}
                     case _:
                         function = decorator
-                if _call_name(function, local) != "dataclasses.dataclass":
+                if call_name(function, local) != "dataclasses.dataclass":
                     continue
                 match flags.get("frozen"), flags.get("slots"):
                     case ast.Constant(value=True), ast.Constant(value=True):
@@ -308,7 +256,7 @@ def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Ma
                         for field in fields:
                             match field:
                                 case ast.AnnAssign(target=ast.Name(id=field_name), annotation=annotation):
-                                    if any(_call_name(node, local) in MUTABLE_TYPES for node in ast.walk(annotation)):
+                                    if any(call_name(node, local) in MUTABLE_TYPES for node in ast.walk(annotation)):
                                         yield Finding(
                                             "mutable-field",
                                             module,
@@ -321,7 +269,7 @@ def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Ma
                                     pass
                     case _:
                         pass
-        case ast.Call(func=function) if _call_name(function, local) in REFLECTION | {"builtins." + name for name in REFLECTION}:
+        case ast.Call(func=function) if call_name(function, local) in REFLECTION | {"builtins." + name for name in REFLECTION}:
             yield Finding(
                 "explicit-attributes",
                 module,
@@ -342,11 +290,11 @@ def observation(source: Source, cache: Cache | None) -> Observation:
         return saved
     tree = parse(source)
     module = module_name(source.name)
-    aliases = _aliases(tree)
+    aliases = import_aliases(tree)
     dynamic: list[Finding] = []
     for node in ast.walk(tree):
         match node:
-            case ast.Call(func=function, args=args, keywords=keywords) if _call_name(function, aliases) in (
+            case ast.Call(func=function, args=args, keywords=keywords) if call_name(function, aliases) in (
                 "importlib.import_module",
                 "__import__",
                 "builtins.__import__",
@@ -381,7 +329,7 @@ FORBIDDEN_TEST_TOOLS = frozenset({"unittest.mock", "mock", "pytest_mock", "mocki
 def testing_dependencies(source: Source) -> Iterator[Finding]:
     """Reject framework replacement seams in production and test source alike."""
     tree = parse(source)
-    aliases = _aliases(tree)
+    aliases = import_aliases(tree)
     for node in ast.walk(tree):
         target = ""
         match node:
@@ -393,7 +341,7 @@ def testing_dependencies(source: Source) -> Iterator[Finding]:
                 imports = (module, *(module + "." + item.name for item in names))
                 target = next((item for item in imports if any(item == name or item.startswith(name + ".") for name in FORBIDDEN_TEST_TOOLS)), "")
             case ast.Call(func=function, args=args):
-                call = _call_name(function, aliases)
+                call = call_name(function, aliases)
                 if call in ("importlib.import_module", "__import__", "builtins.__import__"):
                     match args:
                         case [ast.Constant(value=str() as module), *_] if module in FORBIDDEN_TEST_TOOLS:
@@ -431,8 +379,8 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     all_source = tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources)
     loaded = tuple(source for source in all_source if not source.name.startswith("tests/"))
     observations = {module_name(source.name): observation(source, cache) for source in loaded}
-    imports = {module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded}
-    graph = {module: imported & observations.keys() for module, imported in imports.items()}
+    imported_by = {module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded}
+    graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
     findings = [finding for observed in observations.values() for finding in observed.declarations]
     findings.extend(finding for source in all_source for finding in testing_dependencies(source))
     pending: deque[tuple[str, ...]] = deque((module,) for module in sorted(graph) if module == "miryoku" or module.startswith("miryoku."))
@@ -448,7 +396,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             continue
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
-    findings.extend(ui_isolation(imports, configuration.headless))
+    findings.extend(ui_isolation(imported_by, configuration.headless))
     findings.extend(presentation_isolation(graph, configuration.ui_private))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]

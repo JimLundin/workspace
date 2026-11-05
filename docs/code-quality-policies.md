@@ -51,8 +51,7 @@ Declare dependencies at module level. Use Python 3.15's `lazy import` or
 `lazy from` to defer loading until first use. This preserves visible module
 dependencies and native initialization order without imports inside methods.
 Launchers run directly on Python 3.15 and lazily resolve product imports after
-runtime activation. The editing runner lazily loads its test/native dependencies after both policy gates pass;
-the staged native deployment driver can avoid loading test machinery entirely.
+runtime activation. The editing runner lazily loads its test/native dependencies after both policy gates pass.
 
 ## UI independence
 

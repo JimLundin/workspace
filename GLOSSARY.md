@@ -213,8 +213,7 @@ authorize blindly repeating an action with an uncertain outcome.
 _Avoid_: Cancellation, failure
 
 **Component catalogue**:
-The one list of programs the keeper supervises: the layout, the assistant and
-automation. Each entry names its entry module, control window, quit message,
+The one list of programs the keeper supervises: the layout and the assistant. Each entry names its entry module, control window, quit message,
 shutdown budget and readiness marker.
 _Avoid_: Program, role, miryoku (as a component name)
 
@@ -224,11 +223,17 @@ invocation. The call is temporary; the owner's saved state remains the truth.
 _Avoid_: Local bridge, feed bridge, console request
 
 **Keeper request**:
-A typed ask in the keeper's inbox folder: install a checked change, undo the
-last install, keep the change on trial, or restart one catalogue component.
-The keeper takes each once, oldest first, and refuses one it can't read with a
-visible notice. Deployment pause and resume are separate component commands.
+A typed ask in the keeper's inbox folder: install a checked change (the agent's
+workspace, or a deploy's staged folder), undo the last install, or restart one
+catalogue component. The keeper takes each once, oldest first, and refuses one
+it can't read with a visible notice.
 _Avoid_: Action, agent request (the user's ask of the agent)
+
+**Installed version**:
+A commit in the keeper's version repository (`%LOCALAPPDATA%\workspace\versions.git`)
+holding one state of the installed copy's source files. Each install records
+the running copy first, so Undo checks out the version an install replaced.
+_Avoid_: Snapshot folder, backup
 
 **Readiness marker**:
 The file a component writes once it is up. It names its writer by process id
