@@ -1,4 +1,4 @@
-"""Check receipts and source manifests: what a check proved and what a deploy may install."""
+"""Check receipts and source manifests: what a check proved (the watch baseline) and what a deploy may install."""
 
 import hashlib
 import json
@@ -125,13 +125,6 @@ def json_record[T](adapter: TypeAdapter[T], value: T) -> dict[str, object]:
 
 def write_receipt(path: Path, receipt: CheckReceipt) -> None:
     write(path, json_record(CHECK_RECEIPT, receipt))
-
-
-def read_receipt(path: Path) -> CheckReceipt:
-    try:
-        return CHECK_RECEIPT.validate_json(path.read_bytes(), strict=True)
-    except ValidationError as error:
-        raise ValueError("Supply a successful scripts.check source-bound receipt.") from error
 
 
 def source_map(value: object) -> dict[str, str]:

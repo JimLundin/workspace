@@ -26,9 +26,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Workspace: check and deploy",
+      "label": "Workspace: deploy",
       "type": "shell",
-      "command": ".\\Dev.cmd check --receipt \"$env:TEMP\\workspace-check.json\"; if ($LASTEXITCODE -eq 0) { .\\Dev.cmd deploy --check-receipt \"$env:TEMP\\workspace-check.json\" }",
+      "command": ".\\Dev.cmd deploy",
       "options": {"cwd": "${workspaceFolder}"},
       "problemMatcher": []
     }

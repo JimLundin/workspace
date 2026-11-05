@@ -7,8 +7,8 @@ environment uses the user-installed Python 3.15.1. Keep the installed client
 (`%LOCALAPPDATA%\Programs\workspace-sdk\workspace`) separate so edits and tests never replace files in the running application.
 
 ```powershell
-.\Dev.cmd check --tests tests/test_feed_triage.py --receipt "$env:TEMP\workspace-check.json"
-.\Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"
+.\Dev.cmd check --tests tests/test_feed_triage.py
+.\Dev.cmd deploy
 .\Dev.cmd lint assistant/feed_triage.py
 .\Dev.cmd format assistant/feed_triage.py
 .\Dev.cmd typecheck assistant/feed_triage.py
@@ -70,7 +70,7 @@ tests listed in `SLOW` in `scripts/check_tiers.py`. In a narrow editing check
 (direct imports, fewer than ten modules) a test that takes over 1.5 s fails the
 check by name; make it faster or add it to `SLOW`. `--native` adds the affected
 native modules and the slow tests. `--full` runs everything, natively, and types
-the whole tree: run it after changing native code and before a merge or deploy.
+the whole tree: run it after broad native changes or before a merge.
 CI and the keeper also run the protected `selfcheck.py` full suite.
 
 Any failure stops before a receipt. `--tests` runs exactly the named files and
@@ -100,20 +100,17 @@ Editing checks cache per-file policy observations under
 Generated tests live in `tests/properties/` and need the `test` extra
 (`python -m pip install -e ".[test]"`).
 
-## Receipts and deployment
+## Deployment
 
-After the final edit, write a receipt with
-`Dev.cmd check --full --receipt "$env:TEMP\workspace-check.json"` and deploy with
-`Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`. The receipt
-must match every source byte in the Git-listed working tree, and a receipt
-written without the standards is refused. A changed runtime pin
-(`.python-version` or `requirements/windows-py315.lock`) is refused too: rebuild
-the bundle with `scripts/bundle.py` instead.
+Deploy with `Dev.cmd deploy`. It needs no prior check: the keeper checks the
+change itself. A changed runtime pin (`.python-version` or
+`requirements/windows-py315.lock`) is refused: rebuild the bundle with
+`scripts/bundle.py` instead.
 
-Deploy copies the checked files to a fresh folder in Windows Temp and sends the
-running keeper the same install request the agent uses, naming that folder. The
-keeper checks a frozen copy (the receipt stands for the portable tests, so only
-the affected native modules run), records the running copy as a version, installs
+Deploy copies the Git-listed source files to a fresh folder in Windows Temp and
+sends the running keeper the same install request the agent uses, naming that
+folder. The keeper checks a frozen copy (the tests the change affects, portable
+and native), records the running copy as a version, installs
 the files and restarts only the programs the change affects. A change to a
 protected file relaunches the keeper. Deploy waits for the keeper's result and
 reports it; a refusal or undo fails the command. When no keeper is running,

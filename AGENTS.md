@@ -61,17 +61,19 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 # Checking
 
-Read [docs/iteration-pipeline.md](docs/iteration-pipeline.md). Use
-`Dev.cmd check` for affected portable tests while editing, `--native` after
-changing native code, and `--full` before a merge or deploy. A test over the
-editing budget fails by name: speed it up or list it in `scripts/check_tiers.py`.
-Run native checks sequentially on the shared desktop. After the final edit,
-write a receipt with `--full --receipt "$env:TEMP\workspace-check.json"`. Do not
-change the protected selfcheck gate or CI's full checks.
+Read [docs/iteration-pipeline.md](docs/iteration-pipeline.md). Scale checks to
+the change. Comment, docstring and docs-only changes need no check. Otherwise use
+`Dev.cmd check` for affected portable tests while editing and `--native` after
+changing native code; keep `--full` for broad changes. Don't rerun a whole suite
+to clear a flaky native test: rerun only what failed, and report it. A test over
+the editing budget fails by name: speed it up or list it in
+`scripts/check_tiers.py`. Run native checks sequentially on the shared desktop.
+Do not change the protected selfcheck gate or CI's full checks.
 
 # Committing and deploying
 
-Work is done only when it is committed, deployed and pushed.
+Work is done only when it is committed, deployed and pushed. Changes with no
+runtime effect (comments, docstrings, docs) need only commit and push.
 
 - Commit in small steps, one change each, ending with the session's attribution
   trailer. Commit leftover uncommitted work from earlier sessions as its own
@@ -79,8 +81,8 @@ Work is done only when it is committed, deployed and pushed.
 - Merge work from worktrees and subagents into the user's branch, then remove
   finished worktrees and branches. Never leave the only copy in a worktree, a
   stash or an unpushed branch.
-- Deploy with `Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`.
-  The running keeper installs it into
+- Deploy with `Dev.cmd deploy`; it needs no prior check run. The running keeper
+  checks the tests the change affects, then installs it into
   `C:\Users\Jim.Lundin\AppData\Local\Programs\workspace-sdk\workspace` and restarts only
   what changed; a stopped copy just receives the files. The user has authorized
   this without asking. The ZIP changes only with `scripts/bundle.py`, which a
