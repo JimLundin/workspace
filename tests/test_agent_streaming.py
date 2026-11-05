@@ -62,6 +62,15 @@ def make_agent(
     )
 
 
+def next_live(panel: ObservedWindow, worker: threading.Thread) -> LiveMessage:
+    """The next streamed update; the first request may still be importing the SDK."""
+    while True:
+        try:
+            return panel.events.get(timeout=0.05)
+        except queue.Empty:
+            assert worker.is_alive(), "The agent ended before streaming the expected update."
+
+
 @contextmanager
 def running(agent: Agent, panel: ObservedWindow) -> Generator[threading.Thread]:
     errors: list[Exception] = []
@@ -112,8 +121,8 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes(tmp_path
         agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))
         with running(agent, panel) as worker:
             try:
-                assert isinstance(panel.events.get(timeout=3), ReasoningSummary)
-                assert isinstance(panel.events.get(timeout=3), Answer)
+                assert isinstance(next_live(panel, worker), ReasoningSummary)
+                assert isinstance(next_live(panel, worker), Answer)
                 assert worker.is_alive() and not release.is_set()
                 panel.paint()
                 partial = panel.view.states[-1]
@@ -197,7 +206,8 @@ def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row(tm
         agent = make_agent(endpoint, panel, stop, work=durable(tmp_path), machine=HeldClipboard())
         with running(agent, panel) as worker:
             try:
-                assert entered.wait(timeout=3)
+                while not entered.wait(timeout=0.05):
+                    assert worker.is_alive(), "The agent ended without calling the tool."
                 panel.paint()
                 activity = [item for item in panel.state.messages if isinstance(item, ToolActivity)]
                 assert len(activity) == 1 and activity[0].outcome is ToolStatus.RUNNING
@@ -232,7 +242,7 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_pat
         with running(agent, panel) as worker:
             try:
                 while True:
-                    value = panel.events.get(timeout=3)
+                    value = next_live(panel, worker)
                     if isinstance(value, Answer) and value.text == "The workbook":
                         break
                 panel.stopping()

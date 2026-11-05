@@ -22,8 +22,12 @@ from winapi.pcm import RATE
 SPEECH = array("h", [1400] * RATE).tobytes()
 
 
-def wait_for(predicate: Callable[[], bool], timeout: float = 5) -> None:
-    deadline = time.monotonic() + timeout
+HANG = 60
+"""Fails a hung worker, not a slow one: a loaded check's first transcription imports the SDK."""
+
+
+def wait_for(predicate: Callable[[], bool]) -> None:
+    deadline = time.monotonic() + HANG
     while not predicate():
         assert time.monotonic() < deadline, "The meeting worker did not reach the expected state."
         time.sleep(0.01)
@@ -243,7 +247,7 @@ def test_slow_transcription_does_not_block_capture_stop_or_shutdown(tmp_path: Pa
 
     def slow(audio: bytes, *, context: str) -> str:
         entered.set()
-        assert release.wait(5)
+        assert release.wait(HANG)
         return "The late response."
 
     service = Meetings(
@@ -254,7 +258,7 @@ def test_slow_transcription_does_not_block_capture_stop_or_shutdown(tmp_path: Pa
     )
     try:
         service.start()
-        assert entered.wait(5)
+        assert entered.wait(HANG)
         wait_for(lambda: service.snapshot().seconds == 40)
         service.close(timeout=0.2)
         store = MeetingStore(Path(service.snapshot().path).parent)
@@ -286,7 +290,7 @@ def test_restart_recovers_pending_audio_without_opening_the_microphone(tmp_path:
             service.start_worker()
             # Committing text to the journal precedes publishing its file. Wait
             # for the public completion update before opening that file on Windows.
-            assert exported.wait(5), service.snapshot()
+            assert exported.wait(HANG), service.snapshot()
         finally:
             service.close()
         saved = store.state()
@@ -307,7 +311,7 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
         if calls == 1:
             failed.set()
             return Failure("fixture: temporarily offline")
-        assert resume.wait(5)
+        assert resume.wait(HANG)
         return "Recovered after the outage."
 
     service = Meetings(
@@ -319,7 +323,7 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
     )
     try:
         service.start()
-        assert failed.wait(5)
+        assert failed.wait(HANG)
         assert MeetingStore(Path(service.snapshot().path).parent).state().pending == RATE
         resume.set()
         wait_for(lambda: service.snapshot().phase == "saved")
@@ -391,7 +395,7 @@ def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_pa
         def create(self, source: AudioSource, title: str = "Meeting") -> MeetingStore:
             if title == "Second":
                 creating.set()
-                assert release_create.wait(5)
+                assert release_create.wait(HANG)
             return super().create(source, title)
 
     def reply(request: Received) -> Reply:
@@ -399,7 +403,7 @@ def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_pa
         requests += 1
         if requests == 1:
             entered.set()
-            assert release_response.wait(5)
+            assert release_response.wait(HANG)
             return Reply(b'{"text":"First meeting."}')
         return Reply(b'{"text":"Second meeting."}')
 
@@ -408,11 +412,11 @@ def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_pa
         service = Meetings(settings(endpoint.url), lambda source: GeneratedCapture(1), archive=DelayedArchive(tmp_path))
         try:
             service.start(title="First")
-            assert entered.wait(5)
+            assert entered.wait(HANG)
             wait_for(lambda: service.snapshot().phase == "finishing")
             original = MeetingStore(Path(service.snapshot().path).parent)
             service.start(title="Second")
-            assert creating.wait(5)
+            assert creating.wait(HANG)
             release_response.set()
             wait_for(lambda: original.state().pending == 0)
             assert service.snapshot().phase == "starting" and service.snapshot().title == "Second"
