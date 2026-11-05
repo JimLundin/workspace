@@ -60,23 +60,18 @@ the desktop itself, so the chords can be learned without the mouse:
 - **Focus letters** appear on the windows next to the focused one, with their
   arrow: **← N**, **↓ E**, **↑ I** or **→ O**.
 - **The focused window** adds Zoom (**M**) and Minimize (**V**) as quiet letters.
-- **The chord panel** appears near the bottom of the primary screen when the chord
-  stays held for 600 ms without a letter. It lists every chord in five groups:
-  Apps, Desktops, Focus, Window, and Voice and agent.
 
 Releasing the modifiers hides everything. Minimized windows and windows on other
 desktops get no badge; the pager's names list the apps on other desktops.
 
 `desktop_ui/key_hints.py` decides the hints as a pure function of the
-application observer's navigation world, the window in front and how long the
-chord has been held. Each letter's target comes from the same navigation
-decision that carries the chord out, so a hint can't name a window the chord
-skips. The panel is generated from `CHORDS` and the key map's descriptions, so a
-remapped letter updates it. The bar owns the hints and refreshes the window in
+application observer's navigation world and the window in front. Each letter's
+target comes from the same navigation decision that carries the chord out, so a
+hint can't name a window the chord skips. The bar owns the hints and refreshes the window in
 front on each 100 ms tick while the chord is held; `desktop_ui/key_hint_overlay.py`
 paints them in the bar's material and shape: 26 px capsules with 20 px keycaps
 in Inter 12 medium, glass as the thicker Qt-painted veil, solid, or high
-contrast. Every surface is a click-through tool window that never activates.
+contrast. Every badge is a click-through tool window that never activates.
 Badge windows are pooled, and nothing runs while the hints are hidden.
 
 ## Navigation log

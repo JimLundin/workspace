@@ -56,7 +56,7 @@ lazy from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
-lazy from desktop_ui.key_hints import PANEL_DELAY, hints
+lazy from desktop_ui.key_hints import hints
 lazy from desktop_ui.navigation import CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import EventLoop, application
@@ -122,13 +122,12 @@ class DesktopBar:
         "automatic_recording",
         "away_screens",
         "choices",
-        "chord_since",
+        "chord_held",
         "closed",
         "controls",
         "dictating",
         "errors",
         "frost",
-        "hint_panel",
         "hints",
         "hovered",
         "inbox",
@@ -188,7 +187,7 @@ class DesktopBar:
         self.job: Job | None = None
         self.agent: Agent | None = None
         self.recording = RecordingState()
-        self.chord_since: float | None = None  # When either keyboard began holding its Apps key.
+        self.chord_held = False  # Either keyboard is holding its Apps key.
         self.hints: KeyHintOverlay | None = None
         self.inbox = self.menu_target = 0
         self.notices = Notices()
@@ -222,7 +221,7 @@ class DesktopBar:
         self.notification_service: NotificationObserver | None = None
         self.notification_access = system_notices.Access.UNAVAILABLE
         self.notification_observation: system_notices.Observed | None = None
-        self.timer, self.audio_timer, self.hint_panel = self.timers()
+        self.timer, self.audio_timer = self.timers()
         self.start(native_shell=native_shell, audio_level=audio_level)
 
     def start(self, *, native_shell: bool, audio_level: Callable[[], float | None] | None) -> None:
@@ -239,18 +238,15 @@ class DesktopBar:
             self.close()
             raise
 
-    def timers(self) -> tuple[QtCore.QTimer, QtCore.QTimer, QtCore.QTimer]:
-        """The 100 ms desktop observation tick, the 50 ms microphone trace while dictating, and the chord panel's delay."""
-        tick, audio, panel = QtCore.QTimer(self.window), QtCore.QTimer(self.window), QtCore.QTimer(self.window)
+    def timers(self) -> tuple[QtCore.QTimer, QtCore.QTimer]:
+        """The 100 ms desktop observation tick and the 50 ms microphone trace while dictating."""
+        tick, audio = QtCore.QTimer(self.window), QtCore.QTimer(self.window)
         tick.setInterval(100)
         tick.timeout.connect(self.tick)
         audio.setInterval(50)
         audio.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         audio.timeout.connect(self.sample_audio)
-        panel.setSingleShot(True)
-        panel.setInterval(round(PANEL_DELAY * 1000))
-        panel.timeout.connect(self.show_hints)
-        return tick, audio, panel
+        return tick, audio
 
     def start_shell(self) -> None:
         """The production desktop: notifications, system status, shell controls and taskbar recovery."""
@@ -301,12 +297,12 @@ class DesktopBar:
                 self.applications = self.arrangement.shelf
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
         arrangement = self.arrangement
-        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, chord=self.chord_since is not None), self.navigate)
+        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, chord=self.chord_held), self.navigate)
         # Changed apps or pager targets must also publish section geometry when the island is still,
         # or a pager that loses its hints keeps its wider capsule.
         if previous != (sections.app_snapshot, sections.pager_view):
             self.window.presentation = None
-        if self.chord_since is not None:
+        if self.chord_held:
             self.show_hints()
 
     def application_click(self, item: Item, click: Click) -> None:
@@ -598,22 +594,18 @@ class DesktopBar:
             self.render()
 
     def chord(self, *, held: bool) -> None:
-        if held and self.chord_since is None:
-            self.chord_since = self.observations.clock()
-            self.hint_panel.start()
-        elif not held:
-            self.chord_since = None
-            self.hint_panel.stop()
+        self.chord_held = held
         self.show_hints()
 
     def show_hints(self) -> None:
         """The hints follow the window in front, which can change while the chord is held."""
         if self.hints is None:
             return
-        since, world = self.chord_since, self.arrangement.world
-        held = self.observations.clock() - since if since is not None else None
-        fresh = replace(world, foreground=self.observations.foreground()) if world is not None and held is not None else world
-        self.hints.show(hints(fresh, held), self.preference)
+        world = self.arrangement.world
+        if not self.chord_held or world is None:
+            self.hints.show((), self.preference)
+            return
+        self.hints.show(hints(replace(world, foreground=self.observations.foreground())), self.preference)
 
     def observed(self) -> Observed:
         asking = self.agent is not None and self.agent.waiting
@@ -824,7 +816,6 @@ class DesktopBar:
         self.closed = True
         self.timer.stop()
         self.audio_timer.stop()
-        self.hint_panel.stop()
         if self.hints is not None:
             self.hints.close()
         if self.audio_meter is not None:

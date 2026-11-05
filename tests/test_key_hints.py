@@ -1,12 +1,10 @@
-"""Key hints: which letter each window shows while the chord is held, and the panel of every chord."""
+"""Key hints: which letter each window shows while the chord is held."""
 
 from dataclasses import replace
 
-from desktop_ui.key_hints import HIDDEN, PANEL, ActionCap, AppCap, DirectionCap, Group, Keycap, Row, Section, hints, panel
+from desktop_ui.key_hints import ActionCap, AppCap, DirectionCap, Keycap, hints
 from desktop_ui.navigation import Direction, Focus, Source, SpatialFocus, World, decide
 from desktop_ui.window_layout import CODE, EDGE, TERMINAL, Target
-from miryoku.firmware import CHORDS
-from protocol import Tool
 from winapi.shapes import Rect
 
 # Two terminals stacked on the left, Edge and Code stacked on the right, a third
@@ -33,7 +31,7 @@ WORLD = World(
 
 
 def badges(world: World) -> dict[int, tuple[Keycap, ...]]:
-    return {badge.window: badge.keycaps for badge in hints(world, 0.0).badges}
+    return {badge.window: badge.keycaps for badge in hints(world)}
 
 
 def test_badges_carry_each_apps_letter_and_mark_the_window_its_next_press_reaches() -> None:
@@ -69,24 +67,3 @@ def test_only_placed_windows_on_the_current_desktop_get_badges() -> None:
     # Defects: badges for the minimized Code window or the terminal on desktop 2.
     assert set(badges(WORLD)) == {1, 5, 2, 3}
     assert set(badges(replace(WORLD, current=1, foreground=4))) == {4}
-
-
-def test_hints_show_while_held_add_the_panel_after_a_pause_and_hide_on_release() -> None:
-    assert hints(WORLD, None) == HIDDEN
-    assert hints(None, None) == HIDDEN
-    assert hints(WORLD, 0.59).panel == ()
-    assert hints(WORLD, 0.6).panel == PANEL
-    assert hints(None, 0.6).badges == ()
-
-
-def test_the_panel_lists_every_chord_once_in_its_section() -> None:
-    # Defects: a chord missing or repeated, or one filed under the wrong section.
-    letters = [row.letter for group in PANEL for row in group.rows]
-    assert sorted(letters) == sorted(CHORDS.values())
-    assert [group.section for group in PANEL] == [Section.APPS, Section.DESKTOPS, Section.FOCUS, Section.WINDOW, Section.VOICE]
-    remapped = panel({Tool.MINIMIZE: "Z", Tool.FOCUS_LEFT: "Q", Tool.DESKTOP_2: "X"})
-    assert remapped == (
-        Group(Section.DESKTOPS, (Row("X", "Desk 2"),)),
-        Group(Section.FOCUS, (Row("Q", "Focus ←"),)),
-        Group(Section.WINDOW, (Row("Z", "Min"),)),
-    )

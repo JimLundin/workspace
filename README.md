@@ -83,8 +83,7 @@ on the laptop's Apps layer at that place (listed below), and swallowed. F24
 itself never reaches an application. A hold-to-talk key lasts while it is held.
 
 While either keyboard holds its Apps key, the bar shows each target's letter.
-App keys focus the app, cycle its windows, or start it. Held for 600 ms without
-another key, a panel lists every one.
+App keys focus the app, cycle its windows, or start it.
 
 | Apps + | does |
 |---|---|
