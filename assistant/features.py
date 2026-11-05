@@ -11,7 +11,6 @@ handed to the worker thread (`submit`), which does one job at a time, in order.
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from enum import Enum, auto
 from typing import Literal, Protocol, assert_never
 
 from assistant import prompts
@@ -67,10 +66,6 @@ class Controls(Protocol):
     def open_inbox(self) -> None: ...
     def switch_windows(self) -> None: ...
     def toggle_meeting(self) -> None: ...
-
-
-class Outcome(Enum):
-    DONE = auto()
 
 
 def submit_voice_text(text: str, send: Callable[[str], None], details: dict[str, Detail]) -> None:
@@ -206,10 +201,10 @@ class Assistant:
         self.desktop.busy(job)
         self.desktop.show_state(State.WORKING)
 
-    def timed(self, feature: str, job: Callable[[], Failure | Outcome], *, extra: Mapping[str, Detail] | None = None) -> None:
+    def timed(self, feature: str, job: Callable[[], Failure | None], *, extra: Mapping[str, Detail] | None = None) -> None:
         """Runs a job, reports a failure, and logs the use (never the content)."""
         started = time.monotonic()
-        outcome: Failure | Outcome = Failure("crashed")
+        outcome: Failure | None = Failure("crashed")
         evidence: dict[str, Detail] = {}
         try:
             outcome = job()
@@ -324,7 +319,7 @@ class Assistant:
 
     # ---- the tools ---------------------------------------------------------------------
 
-    def heard(self, tool: Tool, pcm: bytes, details: dict[str, Detail]) -> Failure | Outcome:
+    def heard(self, tool: Tool, pcm: bytes, details: dict[str, Detail]) -> Failure | None:
         details["phase"] = "transcribing"
         started = time.monotonic()
         try:
@@ -354,7 +349,7 @@ class Assistant:
                 submit_voice_text(transcript, self.controls.run_agent, details)
             case _:
                 raise AssertionError(f"{tool} doesn't listen")
-        return Outcome.DONE
+        return None
 
     def remember_transcript(self, text: str) -> None:
         """Keep recovery independent of both the clipboard and the insertion attempt."""
@@ -375,18 +370,16 @@ class Assistant:
         except OSError as error:
             self.desktop.problem(str(error))
 
-    def arrange(self, tool: Tool, *, target: int | None) -> Failure | Outcome:
+    def arrange(self, tool: Tool, *, target: int | None) -> Failure | None:
         try:
             self.desktop.arrange(tool, target=target)
         except OSError as error:
             return Failure(str(error))
-        return Outcome.DONE
+        return None
 
-    def agent_session(self) -> Outcome:
+    def agent_session(self) -> None:
         self.controls.show_agent()
-        return Outcome.DONE
 
-    def order(self, order: Order | None) -> Outcome:
+    def order(self, order: Order | None) -> None:
         if order is not None:
             self.desktop.navigate(order)
-        return Outcome.DONE
