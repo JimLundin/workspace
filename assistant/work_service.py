@@ -136,7 +136,7 @@ class WorkService:
             source = request.source
             if existing is not None:
                 if existing.source.profile != source.profile or existing.prompt != request.prompt.strip():
-                    raise ValueError("That task identity already belongs to a different request.")
+                    raise ValueError(f"That task identity already belongs to a different request: {request.identity}.")
                 source = existing.source
             issued = Issued(Submit(request.prompt), request.identity, source, request.context)
         else:
