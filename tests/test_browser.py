@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
-from unittest import TestCase
+from unittest import SkipTest, TestCase
 
 from pydantic import TypeAdapter
 from websockets.sync.server import ServerConnection, serve
@@ -18,7 +18,7 @@ from websockets.sync.server import ServerConnection, serve
 from assistant import browser_tools
 from assistant.browser import MAX_OUTPUT, Browser, task_pages
 from assistant.browser_requests import BrowserRequest, web_url
-from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source
+from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source, released
 from assistant.browser_values import BrowserError, InterruptedError, NavigationContextError, Page, evaluated
 from automation.json_value import Json
 
@@ -692,3 +692,25 @@ def test_check_without_a_requested_state_checks_the_control(tmp_path: Path) -> N
     sent = page_action(tmp_path, {"checked": True}, action="check")
     evaluation = next(message["params"] for message in sent if message["method"] == "Runtime.evaluate")
     assert isinstance(evaluation, dict) and '"checked":true' in str(evaluation["expression"])
+
+
+def test_a_relaunch_waits_for_the_closing_browser_to_release_its_profile(tmp_path: Path) -> None:
+    # Defect: switching a browser between visible and headless relaunched Edge
+    # while the closing one still held the profile; the new Edge handed its
+    # command line to the exiting browser and quit with code 21.
+    if sys.platform != "win32":
+        raise SkipTest("Only Windows refuses to delete a file another handle holds open.")
+    lock = tmp_path / "lockfile"
+    held = lock.open("w")
+    closer = threading.Timer(0.3, held.close)
+    closer.start()
+    started = time.monotonic()
+    released(tmp_path, threading.Event())
+    assert time.monotonic() - started >= 0.25 and not lock.exists()
+    closer.join()
+    with lock.open("w"), TestCase().assertRaises(InterruptedError):
+        cancel = threading.Event()
+        cancel.set()
+        released(tmp_path, cancel)
+    with lock.open("w"), TestCase().assertRaisesRegex(BrowserError, "still holds"):
+        released(tmp_path, threading.Event(), timeout=0)

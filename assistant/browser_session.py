@@ -322,6 +322,24 @@ class Attached:
 type Owner = Stopped | Managed | Attached
 
 
+def released(profile: Path, cancel: threading.Event, timeout: float = 20) -> None:
+    """Wait until no Edge holds the profile's exclusive lock file.
+
+    A closed browser's processes may still be exiting. Edge started on a profile
+    they hold hands its command line to them and exits with code 21.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            (profile / "lockfile").unlink(missing_ok=True)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise BrowserError("Another Edge still holds the automation profile. Close it and try again.") from None
+        if cancel.wait(0.05):
+            raise InterruptedError("Stopped while the previous browser was exiting.")
+
+
 def _close_process(owner: Managed) -> None:
     process, job = owner.process, owner.job
     with contextlib.suppress(subprocess.TimeoutExpired):
@@ -408,6 +426,7 @@ class NativeSessions:
         if cancel.is_set():
             raise InterruptedError("Stopped before starting the browser.")
         self.profile.mkdir(parents=True, exist_ok=True)
+        released(self.profile, cancel)
         port_file = self.profile / "DevToolsActivePort"
         port_file.unlink(missing_ok=True)
         arguments = [
