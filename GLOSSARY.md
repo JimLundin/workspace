@@ -238,7 +238,7 @@ _Avoid_: Ready flag
 **Self-review**:
 A task in which the agent reviews its own work. A review is queued after a run
 that failed, ended blocked, left an action uncertain or not applied, or needed
-a goal revision or an answer from the user. A daily review covers the previous
+an answer from the user. A daily review covers the previous
 day. A review reads the task journal and keeps lessons. It may also check,
 publish and install source changes. A review is never reviewed.
 _Avoid_: Reflection, evaluation run
