@@ -1,6 +1,6 @@
 """Observe app windows on every virtual desktop, place them where the layout
-declares, carry out navigation, copy icons away from Qt's animation/audio thread
-and hide pinned web-app windows' captions.
+declares, carry out and log navigation, copy icons away from Qt's animation/audio
+thread and hide pinned web-app windows' captions.
 
 One worker owns all of it: placement moves and resizes the same windows whose
 regions hide their captions and that navigation focuses, zooms and launches, so a
@@ -12,21 +12,25 @@ import queue
 import subprocess
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from datetime import datetime
+from pathlib import Path
 from typing import assert_never
 
 import protocol
 from assistant.browser_session import edge_path
 from assistant.geometry import framed
-from desktop_ui.navigation import Effect, Focus, Launch, Navigated, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, zoom_after
+from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, owner, zoom_after
+from desktop_ui.navigation_log import NAVIGATION_LOG, START, Arrival, Entry, Moment, Tracker, append, arrived, navigated, noticed, seen, settled
 from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
-from desktop_ui.window_layout import NOWHERE, App, Placement, Target, groups, managed, place, screens
+from desktop_ui.window_layout import NOWHERE, App, Placement, Program, Setup, Target, groups, managed, place, screens
 from winapi import app_user_model, screen, windows
 from winapi.icon_pixels import window_pixels
 from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
+from winapi.win_events import CaptureStart, Foreground, SwitchEnd, SwitchStart, WinEvent, WinEvents
 
 _CREATE_NO_WINDOW = 0x0800_0000
 RECENT = 32
@@ -161,7 +165,7 @@ class Desktop:
 
 @dataclass(frozen=True, slots=True)
 class Arrangement:
-    """What the bar shows: the applications, the desktops and whether placement is paused."""
+    """What the bar shows: the applications, the desktops, whether placement is paused and the navigation world."""
 
     shelf: Shelf
     desktops: int
@@ -169,6 +173,8 @@ class Arrangement:
     placed: tuple[tuple[App, ...], ...] = ()
     """Each desktop's placed applications, in shelf order."""
     paused: bool = field(default=False, kw_only=True)
+    world: World | None = field(default=None, kw_only=True)
+    """What navigation is decided against, so the bar's key hints name what each chord reaches."""
 
 
 EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
@@ -177,15 +183,15 @@ EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
 class ApplicationObserver:
     """One worker owns native polling, placement, desktops, navigation and slot-window regions; callers receive immutable snapshots."""
 
-    __slots__ = ("navigated", "problem", "requests", "results", "stop", "thread")
+    __slots__ = ("log", "problem", "requests", "results", "stop", "thread")
 
-    def __init__(self, problem: Callable[[str], None], navigated: Callable[[Navigated], None] = lambda _: None) -> None:
+    def __init__(self, problem: Callable[[str], None], log: Path = NAVIGATION_LOG) -> None:
         self.problem = problem
-        self.navigated = navigated
-        """Receives what every navigation did, on the worker thread."""
+        self.log = log
+        """The navigation log, appended only by the worker."""
         self.results: queue.Queue[Arrangement] = queue.Queue(maxsize=1)
-        self.requests: queue.Queue[Order | None] = queue.Queue()
-        """Navigation and placement orders; None only wakes the worker to stop."""
+        self.requests: queue.Queue[Order | WinEvent | None] = queue.Queue()
+        """Navigation and placement orders and foreground events; None only wakes the worker to stop."""
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.run, name="application icons", daemon=True)
         self.thread.start()
@@ -204,9 +210,23 @@ class ApplicationObserver:
 
 
 class Worker:
-    """The observer thread's state: the last placement, zoom, pause, recent windows and pending web-app launches."""
+    """The observer thread's state: the last placement, zoom, pause, recent windows, pending web-app launches and focus history."""
 
-    __slots__ = ("desktop", "framed", "launches", "observer", "paused", "placement", "previous", "recent", "world", "zoomed")
+    __slots__ = (
+        "arrival",
+        "desktop",
+        "framed",
+        "launches",
+        "observer",
+        "paused",
+        "placement",
+        "previous",
+        "recent",
+        "setup",
+        "tracker",
+        "world",
+        "zoomed",
+    )
 
     def __init__(self, observer: ApplicationObserver) -> None:
         self.observer = observer
@@ -219,18 +239,48 @@ class Worker:
         self.recent: tuple[int, ...] = ()
         self.launches: Launches = frozendict()
         self.world: World | None = None
+        self.setup: Setup | None = None
+        self.tracker: Tracker = START
+        self.arrival: Foreground | None = None
+        """A foreground change waiting for the next poll to identify its window."""
 
     def run(self) -> None:
+        # The hooks' own thread waits for their messages; it only queues each event for this worker.
+        events = WinEvents(self.observer.requests.put)
         try:
             while not self.observer.stop.is_set():
                 self.poll()
+                self.follow()
                 with suppress(queue.Empty):
                     while (order := self.observer.requests.get(timeout=1)) is not None:
                         if not self.carry(order):
                             break
         finally:
+            events.close()
             release(self.framed)
             self.desktop.disconnect()
+
+    def moment(self, at: float) -> Moment:
+        return Moment(at, datetime.now().astimezone(), self.setup)
+
+    def write(self, entries: Iterable[Entry]) -> None:
+        with suppress(OSError):  # A full or locked disk loses entries, never navigation.
+            append(entries, self.observer.log)
+
+    def follow(self) -> None:
+        """Resolve a foreground change against the poll that just ran, and let pending expectations expire."""
+        if (world := self.world) is not None:
+            self.tracker = seen(self.tracker, world)
+        if (event := self.arrival) is not None:
+            self.arrival = None
+            app = owner(world, event.window) if world is not None else None
+            if app is None and (exe := windows.exe(event.window)):
+                app = Program(exe)  # A dialog or shell surface outside the taskbar: its program, never its title.
+            here = Arrival(event.window, app, world.current if world is not None else None, held=event.held)
+            self.tracker, entries = arrived(self.tracker, here, self.moment(event.at))
+        else:
+            self.tracker, entries = settled(self.tracker, self.moment(time.monotonic()))
+        self.write(entries)
 
     def poll(self) -> None:
         observed = self.desktop.observe()
@@ -243,7 +293,9 @@ class Worker:
         foreground = windows.foreground()
         self.zoomed = zoom_after(self.zoomed, foreground)
         state = observed.state
-        if (where := screens(screen.monitors())) is not None and state is not None:
+        where = screens(screen.monitors())
+        self.setup = where.setup if where is not None else None
+        if where is not None and state is not None:
             own = os.getpid()
             eligible = frozenset(
                 window.handle
@@ -290,16 +342,22 @@ class Worker:
             for app in grouped.running
         )
         desktops, current = (len(state.ids), state.ids.index(state.current)) if state is not None else (0, 0)
-        snapshot = Arrangement(replace(grouped, running=running), desktops, current, self.placed(desktops), paused=self.paused)
+        snapshot = Arrangement(replace(grouped, running=running), desktops, current, self.placed(desktops), paused=self.paused, world=self.world)
         if snapshot != self.previous:
             with suppress(queue.Empty):
                 self.observer.results.get_nowait()
             self.observer.results.put_nowait(snapshot)
         self.previous = snapshot
 
-    def carry(self, order: Order) -> bool:
+    def carry(self, order: Order | WinEvent) -> bool:
         """Carry out one order; False when the next poll should run first."""
         match order:
+            case Foreground():
+                self.arrival = order
+                return False
+            case CaptureStart() | SwitchStart() | SwitchEnd():
+                self.tracker = noticed(self.tracker, order)
+                return True
             case Placing.TOGGLE_PAUSE:
                 self.paused = not self.paused
                 return False
@@ -311,8 +369,9 @@ class Worker:
                     return False
                 fresh = replace(world, foreground=windows.foreground())
                 chosen, record = decide(order, fresh)
+                self.tracker, entries = navigated(self.tracker, (chosen, record), self.moment(time.monotonic()))
                 self.effect(chosen)
-                self.observer.navigated(record)
+                self.write(entries)
                 self.world = replace(fresh, current=record.to_desktop)
                 return True
 

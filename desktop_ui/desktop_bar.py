@@ -55,7 +55,10 @@ lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, 
 lazy from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
+lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
+lazy from desktop_ui.key_hints import PANEL_DELAY, hints
 lazy from desktop_ui.navigation import BarScroll, CycleApp, Order, Placing, ShowWindow, Source
+lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TASKBAR_TOGGLE, TaskbarControl, WindowsKeyObserver
@@ -119,13 +122,15 @@ class DesktopBar:
         "automatic_recording",
         "away_screens",
         "choices",
-        "chord_held",
+        "chord_since",
         "closed",
         "controls",
         "current_layer",
         "dictating",
         "errors",
         "frost",
+        "hint_panel",
+        "hints",
         "hovered",
         "inbox",
         "job",
@@ -190,14 +195,14 @@ class DesktopBar:
         self.recording = RecordingState()
         self.layout_enabled = True
         self.current_layer: str | None = None
-        self.chord_held = False
-        self.inbox = 0
+        self.chord_since: float | None = None  # When either keyboard began holding Ctrl+Alt+Shift.
+        self.hints: KeyHintOverlay | None = None
+        self.inbox = self.menu_target = 0
         self.notices = Notices()
         self.choices: tuple[Phase, ...] = ()  # The session's phases, for a question opened from the island.
         self.hovered: Key | None = None
         # What the person opened, and the window that had the keyboard before it opened.
         self.opened: Menu | Phase | Inbox | None = None
-        self.menu_target = 0
         self.views: tuple[CapsuleView, ...] = ()
         # Reassigned each frame; the bar mutates no motion or view record.
         self.motion = IslandMotion()
@@ -225,7 +230,7 @@ class DesktopBar:
         self.notification_service: NotificationObserver | None = None
         self.notification_access = system_notices.Access.UNAVAILABLE
         self.notification_observation: system_notices.Observed | None = None
-        self.timer, self.audio_timer = self.timers()
+        self.timer, self.audio_timer, self.hint_panel = self.timers()
         self.start(native_shell=native_shell, audio_level=audio_level)
 
     def start(self, *, native_shell: bool, audio_level: Callable[[], float | None] | None) -> None:
@@ -242,15 +247,18 @@ class DesktopBar:
             self.close()
             raise
 
-    def timers(self) -> tuple[QtCore.QTimer, QtCore.QTimer]:
-        """The 100 ms desktop observation tick, and the 50 ms microphone trace while dictating."""
-        tick, audio = QtCore.QTimer(self.window), QtCore.QTimer(self.window)
+    def timers(self) -> tuple[QtCore.QTimer, QtCore.QTimer, QtCore.QTimer]:
+        """The 100 ms desktop observation tick, the 50 ms microphone trace while dictating, and the chord panel's delay."""
+        tick, audio, panel = QtCore.QTimer(self.window), QtCore.QTimer(self.window), QtCore.QTimer(self.window)
         tick.setInterval(100)
         tick.timeout.connect(self.tick)
         audio.setInterval(50)
         audio.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         audio.timeout.connect(self.sample_audio)
-        return tick, audio
+        panel.setSingleShot(True)
+        panel.setInterval(round(PANEL_DELAY * 1000))
+        panel.timeout.connect(self.show_hints)
+        return tick, audio, panel
 
     def start_shell(self) -> None:
         """The production desktop: notifications, system status, shell controls and taskbar recovery."""
@@ -264,6 +272,7 @@ class DesktopBar:
             self.errors.put(f"Screens can't go dark when locked: {error}")
         self.tray_host = TrayHost()
         self.application_service = ApplicationObserver(self.errors.put)
+        self.hints = KeyHintOverlay(NativeOverlayDesktop())
         self.keys = WindowsKeyObserver(self.controls.handle)
         self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
         self.worker.start()
@@ -304,11 +313,13 @@ class DesktopBar:
                 self.applications = self.arrangement.shelf
         self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
         arrangement = self.arrangement
-        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, chord=self.chord_held), self.navigate)
+        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, chord=self.chord_since is not None), self.navigate)
         # Changed apps or pager targets must also publish section geometry when the island is still,
         # or a pager that loses its hints keeps its wider capsule.
         if previous != (sections.app_snapshot, sections.pager_view):
             self.window.presentation = None
+        if self.chord_since is not None:
+            self.show_hints()
 
     def application_click(self, item: Item, click: Click) -> None:
         self.close_menu(restore=False)
@@ -610,7 +621,22 @@ class DesktopBar:
         self.render()
 
     def chord(self, *, held: bool) -> None:
-        self.chord_held = held
+        if held and self.chord_since is None:
+            self.chord_since = self.observations.clock()
+            self.hint_panel.start()
+        elif not held:
+            self.chord_since = None
+            self.hint_panel.stop()
+        self.show_hints()
+
+    def show_hints(self) -> None:
+        """The hints follow the window in front, which can change while the chord is held."""
+        if self.hints is None:
+            return
+        since, world = self.chord_since, self.arrangement.world
+        held = self.observations.clock() - since if since is not None else None
+        fresh = replace(world, foreground=self.observations.foreground()) if world is not None and held is not None else world
+        self.hints.show(hints(fresh, held), self.preference)
 
     def layout(self, *, enabled: bool) -> None:
         self.layout_enabled = enabled
@@ -826,6 +852,9 @@ class DesktopBar:
         self.closed = True
         self.timer.stop()
         self.audio_timer.stop()
+        self.hint_panel.stop()
+        if self.hints is not None:
+            self.hints.close()
         if self.audio_meter is not None:
             self.audio_meter.close()
         if self.status_service is not None:

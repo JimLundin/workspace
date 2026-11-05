@@ -77,7 +77,8 @@ pauses and keeps English (US). On it, **Ctrl+Shift+D** holds dictation and
 home-row mods **R S T** or **I E N** with one hand and tap the letter with the
 other. The letters are the same on both keyboards. While you hold the chord,
 the bar shows each target's letter. App chords focus the app, cycle its
-windows, or start it. The app letters follow `APPS` in `config.py`.
+windows, or start it. The app letters follow `APPS` in `config.py`. Held for 600 ms without a
+letter, a panel lists every chord.
 
 | chord | does |
 |---|---|
