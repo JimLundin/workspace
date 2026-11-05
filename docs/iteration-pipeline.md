@@ -47,8 +47,8 @@ live communications. `watch --preview` runs the same preview beside the tests.
    frameworks in every source file.
 2. It runs the interface review (`scripts/quality.py`): Ruff's FBT001, FBT002 and
    PLR0913 (at most five inputs), and the import rules for relative, inline and
-   aliased imports and `__all__` forwarding. See
-   [code-quality-policies.md](code-quality-policies.md).
+   aliased imports and `__all__` forwarding. See the Design section of
+   [AGENTS.md](../AGENTS.md).
 3. With `--standards`, which `Dev.cmd check` always passes, it runs whole-tree
    `ruff check` and `ruff format --check` before tests, and Pyright over the
    changed Python files alongside the tests. `--full` and CI type the whole tree.
@@ -70,7 +70,7 @@ Editing checks cache per-file policy observations under
 `%LOCALAPPDATA%\workspace\development\analysis`; the protected selfcheck uses no cache.
 
 Generated tests live in `tests/properties/` and need the `test` extra
-(`python -m pip install -e ".[test]"`). See [property-testing.md](property-testing.md).
+(`python -m pip install -e ".[test]"`).
 
 ## Receipts and deployment
 
