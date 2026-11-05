@@ -103,9 +103,6 @@ class SourceFixture:
     def activate(self) -> None:
         pass
 
-    def compile(self, root: Path, failures: list[str]) -> None:
-        pass
-
     def import_all(self, root: Path, failures: list[str]) -> None:
         self.order.append("imports")
         failures.append("A dependency does not import")

@@ -180,7 +180,6 @@ class SourceRuntime(Protocol):
     """Runtime initialization and source loading owned by a check invocation."""
 
     def activate(self) -> None: ...
-    def compile(self, root: Path, failures: list[str]) -> None: ...
     def import_all(self, root: Path, failures: list[str]) -> None: ...
     def load(self, module: str) -> object: ...
 
@@ -192,9 +191,6 @@ class NativeSourceRuntime:
             # Bootstrap the private test process before broad SDK/Qt imports.
             # Mandatory policy gates have passed; protected gates stay intact.
             importlib.import_module("tests")
-
-    def compile(self, root: Path, failures: list[str]) -> None:
-        selfcheck.compile_all(root, failures)
 
     def import_all(self, root: Path, failures: list[str]) -> None:
         selfcheck.import_all(root, failures)
@@ -245,15 +241,12 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     with timed("phase:runtime activation", phases):
         runtime.activate()
     failures: list[Failure] = []
+    # No separate compile phase: the architecture review and Ruff parse every
+    # source before any test, and the import review compiles what it loads.
     broad = selection.reason not in (DIRECT, "explicit iteration scope")
-    if broad:
-        with timed("phase:compile all source", phases):
-            failures.extend(step_failures("compile all source", runtime.compile, root))
-        if failures:
-            return Results(0, 0, tuple(failures), tuple(phases))
     # Hypothesis inspects loaded modules for local constants. Keep generated
     # domain checks ahead of the eager SDK/native import review, so bundled
-    # dependencies do not become their generation catalog. Full compile/import
+    # dependencies do not become their generation catalog. Full import
     # coverage and the final source binding still apply to this same run.
     generated = tuple(name for name in selection.tests if name.startswith("tests/properties/"))
     first = execute_tests(generated, root, runtime.load)

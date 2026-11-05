@@ -26,7 +26,6 @@ import ast
 import importlib
 import inspect
 import os
-import py_compile
 import sys
 import tempfile
 import time
@@ -217,12 +216,12 @@ def _modules(root: Path) -> Iterator[str]:
 
 
 def compile_all(root: Path, problems: list[str]) -> None:
-    with tempfile.TemporaryDirectory() as scratch:
-        for i, path in enumerate(_sources(root)):
-            try:
-                py_compile.compile(str(path), cfile=os.path.join(scratch, f"{i}.pyc"), doraise=True)
-            except py_compile.PyCompileError as error:
-                problems.append(f"doesn't compile: {path.relative_to(root).as_posix()}\n{error.msg}")
+    # In memory: writing hundreds of scratch .pyc files cost several times the compilation.
+    for path in _sources(root):
+        try:
+            compile(path.read_bytes(), str(path), "exec")
+        except (SyntaxError, ValueError) as error:
+            problems.append(f"doesn't compile: {path.relative_to(root).as_posix()}\n{error}")
 
 
 def import_all(root: Path, problems: list[str]) -> None:
