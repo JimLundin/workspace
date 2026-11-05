@@ -12,11 +12,12 @@ from assistant.communications import SourceDate
 from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import Excerpt
 from assistant.notification_agent import NotificationAgent
+from assistant.work_snapshot import WorkSnapshot
 from automation.task import Blocked, Completed, FeedHandoff, Question, RequestKind, RequestSource, TaskStatus, TextAnswer, Waiting
 from desktop_ui.island_agent import notices
 from tests.feed_source_fixture import captured
 from tests.test_external_input import has_pending_input
-from tests.test_work_agent import RecordingBridge, WorkRig, invocation
+from tests.test_work_agent import WorkRig, invocation
 from tests.work_fixture import seed_tasks
 
 
@@ -66,7 +67,7 @@ def test_notification_replay_uses_the_original_frontend_task_after_restart(tmp_p
 
 
 class PollHold:
-    """Pause the explicit bridge adapter while no journal connection is open."""
+    """Pause the observer in its publication, while no journal connection is open."""
 
     __slots__ = ("armed", "entered", "release")
 
@@ -78,7 +79,7 @@ class PollHold:
         self.release.clear()
         self.armed.set()
 
-    def poll(self) -> None:
+    def poll(self, _snapshot: WorkSnapshot) -> None:
         if self.armed.is_set():
             self.armed.clear()
             self.entered.set()
@@ -99,6 +100,8 @@ def unavailable_journal(rig: WorkRig, gate: PollHold) -> Generator[None]:
         gate.release.set()
     try:
         assert completed.wait(5)
+        # The paused observation had already read the journal; the next one fails.
+        assert rig.agent.refresh().wait(5)
         yield
     finally:
         # Park the sole observer for restoration too. Otherwise it can create
@@ -127,7 +130,7 @@ def test_identified_duplicates_reuse_the_original_source_and_invocation_context_
         rig.agent.submit_identified("caller-task", "Summarize this workbook", RequestKind.GENERAL)
         snapshot = rig.refresh()
         assert rig.tasks.get("caller-task") == original
-        assert rig.bridge.registrations == [(original.id, invocation("Original workbook"), 1234)]
+        assert rig.worker.registrations == [(original.id, invocation("Original workbook"))]
         assert snapshot.submission_problems == () and len(snapshot.tasks) == 1
         assert snapshot.status == "" and not rig.errors
         rig.agent.submit_identified("caller-task", "Summarize this workbook", FeedHandoff("feed-item", "Workbook summary"))
@@ -135,7 +138,7 @@ def test_identified_duplicates_reuse_the_original_source_and_invocation_context_
         rig.agent.submit_identified("caller-task", "An unrelated request", RequestKind.GENERAL)
         snapshot = rig.refresh()
         assert rig.tasks.get("caller-task") == original
-        assert len(rig.bridge.registrations) == 1
+        assert len(rig.worker.registrations) == 1
         assert [(problem.task_id, "different request" in problem.reason) for problem in snapshot.submission_problems] == [(original.id, True)]
         # An unrelated row with the same ID cannot clear the failed submission.
         assert rig.refresh().submission_problems == snapshot.submission_problems
@@ -157,7 +160,7 @@ def test_invalid_identified_input_is_rejected_before_the_caller_accepts_it(tmp_p
 
 def test_unconfirmed_submission_keeps_known_rows_and_later_matching_work_clears_only_its_problem(tmp_path: Path) -> None:
     gate = PollHold()
-    rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
+    rig = WorkRig(tmp_path, on_snapshot=gate.poll)
     try:
         rig.agent.submit_identified("known-task", "Known work", RequestKind.GENERAL)
         before = rig.refresh()
@@ -191,7 +194,7 @@ def test_unconfirmed_submission_keeps_known_rows_and_later_matching_work_clears_
 
 def test_watching_a_missing_id_distinguishes_an_observed_absence_from_a_failed_read(tmp_path: Path) -> None:
     gate = PollHold()
-    rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
+    rig = WorkRig(tmp_path, on_snapshot=gate.poll)
     try:
         rig.agent.watch(("missing-task",))
         problem = rig.refresh().submission_problems[0]
@@ -237,7 +240,7 @@ def test_watch_capacity_rejection_preserves_both_views_interests(tmp_path: Path)
 
 def test_unrelated_failures_cannot_evict_a_watched_identity_collision(tmp_path: Path) -> None:
     gate = PollHold()
-    rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
+    rig = WorkRig(tmp_path, on_snapshot=gate.poll)
     try:
         rig.agent.submit_identified("watched-collision", "The original request", RequestKind.GENERAL)
         rig.agent.watch(("watched-collision",))
@@ -321,7 +324,7 @@ def test_stop_ordering_preserves_new_requests_accepted_after_stop(tmp_path: Path
 
 def test_a_failed_answer_commit_restores_the_exact_question_for_a_new_reply(tmp_path: Path) -> None:
     gate = PollHold()
-    rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
+    rig = WorkRig(tmp_path, on_snapshot=gate.poll)
     try:
         rig.agent.submit_identified("question-task", "Choose the workbook", RequestKind.GENERAL)
         rig.refresh()
@@ -346,7 +349,7 @@ def test_a_failed_answer_commit_restores_the_exact_question_for_a_new_reply(tmp_
 
 def test_a_later_confirmed_answer_is_not_reopened_after_a_failed_observation(tmp_path: Path) -> None:
     gate = PollHold()
-    rig = WorkRig(tmp_path, bridge=RecordingBridge(on_poll=gate.poll))
+    rig = WorkRig(tmp_path, on_snapshot=gate.poll)
     try:
         rig.agent.submit_identified("question-task", "Choose a year", RequestKind.GENERAL)
         rig.refresh()
@@ -368,7 +371,7 @@ def test_a_later_confirmed_answer_is_not_reopened_after_a_failed_observation(tmp
 def test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conversation(tmp_path: Path) -> None:
     for mismatch in ("prompt", "conversation"):
         gate = PollHold()
-        rig = WorkRig(tmp_path / mismatch, bridge=RecordingBridge(on_poll=gate.poll))
+        rig = WorkRig(tmp_path / mismatch, on_snapshot=gate.poll)
         try:
             rig.agent.start("Establish the original conversation")
             original = rig.refresh().tasks[0]

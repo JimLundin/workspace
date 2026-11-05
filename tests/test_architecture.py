@@ -72,35 +72,6 @@ def test_keyboard_rejection_follows_lazy_imports_and_package_initializers(tmp_pa
     assert not review(tmp_path).failures
 
 
-def test_worker_cannot_reach_desktop_only_modules(tmp_path: Path) -> None:
-    # Defect: work isolation misses a transitive lazy import, or rejects an
-    # owner the work process cannot reach.
-    write_tree(
-        tmp_path,
-        {
-            "automation/__init__.py": "",
-            "automation/__main__.py": "lazy from assistant.settings import config\nlazy from automation.app import run\n",
-            "automation/app.py": "lazy from assistant.tools import run\n",
-            "assistant/__init__.py": "",
-            "assistant/settings.py": "config = 1\n",
-            "assistant/tools.py": "lazy import desktop_ui.session\n",
-            "desktop_ui/__init__.py": "",
-            "desktop_ui/session.py": "",
-            "assistant/unreachable.py": "lazy import desktop_ui.session\n",
-        },
-    )
-    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
-        output.write('desktop_only = ["desktop_ui"]\n')
-    failures = review(tmp_path).failures
-    assert all(failure.rule == "worker-isolation" and failure.module == "automation.__main__" for failure in failures)
-    assert {failure.detail for failure in failures} == {
-        "automation.__main__ → automation.app → assistant.tools → desktop_ui",
-        "automation.__main__ → automation.app → assistant.tools → desktop_ui.session",
-    }
-    (tmp_path / "assistant/tools.py").write_text("", encoding="utf-8")
-    assert not review(tmp_path).failures
-
-
 def test_headless_owners_reject_indirect_ui_and_native_qt_imports(tmp_path: Path) -> None:
     # Defect: a controller gains a view dependency through a shared contract or
     # a lazy native import, while process isolation still permits that route.

@@ -41,9 +41,8 @@ live communications. `watch --preview` runs the same preview beside the tests.
 ## What `Dev.cmd check` does
 
 1. It runs the architecture review (`scripts/architecture.py`), which parses
-   source without importing it. The review enforces keyboard isolation, the
-   work process's isolation from desktop-only owners, headless and UI-private
-   owners, frozen and slotted data records, the reflection rules with their
+   source without importing it. The review enforces keyboard isolation,
+   headless and UI-private owners, frozen and slotted data records, the reflection rules with their
    exact exceptions in `pyproject.toml`, and the ban on patch and mock
    frameworks in every source file.
 2. It runs the interface review (`scripts/quality.py`): Ruff's FBT001, FBT002 and

@@ -20,7 +20,7 @@ from typing import Final, Literal, Protocol
 
 from protocol import WM_QUIT_LAYOUT
 
-type Component = Literal["layout", "assistant", "automation"]
+type Component = Literal["layout", "assistant"]
 
 WM_CLOSE: Final = 0x0010
 
@@ -49,9 +49,9 @@ class Entry:
         return state / f"ready-{self.name}"
 
 
-# Assistant cleanup includes a 20-second personal-work join, and automation must
-# park ongoing work and close its browser: a bounded minute each. The keyboard
-# has nothing to drain, so a stuck one is replaced quickly.
+# Assistant cleanup parks ongoing work, closes the agent's browser and joins
+# personal work: a bounded minute. The keyboard has nothing to drain, so a stuck
+# one is replaced quickly.
 LAYOUT: Final = Entry(name="layout", module="miryoku", window=Window("workspace layout", None), quit_message=WM_QUIT_LAYOUT, shutdown_s=5.0)
 ASSISTANT: Final = Entry(
     name="assistant",
@@ -60,10 +60,9 @@ ASSISTANT: Final = Entry(
     quit_message=WM_CLOSE,
     shutdown_s=60.0,
 )
-AUTOMATION: Final = Entry(name="automation", module="automation", window=Window("workspace automation", None), quit_message=WM_CLOSE, shutdown_s=60.0)
 
-CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (LAYOUT, ASSISTANT, AUTOMATION)})
-"""In startup order. Shutdown reverses it so automation releases the desktop before the assistant's UI."""
+CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (LAYOUT, ASSISTANT)})
+"""In startup order; shutdown reverses it."""
 
 BAR_WINDOW: Final = "Workspace floating bar"
 """The assistant's visible surface; a deployment restores it when it was showing."""

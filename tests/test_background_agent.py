@@ -9,8 +9,8 @@ from assistant import browser_tools, business_tools, meeting_tools
 from assistant.agent import Agent
 from assistant.agent_session import activity_text
 from assistant.llm import Settings, ToolCall
+from assistant.meeting_tools import MeetingCommand, StartMeeting
 from assistant.task_profiles import General
-from automation.ipc import MeetingCommand, StartMeeting
 from automation.json_value import Json
 from automation.presentation import ToolActivity
 from tests.agent_requests import body

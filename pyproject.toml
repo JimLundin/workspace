@@ -254,11 +254,6 @@ headless = [
     "assistant.work_canvas_edits",
 ]
 ui_private = ["assistant.work_agent", "assistant.work_canvas"]
-# Owners the work process (automation.__main__) must never import.
-desktop_only = [
-    "desktop_ui",
-    "assistant.personal_work_store",
-]
 
 [[tool.workspace.architecture.exceptions]]
 rule = "explicit-attributes"

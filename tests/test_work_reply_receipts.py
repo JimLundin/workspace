@@ -9,7 +9,7 @@ from assistant.work_commands import AnswerTask
 from assistant.work_snapshot import WorkSnapshot
 from automation.task import Question, RequestSource, TaskStatus, TextAnswer, Waiting
 from tests.test_external_input import has_pending_input
-from tests.test_work_agent import RecordingBridge, WorkRig
+from tests.test_work_agent import WorkRig
 from tests.test_work_submissions import PollHold
 
 
@@ -33,7 +33,7 @@ class SnapshotFeed:
 
 @contextmanager
 def journal_outage(rig: WorkRig, gate: PollHold, feed: SnapshotFeed, watched: tuple[str, ...]) -> Generator[None]:
-    # The bridge gate proves no journal connection is open while the fixture
+    # The publication gate proves no journal connection is open while the fixture
     # replaces the database path. No timing or queue-drain assumption is used.
     gate.arm()
     rig.agent.watch(watched)
@@ -69,8 +69,12 @@ def check_replaced_request(rig: WorkRig, feed: SnapshotFeed) -> None:
 
 def test_watched_caller_reply_failures_have_distinct_exact_receipts_after_confirmed_reads(tmp_path: Path) -> None:
     gate, feed = PollHold(), SnapshotFeed()
-    bridge = RecordingBridge(on_poll=gate.poll)
-    rig = WorkRig(tmp_path, bridge=bridge, on_snapshot=feed.publish, start=False)
+
+    def observed(snapshot: WorkSnapshot) -> None:
+        gate.poll(snapshot)
+        feed.publish(snapshot)
+
+    rig = WorkRig(tmp_path, on_snapshot=observed, start=False)
     watched = ("caller-task", "another-task")
     try:
         rig.agent.new_conversation()

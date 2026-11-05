@@ -1,6 +1,6 @@
 """The keeper: the one part of Workspace that never changes itself.
 
-It runs the layout, assistant, and automation worker, and installs changes to
+It runs the layout and the assistant, and installs changes to
 them: when the agent asks, it checks the change (selfcheck.py), keeps a copy of
 the current version, installs, and restarts them. A failed check prevents an
 installation. A change that doesn't start, crashes during its ten-minute trial,
@@ -232,9 +232,9 @@ class Stage(Enum):
     PAUSED = auto()
 
 
-def unexpected_exit(name: str, code: int | None) -> bool:
-    """Only the layout and assistant have a user-requested normal exit."""
-    return code is not None and (code != 0 or name == "automation")
+def unexpected_exit(code: int | None) -> bool:
+    """A clean exit is the user quitting that program."""
+    return code is not None and code != 0
 
 
 class Recovery:
@@ -408,7 +408,7 @@ class Keeper:
             case Stage.STARTING:
                 self.starting(now)
             case Stage.TRIAL:
-                if any(unexpected_exit(name, child.poll()) for name, child in self.children.items()):
+                if any(unexpected_exit(child.poll()) for child in self.children.values()):
                     self.rollback("it crashed during its trial", now)
                     return
                 self.running(now)  # quitting on purpose is handled as usual
@@ -472,7 +472,7 @@ class Keeper:
             if code is None:
                 continue
             del self.children[name]
-            if not unexpected_exit(name, code):
+            if not unexpected_exit(code):
                 if name == "assistant":  # Quit in the tray menu: everything stops
                     self.stop_all()
                     self.done = True

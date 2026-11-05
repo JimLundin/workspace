@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from typing import Final
 
 from pydantic import ConfigDict, TypeAdapter
@@ -10,7 +11,26 @@ from assistant.agent_tools import NO_ARGUMENTS, Args, Display, Output, Session, 
 from assistant.llm import ToolSpec
 from automation.actions import Change, Evidence, Observation
 from automation.capture import AudioSource
-from automation.ipc import MeetingCommand, MeetingOperation, StartMeeting
+from automation.task import text
+
+
+@dataclass(frozen=True, slots=True)
+class StartMeeting:
+    source: AudioSource
+    title: str
+
+    def __post_init__(self) -> None:
+        text(self.title, "meeting title", maximum=240)
+
+
+class MeetingCommand(Enum):
+    STOP = "stop"
+    RETRY = "retry"
+    LIST = "list"
+    STATUS = "status"
+
+
+type MeetingOperation = StartMeeting | MeetingCommand
 
 
 @dataclass(frozen=True, slots=True)

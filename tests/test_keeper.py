@@ -118,7 +118,7 @@ class World:
         self.results.append(result)
 
     def come_up(self) -> None:
-        self.ready |= {"layout", "assistant", "automation"}
+        self.ready |= {"layout", "assistant"}
 
     def take(self) -> list[str]:
         log, self.log = self.log, []
@@ -147,27 +147,14 @@ def installed(world: World, keeper: Keeper) -> None:
 # ---- starting and running --------------------------------------------------------------
 
 
-def test_starts_layout_assistant_and_automation() -> None:
+def test_starts_layout_and_assistant() -> None:
     world = World()
     keeper = Keeper(world)
     keeper.start(now=0)
     world.come_up()
     keeper.tick(now=1)
-    assert world.take() == ["start layout", "start assistant", "start automation"]
+    assert world.take() == ["start layout", "start assistant"]
     assert keeper.stage is Stage.RUNNING
-
-
-def test_startup_waits_for_automation_after_layout_and_assistant_are_ready() -> None:
-    world = World()
-    keeper = Keeper(world)
-    keeper.start(now=0)
-    world.ready |= {"layout", "assistant"}
-    keeper.tick(now=1)
-    before_worker_ready = keeper.stage
-    world.ready.add("automation")
-    keeper.tick(now=2)
-    assert (before_worker_ready, keeper.stage) == (Stage.STARTING, Stage.RUNNING)
-    assert world.take() == ["start layout", "start assistant", "start automation"]
 
 
 def test_a_crash_is_restarted() -> None:
@@ -178,36 +165,19 @@ def test_a_crash_is_restarted() -> None:
     assert world.take() == ["start layout"]
 
 
-def test_automation_exit_restarts_only_the_worker_even_when_exit_code_is_zero() -> None:
-    for code in (0, 1):
-        world = World()
-        keeper = running(world)
-        layout, assistant, automation = (world.children[name] for name in ("layout", "assistant", "automation"))
-        automation.code = code
-        keeper.tick(now=5)
-        assert world.take() == ["start automation"]
-        assert world.children["automation"] is not automation
-        assert world.children["layout"] is layout and not layout.stopped
-        assert world.children["assistant"] is assistant and not assistant.stopped
-        assert not keeper.done
-        keeper.tick(now=6)
-        assert world.take() == []
-
-
-def test_layout_restart_preserves_the_worker_and_assistant() -> None:
+def test_layout_restart_preserves_the_assistant() -> None:
     world = World()
     keeper = running(world)
-    automation, assistant = world.children["automation"], world.children["assistant"]
+    assistant = world.children["assistant"]
     keeper.request(Restart("layout"), now=5)
     assert world.take() == ["stop layout", "start layout"]
-    assert world.children["automation"] is automation and not automation.stopped
     assert world.children["assistant"] is assistant and not assistant.stopped
 
 
 def test_independent_restart_preserves_other_children_and_waits_for_fresh_readiness() -> None:
     # Detect treating an intentional assistant restart as Quit Workspace, or
     # accepting its old readiness marker before the replacement is ready.
-    for name in ("assistant", "automation"):
+    for name in ("assistant", "layout"):
         world = World()
         keeper = running(world)
         original = tuple(world.children.items())
@@ -229,7 +199,7 @@ def test_deployment_pause_requires_matching_resume_and_keeps_keyboard_alive(tmp_
     # a second sender stealing the pause, or resume replacing retained children.
     world = World()
     keeper = running(world)
-    layout, automation = world.children["layout"], world.children["automation"]
+    layout = world.children["layout"]
     control = Control(tmp_path)
     submit(tmp_path, Pause("deployment", ("assistant",)))
     control.poll(keeper, 5)
@@ -245,8 +215,8 @@ def test_deployment_pause_requires_matching_resume_and_keeps_keyboard_alive(tmp_
     submit(tmp_path, Resume("deployment"))
     control.poll(keeper, 9)
     assert STATUS.validate_json((tmp_path / "component-status.json").read_bytes(), strict=True) == Resumed("deployment")
-    assert keeper.children["layout"] is layout and keeper.children["automation"] is automation
-    assert not layout.stopped and not automation.stopped and not keeper.done
+    assert keeper.children["layout"] is layout
+    assert not layout.stopped and not keeper.done
     assert keeper.stage is Stage.STARTING
 
 
@@ -262,7 +232,7 @@ def test_pause_refuses_update_and_duplicate_selections_and_allows_no_restart() -
     paused.tick(now=6)
     assert other.take() == [] and paused.stage is Stage.PAUSED
     paused.resume(now=7)
-    assert other.take() == [] and set(paused.children) == {"layout", "assistant", "automation"}
+    assert other.take() == [] and set(paused.children) == {"layout", "assistant"}
 
 
 def test_quitting_the_layout_on_purpose_leaves_it_stopped_until_asked() -> None:
@@ -280,17 +250,16 @@ def test_quitting_the_assistant_quits_everything() -> None:
     keeper = running(world)
     world.children["assistant"].code = 0  # Quit in the tray menu
     keeper.tick(now=5)
-    assert world.take() == ["stop automation", "stop layout"]
+    assert world.take() == ["stop layout"]
     assert world.children["layout"].stopped
-    assert world.children["automation"].stopped
     assert keeper.done
 
 
-def test_shutdown_stops_automation_before_its_ui_and_input_dependencies() -> None:
+def test_shutdown_stops_the_assistant_before_the_keyboard() -> None:
     world = World()
     keeper = running(world)
     keeper.stop_all()
-    assert world.take() == ["stop automation", "stop assistant", "stop layout"]
+    assert world.take() == ["stop assistant", "stop layout"]
     keeper.stop_all()
     assert world.take() == []
 
@@ -304,23 +273,6 @@ def test_crashing_over_and_over_without_an_update_gives_up_with_a_notice() -> No
     assert world.take()[-1] == "notify The layout keeps crashing, so it's stopped. See layout.log."
 
 
-def test_repeated_zero_exits_exhaust_the_automation_restart_budget() -> None:
-    world = World()
-    keeper = running(world)
-    for at in (10, 11, 12, 13):
-        world.children["automation"].code = 0
-        keeper.tick(now=at)
-    assert world.take() == [
-        "start automation",
-        "start automation",
-        "start automation",
-        "notify The automation keeps crashing, so it's stopped. See automation.log.",
-    ]
-    assert not world.children["layout"].stopped
-    assert not world.children["assistant"].stopped
-    assert not keeper.done
-
-
 # ---- installing ------------------------------------------------------------------------
 
 
@@ -331,13 +283,11 @@ def test_an_install_is_checked_snapshotted_installed_and_tried() -> None:
     assert world.take() == [
         "check",
         "snapshot v1",
-        "stop automation",
         "stop assistant",
         "stop layout",
         "install",
         "start layout",
         "start assistant",
-        "start automation",
     ]
     assert keeper.stage is Stage.TRIAL
     assert world.results == [InstallChecking("digest"), InstallStarted("digest", "a new snippet", "v1")]
@@ -376,57 +326,11 @@ def test_a_change_that_doesnt_come_up_is_undone() -> None:
     world.take()
     keeper.tick(now=20 + 31)  # never ready
     assert world.take() == [
-        "stop automation",
         "stop assistant",
         "stop layout",
         "restore v1",
         "start layout",
         "start assistant",
-        "start automation",
-        "note Update undone: it didn't start.",
-    ]
-
-
-def test_update_is_undone_when_only_automation_never_becomes_ready() -> None:
-    world = World()
-    keeper = running(world)
-    keeper.request(Install("missing worker readiness", "digest", None), now=10)
-    world.check.outcome = (True, "ok")
-    keeper.tick(now=20)
-    world.take()
-    world.ready |= {"layout", "assistant"}
-    keeper.tick(now=21)
-    assert keeper.stage is Stage.STARTING
-    keeper.tick(now=51)
-    assert world.take() == [
-        "stop automation",
-        "stop assistant",
-        "stop layout",
-        "restore v1",
-        "start layout",
-        "start assistant",
-        "start automation",
-        "note Update undone: it didn't start.",
-    ]
-
-
-def test_update_is_undone_when_automation_exits_before_readiness() -> None:
-    world = World()
-    keeper = running(world)
-    keeper.request(Install("worker exits early", "digest", None), now=10)
-    world.check.outcome = (True, "ok")
-    keeper.tick(now=20)
-    world.take()
-    world.come_up()
-    world.children["automation"].code = 0
-    keeper.tick(now=21)
-    assert world.take() == [
-        "stop assistant",
-        "stop layout",
-        "restore v1",
-        "start layout",
-        "start assistant",
-        "start automation",
         "note Update undone: it didn't start.",
     ]
 
@@ -441,12 +345,10 @@ def test_a_change_that_exits_while_starting_is_undone_at_once() -> None:
     world.children["assistant"].code = 1
     keeper.tick(now=21)
     assert world.take() == [
-        "stop automation",
         "stop layout",
         "restore v1",
         "start layout",
         "start assistant",
-        "start automation",
         "note Update undone: it didn't start.",
     ]
 
@@ -459,33 +361,12 @@ def test_a_crash_during_the_trial_undoes_the_change() -> None:
     world.children["layout"].code = 1
     keeper.tick(now=100)
     assert world.take() == [
-        "stop automation",
         "stop assistant",
         "restore v1",
         "start layout",
         "start assistant",
-        "start automation",
         "note Update undone: it crashed during its trial.",
     ]
-
-
-def test_automation_exit_during_trial_undoes_the_update_even_when_exit_code_is_zero() -> None:
-    for code in (0, 1):
-        world = World()
-        keeper = running(world)
-        installed(world, keeper)
-        world.take()
-        world.children["automation"].code = code
-        keeper.tick(now=100)
-        assert world.take() == [
-            "stop assistant",
-            "stop layout",
-            "restore v1",
-            "start layout",
-            "start assistant",
-            "start automation",
-            "note Update undone: it crashed during its trial.",
-        ]
 
 
 def test_quitting_the_layout_during_the_trial_isnt_a_crash() -> None:
@@ -518,13 +399,11 @@ def test_undo_rolls_back_after_the_trial() -> None:
     world.take()
     keeper.request(Undo(), now=640)  # undo works after the trial too
     assert world.take() == [
-        "stop automation",
         "stop assistant",
         "stop layout",
         "restore v1",
         "start layout",
         "start assistant",
-        "start automation",
         "note Update undone: you undid it.",
     ]
 
@@ -655,7 +534,7 @@ def test_install_failure_restores_and_restarts() -> None:
     world.check.outcome = (True, "ok")
     keeper.tick(20)
     assert "restore v1" in world.log
-    assert set(keeper.children) == {"layout", "assistant", "automation"}
+    assert set(keeper.children) == {"layout", "assistant"}
 
 
 def test_undo_survives_keeper_restart(tmp_path: Path) -> None:

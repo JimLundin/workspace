@@ -3,15 +3,15 @@
 A personal work environment for a Windows laptop: extract and run with installed
 Python 3.15 and no admin installation. It changes itself: ask its agent for a new feature or a fix,
 and it edits, tests, installs and reloads the change without asking again.
-It undoes the update by itself if it fails. Four main processes:
+It undoes the update by itself if it fails. Three processes:
 
 - **the layout** (`miryoku/`): Colemak Mod-DH in the Miryoku style on the
   laptop's own ISO keyboard: home row mods, layers, caps word, snippets;
 - **the assistant** (`assistant/`): dictation, app switching, window
-  placement, and an agent, all through your company's OpenAI-style endpoint, with a floating control bar and tray controls;
-- **the automation worker** (`automation/`): runs durable tasks and recovery
-  independently of the conversation window;
-- **the keeper** (`keeper.py`): runs the other three, restarts them if they crash,
+  placement, and an agent, all through your company's OpenAI-style endpoint, with a floating control bar and tray controls.
+  Its worker (`automation/`) runs durable tasks on their own threads and
+  recovers them from the task journal when the assistant starts;
+- **the keeper** (`keeper.py`): runs the other two, restarts them if they crash,
   and installs the agent's changes to them (see *Changing Workspace*).
 
 The browser/native [Shared Workspace](https://github.com/JimLundin/shared-workspace)
@@ -129,10 +129,10 @@ embedded browser are paused; Workspace retains its Windows desktop runtime.
   modifiers were released first. **Ctrl+Alt+Shift** plus a letter reaches
   navigation and apps, as on the laptop; see the keyboard chords below. No
   firmware update is needed.
-- **Restart assistant** keeps the keyboard layout and automation running while
-  the assistant and floating bar reload. Dictation stops with the assistant;
-  unavailable shortcuts give a warning sound, and ordinary typing continues.
-  **Restart automation** reloads that worker independently. **Quit Workspace**
+- **Restart assistant** keeps the keyboard layout running while the assistant,
+  its agent work and the floating bar reload; running tasks resume from where
+  they were saved. Dictation stops with the assistant; unavailable shortcuts
+  give a warning sound, and ordinary typing continues. **Quit Workspace**
   closes all components.
 - **Keyboard overlay**: a faded, click-through key map near the bottom of the
   main screen. It stays visible while the layout is on and follows held or
@@ -613,9 +613,9 @@ through `assistant/sdk.py`. Its `Runner` owns model turns and tool execution;
 (`assistant/*_tools.py`) owns its tools' schemas, permissions and evidence.
 A task's profile owns its execution and toolset in `assistant/task_profiles.py`:
 a general request continues its conversation with the request's desktop context
-and offers the whole desktop. The supervised
-automation process owns execution, browser sessions, and the durable action
-journal; the assistant owns views, human input, and audio capture. The SDK
+and offers the whole desktop. The worker runs execution, browser sessions and
+the durable action journal on its own threads inside the assistant, which also
+owns views, human input and audio capture. The SDK
 uses your configured OpenAI-compatible
 [Responses API](https://platform.openai.com/docs/api-reference/responses) endpoint
 for agent tasks and tool calling, with streaming enabled.
@@ -674,8 +674,8 @@ All in `%LOCALAPPDATA%\workspace` (tray menu → Open logs folder):
 |---|---|
 | `usage.jsonl` | which features were used, how long they took, whether they failed. Voice uses include held/audio durations, transcription/submission timing, and transcript/requested/submitted character counts; agent uses include preparation, first response and first tool timings. Never what you typed or said. Tray menu → **Usage report** lists every feature by use, and the ones never used, so they can go. |
 | `work/work.sqlite3` | saved tasks, checkpoints, questions, action fingerprints and outcomes, and explicit context |
-| `assistant.log`, `automation.log`, `layout.log` | problems and crashes |
-| `work/worker.log` | bounded work-process diagnostics; automation failures point here |
+| `assistant.log`, `layout.log` | problems and crashes |
+| `work/worker.log` | bounded agent-work diagnostics |
 | `agent-ui.log` | desktop view startup timing and errors |
 | `keeper.log` | starts, installs, trials, undos |
 
@@ -702,7 +702,7 @@ miryoku/        the layout: layout.py (the tables), engine.py (the logic), win.p
 automation/     task.py and store.py (durable work), controller.py (execution),
                 actions.py and execution.py (attempts and verification),
                 context.py (saved knowledge),
-                ipc.py, bridge.py, app.py (the supervised worker)
+                worker.py (runs work on the assistant's threads)
 assistant/      llm.py (the endpoint), features.py (key actions), agent.py,
                 agent_tools.py and *_tools.py (agent tool families),
                 task_profiles.py (task execution), work_service.py (frontend IO),

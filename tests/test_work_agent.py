@@ -1,9 +1,7 @@
 """Durable conversation behavior through real journals and public UI seams."""
 
-import queue
 import threading
 from collections.abc import Callable, Generator
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -14,18 +12,8 @@ from assistant.work_agent import WorkAgent
 from assistant.work_canvas import WorkCanvas, run_prompt
 from assistant.work_commands import AnswerTask, ControlTask
 from assistant.work_snapshot import WorkSnapshot
-from automation import ipc
 from automation.activity import Activity, ContextSnapshot
-from automation.bridge import BridgeClient, BridgeServer
 from automation.context import ContextStore
-from automation.ipc import (
-    BridgeEvent,
-    Envelope,
-    LogEvent,
-    MeetingCommand,
-    Resync,
-    StartMeeting,
-)
 from automation.personal_work import Catalog, SourceKind
 from automation.presentation import Answer, Said, StreamState, Succeeded, ToolActivity
 from automation.store import TaskStore
@@ -37,13 +25,11 @@ from automation.task import (
     RequestKind,
     RequestSource,
     Running,
-    RunRef,
     SelfReview,
     Task,
     TaskStatus,
     TextAnswer,
     Waiting,
-    owns,
 )
 from desktop_ui.agent_progress import Busy, Settled, Working, phases
 from desktop_ui.island_agent import notices
@@ -63,78 +49,21 @@ class Clock:
             return self.value
 
 
-class RecordingBridge:
-    """Only replace the process boundary; SQLite and session transitions are real."""
+class RecordingWorker:
+    """Only replace the worker's threads; SQLite and session transitions are real."""
 
-    def __init__(
-        self,
-        *,
-        on_register: Callable[[str], None] | None = None,
-        on_poll: Callable[[], None] | None = None,
-        on_wake: Callable[[], None] | None = None,
-    ) -> None:
-        self.epoch = "worker-one"
-        self.sequence = 0
-        self.online = True
-        self.messages: queue.Queue[Envelope] = queue.Queue()
-        self.registrations: list[tuple[str, ContextSnapshot | None, int]] = []
-        self.contexts: list[ContextSnapshot] = []
+    def __init__(self, *, on_register: Callable[[str], None] | None = None) -> None:
+        self.registrations: list[tuple[str, ContextSnapshot | None]] = []
         self.on_register = on_register
-        self.on_poll = on_poll
-        self.on_wake = on_wake
-        self.closed = threading.Event()
+        self.wakes = 0
 
-    def connect(self) -> str:
-        if not self.online:
-            raise OSError("Fixture work process is offline.")
-        return self.epoch
-
-    def poll(self, limit: int = 64) -> tuple[Envelope, ...]:
-        if self.on_poll is not None:
-            self.on_poll()
-        self.connect()
-        batch: list[Envelope] = []
-        for _ in range(limit):
-            try:
-                batch.append(self.messages.get_nowait())
-            except queue.Empty:
-                break
-        return tuple(batch)
-
-    def wake(self) -> None:
-        self.connect()
-        if self.on_wake is not None:
-            self.on_wake()
-
-    def register(self, task_id: str, context: ContextSnapshot | None, *, assistant_pid: int) -> None:
-        self.registrations.append((task_id, context, assistant_pid))
+    def register(self, task_id: str, context: ContextSnapshot | None) -> None:
+        self.registrations.append((task_id, context))
         if self.on_register is not None:
             self.on_register(task_id)
-        self.connect()
 
-    def publish_context(self, context: ContextSnapshot, *, assistant_pid: int) -> None:
-        self.contexts.append(context)
-        self.connect()
-
-    def respond(self, message: Envelope, result: ipc.Succeeded | ipc.Failed) -> bool:
-        self.connect()
-        raise AssertionError("Owner effects use the real pipe fixture.")
-
-    def publish(self, payload: BridgeEvent, *, epoch: str | None = None) -> None:
-        self.sequence += 1
-        self.messages.put(Envelope(self.epoch if epoch is None else epoch, self.sequence, payload))
-
-    def restart(self, epoch: str) -> None:
-        self.epoch, self.sequence = epoch, 0
-
-    def disconnect(self) -> None:
-        self.online = False
-
-    def reconnect(self) -> None:
-        self.online = True
-
-    def close(self) -> None:
-        self.closed.set()
+    def wake(self) -> None:
+        self.wakes += 1
 
 
 class WorkRig:
@@ -142,7 +71,7 @@ class WorkRig:
         self,
         folder: Path,
         *,
-        bridge: RecordingBridge | None = None,
+        worker: RecordingWorker | None = None,
         context: Callable[[], ContextSnapshot] | None = None,
         start: bool = True,
         on_snapshot: Callable[[WorkSnapshot], None] | None = None,
@@ -151,7 +80,7 @@ class WorkRig:
         # fixture effects while preserving the frontend dependency interface.
         self.tasks = TaskStore(folder / "tasks.sqlite3")
         self.saved_context = ContextStore(folder / "context.sqlite3")
-        self.bridge = bridge or RecordingBridge()
+        self.worker = worker or RecordingWorker()
         self.clock = Clock()
         self.windows: list[RecordingWindow] = []
         self.snapshots: list[WorkSnapshot] = []
@@ -162,7 +91,7 @@ class WorkRig:
         self.agent = WorkAgent(
             self.tasks,
             self.saved_context,
-            self.bridge,
+            self.worker,
             self.create_window,
             on_snapshot=self.publish,
             on_done=lambda: self.finished.append(self.agent.running()),
@@ -170,7 +99,6 @@ class WorkRig:
             on_start=lambda: self.started.append(self.agent.running()),
             context=context,
             clock=self.clock,
-            assistant_pid=1234,
         )
         if start:
             self.agent.start_worker()
@@ -223,7 +151,6 @@ def test_canvas_intake_and_questions_continue_when_presentation_is_unavailable(t
     # Defect: creating a conversation view fails before work state reaches the
     # canvas, preventing intake, durable clarification or accepted replies.
     tasks = TaskStore(tmp_path / "tasks.sqlite3")
-    bridge = RecordingBridge()
     errors: list[str] = []
     clock = Clock()
     agent: WorkAgent
@@ -239,13 +166,12 @@ def test_canvas_intake_and_questions_continue_when_presentation_is_unavailable(t
     agent = WorkAgent(
         tasks,
         ContextStore(tasks.path),
-        bridge,
+        RecordingWorker(),
         unavailable,
         on_snapshot=canvas.observe_work,
         on_done=lambda: None,
         report_error=errors.append,
         clock=clock,
-        assistant_pid=1234,
     )
     try:
         canvas.observe_catalog(Catalog(sources=(source(SourceKind.OUTLOOK),)))
@@ -283,9 +209,9 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         rig.refresh()
         second = rig.task("And this one")
         assert first.source == second.source
-        assert rig.bridge.registrations == [
-            (first.id, invocation("First workbook"), 1234),
-            (second.id, invocation("Second workbook"), 1234),
+        assert rig.worker.registrations == [
+            (first.id, invocation("First workbook")),
+            (second.id, invocation("Second workbook")),
         ]
         assert rig.panel.state.queued == ("And this one",)
         rig.panel.paint()
@@ -296,7 +222,7 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
         rig.agent.submit_identified("review-task", "Review the previous task", SelfReview("previous-task"))
         rig.agent.submit_identified("general-task", "Summarize the second workbook", RequestKind.GENERAL)
         rig.refresh()
-        assert rig.bridge.registrations[-2:] == [("review-task", None, 1234), ("general-task", invocation("Second workbook"), 1234)]
+        assert rig.worker.registrations[-2:] == [("review-task", None), ("general-task", invocation("Second workbook"))]
     finally:
         rig.close()
 
@@ -310,12 +236,12 @@ def test_registration_precedes_claimable_submission_and_does_not_block_ui_comman
         entered.set()
         assert release.wait(5)
 
-    rig = WorkRig(tmp_path, bridge=RecordingBridge(on_register=register))
+    rig = WorkRig(tmp_path, worker=RecordingWorker(on_register=register))
     try:
         rig.agent.start("First request")
         assert entered.wait(5)
-        # The observer is held at the process boundary. Both callbacks return
-        # without waiting on that exchange, then shutdown drains them in order.
+        # The observer is held in registration. Both callbacks return without
+        # waiting on it, then shutdown drains them in order.
         rig.agent.start("Queued request")
         rig.agent.close()
         release.set()
@@ -325,21 +251,6 @@ def test_registration_precedes_claimable_submission_and_does_not_block_ui_comman
     finally:
         release.set()
         rig.close()
-
-
-def test_offline_submissions_remain_durable_and_shutdown_preserves_them(tmp_path: Path) -> None:
-    bridge = RecordingBridge()
-    bridge.disconnect()
-    rig = WorkRig(tmp_path, bridge=bridge)
-    try:
-        rig.agent.start("Save this request while offline")
-        snapshot = rig.refresh()
-        assert "reconnect" in snapshot.status
-        assert rig.task("Save this request while offline").state is TaskStatus.READY
-    finally:
-        rig.close()
-    assert bridge.closed.is_set()
-    assert TaskStore(tmp_path / "tasks.sqlite3").list_tasks()[0].state is TaskStatus.READY
 
 
 def test_stop_cancels_only_this_conversations_active_and_queued_tasks(tmp_path: Path) -> None:
@@ -371,7 +282,7 @@ def test_new_chat_keeps_work_and_prevents_old_live_updates_entering_the_new_view
         rig.refresh()
         assert rig.agent.new_conversation()
         rig.agent.start("Fresh conversation")
-        rig.bridge.publish(LogEvent(claim.run, Said("Late previous response", rig.clock())))
+        rig.agent.deliver(claim.run, Said("Late previous response", rig.clock()))
         rig.refresh()
         new = rig.task("Fresh conversation")
         assert old.source != new.source
@@ -408,7 +319,7 @@ def test_a_blocked_task_yields_to_queued_work_and_can_be_resumed_later(tmp_path:
         rig.tasks.finish(blocked.run, Waiting(Blocked("The workbook is locked.")), at=rig.clock())
         working = rig.tasks.claim("worker-one", "summary-run", at=rig.clock())
         assert working is not None
-        rig.bridge.publish(LogEvent(working.run, Said("Writing the summary now", rig.clock())))
+        rig.agent.deliver(working.run, Said("Writing the summary now", rig.clock()))
         rig.refresh()
         assert "The workbook is locked." in rig.panel.all_text()
         assert "Writing the summary now" in rig.panel.all_text()
@@ -449,15 +360,15 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         rig.refresh()
         claim = rig.tasks.claim("worker-one", "first-run", at=rig.clock())
         assert claim is not None
-        rig.bridge.publish(LogEvent(claim.run, Answer("reply", "Current streamed text", rig.clock(), StreamState.RUNNING)))
+        rig.agent.deliver(claim.run, Answer("reply", "Current streamed text", rig.clock(), StreamState.RUNNING))
         rig.refresh()
         assert "Current streamed text" in rig.panel.all_text()
         rig.tasks.control(claim.task.id, Control.PAUSE, at=rig.clock())
         rig.tasks.control(claim.task.id, Control.RESUME, at=rig.clock())
         resumed = rig.tasks.claim("worker-one", "resumed-run", at=rig.clock())
         assert resumed is not None
-        rig.bridge.publish(LogEvent(claim.run, Said("Stale run text", rig.clock())))
-        rig.bridge.publish(LogEvent(resumed.run, Said("Resumed run text", rig.clock())))
+        rig.agent.deliver(claim.run, Said("Stale run text", rig.clock()))
+        rig.agent.deliver(resumed.run, Said("Resumed run text", rig.clock()))
         rig.refresh()
         assert "Stale run text" not in rig.panel.all_text() and "Resumed run text" in rig.panel.all_text()
         rig.tasks.finish(resumed.run, Completed("Verified durable result", ("Output exists",)), at=rig.clock())
@@ -476,7 +387,7 @@ def test_question_and_resumed_action_keep_one_phase_and_one_reply(tmp_path: Path
         rig.refresh()
         claim = rig.tasks.claim("worker-one", "first-run", at=rig.clock())
         assert claim is not None
-        rig.bridge.publish(LogEvent(claim.run, ToolActivity("open", "open_file", "budget.xlsx", rig.clock())))
+        rig.agent.deliver(claim.run, ToolActivity("open", "open_file", "budget.xlsx", rig.clock()))
         rig.refresh()
         request = Question("open-question", "Open which workbook?", "")
         rig.tasks.finish(claim.run, Waiting(request), at=rig.clock())
@@ -487,8 +398,8 @@ def test_question_and_resumed_action_keep_one_phase_and_one_reply(tmp_path: Path
         rig.refresh()
         resumed = rig.tasks.claim("worker-one", "resumed-run", at=rig.clock())
         assert resumed is not None
-        rig.bridge.publish(LogEvent(resumed.run, ToolActivity("open", "open_file", "budget.xlsx", rig.clock(), Succeeded("Opened"))))
-        rig.bridge.publish(LogEvent(resumed.run, Answer("reply", "The workbook is open.", rig.clock(), StreamState.COMPLETE)))
+        rig.agent.deliver(resumed.run, ToolActivity("open", "open_file", "budget.xlsx", rig.clock(), Succeeded("Opened")))
+        rig.agent.deliver(resumed.run, Answer("reply", "The workbook is open.", rig.clock(), StreamState.COMPLETE))
         rig.refresh()
         rig.tasks.finish(resumed.run, Completed("The workbook is open.", ("Window is visible",)), at=rig.clock())
         rig.refresh()
@@ -512,7 +423,7 @@ def test_cancelling_a_task_survives_reopening_the_journal(tmp_path: Path) -> Non
         assert cancelled is not None and cancelled.state is TaskStatus.CANCELLED
 
 
-def test_reconnecting_reprojects_a_durable_question_without_showing_a_hidden_view(tmp_path: Path) -> None:
+def test_a_new_frontend_reprojects_a_durable_question_without_showing_a_hidden_view(tmp_path: Path) -> None:
     store = TaskStore(tmp_path / "tasks.sqlite3")
     store.submit("recovered-task", "Recover my request", "Recover my request", RequestSource("recovered-conversation"), at=10)
     claim = store.claim("old-worker", "saved-question-run", at=20)
@@ -523,71 +434,6 @@ def test_reconnecting_reprojects_a_durable_question_without_showing_a_hidden_vie
         assert rig.panel.waiting
         rig.panel.paint()
         assert rig.panel.view.shown == []
-        rig.bridge.publish(Resync("Worker reconnected"))
-        rig.refresh()
         assert rig.panel.submit("Use the project folder")
         rig.refresh()
         assert [response.reply for response in store.responses("recovered-task")] == [TextAnswer("Use the project folder")]
-
-
-def test_real_bridge_delivers_context_live_output_and_meeting_results_to_the_frontend(tmp_path: Path) -> None:
-    folder = tmp_path / "ipc"
-    folder.mkdir()
-    tasks = TaskStore(tmp_path / "tasks.sqlite3")
-    clock = Clock()
-    windows: list[RecordingWindow] = []
-    errors: list[str] = []
-    operations: list[StartMeeting | MeetingCommand] = []
-
-    def current_run(run: RunRef) -> bool:
-        task = tasks.get(run.task_id)
-        return task is not None and owns(task, run)
-
-    def window(agent: WorkAgent) -> RecordingWindow:
-        result = RecordingWindow(agent.stop, on_submit=agent.start, on_reset=agent.new_conversation)
-        windows.append(result)
-        return result
-
-    def meeting(operation: ipc.OwnerCall) -> ipc.Succeeded:
-        assert isinstance(operation, (StartMeeting, MeetingCommand))
-        operations.append(operation)
-        return ipc.Succeeded("The current recording is active.")
-
-    server = BridgeServer(folder, epoch="1" * 32, wake=lambda: None, owns=current_run)
-    agent = WorkAgent(
-        tasks,
-        ContextStore(tmp_path / "context.sqlite3"),
-        BridgeClient(folder),
-        window,
-        on_snapshot=lambda _: None,
-        on_done=lambda: None,
-        report_error=errors.append,
-        context=lambda: invocation("Shared workbook"),
-        owners=meeting,
-        clock=clock,
-        assistant_pid=1234,
-    )
-    server.start()
-    agent.start_worker()
-    try:
-        agent.start("Inspect my current workbook")
-        assert agent.refresh().wait(5)
-        task = tasks.list_tasks()[0]
-        assert server.invocation(task.id) == invocation("Shared workbook")
-        assert server.context() == invocation("Shared workbook") and server.assistant_pid == 1234
-        claim = tasks.claim("worker-one", "real-bridge-run", at=clock())
-        assert claim is not None
-        assert server.publish(LogEvent(claim.run, Said("Authenticated progress reached the conversation.", clock())))
-        assert agent.refresh().wait(5)
-        assert "Authenticated progress reached the conversation." in windows[0].all_text()
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            response = pool.submit(server.call, claim.run, MeetingCommand.STATUS, threading.Event(), timeout_s=3)
-            assert response.result(timeout=5) == "The current recording is active."
-        assert operations == [MeetingCommand.STATUS] and not errors
-    finally:
-        agent.close()
-        assert agent.wait_closed(5)
-        server.close()
-        assert server.wait(5)
-        for panel in windows:
-            panel.paint()

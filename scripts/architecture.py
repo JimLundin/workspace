@@ -82,8 +82,6 @@ class Configuration:
     """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
 
     exceptions: tuple[ExceptionSpec, ...] = ()
-    desktop_only: tuple[Text, ...] = ()
-    """Owners that the work process must never import."""
     headless: tuple[Text, ...] = ()
     """Application logic that cannot import presentation modules or Qt."""
     ui_private: tuple[Text, ...] = ()
@@ -206,25 +204,6 @@ def _within(module: str, package: str) -> bool:
 
 
 APPLICATION_LAYERS: Final = ("assistant", "desktop_ui")
-WORKER_ENTRY: Final = "automation.__main__"
-
-
-def worker_isolation(graph: Mapping[str, frozenset[str]], desktop_only: Iterable[str]) -> Iterator[Finding]:
-    """Report desktop-only owners reachable from the work process."""
-    restricted = frozenset(desktop_only)
-    entry = WORKER_ENTRY
-    pending: deque[tuple[str, ...]] = deque([(entry,)])
-    visited: set[str] = set()
-    while pending:
-        route = pending.popleft()
-        module = route[-1]
-        if module in visited:
-            continue
-        visited.add(module)
-        if any(_within(module, owner) for owner in restricted):
-            yield Finding("worker-isolation", entry, "", "", 0, " → ".join(route))
-            continue
-        pending.extend((*route, target) for target in sorted(graph.get(module, frozenset())) if target not in visited)
 
 
 def _routes(graph: Mapping[str, frozenset[str]], entry: str) -> Iterator[tuple[str, ...]]:
@@ -469,7 +448,6 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             continue
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
-    findings.extend(worker_isolation(graph, configuration.desktop_only))
     findings.extend(ui_isolation(imports, configuration.headless))
     findings.extend(presentation_isolation(graph, configuration.ui_private))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))

@@ -58,7 +58,7 @@ custom JavaScript or screenshots.
 
 The exclusive browser is started suspended, assigned to an owned Windows job
 and then resumed. Normal closure waits for children; the job also terminates
-them if the worker crashes. The persistent profile retains sign-in data.
+them if the assistant crashes. The persistent profile retains sign-in data.
 
 Snapshots and evaluated output are limited to 20,000 characters; oversized
 snapshots and tab lists retain valid JSON and expose offsets. CDP replies

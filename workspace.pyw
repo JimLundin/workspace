@@ -1,4 +1,4 @@
-"""Double-click launcher: the keeper runs the layout, assistant, and automation."""
+"""Double-click launcher: the keeper runs the layout and the assistant."""
 
 from runtime import activate
 lazy from keeper import STATE, main

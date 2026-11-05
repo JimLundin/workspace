@@ -1,10 +1,9 @@
-"""Conversation controls backed by durable work in the supervised process.
+"""Conversation controls backed by durable work on the worker's threads.
 
-UI callbacks enqueue immutable requests. This controller's observer owns journal mutations and
-transport calls; the owner-call dispatcher rechecks the journal before effects; the injected conversation output owns presentation and UI scheduling.
+UI callbacks enqueue immutable requests. This controller's observer owns journal mutations,
+worker notifications and live updates; the injected conversation output owns presentation and UI scheduling.
 """
 
-import os
 import queue
 import threading
 import time
@@ -18,18 +17,12 @@ from assistant.conversation_output import ConversationOutput
 lazy import automation.presentation
 lazy from assistant import agent_session
 lazy from assistant.feed_origin import FeedRequest, Initiation
-lazy from assistant.owner_calls import OwnerDispatcher, OwnerReply
 lazy from assistant.work_commands import AnswerTask, Submit, WorkCommand
-lazy from assistant.work_service import IdentifiedSubmission, Issued, WorkBridge, WorkService
+lazy from assistant.work_service import IdentifiedSubmission, Issued, Worker, WorkService
 lazy from assistant.work_snapshot import WorkSnapshot
-lazy from automation import ipc
 lazy from automation.activity import ContextSnapshot
 lazy from automation.context import ContextStore
-lazy from automation.ipc import (
-    Envelope,
-    LogEvent,
-    OwnerRequest,
-)
+lazy from automation.presentation import PresentationEvent
 lazy from automation.store import TaskStore
 lazy from automation.task import (
     Blocked,
@@ -42,6 +35,7 @@ lazy from automation.task import (
     RequestKind,
     RequestSource,
     Running,
+    RunRef,
     SelfReview,
     Task,
     TaskStatus,
@@ -134,13 +128,13 @@ class WorkAgent:
         "_conversation",
         "_create_window",
         "_displayed",
+        "_events",
         "_jobs",
         "_last_stop",
         "_last_submission_source",
         "_live",
         "_lock",
         "_ordinary_pending",
-        "_owners",
         "_pending",
         "_queued",
         "_rejected_input",
@@ -164,11 +158,11 @@ class WorkAgent:
         "window",
     )
 
-    def __init__(  # noqa: PLR0913 - composition root for the work process
+    def __init__(  # noqa: PLR0913 - composition root for durable work
         self,
         tasks: TaskStore,
         saved_context: ContextStore,
-        bridge: WorkBridge,
+        worker: Worker,
         create_window: Callable[[WorkAgent], ConversationOutput],
         *,
         on_snapshot: Callable[[WorkSnapshot], None],
@@ -176,14 +170,12 @@ class WorkAgent:
         report_error: Callable[[str], None],
         on_start: Callable[[], None] | None = None,
         context: Callable[[], ContextSnapshot] | None = None,
-        owners: Callable[[ipc.OwnerCall], ipc.OwnerResult] | None = None,
         clock: Callable[[], float] = time.time,
         identity: Callable[[], str] = lambda: uuid.uuid4().hex,
-        assistant_pid: int | None = None,
     ) -> None:
-        # Journal/transport, view construction and independent frontend callbacks
-        # compose one observer lifetime; owner effects run on its dispatcher.
-        self._service = WorkService(tasks, saved_context, bridge, assistant_pid=os.getpid() if assistant_pid is None else assistant_pid)
+        # Journal and worker, view construction and independent frontend
+        # callbacks compose one observer lifetime.
+        self._service = WorkService(tasks, saved_context, worker)
         self._create_window = create_window
         self.on_snapshot, self.on_done, self.report_error, self.on_start = on_snapshot, on_done, report_error, on_start
         self.context, self.clock, self.identity = context, clock, identity
@@ -210,14 +202,13 @@ class WorkAgent:
         self._watch_groups: dict[str, frozenset[str]] = {}
         self._watched: frozenset[str] = frozenset()
         self._live: Callable[[automation.presentation.LiveMessage], None] | None = None
-        self._owners = OwnerDispatcher(owners, tasks, self._wake)
+        self._events: queue.SimpleQueue[tuple[RunRef, PresentationEvent]] = queue.SimpleQueue()
         self.window: ConversationOutput | None = None
 
     def start_worker(self) -> None:
         """Begin observation after the application has composed its callbacks."""
         with self._lock:
             if self._thread is None and not self._closing.is_set():
-                self._owners.start()
                 self._thread = threading.Thread(target=self._observe, name="work frontend", daemon=True)
                 self._thread.start()
 
@@ -402,7 +393,6 @@ class WorkAgent:
             if self._closing.is_set():
                 return
             self._closing.set()
-            self._owners.close()
             self._wake.set()
             if self.window is not None:
                 try:
@@ -465,7 +455,7 @@ class WorkAgent:
             self._clear_input()
         match task.state:
             case TaskStatus.READY:
-                window.step("Queued for the work process.")
+                window.step("Queued.")
             case Running():
                 pass
             case Interrupted(_, reason):
@@ -601,20 +591,25 @@ class WorkAgent:
             self._snapshot = snapshot
         self.on_snapshot(snapshot)
 
-    def _log(self, event: LogEvent) -> None:
+    def deliver(self, run: RunRef, event: PresentationEvent) -> None:
+        """A run's live update, from the worker's execution thread; the observer presents it."""
+        self._events.put((run, event))
+        self._wake.set()
+
+    def _log(self, run: RunRef, event: PresentationEvent) -> None:
         try:
-            self._present_log(event)
+            self._present_log(run, event)
         except Exception:
             self.report_error(traceback.format_exc())
 
-    def _present_log(self, event: LogEvent) -> None:
-        task = self._service.tasks.get(event.run.task_id)
+    def _present_log(self, run: RunRef, event: PresentationEvent) -> None:
+        task = self._service.tasks.get(run.task_id)
         with self._lock:
-            if task is None or not owns(task, event.run) or not in_conversation(task, self._conversation):
+            if task is None or not owns(task, run) or not in_conversation(task, self._conversation):
                 return
             if self._displayed is None or self._displayed.id != task.id or self.window is None or self._closing.is_set():
                 return
-            match event.event:
+            match event:
                 case automation.presentation.Progress(text):
                     self.window.step(text)
                     return
@@ -633,32 +628,21 @@ class WorkAgent:
                         return
                 case automation.presentation.ToolActivity():
                     if self._live is not None:
-                        self._live(event.event)
+                        self._live(event)
                     return
                 case _:
-                    assert_never(event.event)
+                    assert_never(event)
         # The output adapter owns prose preparation outside the frontend lock.
         # The captured producer is fenced to its session generation.
-        live(event.event)
+        live(event)
 
-    def _owner(self, message: Envelope, request: OwnerRequest) -> None:
-        task = self._service.tasks.get(request.run.task_id)
-        if task is None or not owns(task, request.run) or self._closing.is_set():
-            return
-        reply = self._owners.submit(message)
-        if reply is not None:
-            self._owner_reply(reply)
-
-    def _owner_reply(self, reply: OwnerReply) -> None:
-        if reply.error is not None:
-            self.report_error(reply.error)
-        try:
-            if not self._service.bridge.respond(reply.message, reply.result):
-                self._service.problem = "The owner request expired before its result was delivered. Inspect its current state before trying again."
-        except OSError, ValueError:
-            self._service.problem = "The work process disconnected before confirming the owner result. Inspect its current state before trying again."
-        if self._closing.is_set() and self._service.problem:
-            self.report_error(self._service.problem)
+    def _drain_events(self) -> None:
+        for _ in range(512):
+            try:
+                run, event = self._events.get_nowait()
+            except queue.Empty:
+                return
+            self._log(run, event)
 
     def _jobs_ready(self) -> tuple[Observe, ...]:
         observed: list[Observe] = []
@@ -715,29 +699,14 @@ class WorkAgent:
                 pass
 
     def _observe(self) -> None:
-        previous_context: ContextSnapshot | None = None
         try:
             while True:
                 observed = self._jobs_ready()
                 try:
-                    for reply in self._owners.ready():
-                        self._owner_reply(reply)
                     if not self._closing.is_set():
-                        current_context = self.context() if self.context is not None else None
-                        if current_context is not None and current_context != previous_context:
-                            self._service.publish_context(current_context)
-                            previous_context = current_context
-                        events = self._service.events(at=self.clock())
                         watched, pending = self._observed_ids()
                         self._publish(self._service.snapshot(watched=watched, pending=pending))
-                        for event in events:
-                            match event.payload:
-                                case LogEvent() as log:
-                                    self._log(log)
-                                case OwnerRequest() as request:
-                                    self._owner(event, request)
-                                case _:
-                                    raise ValueError("Unexpected frontend event.")
+                        self._drain_events()
                 except Exception as error:
                     self._service.problem = str(error) or "Work could not be refreshed."
                     self._publish_unavailable()
@@ -745,15 +714,10 @@ class WorkAgent:
                 finally:
                     for observation in observed:
                         observation.completed.set()
-                if self._closing.is_set() and self._jobs.empty() and not self._owners.pending:
+                if self._closing.is_set() and self._jobs.empty():
                     break
-                if self._jobs.empty():
+                if self._jobs.empty() and self._events.empty():
                     self._wake.wait(0.25)
                     self._wake.clear()
         finally:
-            try:
-                self._owners.close()
-                self._owners.wait()
-                self._service.bridge.close()
-            finally:
-                self._closed.set()
+            self._closed.set()

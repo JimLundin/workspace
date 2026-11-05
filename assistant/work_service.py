@@ -1,21 +1,13 @@
-"""Journal and volatile transport effects, owned by the frontend's observer."""
+"""Journal effects and worker notifications, owned by the frontend's observer."""
 
-from collections.abc import Callable
 from dataclasses import dataclass, replace
 from itertools import islice
 from typing import Protocol, assert_never
 
 from assistant.work_commands import AnswerTask, ControlTask, Submit, WorkCommand
 from assistant.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapshot
-from automation import ipc
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore
-from automation.ipc import (
-    Envelope,
-    LogEvent,
-    OwnerRequest,
-    Resync,
-)
 from automation.store import TaskStore
 from automation.task import (
     Control,
@@ -28,16 +20,11 @@ from automation.task import (
 )
 
 
-class WorkBridge(Protocol):
-    """The UI process uses bounded, authenticated, non-persistent exchanges."""
+class Worker(Protocol):
+    """The in-process worker: it reads each request's context and wakes after commits."""
 
-    def connect(self) -> str: ...
-    def poll(self, limit: int = 64) -> tuple[Envelope, ...]: ...
+    def register(self, task_id: str, context: ContextSnapshot | None) -> None: ...
     def wake(self) -> None: ...
-    def register(self, task_id: str, context: ContextSnapshot | None, *, assistant_pid: int) -> None: ...
-    def publish_context(self, context: ContextSnapshot, *, assistant_pid: int) -> None: ...
-    def respond(self, message: Envelope, result: ipc.Succeeded | ipc.Failed) -> bool: ...
-    def close(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,54 +62,14 @@ def submission_matches(task: Task, submission: UnconfirmedSubmission) -> bool:
 
 
 class WorkService:
-    __slots__ = (
-        "_epoch",
-        "_pending_inputs",
-        "_replies",
-        "_sequence",
-        "_submissions",
-        "assistant_pid",
-        "bridge",
-        "connection_status",
-        "context",
-        "problem",
-        "tasks",
-    )
+    __slots__ = ("_pending_inputs", "_replies", "_submissions", "context", "problem", "tasks", "worker")
 
-    def __init__(
-        self,
-        tasks: TaskStore,
-        context: ContextStore,
-        bridge: WorkBridge,
-        *,
-        assistant_pid: int,
-    ) -> None:
-        self.tasks, self.context, self.bridge = tasks, context, bridge
-        self.assistant_pid = assistant_pid
-        self._epoch: str | None = None
-        self._sequence = 0
+    def __init__(self, tasks: TaskStore, context: ContextStore, worker: Worker) -> None:
+        self.tasks, self.context, self.worker = tasks, context, worker
         self._submissions: dict[str, UnconfirmedSubmission] = {}
         self._replies: dict[tuple[str, str], ReplyProblem] = {}
         self._pending_inputs: frozenset[tuple[str, str]] = frozenset()
-        self.problem = self.connection_status = ""
-
-    def _transport(self, operation: Callable[[], None]) -> None:
-        try:
-            operation()
-        except OSError, ValueError:
-            self._disconnected()
-
-    def _disconnected(self) -> None:
-        self._epoch = None
-        self.connection_status = "Work is saved. Waiting for the work process to reconnect."
-
-    def register(self, identity: str, context: ContextSnapshot | None) -> None:
-        # BridgeClient retains registration before attempting I/O. Registration
-        # precedes eligibility in SQLite, so an online worker can claim safely.
-        self._transport(lambda: self.bridge.register(identity, context, assistant_pid=self.assistant_pid))
-
-    def publish_context(self, context: ContextSnapshot) -> None:
-        self._transport(lambda: self.bridge.publish_context(context, assistant_pid=self.assistant_pid))
+        self.problem = ""
 
     def _submit(self, identity: str, prompt: str, source: RequestSource, context: ContextSnapshot | None, *, at: float) -> Task:
         prompt = text(prompt, "task prompt").strip()
@@ -132,7 +79,8 @@ class WorkService:
                 raise ValueError("That task identity already belongs to a different request.")
             self._submissions.pop(identity, None)
             return existing
-        self.register(identity, context)
+        # Registration precedes eligibility in SQLite, so the worker's claim finds it.
+        self.worker.register(identity, context)
         task = self.tasks.submit(identity, prompt.splitlines()[0][:240], prompt, source, at=at)
         if task.source != source or task.prompt != prompt:
             raise ValueError("That task identity already belongs to a different request.")
@@ -182,7 +130,7 @@ class WorkService:
         self._limit_replies(watched)
 
     def apply(self, request: WorkRequest, *, at: float) -> None:
-        """Commit a user command before notifying the work process."""
+        """Commit a user command before waking the worker."""
         if isinstance(request, IdentifiedSubmission):
             existing = self.tasks.get(request.identity)
             source = request.source
@@ -206,35 +154,11 @@ class WorkService:
             case _:
                 assert_never(issued.command)
         self.problem = ""
-        self._transport(self.bridge.wake)
+        self.worker.wake()
 
     def stop_conversation(self, conversation_id: str, *, at: float) -> None:
         self.tasks.control_conversation(conversation_id, Control.CANCEL, at=at)
-        self._transport(self.bridge.wake)
-
-    def events(self, *, at: float) -> tuple[Envelope, ...]:
-        try:
-            epoch = self.bridge.connect()
-            if epoch != self._epoch:
-                self._epoch, self._sequence = epoch, 0
-            messages = self.bridge.poll()
-        except OSError, ValueError:
-            self._disconnected()
-            return ()
-        self.connection_status = ""
-        accepted: list[Envelope] = []
-        for message in messages:
-            if message.epoch != self._epoch or message.sequence <= self._sequence:
-                continue
-            self._sequence = message.sequence
-            match message.payload:
-                case Resync():
-                    pass
-                case LogEvent() | OwnerRequest():
-                    accepted.append(message)
-                case _:
-                    assert_never(message.payload)
-        return tuple(accepted)
+        self.worker.wake()
 
     def _submission_problems(
         self,
@@ -297,6 +221,4 @@ class WorkService:
         # Only watched tasks need an action timeline. Bound journal reads and
         # publication size; the task journal retains the complete ledger.
         actions = tuple(islice((action for task in tasks if task.id in watched for action in self.tasks.actions(task.id, limit=16)), 256))
-        return WorkSnapshot(
-            tasks, context, self.problem or self.connection_status, submission_problems=problems, reply_problems=reply_problems, actions=actions
-        )
+        return WorkSnapshot(tasks, context, self.problem, submission_problems=problems, reply_problems=reply_problems, actions=actions)

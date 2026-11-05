@@ -1,7 +1,7 @@
 """The assistant owns the tray, conversation views, microphone, and meetings.
 
-Durable work executes in the supervised automation process. The keyboard sends
-its tool requests here without depending on either work storage or model calls.
+Durable work executes on the worker's threads in this process. The keyboard
+sends its tool requests here without depending on either work storage or model calls.
 """
 
 import contextlib
@@ -44,6 +44,7 @@ lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.meeting_browser import TeamsCalls
 lazy from assistant.meeting_detection import PREFERENCE, AutomaticStatus
 lazy from assistant.meeting_store import MeetingArchive, MeetingStore
+lazy from assistant.meeting_tools import MeetingCommand, StartMeeting
 lazy from assistant.meetings import Meetings
 lazy from assistant.notification_sources import NOTIFICATION_STATE
 lazy from assistant.personal_work_model import Correlator
@@ -55,14 +56,11 @@ lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
 lazy from assistant.work_agent import WorkAgent
-lazy from assistant.work_bridge import WorkOwners, answer
+lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_canvas import WorkCanvas, run_prompt
 lazy from assistant.work_commands import ControlTask, WorkViewCommand
 lazy from assistant.work_snapshot import WorkSnapshot
-lazy from automation import ipc
-lazy from automation.bridge import BridgeClient
 lazy from automation.context import ContextStore
-lazy from automation.ipc import MeetingCommand, StartMeeting
 lazy from automation.personal_work import (
     AddDocument,
     AddWebPage,
@@ -80,6 +78,7 @@ lazy from automation.personal_work import (
 lazy from automation.store import TaskStore
 lazy from automation.task import Control, RequestKind
 lazy from automation.work_folder import BROWSER_PROFILE, WORK
+lazy from automation.worker import OwnerCalls, Worker, native_runner, warm_sdk
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap import indicator_text
 lazy from desktop_ui.navigation import Source, SwitcherPick
@@ -181,6 +180,7 @@ class AssistantApp:
         "assistant",
         "automatic_attention",
         "automatic_meetings",
+        "automation",
         "canvas",
         "capture_timer",
         "communications",
@@ -231,10 +231,11 @@ class AssistantApp:
 
         tasks = TaskStore(WORK.journal)
         saved_context = ContextStore(tasks.path)
+        self.automation = Worker(tasks, WORK.root)
         self.agent = WorkAgent(
             tasks,
             saved_context,
-            BridgeClient(WORK.root),
+            self.automation,
             lambda runner: self.ui.agent(
                 runner.stop,
                 on_problem=self.problem,
@@ -248,7 +249,6 @@ class AssistantApp:
             report_error=log,
             on_start=lambda: self.show(State.AGENT),
             context=context,
-            owners=self.owner_command,
         )
         self.timings.mark("work frontend")
         self.activity = ActivityTracker(
@@ -302,6 +302,7 @@ class AssistantApp:
         self.worker = threading.Thread(target=self.work, name="worker", daemon=True)
         self.startup = WorkerStartup(
             (
+                lambda: self.start_work(tasks, saved_context),
                 self.activity.start,
                 self.worker.start,
                 self.agent.start_worker,
@@ -315,6 +316,16 @@ class AssistantApp:
             self.tray.notify("Workspace", f"The AI tools need {', '.join(missing.names)}; the layout works without them.", warning=True)
 
     # ---- running -----------------------------------------------------------------------
+
+    def start_work(self, tasks: TaskStore, saved_context: ContextStore) -> None:
+        """Recover saved work before readiness; execution then runs on the worker's threads."""
+        calls = OwnerCalls(tasks, self.work_owners.handle, self.meeting_command)
+        runner, close_background = native_runner(
+            self.settings, self.automation, calls, hwnd=self.window.handle, contexts=saved_context, context=self.activity.snapshot
+        )
+        self.automation.start(runner, self.agent.deliver, close_background)
+        if self.settings.api_key:
+            threading.Thread(target=warm_sdk, args=(WORK.root,), name="work SDK warmup", daemon=True).start()
 
     def observe_meeting(self, store: MeetingStore) -> None:
         """Canvas intake failures must not fail a recording or its transcription."""
@@ -394,12 +405,13 @@ class AssistantApp:
             self.capture_timer = None
         self.assistant.stop_capture(discard=True, reason="shutdown")
         timings.mark("stop capture")
+        # Park running work while the desktop owners its calls reach still exist.
+        self.automation.close()
+        timings.mark("worker")
         self.agent.close()
-        # A canvas call waits up to eight seconds on Qt. Retain every desktop
-        # owner until the dispatcher and observer have drained their replies.
         if not self.agent.wait_closed(timeout=12):
-            raise RuntimeError("The work frontend did not release its desktop owner calls before shutdown.")
-        timings.mark("work frontend and desktop calls")
+            raise RuntimeError("The work frontend did not drain before shutdown.")
+        timings.mark("work frontend")
         self.personal.close()
         timings.mark("personal work")
         self.triage.close()
@@ -567,12 +579,8 @@ class AssistantApp:
     def open_meeting_file(self, path: Path) -> None:
         self.jobs.put(control_policy.meeting_file_job(path, os.startfile, self.problem))
 
-    def owner_command(self, call: ipc.OwnerCall) -> ipc.OwnerResult:
-        """Route the work process's one owner-call seam to its desktop owners."""
-        return answer(call, self.work_owners, self.meeting_command)
-
-    def meeting_command(self, command: StartMeeting | MeetingCommand) -> ipc.Succeeded | ipc.Failed:
-        """Execute the worker's validated request with the existing capture owner."""
+    def meeting_command(self, command: StartMeeting | MeetingCommand) -> str:
+        """Execute the agent's meeting request with the existing capture owner."""
         try:
             match command:
                 case StartMeeting(source, title):
@@ -582,14 +590,14 @@ class AssistantApp:
                 case MeetingCommand.RETRY:
                     self.meetings.retry()
                 case MeetingCommand.LIST:
-                    return ipc.Succeeded(self.meetings.recent())
+                    return self.meetings.recent()
                 case MeetingCommand.STATUS:
                     pass
                 case _:
                     assert_never(command)
-            return ipc.Succeeded(self.meetings.describe())
-        except (OSError, ValueError) as error:
-            return ipc.Failed(str(error))
+            return self.meetings.describe()
+        except ValueError as error:
+            raise OSError(str(error)) from error
 
     def agent_done(self) -> None:
         if self.assistant.listening is None:
@@ -703,8 +711,6 @@ class AssistantApp:
                 keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("layout"))
             case control_policy.Menu.RESTART_ASSISTANT.value:
                 keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("assistant"))
-            case control_policy.Menu.RESTART_AUTOMATION.value:
-                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("automation"))
             case control_policy.Menu.OVERLAY.value:
                 self.toggle_overlay()
             case control_policy.Menu.KEYMAP.value:

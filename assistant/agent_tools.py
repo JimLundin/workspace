@@ -22,9 +22,9 @@ from automation.json_value import Json
 from automation.task import ActionNotApplied, ActionReturned, ActionUncertain, ActionVerified, FileDigest, NoVerification
 from winapi.shapes import Rect
 lazy from assistant.browser_requests import BrowserRequest
+lazy from assistant.meeting_tools import MeetingOperation
 lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
-lazy from automation.ipc import MeetingOperation
 
 _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 

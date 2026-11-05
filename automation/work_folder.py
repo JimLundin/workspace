@@ -1,4 +1,4 @@
-"""Shared storage paths used by the assistant and supervised work process."""
+"""Storage paths for the assistant's durable work."""
 
 from dataclasses import dataclass
 from pathlib import Path

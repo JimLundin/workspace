@@ -35,7 +35,6 @@ class Menu(Enum):
     WORK = 14
     TASKBAR = 15
     RESTART_ASSISTANT = 18
-    RESTART_AUTOMATION = 19
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -71,7 +70,6 @@ def menu_items(state: MenuState) -> tuple[MenuItem, ...]:
         MenuItem(Menu.LOGS.value, "Open logs folder"),
         MenuItem(0),
         MenuItem(Menu.RESTART_ASSISTANT.value, "Restart assistant"),
-        MenuItem(Menu.RESTART_AUTOMATION.value, "Restart automation"),
         MenuItem(Menu.QUIT.value, "Quit Workspace"),
     )
 

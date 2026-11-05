@@ -1,7 +1,7 @@
 """Shared presentation values: progress, results and live rows.
 
-The automation process publishes live updates over the process bridge. The
-assistant synthesizes Done and Finished from durable task outcomes and renders
+The worker publishes live updates straight to the assistant's observer, which
+synthesizes Done and Finished from durable task outcomes and renders
 the timeline. Each variant carries its presentation `kind`.
 """
 
@@ -92,6 +92,10 @@ class Problem:
     text: str
     at: float
     kind: Literal["problem"] = "problem"
+
+
+type PresentationEvent = Progress | Said | Problem | LiveMessage
+"""What a run publishes live; the assistant derives Done and Finished from the journal."""
 
 
 @dataclass(frozen=True, slots=True)
