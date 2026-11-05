@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import keeper
-from keeper_control import Install, InstallChecking, InstallRefused, InstallStarted, ask, install_result
+from keeper_control import INSTALL_RESULT_FILE, Install, InstallChecking, InstallRefused, InstallStarted, ask, install_result
 from scripts.check import source_files
 from scripts.deploy_files import PINS, checked_sources, sha
 from scripts.development_paths import LIVE, TEMP
@@ -51,10 +51,22 @@ def summary(checkout: Path) -> str:
     return f"Deploy {head}" if head else "Deploy"
 
 
-def wait_for(digest: str, *, deadline: float) -> InstallStarted | InstallRefused:
+def result_stamp(state: Path) -> int | None:
+    """When the keeper last replaced its install result, or None while there is none."""
+    try:
+        return (state / INSTALL_RESULT_FILE).stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def wait_for(state: Path, digest: str, *, before: int | None, deadline: float) -> InstallStarted | InstallRefused:
+    """The keeper's answer to this request; a result recorded `before` it answered an earlier one."""
     reported = False
     while time.monotonic() < deadline:
-        match install_result(keeper.STATE):
+        if result_stamp(state) == before:
+            time.sleep(1)
+            continue
+        match install_result(state):
             case InstallStarted(digest=installed) as result if installed == digest:
                 return result
             case InstallRefused(digest=refused) as result if refused == digest:
@@ -80,10 +92,12 @@ def deploy(live: Path) -> None:
                 previous = keeper.install_stopped(stage, live, title, state=keeper.STATE, versions=keeper.VERSIONS)
                 print(f"Workspace isn't running: installed the files over version {previous[:12]}; it stays stopped.", flush=True)
                 return
+        # A retried deploy has the same digest as its last result; only a newer result answers it.
+        before = result_stamp(keeper.STATE)
         # No fast check stands for these bytes, so the keeper runs the affected portable tests too.
         ask(keeper.REQUESTS, Install(title, digest, None, str(stage)))
         print("Asked the running keeper to install the change.", flush=True)
-        match wait_for(digest, deadline=time.monotonic() + WAIT_S):
+        match wait_for(keeper.STATE, digest, before=before, deadline=time.monotonic() + WAIT_S):
             case InstallStarted(version=version):
                 print(f"Installed; the affected programs are running. Undo restores version {version[:12]}.", flush=True)
             case InstallRefused(reason=reason):

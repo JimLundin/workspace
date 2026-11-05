@@ -3,9 +3,11 @@
 import os
 import shutil
 import subprocess
+import time
 import unittest
 from pathlib import Path
 
+from keeper_control import InstallRefused, InstallStarted, record_install
 from scripts import deploy
 from scripts.deploy_files import PINS, file_at, member, names, sha, source_map
 from tests.git_fixture import initialized
@@ -41,6 +43,18 @@ def test_a_changed_runtime_pin_is_named_before_anything_is_installed(tmp_path: P
     assert deploy.changed_pins(wanted, live) == ()
     (live / PINS[1]).write_bytes(b"newer\n")
     assert deploy.changed_pins(wanted, live) == (PINS[1],)
+
+
+def test_a_retried_deploy_waits_for_a_result_newer_than_its_request(tmp_path: Path) -> None:
+    # Defect: retrying an identical deploy reads the keeper's earlier result for
+    # the same digest, reports it and deletes the stage the keeper still needs.
+    digest = "d" * 64
+    record_install(tmp_path, InstallRefused(digest, "Update undone: it didn't start."))
+    before = deploy.result_stamp(tmp_path)
+    with unittest.TestCase().assertRaises(SystemExit):
+        deploy.wait_for(tmp_path, digest, before=before, deadline=time.monotonic() + 0.05)
+    record_install(tmp_path, InstallStarted(digest, "Deploy", "v" * 40))
+    assert deploy.wait_for(tmp_path, digest, before=before, deadline=time.monotonic() + 5) == InstallStarted(digest, "Deploy", "v" * 40)
 
 
 def test_release_paths_reject_windows_aliases_and_escapes(tmp_path: Path) -> None:
