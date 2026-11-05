@@ -4,7 +4,6 @@ Windows drops a hook that misses LowLevelHooksTimeout and tells nobody. Raw
 keyboard input still reaches the layout's window, so keyboard input the hook
 never saw is the evidence, and a probe key the hook should see confirms it.
 Ticks are Windows message times in milliseconds, which wrap at 2**32.
-See docs/keyboard-hook-watchdog.md.
 """
 
 from dataclasses import dataclass
