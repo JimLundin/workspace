@@ -20,6 +20,7 @@ from pydantic import TypeAdapter, ValidationError
 from scripts.check_results import Results, Selection
 from scripts.development_paths import TEMP
 lazy from scripts.check import DIRECT, combined_results, execute, worker_result
+lazy from selfcheck import NATIVE_LANES
 
 RUNNER = """import sys
 from pathlib import Path
@@ -49,21 +50,6 @@ def run_native(root: Path, configuration: Path) -> None:
     results = execute(settings.selection, root)
     Path(settings.output).write_bytes(NATIVE_RESULT.dump_json(results))
     raise SystemExit(bool(results.failures))
-
-
-NATIVE_LANES = (
-    # Each launches real Edge processes on disposable profiles.
-    ("tests/test_windows_browser.py",),
-    ("tests/test_windows_runtime.py", "tests/test_windows_test_desktop.py"),
-    ("tests/test_windows_computer.py", "tests/test_windows_development.py"),
-)
-"""Slow native modules that wait on child processes and share no machine-wide state.
-
-Each lane, and then the remaining native modules together, runs in its own
-Windows runner on its own private desktop after the main lane, which keeps the
-import review and the portable tests. Audio endpoints and the keyboard hook stay
-in the remaining lane, so their modules never overlap.
-"""
 
 
 def lanes(selection: Selection) -> tuple[Selection | None, tuple[Selection, ...]]:

@@ -69,6 +69,7 @@ SLOW: Final[frozendict[str, str]] = frozendict(
         "tests/test_workspace.py::test_check_runs_selfcheck_on_the_workspace": CHECK_PROCESS,
         "tests/test_workspace.py::test_editing_checks_fail_on_the_standards_report_after_tests_pass": CHECK_PROCESS,
         "tests/test_workspace.py::test_runtime_checks_cannot_change_the_source_that_was_checked": CHECK_PROCESS,
+        "tests/test_selfcheck.py::test_parallel_native_lanes_report_each_lanes_passes_failures_and_crashes": CHECK_PROCESS,
     }
 )
 """Portable tests allowed over the editing budget, each with why it can't be faster.

@@ -31,6 +31,7 @@ import ast
 import importlib
 import inspect
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -44,6 +45,8 @@ from enum import Enum
 from pathlib import Path
 from types import FunctionType
 from typing import Final, Protocol
+
+lazy from pydantic import TypeAdapter
 
 _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 """Signs that an import failed only because this isn't Windows."""
@@ -255,6 +258,20 @@ PORTABLE = (
 # native modules run after the workers exit, keeping their fixture costs stable.
 AFTER_WORKERS = frozenset({"tests/test_agent_streaming.py"})
 
+NATIVE_LANES: Final = (
+    # Each launches real Edge processes on disposable profiles.
+    ("tests/test_windows_browser.py",),
+    ("tests/test_windows_runtime.py", "tests/test_windows_test_desktop.py"),
+    ("tests/test_windows_computer.py", "tests/test_windows_development.py"),
+)
+"""Slow native modules that wait on child processes and share no machine-wide state.
+
+Each lane, and then the remaining native modules together, runs in its own process
+on its own private desktop once the portable workers exit. Audio endpoints and the
+keyboard hook stay in the remaining lane, so their modules never overlap. The lanes
+live in this protected file so a change cannot widen them for its own install check.
+"""
+
 
 def _windows_only(error: BaseException) -> bool:
     return not _ON_WINDOWS and isinstance(error, (ImportError, AttributeError, OSError)) and any(w in str(error) for w in _WINDOWS_ONLY)
@@ -361,6 +378,81 @@ def _prepare_worker(root: str) -> None:
         importlib.import_module("assistant.sdk")
 
 
+@dataclass(frozen=True, slots=True)
+class LaneOutcome:
+    """A native lane process's combined result, written for the coordinating check."""
+
+    passed: int
+    skipped: int
+    problems: tuple[str, ...]
+    timings: tuple[tuple[float, str], ...]
+
+
+def native_groups(root: Path, paths: list[Path]) -> list[list[Path]]:
+    """The selected native modules of each lane, then the remaining ones, omitting empty groups."""
+    relative = {path: path.relative_to(root).as_posix() for path in paths}
+    grouped = [[path for path in paths if relative[path] in lane] for lane in NATIVE_LANES]
+    remaining = [path for path in paths if not any(relative[path] in lane for lane in NATIVE_LANES)]
+    return [group for group in (*grouped, remaining) if group]
+
+
+def run_lane(paths: list[Path], result: Path) -> bool:
+    """Run one lane's modules here, in order, and write their combined outcome to `result`."""
+    outcomes: list[Outcome] = []
+    for path in paths:
+        started = time.perf_counter()
+        outcome = run_module(path)
+        _progress(path, outcome, time.perf_counter() - started)
+        outcomes.append(outcome)
+    combined = LaneOutcome(
+        sum(outcome[0] for outcome in outcomes),
+        sum(outcome[1] for outcome in outcomes),
+        tuple(problem for outcome in outcomes for problem in outcome[2]),
+        tuple(timing for outcome in outcomes for timing in outcome[3]),
+    )
+    result.write_bytes(TypeAdapter(LaneOutcome).dump_json(combined))
+    return not combined.problems
+
+
+def _lane_failure(group: list[Path], text: str) -> Outcome:
+    return 0, 0, (f"FAILED native lane ({', '.join(path.name for path in group)}): {text}",), ()
+
+
+def run_lanes(root: Path, groups: list[list[Path]]) -> list[Outcome]:
+    """Run each group in a process of its own, concurrently, and collect their outcomes.
+
+    Each process runs this protected runner, not the candidate's. It drops the
+    inherited test desktop, so its first `import tests` gives it a private desktop
+    of its own. The job of the test desktop that started this check owns the lanes
+    too, so stopping the check ends them.
+    """
+    environment = {key: value for key, value in os.environ.items() if key != "WORKSPACE_TEST_DESKTOP"}
+    outcomes: list[Outcome] = []
+    with tempfile.TemporaryDirectory(prefix="selfcheck-lanes-") as scratch:
+        running: list[tuple[list[Path], Path, Path, subprocess.Popen[bytes]]] = []
+        for index, group in enumerate(groups):
+            result, log = Path(scratch) / f"lane-{index}.json", Path(scratch) / f"lane-{index}.txt"
+            names = [path.relative_to(root).as_posix() for path in group]
+            command = [sys.executable, os.path.abspath(__file__), str(root), "--modules", ",".join(names), "--result", str(result)]
+            with log.open("wb") as output:
+                process = subprocess.Popen(command, cwd=root, env=environment, stdout=output, stderr=subprocess.STDOUT)
+            running.append((group, result, log, process))
+        for group, result, log, process in running:
+            code = process.wait()
+            report = log.read_text(encoding="utf-8", errors="replace")
+            sys.stdout.write(report)
+            sys.stdout.flush()
+            try:
+                lane = TypeAdapter(LaneOutcome).validate_json(result.read_bytes())
+            except OSError, ValueError:
+                outcomes.append(_lane_failure(group, f"exited {code} without a result\n{report[-2000:]}"))
+                continue
+            outcomes.append((lane.passed, lane.skipped, lane.problems, lane.timings))
+            if code and not lane.problems:
+                outcomes.append(_lane_failure(group, f"exited {code}"))
+    return outcomes
+
+
 def _progress(path: Path, outcome: Outcome, seconds: float) -> None:
     """One line per module as it finishes, so a timed-out install shows where it stopped."""
     sys.stdout.write(f"{seconds:7.1f}s {path.name}: {outcome[0]} passed, {len(outcome[2])} failed\n")
@@ -402,23 +494,38 @@ def failed_modules(report: str) -> frozenset[str]:
     )
 
 
+type Runs = tuple[list[Path], list[Path], list[Path], list[Path], list[Path]]
+"""Leading (last time's failures), portable (workers), alongside (here, beside the
+workers), later (after the workers) and native modules, each in run order."""
+
+
+def partition(root: Path, paths: list[Path], first: frozenset[str]) -> Runs:
+    """Which runner takes each selected module."""
+    relative = {path: path.relative_to(root).as_posix() for path in paths}
+    leading = [path for path in paths if relative[path] in first]
+    rest = [path for path in paths if path not in leading]
+    portable = [path for name in PORTABLE for path in rest if relative[path] == name]
+    native = [path for path in rest if path.name.startswith("test_windows_")]
+    later = [path for path in rest if relative[path] in AFTER_WORKERS and path not in native]
+    alongside = [path for path in rest if path not in portable and path not in native and path not in later]
+    return leading, portable, alongside, later, native
+
+
 def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope = FULL_SCOPE) -> tuple[int, int, tuple[tuple[float, str], ...]]:
     """Passed tests, skipped test modules and per-test timings.
 
     `scope.first` modules run first, alone. Then reviewed portable modules run on
-    worker processes while the other non-native modules run here; native modules
-    run after the workers exit, one at a time. With `scope.stop`, nothing starts
-    after a failure, and the modules left out are reported.
+    worker processes while the other non-native modules run here. Native modules
+    run after the workers exit: in parallel lane processes when they span more than
+    one lane, otherwise here. With `scope.stop`, nothing starts after a failure, and
+    the modules left out are reported.
     """
-    relative = {path: path.relative_to(root).as_posix() for path in paths}
-    leading = [path for path in paths if relative[path] in scope.first]
-    rest = [path for path in paths if path not in leading]
-    portable = [path for name in PORTABLE for path in rest if relative[path] == name]
-    following = [path for path in rest if path.name.startswith("test_windows_") or relative[path] in AFTER_WORKERS]
-    alongside = [path for path in rest if path not in portable and path not in following]
+    leading, portable, alongside, later, native = partition(root, paths, scope.first)
     # This coordinator owns the run's counters and ledgers; workers return
     # immutable outcomes only.
     outcomes: list[Outcome] = []
+    ran: set[Path] = set()
+    """The modules that ran, whichever runner ran them; a lane reports once for all of its modules."""
 
     def failed() -> bool:
         return scope.stop and any(outcome[2] for outcome in outcomes)
@@ -431,10 +538,11 @@ def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope =
             outcome = run_module(path)
             _progress(path, outcome, time.perf_counter() - started)
             outcomes.append(outcome)
+            ran.add(path)
 
     sequential(leading)
     if len(portable) < 2:
-        sequential([*portable, *alongside, *following])
+        sequential([*portable, *alongside, *later])
     elif not failed():
         started = time.perf_counter()
         with ProcessPoolExecutor(max_workers=WORKERS, initializer=_prepare_worker, initargs=(str(root),)) as pool:
@@ -454,21 +562,33 @@ def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope =
                     outcome = 0, 0, (f"FAILED tests.{path.stem} (in a worker)\n{''.join(traceback.format_exception(error))}",), ()
                 _progress(path, outcome, time.perf_counter() - started)
                 outcomes.append(outcome)
-        sequential(following)
+                ran.add(path)
+        sequential(later)
+    groups = native_groups(root, native)
+    if len(groups) > 1 and not failed():
+        outcomes.extend(run_lanes(root, groups))
+        ran.update(native)
+    else:
+        sequential(native)
     for _, _, found, _ in outcomes:
         problems.extend(found)
-    if (left := len(paths) - len(outcomes)) and failed():
+    if (left := len(paths) - len(ran)) and failed():
         problems.append(f"Stopped at the first failure: {left} affected test module{'' if left == 1 else 's'} not run.")
     measured = tuple(timing for outcome in outcomes for timing in outcome[3])
     return sum(outcome[0] for outcome in outcomes), sum(outcome[1] for outcome in outcomes), measured
 
 
-def check(root: Path, scope: Scope = FULL_SCOPE, durations: int = 0) -> tuple[bool, str]:
-    """Whether the copy at `root` is sound, and a report. Imports from `root`, so run
-    it in a process of its own (as `main` does)."""
+def _enter(root: Path) -> None:
+    """Make this fresh process import from `root`."""
     os.environ.pop("WORKSPACE_E2E", None)  # never the end-to-end tests: they'd start a second workspace
     sys.path.insert(0, str(root))
     os.chdir(root)
+
+
+def check(root: Path, scope: Scope = FULL_SCOPE, durations: int = 0) -> tuple[bool, str]:
+    """Whether the copy at `root` is sound, and a report. Imports from `root`, so run
+    it in a process of its own (as `main` does)."""
+    _enter(root)
     problems: list[str] = []
     timings: list[tuple[float, str]] = []
     profile = scope.profile
@@ -509,6 +629,8 @@ def main() -> None:
     parser.add_argument("--changed-from", type=Path, metavar="BASE", help="run only tests affected by changes from BASE")
     parser.add_argument("--previous", type=Path, metavar="REPORT", help="first run the modules that failed in this earlier report")
     parser.add_argument("--stop-at-first-failure", action="store_true", help="start no test module after one fails")
+    parser.add_argument("--modules", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--result", type=Path, help=argparse.SUPPRESS)
     match dict(inspect.getmembers(parser.parse_args())):
         case {
             "folder": Path() as folder,
@@ -518,10 +640,17 @@ def main() -> None:
             "changed_from": (Path() | None) as base,
             "previous": (Path() | None) as previous,
             "stop_at_first_failure": bool() as stop,
+            "modules": str() as modules,
+            "result": (Path() | None) as result,
         }:
             pass
         case _:
             parser.error("Invalid selfcheck arguments.")
+    if result is not None:
+        # A native lane that run_lanes started: exactly these modules, no source review.
+        root = folder.resolve()
+        _enter(root)
+        sys.exit(0 if run_lane([root / name for name in modules.split(",")], result.resolve()) else 1)
     if durations < 0:
         parser.error("durations must be nonnegative")
     profile = Profile.FAST if fast else Profile.NATIVE if native else Profile.FULL
