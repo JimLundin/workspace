@@ -442,6 +442,11 @@ class NativeSessions:
             # pages Workspace automates, so this profile runs neither.
             "--disable-sync",
             "--disable-extensions",
+            # Automated pages are often background tabs or offscreen. Throttled
+            # timers stalled their in-page waits past the operation timeout.
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
             "--window-size=1280,900",
         ]
         if not visible:

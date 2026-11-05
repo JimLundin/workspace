@@ -33,7 +33,8 @@ def test_in_call_controls_exclude_prejoin_lobby_and_hidden_stale_controls(tmp_pa
     }
     cancel = threading.Event()
     with disposable(Browser(tmp_path / "meeting-dom")) as browser, fixture(pages=documents) as url:
-        browser.connect(cancel, visible=True)
+        # `open` runs the managed browser hidden; connecting it visibly first only
+        # forced a relaunch whose slow Edge exit failed the test under load.
         page = request(browser, "open", url=url + "chat")
         target = str(page["target_id"])
         connection = browser.connection
