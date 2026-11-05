@@ -63,18 +63,6 @@ class RecordingState:
     def visible(self) -> bool:
         return self.phase != "idle"
 
-    @property
-    def control(self) -> Literal["stop", "retry", "open"]:
-        match self.phase:
-            case "starting" | "recording" | "stopping":
-                return "stop"
-            case "paused":
-                return "retry"
-            case "idle" | "finishing" | "saved" | "interrupted":
-                return "open"
-            case _:
-                assert_never(self.phase)
-
 
 @dataclass(frozen=True, slots=True)
 class StoredState:
@@ -187,25 +175,3 @@ def source_name(source: AudioSource) -> str:
             return "Microphone"
         case _:
             assert_never(source)
-
-
-def phase_label(phase: Phase) -> str:
-    match phase:
-        case "idle":
-            return ""
-        case "starting":
-            return "Starting"
-        case "recording":
-            return "Recording"
-        case "stopping":
-            return "Stopping"
-        case "finishing":
-            return "Transcribing"
-        case "paused":
-            return "Paused"
-        case "saved":
-            return "Saved"
-        case "interrupted":
-            return "Interrupted"
-        case _:
-            assert_never(phase)

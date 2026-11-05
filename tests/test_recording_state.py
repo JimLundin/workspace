@@ -84,28 +84,28 @@ def test_capture_reservation_and_pause_take_precedence_over_worker_updates() -> 
     recording = published(replace(current, phase="recording"), incoming, stopping=False)
     assert recording is not None and recording.phase == "recording"
     stopping = published(current, incoming, stopping=True, phase="finishing")
-    assert stopping is not None and stopping.phase == "stopping" and stopping.control == "stop"
+    assert stopping is not None and stopping.phase == "stopping"
     final = replace(incoming, saved=replace(incoming.saved, finished=True))
     paused = published(stopping, final, stopping=True, paused="Close the transcript to retry", phase="saved")
-    assert paused is not None and paused.phase == "paused" and paused.control == "retry"
+    assert paused is not None and paused.phase == "paused"
     assert paused.detail == "Close the transcript to retry"
 
 
-def test_recording_controls_and_elapsed_labels_follow_capture_progress() -> None:
+def test_recording_capture_and_elapsed_labels_follow_capture_progress() -> None:
     initial = RecordingState()
-    assert not initial.visible and not initial.capturing and initial.control == "open"
-    phases: tuple[tuple[Phase, bool, str], ...] = (
-        ("starting", True, "stop"),
-        ("recording", True, "stop"),
-        ("stopping", True, "stop"),
-        ("finishing", False, "open"),
-        ("paused", False, "retry"),
-        ("saved", False, "open"),
-        ("interrupted", False, "open"),
+    assert not initial.visible and not initial.capturing
+    phases: tuple[tuple[Phase, bool], ...] = (
+        ("starting", True),
+        ("recording", True),
+        ("stopping", True),
+        ("finishing", False),
+        ("paused", False),
+        ("saved", False),
+        ("interrupted", False),
     )
-    for phase, capturing, control in phases:
+    for phase, capturing in phases:
         state = replace(initial, phase=phase)
-        assert state.visible and state.capturing == capturing and state.control == control
+        assert state.visible and state.capturing == capturing
     assert Batch(10, b"\x00\x00\x01\x00").end == 12
     assert [duration(seconds) for seconds in (-1, 0, 59.9, 60, 3599, 3600, 3661)] == [
         "00:00:00",
