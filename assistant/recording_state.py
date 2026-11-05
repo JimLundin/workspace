@@ -1,12 +1,13 @@
 """Recording values and decisions, independent of devices, storage, threads, and widgets."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from math import isfinite
 from typing import Literal, assert_never
 
 from automation.capture import AudioSource
-from winapi.pcm import RATE
+from winapi.pcm import RATE, Dropout, LateAudio, Problem, Skipped, Stall
 
 type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]
 type RecordingAction = Literal["start", "stop", "open", "folder", "retry", "automatic"]
@@ -171,6 +172,39 @@ def published(  # noqa: PLR0913 - one transition with its optional overrides
         incoming.preview,
         saved.revision,
         saved.exported_revision,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CaptureReport:
+    """Recovered capture problems: the gaps they add to the recording and one log line."""
+
+    gaps: int
+    gap_frames: int
+    text: str
+
+
+def capture_report(problems: Sequence[Problem]) -> CaptureReport:
+    stalls: list[float] = []
+    gaps: dict[str, list[int]] = {}
+    for problem in problems:
+        match problem:
+            case Stall(seconds=seconds):
+                stalls.append(seconds)
+            case LateAudio(frames=frames):
+                gaps.setdefault("late audio clipped (it arrived after its time was saved)", []).append(frames)
+            case Skipped(frames=frames):
+                gaps.setdefault("silence inserted (capture fell further behind than the mixing ring)", []).append(frames)
+            case Dropout(frames=frames):
+                gaps.setdefault("microphone audio lost before it was read (its engine buffer overflowed)", []).append(frames)
+            case _:
+                assert_never(problem)
+    parts = [f"capture loop stalled {len(stalls)}x, longest {max(stalls):.1f} s"] if stalls else []
+    parts.extend(f"{label} {len(frames)}x, {sum(frames) * 1000 // RATE} ms" for label, frames in gaps.items())
+    return CaptureReport(
+        sum(map(len, gaps.values())),
+        sum(map(sum, gaps.values())),
+        "Meeting capture recovered: " + "; ".join(parts) + ".",
     )
 
 

@@ -17,7 +17,7 @@ from assistant.recording_state import RecordingState, RetryPolicy
 from automation.capture import AudioSource
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.test_llm import settings
-from winapi.pcm import RATE, Gap, LateAudio, Skipped
+from winapi.pcm import RATE, LateAudio, Problem, Skipped, Stall
 
 SPEECH = array("h", [1400] * RATE).tobytes()
 
@@ -40,7 +40,7 @@ class GeneratedCapture:
         self.blocks, self.tail, self.hold = blocks, tail, hold
         self.opened, self.finished = threading.Event(), threading.Event()
 
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
+    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
         self.opened.set()
         ready()
         for _ in range(self.blocks):
@@ -245,7 +245,9 @@ def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> N
     class LockingCapture:
         __slots__ = ()
 
-        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
+        def record(
+            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+        ) -> None:
             ready()
             holder = sqlite3.connect(next(tmp_path.glob("*/session.sqlite3")), isolation_level=None)
             try:
@@ -311,15 +313,22 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(tmp_path:
     class GappedCapture:
         __slots__ = ()
 
-        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
+        def record(
+            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+        ) -> None:
             ready()
             consume(SPEECH)
             report(LateAudio(RATE, RATE // 4))
             consume(SPEECH)
+            report(Stall(RATE * 2, 12.5))
             report(Skipped(RATE * 2, RATE))
 
+    # Defect: capture problems never reach the assistant log, so a shortened
+    # recording leaves no trace of which condition or how long the stall was;
+    # or a stall without lost audio is counted as a gap.
+    logged: list[str] = []
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: GappedCapture(), archive=MeetingArchive(tmp_path))
+        service = Meetings(settings(endpoint.url), lambda source: GappedCapture(), archive=MeetingArchive(tmp_path), log=logged.append)
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
@@ -328,6 +337,10 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(tmp_path:
             saved = MeetingStore(Path(state.path).parent).state()
             assert (saved.gaps, saved.gap_frames, saved.problem) == (2, RATE * 5 // 4, "")
             assert "through 2 gaps totalling 1.2 s" in Path(state.path).read_text(encoding="utf-8")
+            text = "\n".join(logged)
+            assert "stalled 1x, longest 12.5 s" in text and "late audio clipped" in text and "250 ms" in text, text
+            assert "silence inserted" in text and "1000 ms" in text, text
+            assert "ended:" not in text, "A recovered recording was logged as ended by a problem."
         finally:
             service.close()
 
@@ -455,6 +468,8 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
 
 def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: Path) -> None:
     capture = GeneratedCapture(50)
+    # Defect: a recording that ends early leaves no reason in the assistant log.
+    logged: list[str] = []
 
     def unavailable(audio: bytes, *, context: str) -> Failure:
         return Failure("fixture offline")
@@ -464,6 +479,7 @@ def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: 
         lambda source: capture,
         archive=MeetingArchive(tmp_path, max_pending_bytes=RATE * 4),
         transcribe_audio=unavailable,
+        log=logged.append,
     )
     try:
         service.start()
@@ -471,6 +487,7 @@ def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: 
         store = MeetingStore(Path(service.snapshot().path).parent)
         assert store.state().finished and store.state().frames == RATE * 2
         assert "storage limit" in store.state().problem
+        assert any(f"{store.folder.name} ended: Recording stopped because" in line for line in logged), logged
     finally:
         service.close()
 

@@ -20,7 +20,7 @@ from tests.fake_endpoint import fake_endpoint
 from tests.test_llm import settings
 from tests.test_meetings import wait_for
 from winapi import audio, recording
-from winapi.pcm import RATE, Dropout, Gap
+from winapi.pcm import RATE, Dropout, Problem, Stall
 
 
 def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(tmp_path: Path) -> None:
@@ -45,9 +45,9 @@ def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(
     assert "The complete transcript." in store.transcript.read_text(encoding="utf-8")
 
 
-def no_gap(gap: Gap) -> None:
+def no_gap(problem: Problem) -> None:
     # Defect: on-time synthetic packets are misreported as late or skipped audio.
-    raise AssertionError(f"An on-time capture reported a gap: {gap}")
+    raise AssertionError(f"An on-time capture reported a problem: {problem}")
 
 
 def set_pointer(argument: object, value: int) -> None:
@@ -225,7 +225,7 @@ def test_a_microphone_dropout_preserves_timing_and_other_speakers_until_stop() -
         blocks: list[bytes] = []
         api = Wasapi()
         api.dropouts = {(30, 48_000): 9_600}
-        gaps: list[Gap] = []
+        gaps: list[Problem] = []
         recording.MeetingAudio(api, computer_audio=computer_audio).record(stop, blocks.append, lambda: None, gaps.append)
         assert api.ticks == api.stop_at
         audio = array("h", b"".join(blocks))
@@ -245,16 +245,25 @@ def test_a_stalled_drain_keeps_every_buffered_packet_without_reporting_a_gap() -
     api.packet_frames = 160
     api.stalls = {40: 5.0}
     blocks: list[bytes] = []
-    recording.MeetingAudio(api).record(threading.Event(), blocks.append, lambda: None, no_gap)
+    problems: list[Problem] = []
+    recording.MeetingAudio(api).record(threading.Event(), blocks.append, lambda: None, problems.append)
     assert api.ticks == api.stop_at
     assert b"".join(blocks) == array("h", [3000] * round(7.54 * RATE)).tobytes()
+    # Defect: the stall that put the recording at risk leaves no measurement.
+    match problems:
+        case [Stall(seconds=seconds)]:
+            assert 5 < seconds < 5.2, seconds
+        case _:
+            raise AssertionError(problems)
 
 
 def test_meeting_service_saves_speech_after_a_microphone_dropout(tmp_path: Path) -> None:
     class Capture:
         __slots__ = ()
 
-        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
+        def record(
+            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+        ) -> None:
             api = Wasapi()
             api.dropouts = {(30, 48_000): 9_600}
             recording.MeetingAudio(api).record(stop, consume, ready, report)

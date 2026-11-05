@@ -14,7 +14,7 @@ from typing import Final, Protocol
 
 from winapi._core import fn, kernel32
 from winapi.audio import WAVEFORMATEX
-from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, dropout
+from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, Problem, Stall, dropout
 
 _ole32 = ctypes.WinDLL("ole32", use_last_error=True)
 _CoInitializeEx = fn(_ole32, "CoInitializeEx", ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)
@@ -32,6 +32,8 @@ _LATENCY: Final = 0.5
 _BUFFER: Final = 30_000_000
 """The engine buffer in 100 ns units: three seconds of audio survive a stalled drain."""
 _DEVICE_INVALIDATED: Final = 0x8889_0004
+_STALL: Final = 1.0
+"""Seconds between deliveries (normally 0.1) that count as a stalled capture loop."""
 
 
 def _guid(value: str) -> ctypes.Array[ctypes.c_char]:
@@ -262,7 +264,7 @@ class MeetingAudio:
         self.api = api if api is not None else NativeWasapi()
         self.computer_audio = computer_audio
 
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
+    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
         """Capture until `stop`; `consume` and `report` run on this real-time thread and must not block."""
         _check(self.api.initialize(), "Preparing Windows audio")
         enumerator = ctypes.c_void_p()
@@ -287,7 +289,14 @@ class MeetingAudio:
                 for gap in mixer.reported():
                     report(gap)
 
+            delivered = origin
+
             def deliver(pcm: bytes) -> None:
+                nonlocal delivered
+                now = self.api.clock()
+                if now - delivered > _STALL:
+                    report(Stall(max(0, round((delivered - origin) * RATE)), now - delivered))
+                delivered = now
                 consume(pcm)
                 gaps()
 

@@ -12,6 +12,7 @@ import queue
 import sqlite3
 import threading
 import time
+import traceback
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -20,10 +21,10 @@ from typing import Final, Protocol
 
 from assistant.llm import Failure, Settings, transcribe, wav
 from assistant.meeting_store import MeetingArchive, MeetingStore
-from assistant.recording_state import Exhausted, Phase, Publication, RecordingState, RetryPolicy, published, source_name
+from assistant.recording_state import Exhausted, Phase, Publication, RecordingState, RetryPolicy, capture_report, published, source_name
 from automation.capture import AudioSource
 from usage import DIRECTORY
-from winapi.pcm import RATE, Gap
+from winapi.pcm import RATE, Problem
 
 
 class Transcriber(Protocol):
@@ -31,7 +32,9 @@ class Transcriber(Protocol):
 
 
 class Capture(Protocol):
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None: ...
+    def record(
+        self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+    ) -> None: ...
 
 
 SPOOL_SECONDS: Final = 60
@@ -49,7 +52,7 @@ class Handover:
     """What the journal thread takes from the spool in one wake."""
 
     pcm: bytes
-    gaps: tuple[Gap, ...] = ()
+    problems: tuple[Problem, ...] = ()
     flagged: bool = False
     closed: bool = False
 
@@ -61,13 +64,13 @@ class Spool:
     would exceed the bound is refused, which ends the recording.
     """
 
-    __slots__ = ("_blocks", "_closed", "_condition", "_flagged", "_gaps", "_size", "limit")
+    __slots__ = ("_blocks", "_closed", "_condition", "_flagged", "_problems", "_size", "limit")
 
     def __init__(self, limit: int = RATE * 2 * SPOOL_SECONDS) -> None:
         self.limit = limit
         self._condition = threading.Condition()
         self._blocks: deque[bytes] = deque()
-        self._gaps: list[Gap] = []
+        self._problems: list[Problem] = []
         self._size = 0
         self._flagged = self._closed = False
 
@@ -84,9 +87,9 @@ class Spool:
             self._size += len(pcm)
             self._condition.notify()
 
-    def report(self, gap: Gap) -> None:
+    def report(self, problem: Problem) -> None:
         with self._condition:
-            self._gaps.append(gap)
+            self._problems.append(problem)
             self._condition.notify()
 
     def flag(self) -> None:
@@ -102,10 +105,10 @@ class Spool:
 
     def take(self, timeout: float) -> Handover:
         with self._condition:
-            self._condition.wait_for(lambda: self._blocks or self._gaps or self._flagged or self._closed, timeout)
-            taken = Handover(b"".join(self._blocks), tuple(self._gaps), flagged=self._flagged, closed=self._closed)
+            self._condition.wait_for(lambda: self._blocks or self._problems or self._flagged or self._closed, timeout)
+            taken = Handover(b"".join(self._blocks), tuple(self._problems), flagged=self._flagged, closed=self._closed)
             self._blocks.clear()
-            self._gaps.clear()
+            self._problems.clear()
             self._size = 0
             self._flagged = False
             return taken
@@ -139,10 +142,12 @@ class _Writer:
 class _Journal:
     """The capture's storage owner: writes spooled audio and paces its publication."""
 
-    __slots__ = ("changed", "problem", "publish", "spool", "store")
+    __slots__ = ("changed", "log", "problem", "publish", "spool", "store")
 
-    def __init__(self, store: MeetingStore, spool: Spool, changed: Callable[[], None], publish: Callable[[], None]) -> None:
-        self.store, self.spool, self.changed, self.publish = store, spool, changed, publish
+    def __init__(
+        self, store: MeetingStore, spool: Spool, changed: Callable[[], None], publish: Callable[[], None], log: Callable[[str], None]
+    ) -> None:
+        self.store, self.spool, self.changed, self.publish, self.log = store, spool, changed, publish, log
         self.problem = ""
 
     def run(self, stop: threading.Event) -> None:
@@ -155,10 +160,13 @@ class _Journal:
                 if writer.feed(taken.pcm):
                     self.changed()
                     dirty = True
-                if taken.gaps:
+                if taken.problems:
                     # Recovered timing problems are notes on the recording, never its end.
-                    self.store.record_gaps(len(taken.gaps), sum(gap.frames for gap in taken.gaps))
-                    dirty = True
+                    report = capture_report(taken.problems)
+                    self.log(f"{report.text} Recording {self.store.folder.name} continues.")
+                    if report.gaps:
+                        self.store.record_gaps(report.gaps, report.gap_frames)
+                        dirty = True
                 now = time.monotonic()
                 # A phase change publishes even when capture has already ended.
                 if taken.flagged or (dirty and now - published >= PUBLISH_SECONDS and not taken.closed):
@@ -172,8 +180,13 @@ class _Journal:
             self.problem = str(error)
         except Exception:
             self.problem = "Recording stopped unexpectedly. The captured part is saved in the meetings folder."
+            self.log(traceback.format_exc())
         # Saving failed: end capture, and never store audio captured after the failure.
         stop.set()
+
+
+def _unlogged(text: str) -> None:
+    pass
 
 
 class Meetings:
@@ -194,6 +207,7 @@ class Meetings:
         "_worker",
         "archive",
         "factory",
+        "log",
         "on_meeting",
         "on_update",
         "retry_policy",
@@ -211,10 +225,12 @@ class Meetings:
         transcribe_audio: Transcriber | None = None,
         retry_policy: RetryPolicy | None = None,
         on_meeting: Callable[[MeetingStore], None] | None = None,
+        log: Callable[[str], None] | None = None,
     ) -> None:
         # Capture, transcription, storage and their independent publications
         # are effect dependencies; no callback owns another owner's progress.
         self.settings, self.factory = settings, factory
+        self.log: Callable[[str], None] = log if log is not None else _unlogged
         self.archive = archive if archive is not None else MeetingArchive(DIRECTORY / "meetings")
 
         def configured_transcriber(audio: bytes, *, context: str) -> str | Failure:
@@ -353,7 +369,7 @@ class Meetings:
                 self._state = replace(self._state, identity=store.folder.name, path=str(store.transcript))
             self._publish(store)
             self._schedule(store)
-            journal = _Journal(store, spool, self._wake.set, lambda: self._publish(store))
+            journal = _Journal(store, spool, self._wake.set, lambda: self._publish(store), self.log)
             thread = threading.Thread(target=journal.run, args=(stop,), name="meeting journal", daemon=True)
             thread.start()
 
@@ -368,6 +384,7 @@ class Meetings:
             problem = str(error)
         except Exception:
             problem = "Recording stopped unexpectedly. The captured part is saved in the meetings folder."
+            self.log(traceback.format_exc())
         finally:
             spool.close()
             if thread is not None:
@@ -375,6 +392,8 @@ class Meetings:
             if journal is not None:
                 # A storage failure stops capture; report it, not the stop it caused.
                 problem = journal.problem or problem
+            if problem:
+                self.log(f"Meeting recording {store.folder.name if store is not None else '(not created)'} ended: {problem}")
             if store is not None:
                 try:
                     store.finish_capture(problem)

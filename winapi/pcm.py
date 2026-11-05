@@ -114,6 +114,18 @@ class Dropout:
 
 type Gap = LateAudio | Skipped | Dropout
 
+
+@dataclass(frozen=True, slots=True)
+class Stall:
+    """The capture loop published nothing for `seconds` after frame `at`; any loss it caused is reported as a gap."""
+
+    at: int
+    seconds: float
+
+
+type Problem = Gap | Stall
+"""A capture timing problem the recording recovered from."""
+
 DROPOUT_TOLERANCE: Final = RATE // 100
 """Timestamp rounding across a flagged discontinuity is not lost audio."""
 
