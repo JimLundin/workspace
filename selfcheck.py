@@ -32,7 +32,7 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
@@ -152,30 +152,41 @@ def _ancestors(module: str) -> Iterator[str]:
         yield ".".join(parts[:end])
 
 
-def module_inputs(root: Path) -> dict[str, frozenset[str]]:
+type Imports = Mapping[str, frozenset[str]]
+"""Each test source file (tests/x.py) and the modules it imports, with their packages."""
+
+
+def tests_imports(root: Path) -> dict[str, frozenset[str]]:
+    """The imports of every test source file directly under tests/."""
+    return {
+        path.relative_to(root).as_posix(): imports(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
+        for path in (root / "tests").glob("*.py")
+    }
+
+
+def module_inputs(found: Imports) -> dict[str, frozenset[str]]:
     """Each test module's inputs: itself, the test helpers it reaches, and the modules those import.
 
     Production imports are not followed further; the full suite runs in CI.
     """
-    found = {
-        _module(path.relative_to(root).as_posix()): imports(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
-        for path in (root / "tests").glob("*.py")
-    }
-    helpers = frozenset(name for name in found if not name.rpartition(".")[2].startswith("test_"))
+    by_module = {_module(name): (name, modules) for name, modules in found.items()}
+    helpers = frozenset(module for module, (name, _) in by_module.items() if not Path(name).name.startswith("test_"))
     result: dict[str, frozenset[str]] = {}
-    for module in sorted(found.keys() - helpers):
+    for module in sorted(by_module.keys() - helpers):
         # Each module's input set grows locally; only the frozen set leaves.
-        inputs = {module, *found[module]}
-        while extra := {name for helper in inputs & helpers for name in found[helper]} - inputs:
+        inputs = {module, *by_module[module][1]}
+        while extra := {name for helper in inputs & helpers for name in by_module[helper][1]} - inputs:
             inputs |= extra
-        result[module.replace(".", "/") + ".py"] = frozenset(inputs)
+        result[by_module[module][0]] = frozenset(inputs)
     return result
 
 
-def affected_tests(root: Path, changed: Iterable[str]) -> frozenset[str] | None:
+def affected_tests(root: Path, changed: Iterable[str], found: Imports | None = None) -> frozenset[str] | None:
     """Test modules whose inputs include a changed module, or a reader of a changed asset.
 
-    None means every test: a changed non-Python file has unknown readers.
+    The one incremental selection: the keeper's install check and Dev.cmd check
+    (which passes its cached `found`) both use it. None means every test: a
+    changed non-Python file has unknown readers.
     """
     reached: set[str] = set()
     for name in changed:
@@ -185,7 +196,9 @@ def affected_tests(root: Path, changed: Iterable[str]) -> frozenset[str] | None:
             return None
         else:
             reached.update(_module(reader) for reader in readers)
-    return frozenset(name for name, inputs in module_inputs(root).items() if inputs & reached)
+    if not reached:
+        return frozenset()
+    return frozenset(name for name, inputs in module_inputs(tests_imports(root) if found is None else found).items() if inputs & reached)
 
 
 def _selected(path: Path, profile: Profile) -> bool:

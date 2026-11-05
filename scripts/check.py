@@ -92,33 +92,20 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
     )
     if full or not previous or any(name.startswith("requirements/") for name in changed):
         return Selection(all_tests, changed, "full source checks" if full else "dependency pins or missing baseline")
-    # A changed asset counts as a change to the source files that read it; an
-    # asset with unknown readers runs the whole source suite.
-    readers = [selfcheck.asset_readers(name) for name in changed if not name.endswith((".py", ".pyw"))]
-    if any(found is None for found in readers):
-        return Selection(all_tests, changed, "application asset has implicit dependencies")
-    read = (reader for found in readers if found is not None for reader in found)
-    affected = {module_name(name) for name in (*changed, *read) if name.endswith((".py", ".pyw"))}
-    if not affected:
-        return Selection((), changed, DIRECT)
-    # Cache ownership stays inside source selection; callers only choose
-    # coverage. Minimal source fixtures need no project/cache configuration.
+    # Minimal source fixtures need no project/cache configuration.
     cache = Cache(root) if (root / "pyproject.toml").is_file() else None
-    # Tests that import a changed module, themselves or through test helpers.
-    # Following production imports transitively selected most of the suite for
-    # any core edit (56 modules, 250 s for a two-file change); the full suite
-    # runs with --full and in CI.
     tests = {
         name: dependencies(name, file_at(root, name).read_text(encoding="utf-8"), cache=cache)
         for name in current
         if name.startswith("tests/") and name.endswith(".py") and (root / name).is_file()
     }
-    # This selection owner grows its reached set locally; only the immutable selection leaves.
-    reached = set(affected)
-    while extra := {module_name(name) for name, imports in tests.items() if not Path(name).name.startswith("test_") and imports & reached} - reached:
-        reached |= extra
-    selected = tuple(name for name in all_tests if module_name(name) in reached or tests.get(name, frozenset()) & reached)
-    return Selection(selected, changed, DIRECT)
+    # The keeper's install check selects with the same function, so it reruns only
+    # what this check would. Following production imports transitively selected most
+    # of the suite for any core edit; the full suite runs with --full and in CI.
+    affected = selfcheck.affected_tests(root, changed, tests)
+    if affected is None:
+        return Selection(all_tests, changed, "application asset has implicit dependencies")
+    return Selection(tuple(name for name in all_tests if name in affected), changed, DIRECT)
 
 
 def windows_only(error: BaseException) -> bool:
