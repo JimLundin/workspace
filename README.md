@@ -32,9 +32,8 @@ installed Python 3.15 and needs no admin rights. It runs three processes:
 | `WORKSPACE_FAST_MODEL` | `gpt-6-luna` | Tidied dictation, dictated commands, notification screening |
 | `WORKSPACE_AGENT_MODEL` | `gpt-6-astra` | The agent and every other model job |
 | `WORKSPACE_AGENT_REASONING_EFFORT` | `low` | Reasoning effort for agent tasks |
-| `WORKSPACE_TRANSCRIBE_MODEL` | `gpt-4o-transcribe` | Speech to text |
+| `WORKSPACE_TRANSCRIBE_MODEL` | `gpt-transcribe` | Speech to text |
 | `WORKSPACE_VOCABULARY` | empty | Names and jargon to expect in dictation |
-| `WORKSPACE_LANGUAGE` | detected | Dictation language, such as `sv` or `en` |
 | `WORKSPACE_AGENT_CONTEXT` | `recent` | `off` stops sending recent windows and a screenshot with each request |
 | `WORKSPACE_COLEMAK_LAYOUT` | your Colemak entry | The Windows layout ID used while the layout is off |
 | `WORKSPACE_GIT_REMOTE` | `https://github.com/JimLundin/workspace.git` | Where the agent's changes land |

@@ -8,8 +8,8 @@ from winapi.pcm import RATE
 ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
 
 
-def settings(url: str, vocabulary: str = "", language: str = "") -> Settings:
-    return Settings(url, "secret", "gpt-4o-transcribe", vocabulary, language, fast_model="chat-model")
+def settings(url: str, vocabulary: str = "") -> Settings:
+    return Settings(url, "secret", "gpt-transcribe", vocabulary, fast_model="chat-model")
 
 
 # ---- settings --------------------------------------------------------------------------
@@ -23,7 +23,7 @@ def test_settings_need_the_endpoint_and_key() -> None:
 def test_settings_defaults() -> None:
     # Defect: the fast or agent model defaults to the wrong provider model.
     result = settings_from(ENV)
-    assert result == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "", "", "gpt-6-luna", "gpt-6-astra", "low")
+    assert result == Settings("https://ai.example/v1", "k", "gpt-transcribe", "", "gpt-6-luna", "gpt-6-astra", "low")
 
 
 def test_settings_overrides() -> None:
@@ -35,9 +35,8 @@ def test_settings_overrides() -> None:
         "WORKSPACE_AGENT_MODEL": "deep",
         "WORKSPACE_AGENT_REASONING_EFFORT": "high",
         "WORKSPACE_VOCABULARY": "Miryoku, Colemak",
-        "WORKSPACE_LANGUAGE": "sv",
     }
-    assert settings_from(env) == Settings("https://ai.example/v1", "k", "whisper-1", "Miryoku, Colemak", "sv", "quick", "deep", "high")
+    assert settings_from(env) == Settings("https://ai.example/v1", "k", "whisper-1", "Miryoku, Colemak", "quick", "deep", "high")
 
 
 def test_empty_model_overrides_are_rejected_at_configuration_entry() -> None:
@@ -63,19 +62,17 @@ def test_transcribe_posts_the_audio_and_returns_the_text() -> None:
         r = endpoint.last
         assert r.path == "/v1/audio/transcriptions"
         assert r.authorization == "Bearer secret"
-        assert b'name="model"\r\n\r\ngpt-4o-transcribe\r\n' in r.body
+        assert b'name="model"\r\n\r\ngpt-transcribe\r\n' in r.body
         assert b'name="response_format"\r\n\r\njson\r\n' in r.body
         assert b'filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n' + audio + b"\r\n" in r.body
         assert b'name="prompt"' not in r.body
-        assert b'name="language"' not in r.body
 
 
-def test_transcribe_sends_vocabulary_context_and_language_when_set() -> None:
-    # Defect: the configured vocabulary, the meeting context or the language is dropped.
+def test_transcribe_sends_vocabulary_and_context_when_set() -> None:
+    # Defect: the configured vocabulary, or the meeting context is dropped.
     with fake_endpoint() as endpoint:
-        transcribe(settings(endpoint.url, vocabulary="Miryoku, Colemak", language="sv"), wav(b"", RATE), context="Earlier words.")
+        transcribe(settings(endpoint.url, vocabulary="Miryoku, Colemak"), wav(b"", RATE), context="Earlier words.")
         assert b'name="prompt"\r\n\r\nMiryoku, Colemak\nEarlier words.\r\n' in endpoint.last.body
-        assert b'name="language"\r\n\r\nsv\r\n' in endpoint.last.body
 
 
 def test_failures_carry_the_servers_message() -> None:

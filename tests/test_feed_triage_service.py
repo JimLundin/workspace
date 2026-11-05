@@ -236,7 +236,7 @@ def test_saved_visibility_preferences_are_trusted_but_notification_text_is_only_
     preference = "Keep fictional deployment notifications quiet."
     with fake_endpoint() as endpoint:
         endpoint.replies = [screening_reply(((source.identity, "quiet"),))]
-        settings = Settings(endpoint.url, "fake-key", "transcribe", "", "")
+        settings = Settings(endpoint.url, "fake-key", "transcribe", "")
         result = decode(classify(settings, (source,), (preference,)), (source,))
         payload = json_object(endpoint.last.body)
     trusted = json_text(payload["instructions"])

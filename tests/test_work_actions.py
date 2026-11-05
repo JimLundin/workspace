@@ -61,7 +61,7 @@ def written(arguments: Mapping[str, Json], verification: FileDigest | None = Non
 def families(work: WorkExecution) -> Agent:
     """The registered tool families classify operations and decide what observations prove."""
     return Agent(
-        Settings("", "", "", "", ""),
+        Settings("", "", "", ""),
         FakeMachine(),
         FakeWindow(),
         threading.Event(),

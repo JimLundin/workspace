@@ -79,7 +79,7 @@ def test_triage_model_receives_readable_current_and_source_dates() -> None:
     source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
     with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [screening_reply(((source.identity, "quiet"),))]
-        settings = Settings(endpoint.url, "fixture", "transcribe", "", "")
+        settings = Settings(endpoint.url, "fixture", "transcribe", "")
         classify(settings, (source,), (), clock=lambda: THIS_WEEK)
         request: object = json.loads(endpoint.last.body)
     match request:
@@ -113,7 +113,7 @@ def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() 
     sources = triage_evidence(PendingFeed(Feed(updates=observed.items)))
     with fake_endpoint.fake_endpoint() as endpoint:
         endpoint.replies = [screening_reply((item.identity, "quiet") for item in sources)]
-        classify(Settings(endpoint.url, "fixture", "transcribe", "", ""), sources, (), clock=lambda: THIS_WEEK)
+        classify(Settings(endpoint.url, "fixture", "transcribe", ""), sources, (), clock=lambda: THIS_WEEK)
         request: object = json.loads(endpoint.last.body)
     match request:
         case {"input": [{"role": "user", "content": str() as content}]}:

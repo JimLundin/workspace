@@ -96,7 +96,7 @@ def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answ
     working = work.read(board, source.title + " " + source.body, 50).describe(board)
     with fake_endpoint() as endpoint:
         endpoint.replies = [screening_reply(((source.identity, "action"),)), says(output(([source.identity], "action")))]
-        classify(Settings(endpoint.url, "fixture", "transcribe", "", ""), (source,), (), working_context=working, clock=lambda: 50)
+        classify(Settings(endpoint.url, "fixture", "transcribe", ""), (source,), (), working_context=working, clock=lambda: 50)
         payload = _OBJECT.validate_json(endpoint.last.body)
     assert payload["model"] == "gpt-6-astra"
     match payload:

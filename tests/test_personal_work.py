@@ -531,7 +531,7 @@ def test_correlation_model_receives_bounded_evidence_and_has_no_action_tools(tmp
             "usage": {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20},
         }
         endpoint.replies = [Reply(WIRE.dump_json(output))]
-        model = Correlator(Settings(endpoint.url, "key", "transcribe", "", "", agent_model="work-model"))
+        model = Correlator(Settings(endpoint.url, "key", "transcribe", "", agent_model="work-model"))
         assert model(captured, threading.Event()) == plan
         wire = WIRE.validate_json(endpoint.last.body)
         assert wire["model"] == "work-model" and wire["store"] is False and not wire.get("tools")
