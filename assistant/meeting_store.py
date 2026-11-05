@@ -86,7 +86,10 @@ class MeetingStore:
         return journal.reading(self.folder / "session.sqlite3", self.connect)
 
     def writing(self) -> AbstractContextManager[journal.Connection]:
-        return journal.writing(self.folder / "session.sqlite3", self.connect)
+        # A write-ahead log: transcription and catalog reads never hold up the
+        # capture's once-a-second append, and appends do not wait for the disk.
+        # Power loss can cost the last moments of audio, never the journal.
+        return journal.writing(self.folder / "session.sqlite3", self.connect, journal.Durability.WAL)
 
     @classmethod
     def create(

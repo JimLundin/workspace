@@ -83,6 +83,19 @@ def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_seco
     assert SPEECH[:512] not in (store.folder / "session.sqlite3").read_bytes()
 
 
+def test_an_open_read_snapshot_does_not_hold_up_journaling_audio(tmp_path: Path) -> None:
+    # Defect: a transcription or catalog read holding its snapshot makes the
+    # audio append wait out the busy timeout and stop the recording.
+    store = MeetingStore.create(tmp_path, "both")
+    with store.reading() as connection:
+        assert connection.execute("SELECT frames FROM meeting").fetchone() == (0,)
+        began = time.monotonic()
+        store.append(SPEECH)
+        assert time.monotonic() - began < 1
+        assert connection.execute("SELECT frames FROM meeting").fetchone() == (0,), "The snapshot saw a later commit."
+    assert store.state().frames == RATE
+
+
 def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Path) -> None:
     store = MeetingStore.create(tmp_path, "microphone")
     store.append(SPEECH)
