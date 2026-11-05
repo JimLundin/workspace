@@ -18,6 +18,7 @@ from scripts.check import (
     execute,
     execution_plan,
     publish_check,
+    sdk_packages,
     select,
     windows_only,
     worker_result,
@@ -200,7 +201,7 @@ def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(
 
 def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> None:
     # Defects: a native or strict-deadline module runs in a worker, a selector
-    # loses its function, or a few modules wait for workers to start.
+    # loses its function, or a few modules (however many selectors name them) wait for workers to start.
     unreviewed = tuple(f"tests/test_unreviewed_{index}.py" for index in range(POOL_MINIMUM - 2))
     selectors: tuple[str, ...] = (
         *unreviewed,
@@ -212,6 +213,9 @@ def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> 
     plan = execution_plan(selectors)
     assert plan == ExecutionPlan(("tests/test_agent.py::test_declined", "tests/test_work_store.py", *unreviewed), selectors[-4:-2])
     assert execution_plan(selectors[2:]) == ExecutionPlan((), selectors[2:])
+    # One module's functions, as the editing tier names a module with slow tests, start no pool.
+    functions = tuple(f"tests/test_agent.py::test_{index}" for index in range(POOL_MINIMUM))
+    assert execution_plan(functions) == ExecutionPlan((), functions)
     # Our aggregation must preserve failed child assertions and attribute child
     # costs separately from the sequential desktop lane's elapsed work.
     refusal = Failure("tests/test_agent.py::test_declined", "AssertionError", "Refusal failed")
@@ -222,3 +226,20 @@ def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> 
     assert (combined.passed, combined.skipped, combined.failures) == (8, 1, (refusal,))
     assert (2.0, "worker:tests.test_agent.test_declined") in combined.durations
     assert (1.0, "worker:module:tests.test_work_store") in combined.durations
+
+
+def test_the_sdk_is_imported_before_timing_only_for_tests_that_reach_it(tmp_path: Path) -> None:
+    # Defects: a test reaching the SDK through a Workspace module pays its cold
+    # import inside the time budget, or a pure edit pays that import for nothing.
+    files = {
+        "app/__init__.py": "",
+        "app/model.py": "from app import client\n",
+        "app/client.py": "lazy import openai\n",
+        "tests/test_model.py": "from app.model import x\n",
+        "tests/test_pure.py": "import os\n",
+    }
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    assert sdk_packages(("tests/test_model.py::test_one", "tests/test_pure.py"), tmp_path) == ("openai",)
+    assert sdk_packages(("tests/test_pure.py",), tmp_path) == ()

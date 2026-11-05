@@ -48,7 +48,7 @@ TRANSIENT = frozenset({".pyc", ".pyo", ".log", ".jsonl", ".tmp", ".swp", ".pendi
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Settings:
     full: bool = False
-    native: bool = True
+    native: bool = False
     tests: tuple[str, ...] = ()
     preview: bool = False
     checks: bool = True
@@ -250,7 +250,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tests", nargs="+", default=())
     parser.add_argument("--full", action="store_true")
-    parser.add_argument("--source-only", dest="native", action="store_false")
+    parser.add_argument("--native", action="store_true")
     parser.add_argument("--preview", action="store_true", help="restart the toolbar preview after each save")
     parser.add_argument("--preview-only", dest="checks", action="store_false")
     parser.add_argument("--once", action="store_true", help="run one cycle and close; useful for smoke checks")

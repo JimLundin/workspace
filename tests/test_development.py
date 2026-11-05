@@ -8,9 +8,10 @@ from scripts.watch import Settings, check_command, preview_change, source_path
 
 def test_watch_uses_only_successful_session_baseline_and_keeps_native_scope(tmp_path: Path) -> None:
     # Detect a watch command comparing every save only to deployed bytes, losing
-    # its source receipt, or silently dropping Windows coverage/function scope.
+    # its source receipt, dropping requested Windows coverage or function scope,
+    # or running native modules on every save without --native.
     receipt = tmp_path / "checked.json"
-    settings = Settings(tests=("tests/test_windows_island_bar.py::test_capsules_float_below_the_edge_centred_and_one_gap_apart",))
+    settings = Settings(native=True, tests=("tests/test_windows_island_bar.py::test_capsules_float_below_the_edge_centred_and_one_gap_apart",))
     initial = check_command(settings, receipt)
     assert initial[:4] == (sys.executable, "-B", "-m", "scripts.check") and "--native" in initial
     assert initial[initial.index("--receipt") + 1] == str(receipt)
@@ -18,7 +19,7 @@ def test_watch_uses_only_successful_session_baseline_and_keeps_native_scope(tmp_
     receipt.write_text("{}")  # Presence represents the prior successful check; checker owns schema validation.
     following = check_command(settings, receipt)
     assert following[following.index("--baseline") + 1] == str(receipt)
-    assert "--native" not in check_command(Settings(native=False), receipt)
+    assert "--native" not in check_command(Settings(), receipt)
 
 
 def test_watch_filters_its_outputs_and_only_restarts_preview_for_production_changes(tmp_path: Path) -> None:

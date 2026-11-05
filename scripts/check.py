@@ -1,6 +1,6 @@
 """Source-bound editing checks. The keeper's protected full gate is unchanged.
 
-python -m scripts.check [--full] [--native] [--standards] [--tests tests/test_x.py ...]
+python -m scripts.check [--full | --native] [--standards] [--tests tests/test_x.py ...]
                        [--receipt /tmp/workspace-check.json]
 """
 
@@ -33,7 +33,7 @@ from scripts.development_paths import LIVE, PROFILE
 from scripts.source_analysis import Cache
 lazy import selfcheck
 lazy from runtime import activate
-lazy from scripts import check_standards, quality
+lazy from scripts import check_standards, check_tiers, quality
 lazy from scripts.check_native import execute_lanes
 lazy from scripts.native_desktop import current_name
 
@@ -211,11 +211,15 @@ POOL_MINIMUM = 10
 """Fewer modules finish sooner here than workers can start: each imports the SDK first."""
 
 
+def modules(tests: tuple[str, ...]) -> frozenset[str]:
+    return frozenset(selector.partition("::")[0] for selector in tests)
+
+
 def execution_plan(tests: tuple[str, ...]) -> ExecutionPlan:
     # Workers own no native windows: native modules stay in this process, after
     # the workers exit, as do strict-deadline modules.
     candidates = tuple(selector for selector in tests if not selector.startswith("tests/test_windows_"))
-    if len(candidates) < POOL_MINIMUM:
+    if len(modules(candidates)) < POOL_MINIMUM:
         return ExecutionPlan((), tests)
     pooled = {selector for selector in candidates if selector.partition("::")[0] not in selfcheck.AFTER_WORKERS}
     # Known heavy modules lead the queue so they do not finish last.
@@ -273,11 +277,41 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     if not failures:
         with timed("phase:import changed source", phases):
             import_changed(selection.changed, root, failures, runtime.load)
+    if not broad and not failures:
+        # A cold SDK import costs about 2 s; paid here, the time budget does not
+        # blame whichever selected test happens to use the SDK first.
+        with timed("phase:import the SDK", phases):
+            for package in sdk_packages(selection.tests, root):
+                runtime.load(package)
     if failures:
         return combined_results((first, Results(0, 0, tuple(failures), ())), tuple(phases))
     remaining = tuple(name for name in selection.tests if not name.startswith("tests/properties/"))
     following = execute_overlapped(remaining, root, runtime.load)
     return combined_results((first, following), tuple(phases))
+
+
+SDK_PACKAGES = ("agents", "openai")
+
+
+def sdk_packages(tests: tuple[str, ...], root: Path) -> tuple[str, ...]:
+    """The SDK packages the selected tests import, directly or through Workspace modules."""
+    cache = Cache(root) if (root / "pyproject.toml").is_file() else None
+    pending = [module_name(selector.partition("::")[0]) for selector in tests]
+    seen: set[str] = set()
+    reached: set[str] = set()
+    while pending:
+        module = pending.pop()
+        if module in seen:
+            continue
+        seen.add(module)
+        base = root / module.replace(".", "/")
+        path = next((candidate for candidate in (base.with_suffix(".py"), base / "__init__.py") if candidate.is_file()), None)
+        if path is None:
+            continue
+        imported = dependencies(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"), cache=cache)
+        reached |= {name.partition(".")[0] for name in imported} & set(SDK_PACKAGES)
+        pending.extend(imported)
+    return tuple(package for package in SDK_PACKAGES if package in reached)
 
 
 def prepare_worker(root: Path) -> None:
@@ -421,11 +455,11 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
             "timings": (Path() | None) as timings,
         }:
             if requested is None:
-                return Options(full=full, native=native, standards=standards, tests=(), receipt=receipt, baseline=baseline, timings=timings)
+                return Options(full=full, native=native or full, standards=standards, tests=(), receipt=receipt, baseline=baseline, timings=timings)
             try:
                 return Options(
                     full=full,
-                    native=native,
+                    native=native or full,
                     standards=standards,
                     tests=tuple(TEST_NAMES.validate_python(requested, strict=True)),
                     receipt=receipt,
@@ -451,6 +485,8 @@ def choose(args: Options, current: Mapping[str, str], parser: argparse.ArgumentP
             if name not in current:
                 previous[name] = sha(args.baseline / name)
     selection = select(ROOT, current, previous, full=args.full, native=args.native)
+    if not args.native:
+        selection = check_tiers.editing(selection, ROOT)
     if args.tests and args.full:
         parser.error("--full and --tests select different profiles")
     if args.tests:
@@ -554,10 +590,16 @@ def publish_check(options: Options, run: CheckRun) -> bool:
     return bool(failures)
 
 
+def editing_budget(args: Options, selection: Selection, results: Results) -> tuple[Failure, ...]:
+    """Budget failures for a narrow automatic editing check; --tests may name slow tests."""
+    narrow = not args.native and not args.tests and selection.reason == DIRECT and len(modules(selection.tests)) < POOL_MINIMUM
+    return check_tiers.over_budget(results.durations) if narrow else ()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", action="store_true")
-    parser.add_argument("--native", action="store_true", help="include affected native modules; Windows only, one runner")
+    parser.add_argument("--native", action="store_true", help="also run affected native modules and slow tests; --full implies it")
     parser.add_argument("--standards", action="store_true", help="also apply the whole-tree Ruff and pyright standards; Dev.cmd check does")
     parser.add_argument("--tests", nargs="+", help="explicit test modules for an in-progress iteration")
     parser.add_argument("--receipt", type=Path)
@@ -605,7 +647,7 @@ def main() -> None:
         else:
             results = execute(selection, ROOT)
         with timed("phase:type standards", overhead):
-            results = combined_results((results, Results(0, 0, typed(), ())))
+            results = combined_results((results, Results(0, 0, (*typed(), *editing_budget(args, selection, results)), ())))
     with timed("phase:final source manifest", overhead):
         # Stamps taken before hashing: unchanged stamps mean unchanged bytes. Re-hashing
         # every file after the tests cost up to 15 s under post-run file contention.
