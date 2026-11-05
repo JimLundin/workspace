@@ -37,6 +37,14 @@ debounced save. `--native` adds the affected native modules and slow tests. `pre
 actions after each save; it starts no keeper, microphone, keyboard observer or
 live communications. `watch --preview` runs the same preview beside the tests.
 
+## Code volume
+
+`Dev.cmd volume` counts syntax nodes per area and lists the largest files
+(`--top N`). Layout, comments, trailing commas and docstrings do not count, so
+reformatting leaves the number alone and only removing code lowers it. Product
+code is everything outside `tests/`, `scripts/` and `typings/`. Quote the
+before/after product and test totals when a change cuts code.
+
 ## What `Dev.cmd check` does
 
 1. It runs the architecture review (`scripts/architecture.py`), which parses
