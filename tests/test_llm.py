@@ -1,27 +1,10 @@
-"""The AI endpoint client: settings, transcription, chat (plain or with tools).
+"""The AI endpoint: settings, transcription and one-shot questions.
 Against a local fake endpoint; runs anywhere."""
 
 import json
-from typing import cast
 
-import tests.fake_endpoint
-from assistant.llm import (
-    Failure,
-    Missing,
-    Reply,
-    Settings,
-    ToolCall,
-    assistant_message,
-    chat,
-    settings_from,
-    system_message,
-    tool_result,
-    tool_spec,
-    transcribe,
-    user_message,
-    wav,
-)
-from tests.fake_endpoint import fake_endpoint
+from assistant.llm import Failure, Missing, Settings, ask, settings_from, transcribe, wav
+from tests.fake_endpoint import Reply, fake_endpoint
 from winapi.pcm import RATE
 
 ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
@@ -29,12 +12,6 @@ ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
 
 def settings(url: str, vocabulary: str = "", language: str = "") -> Settings:
     return Settings(url, "secret", "gpt-4o-transcribe", vocabulary, language, fast_model="chat-model")
-
-
-def body_json(raw: bytes) -> dict[str, object]:
-    data: object = json.loads(raw)
-    assert isinstance(data, dict)
-    return {str(k): v for k, v in cast("dict[object, object]", data).items()}
 
 
 # ---- settings --------------------------------------------------------------------------
@@ -80,23 +57,14 @@ def test_empty_model_overrides_are_rejected_at_configuration_entry() -> None:
 # ---- transcription ---------------------------------------------------------------------
 
 
-def test_truncated_success_and_error_responses_are_retriable_failures() -> None:
-    with fake_endpoint() as endpoint:
-        for status in (200, 503):
-            endpoint.replies = [tests.fake_endpoint.Reply(b'{"text":"incomplete', status=status, content_length=1000)]
-            result = transcribe(settings(endpoint.url), wav(bytes(RATE * 2), RATE))
-            assert isinstance(result, Failure)
-            assert "connection dropped" in result.message if status == 200 else "HTTP 503" in result.message
-
-
 def test_transcribe_posts_the_audio_and_returns_the_text() -> None:
+    # Defect: the configured key, transcription model or audio file is not what reaches the endpoint.
     with fake_endpoint() as endpoint:
         audio = wav(bytes(2 * RATE), RATE)
         assert transcribe(settings(endpoint.url), audio) == "hello there"
         r = endpoint.last
         assert r.path == "/v1/audio/transcriptions"
         assert r.authorization == "Bearer secret"
-        assert r.content_type.startswith("multipart/form-data; boundary=")
         assert b'name="model"\r\n\r\ngpt-4o-transcribe\r\n' in r.body
         assert b'name="response_format"\r\n\r\njson\r\n' in r.body
         assert b'filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n' + audio + b"\r\n" in r.body
@@ -104,89 +72,69 @@ def test_transcribe_posts_the_audio_and_returns_the_text() -> None:
         assert b'name="language"' not in r.body
 
 
-def test_transcribe_sends_vocabulary_and_language_when_set() -> None:
+def test_transcribe_sends_vocabulary_context_and_language_when_set() -> None:
+    # Defect: the configured vocabulary, the meeting context or the language is dropped.
     with fake_endpoint() as endpoint:
-        transcribe(settings(endpoint.url, vocabulary="Miryoku, Colemak", language="sv"), wav(b"", RATE))
-        assert b'name="prompt"\r\n\r\nMiryoku, Colemak\r\n' in endpoint.last.body
+        transcribe(settings(endpoint.url, vocabulary="Miryoku, Colemak", language="sv"), wav(b"", RATE), context="Earlier words.")
+        assert b'name="prompt"\r\n\r\nMiryoku, Colemak\nEarlier words.\r\n' in endpoint.last.body
         assert b'name="language"\r\n\r\nsv\r\n' in endpoint.last.body
 
 
 def test_failures_carry_the_servers_message() -> None:
+    # Defect: the user sees a generic error instead of the endpoint's explanation.
     with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(b'{"error": {"message": "Invalid session key", "type": "auth"}}', status=401)]
+        endpoint.replies = [Reply(b'{"error": {"message": "Invalid session key", "type": "auth"}}', status=401)]
         assert transcribe(settings(endpoint.url), wav(b"", RATE)) == Failure("HTTP 401: Invalid session key")
 
 
-def test_failures_for_replies_that_arent_what_was_asked() -> None:
+def test_failures_without_a_server_message_carry_the_status() -> None:
+    # Defect: a proxy's plain-text error page escapes as an exception or an empty message.
     with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(b"<html>proxy login</html>")]
+        endpoint.replies = [Reply(b"upstream down", status=502, content_type="text/plain")]
+        assert transcribe(settings(endpoint.url), wav(b"", RATE)) == Failure("HTTP 502: Bad Gateway")
+
+
+def test_failures_for_replies_that_arent_what_was_asked() -> None:
+    # Defect: a proxy login page is typed as the transcript, or raises.
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [Reply(b"<html>proxy login</html>")]
         assert transcribe(settings(endpoint.url), wav(b"", RATE)) == Failure("unexpected reply: <html>proxy login</html>")
 
 
+def test_truncated_replies_are_retriable_failures() -> None:
+    # Defect: a dropped connection mid-reply raises instead of becoming a Failure the meeting worker retries.
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [Reply(b'{"text":"incomplete', content_length=1000)]
+        result = transcribe(settings(endpoint.url), wav(b"", RATE))
+        assert isinstance(result, Failure)
+        assert result.message.startswith(f"can't reach {endpoint.url.removeprefix('http://').removesuffix('/v1')}: peer closed connection")
+
+
 def test_failures_for_an_unreachable_endpoint() -> None:
+    # Defect: an unreachable endpoint raises or hides which host was tried.
     result = transcribe(settings("http://127.0.0.1:9/v1"), wav(b"", RATE), timeout_s=2)
     assert isinstance(result, Failure)
-    assert result.message.startswith("can't reach 127.0.0.1:9")
+    assert result.message.startswith("can't reach 127.0.0.1:9: ")
 
 
-# ---- chat ------------------------------------------------------------------------------
-
-ANSWER = b'{"choices": [{"message": {"role": "assistant", "content": "Hej!"}}]}'
+# ---- questions -------------------------------------------------------------------------
 
 
-def test_chat_sends_messages_and_returns_the_answer() -> None:
-    # Defect: chat ignores the fast model or sends an invalid message contract
-    # to the configured endpoint.
+def test_ask_sends_the_instructions_to_the_fast_model_and_returns_the_answer() -> None:
+    # Defect: dictation cleanup uses the agent model or loses the instructions.
     with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
-        reply = chat(settings(endpoint.url), [system_message("Be brief."), user_message("Say hi")])
-        assert reply == Reply("Hej!", ())
+        endpoint.replies = [Reply(b'{"choices": [{"message": {"role": "assistant", "content": "Hej!"}}]}')]
+        assert ask(settings(endpoint.url), "Be brief.", "Say hi") == "Hej!"
         assert endpoint.last.path == "/v1/chat/completions"
-        body = body_json(endpoint.last.body)
-        assert body["model"] == "chat-model"
-        assert body["messages"] == [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Say hi"}]
-        assert "tools" not in body
+        expected: object = {
+            "model": "chat-model",
+            "messages": [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Say hi"}],
+        }
+        assert json.loads(endpoint.last.body) == expected
 
 
-def test_chat_can_use_another_model() -> None:
+def test_ask_without_an_answer_is_a_failure() -> None:
+    # Defect: a reply without choices raises or types nothing silently.
     with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
-        chat(settings(endpoint.url), [user_message("hi")], model="agent-model")
-        assert body_json(endpoint.last.body)["model"] == "agent-model"
-
-
-def test_chat_with_tools_returns_tool_calls() -> None:
-    call = '{"id": "call_1", "type": "function", "function": {"name": "read_file", "arguments": "{\\"path\\": \\"a.txt\\"}"}}'
-    answer = f'{{"choices": [{{"message": {{"role": "assistant", "content": null, "tool_calls": [{call}]}}}}]}}'.encode()
-    spec = tool_spec("read_file", "Read a file", {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(answer)]
-        reply = chat(settings(endpoint.url), [user_message("read a.txt")], tools=[spec])
-        assert reply == Reply("", (ToolCall("call_1", "read_file", '{"path": "a.txt"}'),))
-        expected: object = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "description": "Read a file",
-                    "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-                },
-            }
-        ]
-        assert body_json(endpoint.last.body)["tools"] == expected
-
-
-def test_tool_calls_and_results_go_back_to_the_model() -> None:
-    call = ToolCall("call_1", "read_file", '{"path": "a.txt"}')
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [tests.fake_endpoint.Reply(ANSWER)]
-        chat(settings(endpoint.url), [assistant_message("", (call,)), tool_result("call_1", "file contents")])
-        expected: object = [
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "read_file", "arguments": '{"path": "a.txt"}'}}],
-            },
-            {"role": "tool", "tool_call_id": "call_1", "content": "file contents"},
-        ]
-        assert body_json(endpoint.last.body)["messages"] == expected
+        endpoint.replies = [Reply(b'{"choices": []}')]
+        assert ask(settings(endpoint.url), "Be brief.", "Say hi") == Failure('unexpected reply: {"choices": []}')

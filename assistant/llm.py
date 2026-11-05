@@ -1,19 +1,17 @@
-"""The AI endpoint: settings, transcription, and chat (plain or with tools),
-against any OpenAI-style API. Pydantic validates incoming JSON.
-Every call returns its result or a `Failure`; none
-raise for network or server problems."""
+"""The AI endpoint: settings, transcription and one-shot questions,
+against any OpenAI-style API. Pydantic validates the replies we read.
+`transcribe` and `ask` return their result or a `Failure`; neither raises for
+network or server problems."""
 
 import io
-import urllib.error
-import urllib.request
-import uuid
 import wave
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
-from http.client import HTTPException, HTTPResponse
-from typing import Final, Literal, NotRequired, TypedDict, assert_never
+from typing import Annotated, Final, TypedDict, assert_never
+from urllib.parse import urlsplit
 
-from pydantic import ConfigDict, TypeAdapter
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
+lazy from openai import APIConnectionError, APIStatusError, OpenAI, omit
 
 from automation.json_value import Json
 from winapi.pcm import RATE
@@ -23,7 +21,6 @@ MAX_SECONDS: Final = 300
 MIN_SECONDS: Final = 0.3
 """Shorter recordings are accidental taps, and aren't sent."""
 
-_JSON = TypeAdapter(Json)
 _SCHEMA = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
 
 
@@ -98,7 +95,7 @@ def wav(pcm: bytes, rate: int) -> bytes:
     return out.getvalue()
 
 
-# ---- Messages --------------------------------------------------------------------------
+# ---- Tools and results -----------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,47 +104,6 @@ class ToolCall:
     name: str
     arguments: str
     """JSON, as the model wrote it (it may not be valid)."""
-
-
-@dataclass(frozen=True, slots=True)
-class SystemMessage:
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class UserMessage:
-    content: str
-
-
-@dataclass(frozen=True, slots=True)
-class AssistantMessage:
-    text: str
-    tool_calls: tuple[ToolCall, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class ToolResult:
-    call_id: str
-    text: str
-
-
-type Message = SystemMessage | UserMessage | AssistantMessage | ToolResult
-
-
-def system_message(text: str) -> SystemMessage:
-    return SystemMessage(text)
-
-
-def user_message(content: str) -> UserMessage:
-    return UserMessage(content)
-
-
-def assistant_message(text: str, tool_calls: tuple[ToolCall, ...] = ()) -> AssistantMessage:
-    return AssistantMessage(text, tool_calls)
-
-
-def tool_result(call_id: str, text: str) -> ToolResult:
-    return ToolResult(call_id, text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,248 +123,94 @@ def tool_spec(name: str, description: str, parameters: Mapping[str, Json]) -> To
 
 
 @dataclass(frozen=True, slots=True)
-class Reply:
-    text: str
-    tool_calls: tuple[ToolCall, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class Failure:
     message: str
 
 
-@dataclass(frozen=True, slots=True)
-class CompletionRequest:
-    """One immutable chat exchange: messages, model and tools."""
-
-    messages: tuple[Message, ...]
-    model: str | None = None
-    tools: tuple[ToolSpec, ...] = ()
+# ---- Requests --------------------------------------------------------------------------
 
 
-class WireCallFunction(TypedDict):
-    name: str
-    arguments: str
+class _Transcription(TypedDict):
+    text: str
 
 
-class WireCall(TypedDict):
-    id: str
-    type: Literal["function"]
-    function: WireCallFunction
-
-
-class WireSystem(TypedDict):
-    role: Literal["system"]
+class _Message(TypedDict):
     content: str
 
 
-class WireUser(TypedDict):
-    role: Literal["user"]
-    content: str
+class _Choice(TypedDict):
+    message: _Message
 
 
-class WireAssistant(TypedDict):
-    role: Literal["assistant"]
-    content: str | None
-    tool_calls: NotRequired[tuple[WireCall, ...]]
+class _Completion(TypedDict):
+    choices: Annotated[list[_Choice], Field(min_length=1)]
 
 
-class WireResult(TypedDict):
-    role: Literal["tool"]
-    tool_call_id: str
-    content: str
+class _ErrorDetail(TypedDict):
+    message: str
 
 
-type WireMessage = WireSystem | WireUser | WireAssistant | WireResult
+# The SDK builds reply objects without validating them (a proxy's HTML page arrives as
+# a `str`), so the calls read the raw body and validate only the fields used here.
+_TRANSCRIPTION = TypeAdapter(_Transcription)
+_COMPLETION = TypeAdapter(_Completion)
+_ERROR_DETAIL = TypeAdapter(_ErrorDetail)
 
 
-class WireFunction(TypedDict):
-    name: str
-    description: str
-    parameters: dict[str, Json]
+def _client(settings: Settings, timeout_s: float) -> OpenAI:
+    # A failed dictation is reported at once; the user or the meeting worker retries.
+    return OpenAI(base_url=settings.base_url, api_key=settings.api_key, timeout=timeout_s, max_retries=0)
 
 
-class WireTool(TypedDict):
-    type: Literal["function"]
-    function: WireFunction
-
-
-class WireCompletion(TypedDict):
-    model: str
-    messages: tuple[WireMessage, ...]
-    tools: NotRequired[tuple[WireTool, ...]]
-
-
-_COMPLETION = TypeAdapter(WireCompletion)
-
-
-def _call(call: ToolCall) -> WireCall:
-    return {"id": call.id, "type": "function", "function": {"name": call.name, "arguments": call.arguments}}
-
-
-def _message(message: Message) -> WireMessage:
-    match message:
-        case SystemMessage(text):
-            return {"role": "system", "content": text}
-        case UserMessage(content):
-            return {"role": "user", "content": content}
-        case AssistantMessage(text, calls):
-            out: WireAssistant = {"role": "assistant", "content": text}
-            if calls:
-                out["content"] = text or None
-                out["tool_calls"] = tuple(_call(call) for call in calls)
-            return out
-        case ToolResult(call_id, text):
-            return {"role": "tool", "tool_call_id": call_id, "content": text}
+def _failure(settings: Settings, error: APIStatusError | APIConnectionError) -> Failure:
+    match error:
+        case APIStatusError():
+            try:
+                detail = _ERROR_DETAIL.validate_python(error.body)["message"]
+            except ValidationError:
+                detail = error.response.reason_phrase
+            return Failure(f"HTTP {error.status_code}: {detail}")
+        case APIConnectionError():
+            return Failure(f"can't reach {urlsplit(settings.base_url).netloc}: {error.__cause__ or error.message}")
         case _:
-            assert_never(message)
-
-
-def _tool(spec: ToolSpec) -> WireTool:
-    return {
-        "type": "function",
-        "function": {"name": spec.name, "description": spec.description, "parameters": _SCHEMA.validate_json(spec.parameters)},
-    }
-
-
-# ---- Reading JSON replies --------------------------------------------------------------
-
-
-def _json(body: bytes) -> Json:
-    try:
-        return _JSON.validate_json(body)
-    except ValueError:
-        return None
-
-
-def _get(data: Json, *path: str | int) -> Json:
-    """`data[a][b]...`, or None where the path doesn't exist."""
-    for step in path:
-        match step, data:
-            case str() as key, dict() as values:
-                data = values.get(key)
-            case int() as index, list() as values if -len(values) <= index < len(values):
-                data = values[index]
-            case _:
-                return None
-    return data
-
-
-def _str(data: Json, *path: str | int) -> str:
-    value = _get(data, *path)
-    return value if isinstance(value, str) else ""
-
-
-def _items(data: Json) -> list[Json]:
-    return data if isinstance(data, list) else []
+            assert_never(error)
 
 
 def _unexpected(body: bytes) -> Failure:
     return Failure(f"unexpected reply: {body[:200].decode(errors='replace')}")
 
 
-# ---- Requests --------------------------------------------------------------------------
-
-
-def _request(settings: Settings, path: str, body: bytes, content_type: str) -> urllib.request.Request:
-    return urllib.request.Request(
-        f"{settings.base_url}{path}",
-        data=body,
-        headers={"Authorization": f"Bearer {settings.api_key}", "Content-Type": content_type},
-        method="POST",
-    )
-
-
-def _open(request: urllib.request.Request, timeout_s: float) -> HTTPResponse | Failure:
-    """Goes through the system's proxy settings, and trusts the certificates the
-    system trusts (so company TLS inspection works)."""
-    try:
-        response: object = urllib.request.urlopen(request, timeout=timeout_s)
-    except urllib.error.HTTPError as error:
-        try:
-            with error:
-                detail = _get(_json(error.read()), "error", "message")
-        except OSError, HTTPException:
-            detail = None
-        return Failure(f"HTTP {error.code}: {detail if isinstance(detail, str) else error.reason}")
-    except urllib.error.URLError as error:
-        return Failure(f"can't reach {request.host}: {error.reason}")
-    except (OSError, HTTPException) as error:  # timeouts, truncated replies and dropped connections
-        return Failure(f"can't reach {request.host}: {error}")
-    match response:
-        case HTTPResponse():
-            return response
-        case _:
-            return Failure("unexpected HTTP response")
-
-
-def _post(request: urllib.request.Request, timeout_s: float) -> bytes | Failure:
-    response = _open(request, timeout_s)
-    if isinstance(response, Failure):
-        return response
-    try:
-        with response:
-            return response.read()
-    except (OSError, HTTPException) as error:
-        return Failure(f"connection dropped: {error}")
-
-
-def _multipart(fields: Mapping[str, str], audio: bytes) -> tuple[bytes, str]:
-    """A multipart/form-data body with text fields and the audio file; and its content type."""
-    boundary = uuid.uuid4().hex
-    parts = [f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode() for name, value in fields.items()]
-    parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n'.encode())
-    parts.append(audio + f"\r\n--{boundary}--\r\n".encode())
-    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
-
-
 def transcribe(settings: Settings, audio: bytes, *, timeout_s: float = 60, context: str = "") -> str | Failure:
     """The text spoken in a WAV file."""
-    fields = {"model": settings.transcribe_model, "response_format": "json"}
     prompt = "\n".join(part for part in (settings.vocabulary, context[-600:]) if part)
-    if prompt:
-        fields["prompt"] = prompt
-    if settings.language:
-        fields["language"] = settings.language
-    body, content_type = _multipart(fields, audio)
-    reply = _post(_request(settings, "/audio/transcriptions", body, content_type), timeout_s)
-    if isinstance(reply, Failure):
-        return reply
-    text = _get(_json(reply), "text")
-    return text if isinstance(text, str) else _unexpected(reply)
-
-
-def _chat_body(settings: Settings, request: CompletionRequest) -> bytes:
-    body: WireCompletion = {
-        "model": request.model or settings.fast_model,
-        "messages": tuple(_message(message) for message in request.messages),
-    }
-    if request.tools:
-        body["tools"] = tuple(_tool(tool) for tool in request.tools)
-    return _COMPLETION.dump_json(body)
-
-
-def chat(
-    settings: Settings,
-    messages: Sequence[Message],
-    *,
-    model: str | None = None,
-    tools: Sequence[ToolSpec] = (),
-    timeout_s: float = 120,
-) -> Reply | Failure:
-    """The model's answer: text, or calls to the tools it was offered."""
-    body = _chat_body(settings, CompletionRequest(tuple(messages), model, tuple(tools)))
-    reply = _post(_request(settings, "/chat/completions", body, "application/json"), timeout_s)
-    if isinstance(reply, Failure):
-        return reply
-    message = _get(_json(reply), "choices", 0, "message")
-    if _get(message, "role") is None and _get(message, "content") is None:
+    try:
+        with _client(settings, timeout_s) as client:
+            reply = client.audio.transcriptions.with_raw_response.create(
+                model=settings.transcribe_model,
+                file=("speech.wav", audio, "audio/wav"),
+                response_format="json",
+                prompt=prompt or omit,
+                language=settings.language or omit,
+            ).content
+    except (APIStatusError, APIConnectionError) as error:
+        return _failure(settings, error)
+    try:
+        return _TRANSCRIPTION.validate_json(reply)["text"]
+    except ValidationError:
         return _unexpected(reply)
-    calls = tuple(ToolCall(_str(c, "id"), _str(c, "function", "name"), _str(c, "function", "arguments")) for c in _items(_get(message, "tool_calls")))
-    return Reply(_str(message, "content"), calls)
 
 
-def ask(settings: Settings, instructions: str, content: str, *, model: str | None = None) -> str | Failure:
-    """One question, one answer."""
-    reply = chat(settings, [system_message(instructions), user_message(content)], model=model)
-    return reply if isinstance(reply, Failure) else reply.text
+def ask(settings: Settings, instructions: str, content: str) -> str | Failure:
+    """One question to the fast model, one answer."""
+    try:
+        with _client(settings, 120) as client:
+            reply = client.chat.completions.with_raw_response.create(
+                model=settings.fast_model,
+                messages=[{"role": "system", "content": instructions}, {"role": "user", "content": content}],
+            ).content
+    except (APIStatusError, APIConnectionError) as error:
+        return _failure(settings, error)
+    try:
+        return _COMPLETION.validate_json(reply)["choices"][0]["message"]["content"]
+    except ValidationError:
+        return _unexpected(reply)
