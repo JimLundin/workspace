@@ -205,7 +205,8 @@ class ExecutionPlan:
     sequential: tuple[str, ...]
 
 
-WORKERS = 6
+WORKERS = 3
+"""One per physical core left after the runner and the running Workspace on a four-core laptop."""
 POOL_MINIMUM = 10
 """Fewer modules finish sooner here than workers can start: each imports the SDK first."""
 

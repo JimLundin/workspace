@@ -58,10 +58,24 @@ live communications. `watch --preview` runs the same preview beside the tests.
    missing baseline select the full source suite.
 
 Any failure stops before a receipt. `--tests` accepts files and
-`tests/test_x.py::test_name` selectors. `--native` includes the Windows
-integration modules, which run sequentially on a private desktop so their
-windows never appear on the user's screen. `--full` runs everything; CI and the
-keeper also run the protected `selfcheck.py` full suite.
+`tests/test_x.py::test_name` selectors. `--native` (always passed by
+`Dev.cmd check`) includes the affected Windows integration modules. `--full`
+runs everything; CI and the keeper also run the protected `selfcheck.py` full
+suite.
+
+Execution order: one Windows runner on a private desktop takes the import
+review and the portable modules (three worker processes once ten or more are
+selected). After it exits, and in `--full` after whole-tree pyright finishes,
+native modules run in four parallel runners, each on its own private desktop:
+Edge, runtime launches, UIA and development tooling, and the rest together
+(`NATIVE_LANES` in `scripts/check_native.py`). Native fixtures have real
+deadlines; overlapping them with the pool or pyright made them fail.
+
+Typical cost on the four-core development laptop, warm policy cache:
+a one-file pure edit about 17 s, a one-file toolbar edit about 14 s, `--full`
+about 165 s (whole-tree pyright alone takes 85 s). Editing `scripts/check.py`
+or the policy reviews invalidates the analysis cache; the next check pays
+about 80 s once.
 
 Every check that reaches execution writes timing evidence to
 `%LOCALAPPDATA%\workspace\development\timings\check-*.json`, or to the path given
