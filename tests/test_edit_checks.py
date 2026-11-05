@@ -68,12 +68,13 @@ def test_package_initializer_and_deleted_source_select_consumers(tmp_path: Path)
     assert select(tmp_path, current, previous).tests == ("tests/test_api.py",)
 
 
-def test_pins_and_assets_fall_back_to_full_suite_but_policy_files_select_their_reviews(tmp_path: Path) -> None:
+def test_pins_and_unknown_assets_fall_back_to_full_suite_but_known_assets_select_their_readers_tests(tmp_path: Path) -> None:
+    # Defect: a changed asset selects the whole suite again, or one with unknown readers selects too little.
     previous = tree(tmp_path)
     for name in ("requirements/windows-py315.lock", "app/assets.js"):
         result = select(tmp_path, previous | {name: "after"}, previous)
         assert set(result.tests) == {"tests/test_api.py", "tests/test_other.py"}
-    (tmp_path / "tests/test_quality.py").write_text("")
+    (tmp_path / "tests/test_quality.py").write_text("from scripts import quality\n")
     previous = previous | {"tests/test_quality.py": "before"}
     assert select(tmp_path, previous | {"pyproject.toml": "after"}, previous).tests == ("tests/test_quality.py",)
     # Repository configuration and type stubs have no test readers.

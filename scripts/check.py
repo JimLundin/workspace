@@ -20,7 +20,7 @@ from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 lazy from concurrent.futures import ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
@@ -39,12 +39,6 @@ lazy from scripts.native_desktop import current_name
 
 ROOT = Path(__file__).resolve().parent.parent
 DIRECT = "direct Python imports"
-POLICY_FILES: Final = frozendict(
-    {
-        "pyproject.toml": ("tests/test_architecture.py", "tests/test_quality.py"),
-    }
-)
-"""Configuration whose only readers are the policy reviews and their tests."""
 TEST_NAMES = TypeAdapter[list[str]](list[str])
 WINDOWS_IMPORTS = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 
@@ -98,19 +92,14 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
     )
     if full or not previous or any(name.startswith("requirements/") for name in changed):
         return Selection(all_tests, changed, "full source checks" if full else "dependency pins or missing baseline")
-    implicit = [
-        name
-        for name in changed
-        if not name.endswith((".py", ".pyw"))
-        and not name.startswith(("docs/", ".github/", ".vscode/", "typings/", ".git"))
-        and name not in ("AGENTS.md", "README.md", "GLOSSARY.md", *POLICY_FILES)
-    ]
-    # Non-Python application assets have implicit users: run the whole source suite.
-    if implicit:
+    # A changed asset counts as a change to the source files that read it; an
+    # asset with unknown readers runs the whole source suite.
+    readers = [selfcheck.asset_readers(name) for name in changed if not name.endswith((".py", ".pyw"))]
+    if any(found is None for found in readers):
         return Selection(all_tests, changed, "application asset has implicit dependencies")
-    affected = {module_name(name) for name in changed if name.endswith((".py", ".pyw"))}
-    policy = {test for name in changed for test in POLICY_FILES.get(name, ())}
-    if not affected and not policy:
+    read = (reader for found in readers if found is not None for reader in found)
+    affected = {module_name(name) for name in (*changed, *read) if name.endswith((".py", ".pyw"))}
+    if not affected:
         return Selection((), changed, DIRECT)
     # Cache ownership stays inside source selection; callers only choose
     # coverage. Minimal source fixtures need no project/cache configuration.
@@ -128,7 +117,7 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
     reached = set(affected)
     while extra := {module_name(name) for name, imports in tests.items() if not Path(name).name.startswith("test_") and imports & reached} - reached:
         reached |= extra
-    selected = tuple(name for name in all_tests if name in policy or module_name(name) in reached or tests.get(name, frozenset()) & reached)
+    selected = tuple(name for name in all_tests if module_name(name) in reached or tests.get(name, frozenset()) & reached)
     return Selection(selected, changed, DIRECT)
 
 

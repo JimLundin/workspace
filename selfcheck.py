@@ -15,7 +15,8 @@ for exactly the same source digest, so compiling, importing and the portable
 tests are not repeated back to back. Any other install gets the full profile.
 With --changed-from, a check runs only the test modules that import a file changed
 from BASE, directly or through test helpers, and compiles and imports only changed
-source; a changed asset runs the whole profile. The full suite runs in CI.
+source. A changed asset in ASSET_READERS counts as a change to its readers; any other
+non-Python change runs the whole profile. The full suite runs in CI.
 
 Discovered member values remain objects; the runner validates origin and the
 supported keyword arguments before invoking a test.
@@ -37,7 +38,7 @@ from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Protocol
+from typing import Final, Protocol
 
 import runtime
 
@@ -72,6 +73,35 @@ FULL_SCOPE = Scope(Profile.FULL)
 _DOCUMENTS = ("docs/", ".github/", ".vscode/", "typings/", ".git")
 """Changes no test reads: documentation, repository and editor configuration, type stubs."""
 _TEXT = frozenset({"AGENTS.md", "README.md", "GLOSSARY.md"})
+
+ASSET_READERS: Final = frozendict(
+    {
+        "pyproject.toml": ("scripts/architecture.py", "scripts/quality.py", "scripts/source_analysis.py", "scripts/check.py"),
+        "Dev.cmd": ("scripts/check.py", "scripts/deploy.py"),
+        "scripts/dev.ps1": ("scripts/check.py", "scripts/deploy.py"),
+        "StartWorkspace.cmd": ("runtime.py",),
+        "assistant/uia.ps1": ("assistant/uia.py",),
+        "desktop_ui/fonts/": ("desktop_ui/components/typeface.py", "desktop_ui/components/text.py"),
+        "tests/uia_fixture.ps1": ("tests/test_windows_computer.py",),
+        # A sample log for `scripts.navigation_report --log`; no test reads it.
+        "tests/navigation_report_fixture.jsonl": (),
+    }
+)
+"""Each non-Python source file (or folder ending in /) and the source files that read it.
+
+A changed asset counts as a change to its readers. Any other non-Python file, such as
+a runtime pin, has unknown readers and selects every test.
+"""
+
+
+def asset_readers(name: str) -> tuple[str, ...] | None:
+    """The source files a changed non-Python file affects: none for documents, None when unknown."""
+    if name.startswith(_DOCUMENTS) or name in _TEXT:
+        return ()
+    for asset, readers in ASSET_READERS.items():
+        if name == asset or (asset.endswith("/") and name.startswith(asset)):
+            return readers
+    return None
 
 
 def _files(root: Path) -> dict[str, bytes]:
@@ -122,24 +152,40 @@ def _ancestors(module: str) -> Iterator[str]:
         yield ".".join(parts[:end])
 
 
-def affected_tests(root: Path, changed: Iterable[str]) -> frozenset[str] | None:
-    """Test modules that import a changed module, directly or through test helpers.
+def module_inputs(root: Path) -> dict[str, frozenset[str]]:
+    """Each test module's inputs: itself, the test helpers it reaches, and the modules those import.
 
-    None means every test: a changed asset or configuration has implicit readers.
     Production imports are not followed further; the full suite runs in CI.
     """
-    names = frozenset(changed)
-    if any(not name.endswith((".py", ".pyw")) and not name.startswith(_DOCUMENTS) and name not in _TEXT for name in names):
-        return None
-    reached = {_module(name) for name in names if name.endswith((".py", ".pyw"))}
-    tests = {
-        path.relative_to(root).as_posix(): imports(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
+    found = {
+        _module(path.relative_to(root).as_posix()): imports(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"))
         for path in (root / "tests").glob("*.py")
     }
-    # This selection owner grows its reached set locally; only the frozen selection leaves.
-    while extra := {_module(name) for name, found in tests.items() if not Path(name).name.startswith("test_") and found & reached} - reached:
-        reached |= extra
-    return frozenset(name for name, found in tests.items() if Path(name).name.startswith("test_") and (found & reached or _module(name) in reached))
+    helpers = frozenset(name for name in found if not name.rpartition(".")[2].startswith("test_"))
+    result: dict[str, frozenset[str]] = {}
+    for module in sorted(found.keys() - helpers):
+        # Each module's input set grows locally; only the frozen set leaves.
+        inputs = {module, *found[module]}
+        while extra := {name for helper in inputs & helpers for name in found[helper]} - inputs:
+            inputs |= extra
+        result[module.replace(".", "/") + ".py"] = frozenset(inputs)
+    return result
+
+
+def affected_tests(root: Path, changed: Iterable[str]) -> frozenset[str] | None:
+    """Test modules whose inputs include a changed module, or a reader of a changed asset.
+
+    None means every test: a changed non-Python file has unknown readers.
+    """
+    reached: set[str] = set()
+    for name in changed:
+        if name.endswith((".py", ".pyw")):
+            reached.add(_module(name))
+        elif (readers := asset_readers(name)) is None:
+            return None
+        else:
+            reached.update(_module(reader) for reader in readers)
+    return frozenset(name for name, inputs in module_inputs(root).items() if inputs & reached)
 
 
 def _selected(path: Path, profile: Profile) -> bool:
