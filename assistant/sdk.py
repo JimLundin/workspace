@@ -31,14 +31,14 @@ from agents.memory.session_settings import SessionSettings
 from agents.run_config import CallModelData, ModelInputData, ToolExecutionConfig
 from agents.tool import FunctionToolResult
 from agents.tool_context import ToolContext
-from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
+from openai import APIError
 from openai.types.responses import ResponseOutputItem, ResponseStreamEvent
 from openai.types.shared import Reasoning
 from pydantic import AfterValidator, BeforeValidator, TypeAdapter
 
 from assistant.agent import KEPT_SCREENSHOTS
 from assistant.agent_history import History
-from assistant.llm import ToolCall, ToolSpec
+from assistant.llm import ToolCall, ToolSpec, async_client
 from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
 from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState
@@ -365,16 +365,9 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
         local.report = InvalidConfiguration(reason)
         local.log.problem(reason)
         return False
-    http = DefaultAsyncHttpxClient(trust_env=True)
-    async with AsyncOpenAI(
-        base_url=local.settings.base_url,
-        api_key=local.settings.api_key,
-        # Let the SDK retry transient request failures with backoff and Retry-After.
-        # Retry only the model request; restarting the agent could repeat completed effects.
-        max_retries=2,
-        timeout=600,
-        http_client=http,
-    ) as client:
+    # Let the SDK retry transient request failures with backoff and Retry-After.
+    # Retry only the model request; restarting the agent could repeat completed effects.
+    async with async_client(local.settings, timeout_s=600, max_retries=2) as client:
         model = OpenAIResponsesModel(model=local.settings.agent_model, openai_client=client)
         config = RunConfig(
             tracing_disabled=True,

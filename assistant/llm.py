@@ -1,4 +1,4 @@
-"""The AI endpoint: settings, transcription and one-shot questions,
+"""The AI endpoint: settings, the SDK clients, transcription and one-shot questions,
 against any OpenAI-style API. Pydantic validates the replies we read.
 `transcribe` and `ask` return their result or a `Failure`; neither raises for
 network or server problems."""
@@ -11,7 +11,7 @@ from typing import Annotated, Final, TypedDict, assert_never
 from urllib.parse import urlsplit
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
-lazy from openai import APIConnectionError, APIStatusError, OpenAI, omit
+lazy from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI, omit
 
 from automation.json_value import Json
 from winapi.pcm import RATE
@@ -155,6 +155,12 @@ class _ErrorDetail(TypedDict):
 _TRANSCRIPTION = TypeAdapter(_Transcription)
 _COMPLETION = TypeAdapter(_Completion)
 _ERROR_DETAIL = TypeAdapter(_ErrorDetail)
+
+
+def async_client(settings: Settings, *, timeout_s: float, max_retries: int = 0) -> AsyncOpenAI:
+    """The endpoint for every SDK model. The SDK's HTTP client uses the system's
+    proxy settings and certificate store, so company TLS inspection works."""
+    return AsyncOpenAI(base_url=settings.base_url, api_key=settings.api_key, timeout=timeout_s, max_retries=max_retries)
 
 
 def _client(settings: Settings, timeout_s: float) -> OpenAI:
