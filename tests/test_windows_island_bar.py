@@ -132,7 +132,6 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         bar.timer.stop()
-        bar.layout(enabled=False)
         pinned = bar.window.shell_sections.pinned
 
         def geometries() -> tuple[QtCore.QRect, ...]:
@@ -148,8 +147,8 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
                 bar.render()
                 capsule = bar.window.capsules[Key.STATUS]
                 assert capsule.view is not None
-                assert capsule.view.slots[1] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
-                assert [button.control.icon for button in capsule.controls] == ["keyboard"]
+                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
+                assert not capsule.controls
                 assert capsule.isVisibleTo(bar.window)
                 for name, label in (
                     (bar.system.speaker_icon, bar.system.speaker_description),
@@ -240,16 +239,11 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         bar.dictation(active=False)
         bar.agent_changed(Agent("Which sheet?", waiting=True))
         press(bar, Key.ISLAND)
-        bar.layout(enabled=False)
-        (keys,) = bar.window.capsules[Key.STATUS].controls
-        assert keys.control.icon == "keyboard" and "Colemak" in keys.accessibleName()
-        keys.click()
         bar.inbox_changed(120)
         assert "120 clarifications" in bar.window.capsules[Key.INBOX].accessibleName()
         press(bar, Key.INBOX)
-        assert invoked == ["stop", "stop", "canvas", "record-stop", "inbox", "keymap", "inbox"]
+        assert invoked == ["stop", "stop", "canvas", "record-stop", "inbox", "inbox"]
         bar.recording_changed(RecordingState(phase="saved"))
-        bar.layout(enabled=True)
         bar.inbox_changed(0)
         rest(bar)
         assert shown(bar) == FIXED

@@ -25,7 +25,7 @@ lazy from winapi import screen
 
 prepare()
 
-SCENARIOS = ("Idle", "Agent working", "Recording", "Keyboard mode", "Needs input", "Transcribing", "Dictating", "Everything at once", "Agent reply")
+SCENARIOS = ("Idle", "Agent working", "Recording", "Needs input", "Transcribing", "Dictating", "Everything at once", "Agent reply")
 
 
 WORKING: Final = Agent("Comparing both sheets", waiting=False, steps=("Read file", "Checking the plans", "PowerShell"))
@@ -133,15 +133,14 @@ class Preview:
         if self.closed:
             return
         self.files.state.write_bytes(CHOICE.dump_json(Choice(index)))
-        recording = RecordingState(phase="recording", seconds=125) if index in (2, 7) else RecordingState()
+        recording = RecordingState(phase="recording", seconds=125) if index in (2, 6) else RecordingState()
         if self.bar is not None:
             self.bar.recording_changed(recording)
-            self.bar.layout(enabled=index != 3)
             asking = Agent("Which sheet should the reply cover?", waiting=True)
-            self.bar.agent_changed(WORKING if index in (1, 7) else asking if index == 4 else None)
-            self.bar.job_changed(Job.TRANSCRIBING if index in (5, 7) else None)
-            self.bar.dictation(active=index in (6, 7))
-            if index == 8:
+            self.bar.agent_changed(WORKING if index in (1, 6) else asking if index == 3 else None)
+            self.bar.job_changed(Job.TRANSCRIBING if index in (4, 6) else None)
+            self.bar.dictation(active=index in (5, 6))
+            if index == 7:
                 # A fresh identity announces the sample again each time it is chosen.
                 at = time.time()
                 text = "Revenue is up 4% against the approved figures; travel is 12% over the Q3 forecast."

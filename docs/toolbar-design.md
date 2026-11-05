@@ -4,17 +4,13 @@ The bar is a row of glass capsules 8 px below the top of the primary screen.
 Its centre holds only live activity and is empty at rest. Left of it, one
 capsule holds Canvas, then the Outlook and Teams web-app slots; the desktop
 pager and the running apps follow in their own capsules. One fixed capsule on
-the right holds the keyboard state when relevant (the layout switched off, or
-a temporary layer held), then volume, Wi-Fi, and the clock with the battery.
-Activity never moves the fixed controls.
+the right holds volume, Wi-Fi, and the clock with the battery. Activity never
+moves the fixed controls.
 
-The right capsule is anchored to the screen's right edge, so the keyboard
-state widens it leftwards and the controls after it keep their places once it
-settles. Nothing is reserved for the keyboard state at rest; while the capsule
-springs to its new width, its content cross-fades centred in it, so the other
-controls slide briefly. Canvas lives in the shell's pinned capsule, which
-yields to activity: the island bounds where it ends, as it does for the pager
-and running apps, and like them it has no edge strip to the top of the screen.
+The right capsule is anchored to the screen's right edge. Canvas lives in the
+shell's pinned capsule, which yields to activity: the island bounds where it
+ends, as it does for the pager and running apps, and like them it has no edge
+strip to the top of the screen.
 
 ## What the bar shows
 
@@ -36,8 +32,8 @@ and running apps, and like them it has no edge strip to the top of the screen.
    under the pointer.
 4. **Each fact has one owner.** Dictation and transcription come from the voice
    controller (`Desktop.busy`). The agent's phase and news come from its
-   session (`island_agent`), the recording from meetings, the inbox from
-   pending questions and unread notices, and the layer from the keyboard.
+   session (`island_agent`), the recording from meetings, and the inbox from
+   pending questions and unread notices.
    Windows notifications never become notices.
 
 | Situation | Island | Beside it |

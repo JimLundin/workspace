@@ -51,7 +51,7 @@ lazy from desktop_ui.island_menu import (
     entries,
     restores_focus,
 )
-lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
+lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island
 lazy from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
@@ -125,7 +125,6 @@ class DesktopBar:
         "chord_since",
         "closed",
         "controls",
-        "current_layer",
         "dictating",
         "errors",
         "frost",
@@ -135,7 +134,6 @@ class DesktopBar:
         "inbox",
         "job",
         "last_frame",
-        "layout_enabled",
         "loop",
         "materials",
         "menu_target",
@@ -190,8 +188,6 @@ class DesktopBar:
         self.job: Job | None = None
         self.agent: Agent | None = None
         self.recording = RecordingState()
-        self.layout_enabled = True
-        self.current_layer: str | None = None
         self.chord_since: float | None = None  # When either keyboard began holding its Apps key.
         self.hints: KeyHintOverlay | None = None
         self.inbox = self.menu_target = 0
@@ -360,8 +356,6 @@ class DesktopBar:
                     self.render()
             case Action.OPEN_CANVAS:
                 self.actions.work()
-            case Action.OPEN_KEYMAP:
-                self.actions.keyboard()
             case Action.STOP_RECORDING:
                 self.actions.record("stop")
             case _:
@@ -603,10 +597,6 @@ class DesktopBar:
             self.automatic_recording = status
             self.render()
 
-    def layer(self, text: str | None) -> None:
-        self.current_layer = text
-        self.render()
-
     def chord(self, *, held: bool) -> None:
         if held and self.chord_since is None:
             self.chord_since = self.observations.clock()
@@ -625,10 +615,6 @@ class DesktopBar:
         fresh = replace(world, foreground=self.observations.foreground()) if world is not None and held is not None else world
         self.hints.show(hints(fresh, held), self.preference)
 
-    def layout(self, *, enabled: bool) -> None:
-        self.layout_enabled = enabled
-        self.render()
-
     def observed(self) -> Observed:
         asking = self.agent is not None and self.agent.waiting
         moment = island_moment.moment(dictating=self.dictating, asking=asking, notices=self.notices)
@@ -639,7 +625,6 @@ class DesktopBar:
             self.ambient,
             self.system,
             self.inbox,
-            keyboard(enabled=self.layout_enabled, layer=self.current_layer),
             dictating=self.dictating,
             unread=island_moment.unread(self.notices),
             notice=moment if isinstance(moment, Notice) else None,

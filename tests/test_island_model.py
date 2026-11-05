@@ -24,14 +24,11 @@ from desktop_ui.island_model import (
     Zone,
     capture,
     island,
-    keyboard,
 )
 from desktop_ui.island_moment import Notice
 from winapi.machine_status import Battery, Speakers, Wifi
 
-RESTING = Observed(
-    None, None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), SystemStatus(), 0, None, dictating=False
-)
+RESTING = Observed(None, None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), SystemStatus(), 0, dictating=False)
 WORKING = Agent("Comparing both sheets", waiting=False)
 ASKING = Agent("Which sheet should the reply cover?", waiting=True)
 RECORDING = RecordingState(phase="recording", seconds=125)
@@ -43,7 +40,7 @@ def view(observed: Observed, key: Key, *, expanded: Expansion | None = None, hov
 
 
 def test_idle_has_only_device_status_and_clock_power_on_right() -> None:
-    # Defect: idle readings reappear in the centre, or the keyboard state shows while the layout is on.
+    # Defect: idle readings reappear in the centre, or the fixed capsule gains a reading.
     views = island(RESTING)
     assert tuple(each.key for each in views) == (Key.STATUS,)
     assert tuple(each.zone for each in views) == (Zone.RIGHT,)
@@ -60,7 +57,7 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
     # Defect: moments hide status, or status becomes a central activity.
     for speakers in Speakers:
         for wifi in Wifi:
-            baseline = replace(RESTING, system=SystemStatus(speakers, wifi), keyboard="NAV")
+            baseline = replace(RESTING, system=SystemStatus(speakers, wifi))
             for observed in (
                 baseline,
                 replace(baseline, dictating=True),
@@ -68,7 +65,7 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                 replace(baseline, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING),
             ):
                 for expanded in (None, Expansion.MENU, Expansion.REQUEST):
-                    # The open menu is the status capsule itself; its row, keyboard state included, stays.
+                    # The open menu is the status capsule itself; its row stays.
                     fixed = view(observed, Key.STATUS, expanded=expanded)
                     assert fixed.slots == view(baseline, Key.STATUS).slots
                     assert expanded is Expansion.MENU or fixed == view(baseline, Key.STATUS)
@@ -139,18 +136,6 @@ def test_inbox_only_exists_while_pending_and_keeps_exact_count_in_label() -> Non
     assert many.slots == ((Glyph("bell"), Badge("99+")),)
     assert many.label.startswith("120 clarifications need your input")
     assert view(replace(RESTING, inbox=1), Key.INBOX).label.startswith("1 clarification needs your input")
-
-
-def test_keyboard_is_temporary_icon_only_leading_the_fixed_cluster_with_state_in_its_label() -> None:
-    # Defects: the keyboard state shows while irrelevant, leaves the fixed cluster,
-    # loses its key-map press, or its press opens the controls menu instead.
-    assert keyboard(enabled=True, layer=None) is None
-    assert keyboard(enabled=False, layer=None) == "Colemak"
-    assert keyboard(enabled=True, layer="NAV · locked") == "NAV · locked"
-    status = view(replace(RESTING, keyboard="NAV"), Key.STATUS)
-    assert status.slots[0] == (Control("keyboard", "NAV · Open key map", Action.OPEN_KEYMAP),)
-    assert status.slots[1:] == view(RESTING, Key.STATUS).slots
-    assert status.action is Action.OPEN_MENU
 
 
 def test_recording_phases_read_and_stop_as_capture_allows() -> None:

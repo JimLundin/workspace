@@ -639,7 +639,6 @@ class AssistantApp:
         self.assistant.layout_on = self.layout is LayoutState.ON
         if not self.assistant.layout_on:
             self.assistant.stop_capture(reason="layout_off")
-        self.ui.desktop_layout(enabled=self.assistant.layout_on)
         self.overlay = self.overlay.set_layout(on=self.assistant.layout_on)
         self.ui.show_pressed_keys(self.overlay.pressed, reset=True)
         self.show_overlay(work)

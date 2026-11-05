@@ -1,7 +1,7 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
 from desktop_ui.island_layout import LINE, LINES_BOTTOM, LINES_TOP, Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap, wrap
-from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Part, Spinner, Text, Zone
+from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Spinner, Text, Zone
 
 
 def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:
@@ -60,20 +60,6 @@ def test_the_fixed_right_cluster_survives_activity_changes() -> None:
         activity = next((each for each in framed if each.key is Key.ISLAND), None)
         if activity is not None:
             assert activity.box.x + activity.box.width <= baseline[0].box.x - 6
-
-
-def test_the_keyboard_state_entering_the_fixed_cluster_leaves_the_other_controls_in_place() -> None:
-    # Defect: the keyboard state joining the right cluster's capsule moves volume,
-    # Wi-Fi, the clock or the battery, so a press lands on the wrong control.
-    readings = ((Glyph("speaker"), Glyph("wifi")), (Text("10:22", reserve="00:00"), Glyph("battery"), Text("73%", reserve="100%")))
-    keyboard = (Control("keyboard", "NAV · Open key map", Action.OPEN_KEYMAP),)
-
-    def placed(slots: tuple[tuple[Part, ...], ...]) -> list[tuple[Part, float]]:
-        content = arrange(slots, width_of)
-        (status,) = frame([Placed(Key.STATUS, Zone.RIGHT, content.width, 34)], Metrics(1000))
-        return [(spot.part, status.box.x + spot.x) for spot in content.spots]
-
-    assert placed((keyboard, *readings))[1:] == placed(readings)
 
 
 def width_of(text: Text) -> float:

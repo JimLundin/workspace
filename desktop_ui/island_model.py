@@ -11,8 +11,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
 - Canvas leads the pinned web apps at the far left (the shell sections own that capsule).
-  One fixed capsule anchors right: the keyboard state when relevant, then
-  volume, Wi-Fi, clock and power. The system tray is in the controls menu.
+  One fixed capsule anchors right: volume, Wi-Fi, clock and power. The system tray is in the controls menu.
 - That capsule expands into the controls menu; a question or the bell's list expands the centre island.
 - Under the pointer, agent work reveals its recent steps below its phase, at the same width.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
@@ -44,7 +43,7 @@ class Zone(Enum):
     LEAD = auto()
     ISLAND = auto()
     TRAIL = auto()
-    RIGHT = auto()  # The fixed keyboard state and readings, independent of activity.
+    RIGHT = auto()  # The fixed readings, independent of activity.
 
 
 class Expansion(Enum):
@@ -64,7 +63,6 @@ class Action(Enum):
     OPEN_QUESTION = auto()
     OPEN_INBOX = auto()
     OPEN_CANVAS = auto()
-    OPEN_KEYMAP = auto()
     STOP_AGENT = auto()
     STOP_RECORDING = auto()
     OPEN_NOTICE = auto()
@@ -159,7 +157,6 @@ class Observed:
     ambient: Ambient
     system: SystemStatus
     inbox: int  # Waiting questions.
-    keyboard: str | None
     dictating: bool = field(kw_only=True)
     unread: int = field(default=0, kw_only=True)  # Notices that collapsed into the bell.
     notice: Notice | None = field(default=None, kw_only=True)  # The notice holding the island; `island_moment` decides.
@@ -193,11 +190,6 @@ def capture(recording: RecordingState) -> Capture | None:
             return None
         case _:
             assert_never(recording.phase)
-
-
-def keyboard(*, enabled: bool, layer: str | None) -> str | None:
-    """Only a temporary layer, or the layout switched off, earns a place in the fixed cluster."""
-    return "Colemak" if not enabled else layer
 
 
 PHASE: Final = 28  # The phase's characters in the island before it elides.
@@ -268,7 +260,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
     """The capsules to show, in left-to-right order, with their contents and press actions.
 
     The right-hand readings expand into the controls menu, where ongoing activities
-    become live rows, so they leave the bar; the keyboard state and the inbox stay.
+    become live rows, so they leave the bar; the inbox stays.
     A question expands the centre island instead.
     """
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
@@ -288,14 +280,8 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
-    # The readings stay the top row while their capsule expands into the menu. The
-    # keyboard state leads them: the capsule is right-anchored, so it grows leftwards
-    # and the readings after it keep their places.
-    layer: tuple[Slot, ...] = ()
-    if observed.keyboard is not None:
-        layer = ((Control("keyboard", f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),),)
+    # The readings stay the top row while their capsule expands into the menu.
     readings: tuple[Slot, ...] = (
-        *layer,
         (Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
         facts(observed.ambient),
     )

@@ -332,7 +332,6 @@ class Ui:
     def indicate(self, text: str | None, work: Rect) -> None:
         """What the layer indicator shows from now on (None: nothing), at the bottom of `work`."""
         self.post(lambda root: self._overlay(root).set(text, work))
-        self.post(lambda _: self._desktop.layer(text) if self._desktop is not None else None)
 
     def flash(self, text: str, work: Rect, seconds: float = 1.2) -> None:
         """Shows a message in the indicator for a moment."""
@@ -697,9 +696,6 @@ class Ui:
                 self._desktop.overlay_changed(enabled=enabled)
 
         self.post(display)
-
-    def desktop_layout(self, *, enabled: bool) -> None:
-        self.post(lambda _: self._desktop.layout(enabled=enabled) if self._desktop is not None else None)
 
     def desktop_chord(self, *, held: bool) -> None:
         self.post(lambda _: self._desktop.chord(held=held) if self._desktop is not None else None)
