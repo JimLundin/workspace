@@ -3,15 +3,13 @@
 from assistant.action_text import readable
 from assistant.agent_session import activity_text
 from automation.presentation import Failed, Succeeded, ToolActivity, ToolStatus
-from desktop_ui.notifications import Entry, body
 
 
 def test_action_arguments_and_results_are_readable_through_the_conversation_views() -> None:
     detail = '{"path":"C:\\\\Documents\\\\budget.xlsx","read_only":true}'
     for outcome in (ToolStatus.RUNNING, Succeeded('{"rows":24,"saved":false}'), Failed('{"error":"File unavailable"}')):
         message = ToolActivity("read", "read_file", detail, 1, outcome)
-        text = body(Entry(0, message))
-        assert text == activity_text(message)
+        text = activity_text(message)
         assert "Path: C:\\Documents\\budget.xlsx\nRead only: Yes" in text
         assert '{"' not in text and "false" not in text
         if isinstance(outcome, Succeeded):
@@ -46,7 +44,7 @@ def test_control_and_window_commands_name_the_operation_and_target() -> None:
         ("manage_window", '{"action":"snap_right","handle":42}', "Snap the selected window to the right."),
     ):
         message = ToolActivity("action", name, detail, 1)
-        assert body(Entry(0, message)) == expected
+        assert activity_text(message) == expected
 
 
 def test_empty_control_search_explains_that_nothing_matched() -> None:

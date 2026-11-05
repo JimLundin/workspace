@@ -19,7 +19,6 @@ lazy from PySide6.QtCore import Qt
 
 import automation.task
 from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
-from assistant.card_actions import OpenCanvas, parse
 from assistant.feed_origin import App
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_store import PersonalStore
@@ -70,7 +69,6 @@ from desktop_ui.components.canvas_look import surface_fill
 from desktop_ui.components.voice_legend import VoiceLegend
 from desktop_ui.icons import State
 from desktop_ui.island_model import Key
-from desktop_ui.notifications import body
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.ui import WaitCursor
@@ -84,7 +82,7 @@ from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
 from tests.test_meetings import SPEECH
-from tests.test_windows_inbox_attention import InboxUi, waiting
+from tests.test_windows_inbox_attention import InboxUi, settle_toolbar, waiting
 from tests.test_work_actions import claimed
 from tests.test_work_canvas import local_canvas, nested_bubbles, queue_nothing, seeded
 from tests.test_work_window import work_task
@@ -954,18 +952,16 @@ def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_re
         ui.dispose()
 
 
-def click_canvas_notification(ui: InboxUi) -> None:
-    card = next(card for card in ui.feed.cards.values() if card.content is not None and "Open on canvas" in body(card.content))
-    if not card.expanded:
-        card.toggle(animate=False)
+def open_question_on_canvas(ui: InboxUi) -> None:
+    """Open the waiting question from the bar, then its canvas button."""
+    ui.bar.visible = True
+    ui.bar.render()
+    ui.open_inbox()
     ui.pump()
-    assert len(card.canvas_actions) == 1
-    span, button = card.canvas_actions[0]
-    assert isinstance(parse(span.link), OpenCanvas)
-    assert button.isVisible() and not button.icon().isNull()
-    assert card.window.rect().contains(button.geometry())
-    assert card.text.document().find("Open on canvas").isNull()
-    QtTest.QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+    settle_toolbar(ui)
+    panel = ui.bar.window.capsules[Key.ISLAND].request
+    assert panel is not None and panel.canvas.isVisible() and not panel.canvas.icon().isNull()
+    QtTest.QTest.mouseClick(panel.canvas, Qt.MouseButton.LeftButton)
     ui.pump()
 
 
@@ -1023,8 +1019,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     ui.configure_work(lambda _command: None)
     work = ui.work_window()
     agent = ui.agent(lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
-    ui.pump()
-    agent.show(focus=False)
+    ui.desktop(show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None)
     ui.pump()
     resumed: list[TextAnswer] = []
 
@@ -1040,7 +1035,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         pump_until(ui, lambda: bool(store.read().activity))
         question = store.read().activity[0]
         assert isinstance(question, CanvasQuestion) and isinstance(question.request, SessionRequest)
-        click_canvas_notification(ui)
+        open_question_on_canvas(ui)
         canvas = ui.canvas_view.panel
         assert canvas.selected == question.id
         detail = canvas.detail(question.id)
@@ -1163,9 +1158,7 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         store.observe_work(snapshot)
         ui.pump()
         assert notices == [("Current question", "question:current")]
-        ui.desktop(
-            show_agent=lambda: None, show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None
-        )
+        ui.desktop(show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None)
         ui.pump()
         assert notices == [("Current question", "question:current")]
         check_late_agent_canvas_replay(ui, store)

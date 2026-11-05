@@ -23,7 +23,7 @@ from winapi.shapes import Rect
 lazy import assistant.communications
 lazy import desktop_ui.desktop_attention
 lazy import winapi.system_notices
-lazy from assistant.agent_session import AgentRequest, ChatMessage, Session, Snapshot, notice_text, pending
+lazy from assistant.agent_session import ChatMessage, Session, Snapshot, notice_text
 lazy from assistant.attention import selected_question
 lazy from assistant.card_actions import OpenCanvas
 lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed, TeamsObserved, observe
@@ -34,8 +34,7 @@ lazy from assistant.state_store import SavedState
 lazy from assistant.work_canvas_contracts import CanvasEdits, CanvasPublication
 lazy from assistant.work_commands import WorkViewCommand
 lazy from desktop_ui import island_agent, island_model
-lazy from desktop_ui.agent_progress import canvas_phases, phases
-lazy from desktop_ui.agent_toasts import AgentToasts
+lazy from desktop_ui.agent_progress import Phase, canvas_phases, hint, phases
 lazy from desktop_ui.agent_window import AgentWindow
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
@@ -44,7 +43,6 @@ lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import Indicator
 lazy from desktop_ui.navigation import Order
-lazy from desktop_ui.notifications import Entry
 lazy from desktop_ui.qt_ui import application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.vector_icons import icon
@@ -72,10 +70,6 @@ def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | No
     return DesktopBar(actions, audio_level=audio_level)
 
 
-def _native_feed_view(root: QtWidgets.QApplication, agent: AgentWindow, open_canvas: Callable[[str], None]) -> AgentToasts:
-    return AgentToasts(root, agent, open_canvas)
-
-
 def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
     return CanvasWindow(root, work, canvas)
 
@@ -85,11 +79,27 @@ class Views:
     """How Ui builds its native views; a test builds isolated ones and keeps what it built."""
 
     desktop: DesktopFactory = _native_desktop
-    feed: Callable[[QtWidgets.QApplication, AgentWindow, Callable[[str], None]], AgentToasts] = _native_feed_view
     canvas: Callable[[QtWidgets.QApplication, WorkWindow, CanvasEdits], CanvasWindow] = _native_canvas_view
 
 
 type Assess = Callable[[PendingFeed], None]
+
+
+@dataclass(frozen=True, slots=True)
+class SessionDisplay:
+    """The conversation's desktop view: the bar and canvas observe each session, and showing it opens the canvas."""
+
+    publish: Callable[[Snapshot], None]
+    reveal: Callable[[], None]
+
+    def render(self, state: Snapshot) -> None:
+        self.publish(state)
+
+    def show(self, *, focus: bool = False) -> None:
+        self.reveal()
+
+    def close(self) -> None:
+        pass
 
 
 class WaitCursor:
@@ -132,7 +142,6 @@ class Ui:
         "_poll_timer",
         "_recording",
         "_root",
-        "_show_agent",
         "_switcher",
         "_thread",
         "_views",
@@ -173,7 +182,6 @@ class Ui:
         # thread, so it connects them through configure_controls.
         self._agent_waiting: Callable[[bool], None] | None = None
         self._recording: Callable[[RecordingAction], None] | None = None
-        self._show_agent: Callable[[], None] | None = None
         self._indicator: Indicator | None = None
         """Made on first use, on the Qt thread."""
         self._keymap: KeymapWindow | None = None
@@ -197,11 +205,9 @@ class Ui:
         *,
         on_agent_waiting: Callable[[bool], None],
         on_recording: Callable[[RecordingAction], None],
-        on_show_agent: Callable[[], None],
     ) -> None:
         """Connect the application before it creates any views."""
         self._agent_waiting, self._recording = on_agent_waiting, on_recording
-        self._show_agent = on_show_agent
 
     def run(self) -> None:
         """Run and dispose Qt on the main thread, including binding-owned deletions."""
@@ -355,7 +361,6 @@ class Ui:
                     on_waiting=self._agent_waiting,
                     on_recording=self._recording,
                     on_work=on_work,
-                    on_snapshot=self.refresh_inbox,
                 )
                 self.post(self._replay_canvas)
             panel = self._agent
@@ -391,6 +396,7 @@ class Ui:
         if self._desktop is not None:
             self._desktop.agent_changed(island_agent.activity(session))
             self._desktop.requests_changed(tuple(phases(session)))
+            self._desktop.notices_changed(island_agent.notices(session))
         if self._canvas_session is not None:
             self._canvas_session(session)
 
@@ -444,8 +450,8 @@ class Ui:
         self._work_view.voice_pressed(pressed=self._agent_speaking)
         return self._work_view
 
-    def _compose_feed(self, agent: AgentWindow) -> AgentToasts:
-        return self._views.feed(self._root, agent, self.open_canvas_at)
+    def _compose_feed(self, agent: AgentWindow) -> SessionDisplay:
+        return SessionDisplay(self.refresh_inbox, agent.show_work)
 
     def configure_canvas(self, canvas: CanvasEdits, notice: Callable[[str, str], None], *, observe_session: Callable[[Snapshot], bool]) -> None:
         """Connect edit commands and a session-observation sink before rendering starts."""
@@ -483,11 +489,7 @@ class Ui:
                 self._canvas_notice(notice.title, notice.target)
 
     def open_canvas_at(self, identity: str) -> None:
-        if self._work is None:
-            if self._agent is not None:
-                self._agent.show_work()
-        else:
-            self._work.show()
+        self.show_canvas()
 
         def reveal(_: QtWidgets.QApplication) -> None:
             if self._work_view is not None:
@@ -568,60 +570,42 @@ class Ui:
                 assert_never(target)
 
     def open_inbox(self) -> None:
-        """Bell and keyboard requests share Qt-owned initialization and inbox focus."""
+        """The bell and Hold V + T list waiting questions with the agent's recent news; with neither, the canvas opens."""
 
         def reveal(_: QtWidgets.QApplication) -> None:
             with self._input_lock:
                 if self._inputs_closed:
                     return
-            waiting = self._canvas.waiting() if self._canvas is not None else ()
-            session = self._agent.snapshot() if self._agent is not None else Session()
-            choices = tuple(phases(session))
-            request = next(
-                (
-                    phase
-                    for phase in choices
-                    if any(
-                        isinstance(entry, Entry) and isinstance(entry.message, AgentRequest) and pending(entry.message)
-                        for entry in phase.turn.entries
-                    )
-                ),
-                None,
-            )
-            if request is None and waiting and self._canvas_published is not None:
-                question = waiting[0]
-                preview = Session(
-                    attention=self._canvas_published.attention,
-                    messages=(
-                        ChatMessage(
-                            "Workspace",
-                            notice_text(question.title, question.id),
-                            question.created_at,
-                            FeedRequest("canvas:" + question.id, question.title),
-                        ),
-                    ),
-                )
-                request = next(canvas_phases(preview), None)
-            if request is not None:
-                if self._desktop is not None:
-                    self._desktop.open_request(request)
-                elif self._agent is not None:
-                    self._agent.show()
-                return
-            target = desktop_ui.desktop_attention.inbox_target(waiting, work_open=self._work is not None)
-            match target:
-                case desktop_ui.desktop_attention.OpenQuestion():
-                    pass
-                case desktop_ui.desktop_attention.Inbox.WORK:
-                    if self._work is not None:
-                        self._work.show()
-                case desktop_ui.desktop_attention.Inbox.CONVERSATION:
-                    if self._show_agent is not None:
-                        self._show_agent()
-                case _:
-                    assert_never(target)
+            if self._desktop is None or not self._desktop.open_inbox(self.questions()):
+                self.show_canvas()
 
         self.post(reveal)
+
+    def questions(self) -> tuple[Phase, ...]:
+        """The session's own waiting questions, then the canvas's others as previews of their context."""
+        session = self._agent.snapshot() if self._agent is not None else Session()
+        asked = tuple(phase for phase in phases(session) if hint(phase.turn))
+        published = self._canvas_published
+        if published is None:
+            return asked
+        routes = frozenset(phase.request for phase in asked)
+        preview = Session(
+            attention=published.attention,
+            messages=tuple(
+                ChatMessage(
+                    "Workspace", notice_text(question.title, question.id), question.created_at, FeedRequest("canvas:" + question.id, question.title)
+                )
+                for question in published.waiting
+                if question.request not in routes
+            ),
+        )
+        return (*asked, *canvas_phases(preview))
+
+    def show_canvas(self) -> None:
+        if self._work is not None:
+            self._work.show()
+        elif self._agent is not None:
+            self._agent.show_work()
 
     def request_action(self, action: OpenCanvas) -> None:
         if self._desktop is not None:
@@ -637,7 +621,6 @@ class Ui:
     def desktop(  # noqa: PLR0913 - one callback per window event
         self,
         *,
-        show_agent: Callable[[], None],
         show_work: Callable[[], None],
         stop: Callable[[], None],
         overlay: Callable[[], None],
@@ -656,7 +639,6 @@ class Ui:
                 return
             try:
                 actions = BarActions(
-                    show_agent,
                     show_work,
                     stop,
                     self._recording or (lambda _: None),
@@ -667,6 +649,7 @@ class Ui:
                     tool or (lambda _tool, _hwnd: None),
                     self.system_notices,
                     inbox=self.open_inbox,
+                    open_item=self.open_canvas_at,
                     requests=RequestActions(self.request_action, self.select_request),
                 )
                 self._desktop = self._views.desktop(actions, audio_level=audio_level)

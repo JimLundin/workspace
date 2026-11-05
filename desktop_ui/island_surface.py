@@ -29,10 +29,13 @@ from desktop_ui.components.meaning import Tint, Tone
 from desktop_ui.components.text import color
 from desktop_ui.island_layout import (
     HEIGHT,
+    LINE,
+    LINES_TOP,
     MENU_HEAD,
     MENU_PAD,
     MENU_RADIUS,
     MENU_WIDTH,
+    TEXT_PAD,
     WAVE_BARS,
     Content,
     Framed,
@@ -43,9 +46,10 @@ from desktop_ui.island_layout import (
 )
 from desktop_ui.island_menu import Face, Item, Live, Menu, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
+from desktop_ui.island_moment import Inbox, Row
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
-from desktop_ui.request_panel import RequestActions, RequestPanel
+from desktop_ui.request_panel import InboxPanel, RequestActions, RequestPanel, list_height
 from desktop_ui.shell_surface import ShellSections, pixmap
 from desktop_ui.vector_icons import icon
 from desktop_ui.view_publication import log_view
@@ -77,6 +81,7 @@ class Owner(Protocol):
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
     def request_actions(self) -> RequestActions | None: ...
+    def choose(self, row: Row) -> None: ...
     def render(self) -> None: ...
 
 
@@ -101,11 +106,10 @@ class Presented:
 
     drawn: tuple[Drawn, ...]
     height: float
-    menu: Menu | None
+    opened: Menu | Phase | Inbox | None
     frost: Frost = field(kw_only=True)
     contrast: bool = field(kw_only=True)
     glass: bool = field(kw_only=True)
-    request: Phase | None = None
     shell_look: Look = field(kw_only=True)
 
 
@@ -504,6 +508,7 @@ class Capsule(KeyboardFocus):
         self.controls: tuple[ControlButton, ...] = ()
         self.cells: tuple[MenuCell, ...] = ()
         self.request: RequestPanel | None = None
+        self.inbox: InboxPanel | None = None
         self.placed: tuple[QtCore.QRect, float, float, Content, tuple[Tile, ...]] | None = None
         self.stills: frozendict[tuple[Content, Look, bool, float], QtGui.QPixmap] = frozendict()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -549,18 +554,28 @@ class Capsule(KeyboardFocus):
             cell.update_tile(tile)
             cell.update()
 
-    def show_request(self, phase: Phase | None) -> None:
-        if phase is None:
-            if self.request is not None:
-                self.request.hide()
-            return
-        actions = self.window_.owner.request_actions()
-        if actions is None:
-            return
-        if self.request is None:
-            self.request = RequestPanel(self, actions)
-        self.request.present(phase, self.look)
-        self.request.show()
+    def show_opened(self, opened: Phase | Inbox | None) -> None:
+        """The island's request or list, while the capsule is expanded for it."""
+        if not isinstance(opened, Phase) and self.request is not None:
+            self.request.hide()
+        if not isinstance(opened, Inbox) and self.inbox is not None:
+            self.inbox.hide()
+        match opened:
+            case Phase():
+                actions = self.window_.owner.request_actions()
+                if actions is None:
+                    return
+                if self.request is None:
+                    self.request = RequestPanel(self, actions)
+                self.request.present(opened, self.look)
+                self.request.show()
+            case Inbox(rows=rows):
+                if self.inbox is None:
+                    self.inbox = InboxPanel(self, self.window_.owner.choose)
+                self.inbox.present(rows, self.look)
+                self.inbox.show()
+            case None:
+                pass
 
     def place_cells(self) -> None:
         left = (self.width() - MENU_WIDTH) / 2
@@ -589,6 +604,14 @@ class Capsule(KeyboardFocus):
         self.setGeometry(geometry)
         self.place_controls()
         self.place_cells()
+        if self.inbox is not None and self.inbox.isVisible():
+            self.inbox.setGeometry(
+                round((self.width() - desktop_ui.request_panel.WIDTH) / 2),
+                TOP + MENU_HEAD,
+                desktop_ui.request_panel.WIDTH,
+                max(0, self.height() - TOP - MENU_HEAD),
+            )
+            self.inbox.setEnabled(self.width() >= desktop_ui.request_panel.WIDTH - 1)
         if self.request is not None and self.request.isVisible():
             self.request.setGeometry(
                 round((self.width() - desktop_ui.request_panel.WIDTH) / 2),
@@ -681,7 +704,7 @@ class Capsule(KeyboardFocus):
         if cached is not None:
             return cached
         scale = self.devicePixelRatioF()
-        image = QtGui.QPixmap(max(1, math.ceil(content.width * scale)), math.ceil((TOP + HEIGHT) * scale))
+        image = QtGui.QPixmap(max(1, math.ceil(content.width * scale)), math.ceil((TOP + max(HEIGHT, content.height)) * scale))
         image.setDevicePixelRatio(scale)
         image.fill(Qt.GlobalColor.transparent)
         painter = QtGui.QPainter(image)
@@ -691,6 +714,11 @@ class Capsule(KeyboardFocus):
             if not animated(spot.part):
                 self.paint_part(painter, spot, previous, TOP + HEIGHT / 2)
             previous = spot
+        painter.setFont(font(strong=False))
+        painter.setPen(color(self.look.lettering.quiet))
+        for index, text in enumerate(content.lines):
+            row = QtCore.QRectF(TEXT_PAD, TOP + LINES_TOP + index * LINE, content.width - 2 * TEXT_PAD, LINE)
+            painter.drawText(row, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
         painter.end()
         # Only the content showing now and the content fading out are kept.
         kept = {(c, self.look, self.contrast, scale) for c in (self.content, self.previous) if c is not None}
@@ -781,6 +809,7 @@ class BarWindow(QtWidgets.QWidget):
         self.owner = owner
         self.menu: Menu | None = None
         self.request: Phase | None = None
+        self.inbox: Inbox | None = None
         self.request_measurement: RequestPanel | None = None
         self.look: Look = look(Material.SOLID, appearance.Capsule(Frost.SMOKED), Tint.NONE)
         self.capsules: Mapping[Key, Capsule] = frozendict()
@@ -855,7 +884,7 @@ class BarWindow(QtWidgets.QWidget):
         def width(text: Text) -> float:
             return math.ceil(QtGui.QFontMetricsF(font(strong=text.strong)).horizontalAdvance(text.text))
 
-        return arrange(view.slots, width)
+        return arrange(view.slots, width, view.detail)
 
     def measure_request(self, phase: Phase) -> Content:
         actions = self.owner.request_actions()
@@ -865,6 +894,9 @@ class BarWindow(QtWidgets.QWidget):
             self.request_measurement = RequestPanel(self, actions)
             self.request_measurement.hide()
         return Content(desktop_ui.request_panel.WIDTH, (), MENU_HEAD + self.request_measurement.measure(phase))
+
+    def measure_inbox(self, rows: tuple[Row, ...]) -> Content:
+        return Content(desktop_ui.request_panel.WIDTH, (), MENU_HEAD + list_height(rows))
 
     def capsule(self, key: Key) -> Capsule:
         existing = self.capsules.get(key)
@@ -893,16 +925,18 @@ class BarWindow(QtWidgets.QWidget):
         height = TOP + math.ceil(presented.height)
         if self.geometry() != QtCore.QRect(area.x(), area.y(), area.width(), height):
             self.setGeometry(area.x(), area.y(), area.width(), height)
-        self.menu = presented.menu
-        self.request = presented.request
+        opened = presented.opened
+        self.menu = opened if isinstance(opened, Menu) else None
+        self.request = opened if isinstance(opened, Phase) else None
+        self.inbox = opened if isinstance(opened, Inbox) else None
         keys = frozenset(each.view.key for each in presented.drawn)
         for each in presented.drawn:
             capsule = self.capsule(each.view.key)
             capsule.show_view(each, contrast=presented.contrast)
             if each.view.key is Key.STATUS:
-                capsule.show_menu(presented.menu if each.content.height > HEIGHT else None)
+                capsule.show_menu(self.menu if each.content.height > HEIGHT else None)
             if each.view.key is Key.ISLAND:
-                capsule.show_request(presented.request if each.content.height > HEIGHT else None)
+                capsule.show_opened((self.request or self.inbox) if each.content.height > HEIGHT else None)
             capsule.frame(each.framed)
             capsule.show()
         for key, capsule in self.capsules.items():
@@ -964,7 +998,7 @@ class BarWindow(QtWidgets.QWidget):
             Qt.Key.Key_Space: island_menu.Key.ENTER,
             Qt.Key.Key_Escape: island_menu.Key.ESCAPE,
         }
-        if self.request is not None and event.key() == Qt.Key.Key_Escape:
+        if (self.request is not None or self.inbox is not None) and event.key() == Qt.Key.Key_Escape:
             self.owner.press(Action.CLOSE_MENU)
             return
         if self.menu is None:
@@ -984,11 +1018,11 @@ class BarWindow(QtWidgets.QWidget):
         if event.type() is QtCore.QEvent.Type.ActivationChange:
             if self.isActiveWindow():
                 self.deactivation_timer.stop()
-            elif (self.menu is not None or self.request is not None) and not self.deactivation_timer.isActive():
+            elif (self.menu is not None or self.request is not None or self.inbox is not None) and not self.deactivation_timer.isActive():
                 self.deactivation_timer.start(16)
 
     def dismiss_inactive(self) -> None:
-        if (self.menu is not None or self.request is not None) and not self.isActiveWindow():
+        if (self.menu is not None or self.request is not None or self.inbox is not None) and not self.isActiveWindow():
             self.owner.deactivated()
 
     def bounds(self, key: Key) -> Rect | None:

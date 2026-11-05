@@ -12,6 +12,7 @@ from desktop_ui.island_model import (
     CapsuleView,
     Capture,
     Control,
+    Detail,
     Expansion,
     Glyph,
     Job,
@@ -25,6 +26,7 @@ from desktop_ui.island_model import (
     island,
     keyboard,
 )
+from desktop_ui.island_moment import Notice
 from winapi.machine_status import Battery, Speakers, Wifi
 
 RESTING = Observed(
@@ -154,3 +156,38 @@ def test_recording_phases_read_and_stop_as_capture_allows() -> None:
     assert capture(RecordingState(phase="finishing")) == Capture("Saving…", can_stop=False, attention=False)
     assert capture(RecordingState(phase="paused")) == Capture("Check recording", can_stop=False, attention=True)
     assert capture(RecordingState(phase="saved", seconds=900)) is None
+
+
+FINDING = Notice("canvas:result:budget:5", "Budget checked", "Approved totals match the forecast.", "result:budget", 5)
+
+
+def test_a_notice_takes_the_island_with_its_reply_and_detaches_running_work() -> None:
+    # Defects: the notice loses its text, its press doesn't open the item, work
+    # vanishes instead of detaching, or a question's notice isn't tinted.
+    observed = replace(RESTING, agent=WORKING, recording=RECORDING, notice=FINDING)
+    views = island(observed)
+    assert [each.key for each in views if each.zone in (Zone.LEAD, Zone.ISLAND, Zone.TRAIL)] == [Key.AGENT, Key.ISLAND, Key.RECORDING]
+    notice = view(observed, Key.ISLAND)
+    assert notice.slots == ((Glyph("agent"), Text("Budget checked", strong=True)), ())
+    assert notice.detail == Detail(("Approved totals match the forecast.",), 2, 340)
+    assert (notice.action, notice.tint) == (Action.OPEN_NOTICE, Tint.NONE)
+    assert view(observed, Key.ISLAND, hovered=Key.ISLAND).slots[-1] == (Control("close", "Dismiss", Action.DISMISS_NOTICE),)
+    question = replace(FINDING, question=True)
+    assert view(replace(RESTING, notice=question), Key.ISLAND).tint is Tint.ATTENTION
+
+
+def test_agent_work_reveals_its_earlier_steps_only_under_the_pointer() -> None:
+    # Defect: the steps show at rest, or hovering widens the capsule beside its neighbours.
+    working = replace(RESTING, agent=replace(WORKING, steps=("PowerShell", "Reading budget.xlsx")))
+    assert view(working, Key.ISLAND).detail is None
+    hovered = view(working, Key.ISLAND, hovered=Key.ISLAND)
+    assert hovered.detail == Detail(("PowerShell", "Reading budget.xlsx"), 1)
+    assert hovered.slots == view(working, Key.ISLAND).slots
+
+
+def test_the_bell_counts_questions_and_unread_notices_and_names_each() -> None:
+    # Defects: unread notices don't reach the bell, or its label misstates what waits.
+    bell = view(replace(RESTING, inbox=1, unread=2), Key.INBOX)
+    assert bell.slots == ((Glyph("bell"), Badge("3")),)
+    assert bell.label == "1 clarification needs your input · 2 new from the agent · Open inbox · Hold V + T"
+    assert view(replace(RESTING, unread=1), Key.INBOX).label == "1 new from the agent · Open inbox · Hold V + T"

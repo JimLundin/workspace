@@ -1,7 +1,7 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
-from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
-from desktop_ui.island_model import Action, Badge, Control, Glyph, Key, Marker, Spinner, Text, Zone
+from desktop_ui.island_layout import LINE, LINES_BOTTOM, LINES_TOP, Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap, wrap
+from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Spinner, Text, Zone
 
 
 def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:
@@ -108,3 +108,26 @@ def test_content_narrower_than_a_circle_centres_in_one() -> None:
     # Defect: a lone marker collapses the capsule below its height, losing its round shape.
     content = arrange(((Marker.DOT,),), width_of)
     assert content.width == 34 and content.spots == (Spot(Marker.DOT, 13, 8),)
+
+
+def test_wrapping_fills_lines_and_ends_overflow_with_an_ellipsis() -> None:
+    # Defects: a line overflows the capsule, words go missing between lines, or
+    # text that doesn't fit is cut without a sign that more is on the canvas.
+    assert wrap("Revenue is up four percent", 12, 2, len) == ("Revenue is", "up four…")
+    assert wrap("Revenue is up", 12, 2, len) == ("Revenue is", "up")
+    assert wrap("Unbreakablewordhere", 8, 1, len) == ("Unbreak…",)
+    assert wrap("   ", 12, 2, len) == ()
+
+
+def test_detail_lines_sit_under_the_row_and_a_wider_detail_keeps_dismiss_at_the_far_edge() -> None:
+    # Defects: detail changes the row's own layout, grows the capsule without its
+    # lines, or leaves Dismiss beside the title instead of at the trailing edge.
+    dismiss = Control("close", "Dismiss", Action.DISMISS_NOTICE)
+    row = ((Glyph("agent"), Text("Budget")), (dismiss,))
+    content = arrange(row, width_of, Detail(("Approved totals match",), 2, 200))
+    assert content.width == 200 and content.lines == ("Approved totals match",)
+    assert content.height == LINES_TOP + LINE + LINES_BOTTOM
+    assert [spot.x for spot in content.spots] == [12, 34, 200 - 31]
+    steps = arrange(((Spinner("Agent"), Text("Reading budget")),), width_of, Detail(("PowerShell", "Comparing both sheets in detail"), 1))
+    assert steps.width == arrange(((Spinner("Agent"), Text("Reading budget")),), width_of).width
+    assert len(steps.lines) == 2 and steps.lines[1].endswith("…")

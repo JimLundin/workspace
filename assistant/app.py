@@ -211,7 +211,6 @@ class AssistantApp:
         self.ui.configure_controls(
             on_agent_waiting=lambda waiting: self.show(State.NEEDS_INPUT if waiting else State.AGENT),
             on_recording=self.recording_action,
-            on_show_agent=self.show_agent,
         )
         self.overlay = OverlayState(enabled=load_enabled())
         self.ui.desktop_overlay(enabled=self.overlay.enabled)
@@ -340,7 +339,6 @@ class AssistantApp:
         """Queue restored runs only after their personal-work title owner exists."""
         if self.settings.api_key and self.settings.base_url:
             # Recover only the crash window between binding and task commit.
-            # Existing task prompts may have been redirected by the user.
             for run in self.canvas.read().runs:
                 match run:
                     case CanvasRun(intent=CanvasInstruction()) | CanvasRun(evidence=str()) if tasks.get(run.task_id) is None:
@@ -373,7 +371,6 @@ class AssistantApp:
             work.publish(replace(self.agent.snapshot(), personal=self.personal.snapshot()))
             work.prepare()
             self.ui.desktop(
-                show_agent=self.agent.show,
                 show_work=self.show_work,
                 stop=lambda: self.choose_tool(Tool.STOP, 0),
                 overlay=self.toggle_overlay,

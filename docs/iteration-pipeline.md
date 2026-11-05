@@ -34,9 +34,9 @@ For feedback on save, install the development watcher once:
 
 `watch` reruns affected tests, including native tests, in fresh processes after
 each debounced save. `--source-only` leaves native modules out of automatic
-selection. `preview` restarts real toolbar and feed widgets with sample data and
-inert actions; it starts no keeper, microphone, keyboard observer or live
-communications. `--preview toolbar` or `--preview feed` narrows it.
+selection. `preview` restarts the real toolbar with sample data and inert
+actions after each save; it starts no keeper, microphone, keyboard observer or
+live communications. `watch --preview` runs the same preview beside the tests.
 
 ## What `Dev.cmd check` does
 

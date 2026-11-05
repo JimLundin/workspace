@@ -28,13 +28,13 @@ def inert() -> BarActions:
     return BarActions(
         lambda: None,
         lambda: None,
-        lambda: None,
         lambda action: None,
         lambda: None,
         lambda: None,
         lambda: None,
         lambda message: None,
         inbox=lambda: None,
+        open_item=lambda _: None,
     )
 
 

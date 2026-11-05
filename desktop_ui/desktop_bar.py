@@ -26,8 +26,8 @@ lazy import winapi.ambient
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from config import DARK_WHEN_IDLE_MINUTES
-lazy from desktop_ui import island_menu
-lazy from desktop_ui.agent_progress import Phase, coalesced, stable_phases
+lazy from desktop_ui import island_menu, island_moment
+lazy from desktop_ui.agent_progress import Phase, coalesced, hint, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
 lazy from desktop_ui.application_observer import EMPTY_ARRANGEMENT, ApplicationObserver, Arrangement
 lazy from desktop_ui.audio_meter import AudioMeter
@@ -36,7 +36,7 @@ lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.desktop_pager import Swipe, pager, swipe
-lazy from desktop_ui.island_layout import HEIGHT, Metrics, expansion, frame, snap
+lazy from desktop_ui.island_layout import HEIGHT, Content, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import (
     Applied,
     Chosen,
@@ -52,6 +52,7 @@ lazy from desktop_ui.island_menu import (
     restores_focus,
 )
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, keyboard
+lazy from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.navigation import BarScroll, CycleApp, Order, Placing, ShowWindow, Source
@@ -73,7 +74,6 @@ prepare()
 
 @dataclass(frozen=True, slots=True)
 class BarActions:
-    agent: Callable[[], None]
     work: Callable[[], None]
     stop: Callable[[], None]
     record: Callable[[RecordingAction], None]
@@ -82,6 +82,7 @@ class BarActions:
     menu: Callable[[], None]
     problem: Callable[[str], None]
     inbox: Callable[[], None] = field(kw_only=True)
+    open_item: Callable[[str], None] = field(kw_only=True)  # The canvas, at one of its items.
     tool: Callable[[Tool, int], None] = lambda tool, hwnd: None
     notices: Callable[[system_notices.Observed], None] = lambda _: None
     requests: RequestActions | None = field(default=None, kw_only=True)
@@ -117,13 +118,13 @@ class DesktopBar:
         "audio_timer",
         "automatic_recording",
         "away_screens",
+        "choices",
         "chord_held",
         "closed",
         "controls",
         "current_layer",
         "dictating",
         "errors",
-        "expanded",
         "frost",
         "hovered",
         "inbox",
@@ -137,15 +138,16 @@ class DesktopBar:
         "motion",
         "next_material",
         "next_power",
+        "notices",
         "notification_access",
         "notification_observation",
         "notification_service",
         "observations",
+        "opened",
         "overlay_enabled",
         "power",
         "preference",
         "recording",
-        "request",
         "resolution",
         "sample_bounds",
         "sampled_at",
@@ -190,10 +192,11 @@ class DesktopBar:
         self.current_layer: str | None = None
         self.chord_held = False
         self.inbox = 0
+        self.notices = Notices()
+        self.choices: tuple[Phase, ...] = ()  # The session's phases, for a question opened from the island.
         self.hovered: Key | None = None
-        # The open menu, and the window that had the keyboard before it opened.
-        self.expanded: Menu | None = None
-        self.request: Phase | None = None
+        # What the person opened, and the window that had the keyboard before it opened.
+        self.opened: Menu | Phase | Inbox | None = None
         self.menu_target = 0
         self.views: tuple[CapsuleView, ...] = ()
         # Reassigned each frame; the bar mutates no motion or view record.
@@ -344,8 +347,19 @@ class DesktopBar:
                 self.close_menu(restore=True)
             case Action.STOP_DICTATION | Action.STOP_AGENT:
                 self.actions.stop()
-            case Action.OPEN_QUESTION | Action.OPEN_INBOX:
+            case Action.OPEN_QUESTION:
+                self.open_question()
+            case Action.OPEN_INBOX:
                 self.actions.inbox()
+            case Action.OPEN_NOTICE:
+                notice = island_moment.shown(self.notices)
+                if notice is not None:
+                    self.choose(notice)
+            case Action.DISMISS_NOTICE:
+                notice = island_moment.shown(self.notices)
+                if notice is not None:
+                    self.notices = island_moment.read(self.notices, frozenset({notice.identity}))
+                    self.render()
             case Action.OPEN_CANVAS:
                 self.actions.work()
             case Action.OPEN_KEYMAP:
@@ -358,6 +372,7 @@ class DesktopBar:
     def hover(self, key: Key | None) -> None:
         if self.hovered is not key:
             self.hovered = key
+            self.notices = island_moment.hover(self.notices, inside=key is Key.ISLAND, now=self.observations.clock())
             self.render()
 
     def menu(self) -> Menu:
@@ -380,59 +395,97 @@ class DesktopBar:
                 )
             )
         )
-        if self.expanded is None:
+        if not isinstance(self.opened, Menu):
             return menu
-        return replace(menu, selected=self.expanded.selected)
+        return replace(menu, selected=self.opened.selected)
 
     def request_actions(self) -> RequestActions | None:
         return self.actions.requests
 
     def requests_changed(self, choices: tuple[Phase, ...]) -> None:
-        choices = tuple(coalesced(stable_phases(choices, (self.request,) if self.request is not None else ())))
-        if self.request is not None:
-            current = next((phase for phase in choices if phase.key == self.request.key), None)
+        request = self.opened if isinstance(self.opened, Phase) else None
+        choices = tuple(coalesced(stable_phases(choices, (request,) if request is not None else ())))
+        self.choices = choices
+        if request is not None:
+            current = next((phase for phase in choices if phase.key == request.key), None)
             if current is None:
                 self.close_menu(restore=False)
-            elif current != self.request:
-                self.request = current
+            elif current != request:
+                self.opened = current
                 if self.actions.requests is not None:
                     self.actions.requests.select(current.request)
+                self.render()
+
+    def notices_changed(self, current: tuple[Notice, ...]) -> None:
+        self.notices = island_moment.observe(self.notices, current, self.observations.clock())
+        self.render()
+
+    def open_question(self) -> None:
+        """ "Needs you" opens the session's own waiting question, wherever else the bell has news."""
+        phase = next((phase for phase in self.choices if hint(phase.turn)), None)
+        if phase is not None:
+            self.open_request(phase)
+        else:
+            self.actions.inbox()
+
+    def open_inbox(self, questions: tuple[Phase, ...]) -> bool:
+        """The bell's list, or straight to the one question when nothing else waits; False with nothing to show."""
+        listed = island_moment.rows(questions, self.notices)
+        match listed:
+            case ():
+                return False
+            case (Asked(phase=phase),):
+                self.open_request(phase)
+            case _:
+                self.notices = island_moment.read(self.notices, frozenset(row.identity for row in listed if isinstance(row, Notice)))
+                self.expand(Inbox(listed))
+        return True
+
+    def choose(self, row: Row) -> None:
+        """A question opens in the island; a notice opens its canvas item and counts as read."""
+        match row:
+            case Asked(phase=phase):
+                self.open_request(phase)
+            case Notice(identity=identity, target=target):
+                self.notices = island_moment.read(self.notices, frozenset({identity}))
+                self.close_menu(restore=False)
+                if target is not None:
+                    self.actions.open_item(target)
+                else:
+                    self.actions.work()
                 self.render()
 
     def open_request(self, phase: Phase) -> None:
         if self.closed:
             return
-        self.menu_target = self.observations.foreground()
-        self.expanded = None
-        self.request = phase
+        self.expand(phase)
         actions = self.actions.requests
         if actions is not None:
             actions.select(phase.request)
-        windows.allow_activation(int(self.window.winId()), allowed=True)
-        self.window.activateWindow()
-        self.window.setFocus()
-        self.render()
 
     def open_menu(self) -> None:
         """The island expands into the menu and takes the keyboard from the window that had it."""
         if self.closed:
             return
-        self.menu_target = self.observations.foreground()
-        self.request = None
         if self.actions.requests is not None:
             self.actions.requests.select(None)
-        self.expanded = self.menu()
-        handle = int(self.window.winId())
-        windows.allow_activation(handle, allowed=True)
+        self.opened = None
+        self.expand(self.menu())
+
+    def expand(self, opened: Menu | Phase | Inbox) -> None:
+        """Take the keyboard from the window that had it, then morph open."""
+        if self.opened is None:
+            self.menu_target = self.observations.foreground()
+        self.opened = opened
+        windows.allow_activation(int(self.window.winId()), allowed=True)
         self.window.activateWindow()
         self.window.setFocus()
         self.render()
 
     def close_menu(self, *, restore: bool) -> None:
-        if self.expanded is None and self.request is None:
+        if self.opened is None:
             return
-        self.expanded = None
-        self.request = None
+        self.opened = None
         if self.actions.requests is not None:
             self.actions.requests.select(None)
         windows.allow_activation(int(self.window.winId()), allowed=False)
@@ -441,17 +494,17 @@ class DesktopBar:
             self.observations.focus(self.menu_target)
 
     def select(self, index: int) -> None:
-        if self.expanded is not None and self.expanded.selected != index:
-            self.expanded = replace(self.expanded, selected=index)
+        if isinstance(self.opened, Menu) and self.opened.selected != index:
+            self.opened = replace(self.opened, selected=index)
             self.render()
 
     def pick(self, index: int) -> None:
-        if self.expanded is not None:
-            self.settle_menu(island_menu.choose(self.expanded, self.expanded.cells[index].entry))
+        if isinstance(self.opened, Menu):
+            self.settle_menu(island_menu.choose(self.opened, self.opened.cells[index].entry))
 
     def key(self, press: island_menu.Press) -> None:
-        if self.expanded is not None:
-            self.settle_menu(island_menu.press(self.expanded, press))
+        if isinstance(self.opened, Menu):
+            self.settle_menu(island_menu.press(self.opened, press))
 
     def deactivated(self) -> None:
         """Another window took the keyboard: the menu closes without taking it back."""
@@ -460,7 +513,7 @@ class DesktopBar:
     def settle_menu(self, outcome: island_menu.Outcome) -> None:
         match outcome:
             case Menu() as menu:
-                self.expanded = menu
+                self.opened = menu
                 self.render()
             case Chosen(choice=choice):
                 self.close_menu(restore=restores_focus(choice))
@@ -479,8 +532,6 @@ class DesktopBar:
                 self.actions.tool(tool, self.menu_target)
             case Command.CANVAS:
                 self.actions.work()
-            case Command.FEED:
-                self.actions.agent()
             case Command.RECORD:
                 self.actions.record("start")
             case Command.STOP_RECORDING:
@@ -566,6 +617,8 @@ class DesktopBar:
         self.render()
 
     def observed(self) -> Observed:
+        asking = self.agent is not None and self.agent.waiting
+        moment = island_moment.moment(dictating=self.dictating, asking=asking, notices=self.notices)
         return Observed(
             self.agent,
             self.job,
@@ -575,29 +628,45 @@ class DesktopBar:
             self.inbox,
             keyboard(enabled=self.layout_enabled, layer=self.current_layer),
             dictating=self.dictating,
+            unread=island_moment.unread(self.notices),
+            notice=moment if isinstance(moment, Notice) else None,
         )
+
+    def measure(self, view: CapsuleView, opened: Menu | Phase | Inbox | None) -> Content:
+        match opened:
+            case Phase() if view.key is Key.ISLAND:
+                return self.window.measure_request(opened)
+            case Inbox(rows=rows) if view.key is Key.ISLAND:
+                return self.window.measure_inbox(rows)
+            case Menu() if view.key is Key.STATUS:
+                return expansion(opened, self.window.measure(view))
+            case _:
+                return self.window.measure(view)
 
     def render(self) -> None:
         """Retarget the capsules at what the bar should show now; frames carry them there."""
         if self.closed:
             return
-        if self.expanded is not None:
-            self.expanded = self.menu()
-        menu = self.expanded
-        request = self.request
-        opened = Expansion.MENU if menu is not None else Expansion.REQUEST if request is not None else None
-        self.views = island(self.observed(), hovered=self.hovered, expanded=opened)
-        shown = tuple(
-            Shown(
-                view,
-                self.window.measure_request(request)
-                if request is not None and view.key is Key.ISLAND
-                else expansion(menu, self.window.measure(view))
-                if menu is not None and view.key is Key.STATUS
-                else self.window.measure(view),
-            )
-            for view in self.views
-        )
+        if isinstance(self.opened, Menu):
+            self.opened = self.menu()
+        # A notice waits while dictation, a question or anything the person opened holds the island.
+        asking = self.agent is not None and self.agent.waiting
+        blocked = self.dictating or asking or self.opened is not None
+        self.notices = island_moment.advance(self.notices, blocked=blocked, now=self.observations.clock())
+        opened = self.opened
+        match opened:
+            case Menu():
+                expanded: Expansion | None = Expansion.MENU
+            case Phase():
+                expanded = Expansion.REQUEST
+            case Inbox():
+                expanded = Expansion.INBOX
+            case None:
+                expanded = None
+            case _:
+                assert_never(opened)
+        self.views = island(self.observed(), hovered=self.hovered, expanded=expanded)
+        shown = tuple(Shown(view, self.measure(view, opened)) for view in self.views)
         self.motion = retarget(self.motion, shown, animate=self.visible and self.observations.motion())
         listening = self.dictating
         if listening and not self.audio_timer.isActive():
@@ -642,16 +711,15 @@ class DesktopBar:
             Presented(
                 drawn,
                 reach,
-                self.expanded,
+                self.opened,
                 frost=self.frost,
                 contrast=contrast,
                 glass=self.preference is appearance.Material.GLASS,
-                request=self.request,
                 shell_look=self.style(Tint.NONE, HEIGHT),
             )
         )
         # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
-        if self.tray_host is not None and self.expanded is not None:
+        if self.tray_host is not None and isinstance(self.opened, Menu):
             self.tray_host.locate(self.window.tray_locations())
 
     def style(self, tint: Tint, height: float) -> Look:
@@ -666,7 +734,7 @@ class DesktopBar:
                 case _:
                     return False
 
-        menu_spinner = self.expanded is not None and self.agent is not None and not self.agent.waiting
+        menu_spinner = isinstance(self.opened, Menu) and self.agent is not None and not self.agent.waiting
         return menu_spinner or any(spinner(part) for view in self.views for slot in view.slots for part in slot)
 
     def paint_frames(self) -> None:
@@ -677,7 +745,7 @@ class DesktopBar:
         elapsed = now - (self.last_frame if self.last_frame is not None else now)
         self.motion = advance(self.motion, elapsed) if animate else finish(self.motion)
         spinning = animate and self.spinning()
-        waving = animate and self.dictating and self.expanded is None
+        waving = animate and self.dictating and self.opened is None
         self.window.wave_progress = min(1.0, max(0.0, (now - self.sampled_at) / 0.05)) if waving and self.sampled_at is not None else 1.0
         self.window.spin_angle = (90 - now * 300) % 360 if spinning else 90.0
         self.draw()

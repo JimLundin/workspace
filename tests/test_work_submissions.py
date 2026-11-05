@@ -13,7 +13,7 @@ from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import Excerpt
 from assistant.notification_agent import NotificationAgent
 from automation.task import Blocked, Completed, FeedHandoff, Question, RequestKind, RequestSource, TaskStatus, TextAnswer, Waiting
-from desktop_ui.agent_progress import Progress, advance_progress, visible
+from desktop_ui.island_agent import notices
 from tests.feed_source_fixture import captured
 from tests.test_external_input import has_pending_input
 from tests.test_work_agent import RecordingBridge, WorkRig, invocation
@@ -21,7 +21,7 @@ from tests.work_fixture import seed_tasks
 
 
 def test_automatic_notification_work_and_failures_stay_quiet_in_the_live_feed(tmp_path: Path) -> None:
-    # Defect: an admitted automatic source opens progress/error desktop cards
+    # Defect: an admitted automatic source announces progress or errors on the desktop
     # despite no requested user action, while its saved failure should remain reviewable.
     source = captured("fyi", Excerpt("Routine status", "Review the context.", 10))
     rig = WorkRig(tmp_path)
@@ -29,15 +29,14 @@ def test_automatic_notification_work_and_failures_stay_quiet_in_the_live_feed(tm
         notifications = NotificationAgent(rig.agent.submit_identified, threading.Event())
         assert notifications.activate((source,))
         rig.refresh()
-        progress = advance_progress(Progress(), rig.panel.snapshot(), 100)
-        assert not visible(progress, 5).toasts
+        assert notices(rig.panel.snapshot()) == ()
         claim = rig.tasks.claim("worker-one", "notification-run", at=rig.clock())
         assert claim is not None
         rig.tasks.finish(claim.run, Waiting(Blocked("Browser evidence is temporarily unavailable.")), at=rig.clock())
         snapshot = rig.refresh()
         assert isinstance(snapshot.tasks[0].state, Waiting)
         assert rig.panel.snapshot().result == "Ready"
-        assert not visible(advance_progress(progress, rig.panel.snapshot(), 101), 5).toasts
+        assert notices(rig.panel.snapshot()) == ()
     finally:
         rig.close()
 
@@ -383,11 +382,7 @@ def test_ordinary_unconfirmed_submission_requires_its_original_prompt_and_conver
             prompt = "A different request" if mismatch == "prompt" else "The unconfirmed ordinary request"
             rig.tasks.submit(identity, "Externally committed work", prompt, source, at=rig.clock())
             assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]
-            if mismatch == "prompt":
-                rig.tasks.revise(identity, "The unconfirmed ordinary request", at=rig.clock())
-                assert rig.refresh().submission_problems == ()
-            else:
-                assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]
+            assert [problem.task_id for problem in rig.refresh().submission_problems] == [identity]
         finally:
             rig.close()
 

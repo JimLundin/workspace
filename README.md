@@ -21,7 +21,7 @@ implementation, including the keyboard, dictation, assistant and automation.
 The project, launcher, installation directory and bundle are named Workspace.
 
 The agent uses **OpenAI Agents SDK 0.24.0**. Every interface uses **Qt 6.12**:
-the floating bar, conversation bubbles, History, Work, prompts,
+the floating bar, the work canvas, prompts,
 keyboard overlays, and keeper dialogs. The assistant has one Qt event loop;
 the keeper owns its own protected Qt UI. Workspace runs directly on installed Windows Python 3.15. The keyboard process uses only the standard library
 and our typed Win32 bindings (`winapi/`), independently of the assistant.
@@ -373,22 +373,23 @@ agent and clears queued follow-ups. The toolbar's Canvas button opens your local
 work surface; the agent collects evidence, maintains connections and builds on
 work threads there.
 
-Clarification bubbles live alongside their work on the canvas. Their desktop
-card expands the complete request in place; the toolbar bell, **Needs you** and
-**Hold V + T** expand the toolbar to present it too. **Hold N** to reply and release
+Clarification bubbles live alongside their work on the canvas. **Needs you**
+expands the island to present the complete request; the toolbar bell and
+**Hold V + T** open the inbox list of questions and recent agent news. **Hold N** to reply and release
 to send; the same agent work resumes with your answer. A separate canvas icon
 opens the exact question when you want its surrounding context. The bell counts
 pending clarifications. Answered questions retain your context, and a rejected
 submission keeps your reply available for retry.
 
-Floating bubbles use the existing Windows glass, contrast and motion treatment.
-They present questions and useful canvas findings or state changes. Routine app arrivals stay quiet after quick relevance screening.
-One requested outcome keeps its updates, tools and final reply in one card.
-Related notification work shares that card through its work context even when
-the canvas arranges contributions separately. The trail holds at most three
-cards, and completed cards expire after a reading delay. Questions remain until
+The agent's news appears as a notice in the island at the top of the screen:
+a finished reply, or a canvas finding or question it announces. A notice shows
+its title and up to two lines for a few seconds, stays while the pointer is
+over it, then joins the bell as unread. Pressing it opens the canvas at its item.
+Each finished conversation reply is also kept in full on the canvas. Routine
+app arrivals stay quiet after quick relevance screening. Questions remain until
 answered or closed. Meeting recording retains its own control.
-**Hold V + L** or **Agent session** opens explicit conversation history.
+**Hold V + L** or **Agent session** opens the canvas. See the
+[island bar](docs/toolbar-design.md) for the full policy.
 
 Workspace reuses one existing Teams tab on the approved Edge connection for
 chat collection, Activity and opening conversations. Collection pauses while
@@ -424,15 +425,9 @@ An uncertain reply is never resent automatically: inspect the chat, then choose
 **I checked this in Teams** to allow another reply while retaining the evidence.
 Starting **New chat** resets agent context and keeps the Teams projection.
 
-Notifications stack in the right corner of the foreground window's monitor. Each bubble fits its content up to
-360 logical pixels wide (280 for your requests), keeping its right edge anchored as it grows. Longer
-entries share the available height, with space reserved for the
-voice-reply hint. A small scroll marker shows progress through overflowing text.
-
-The SDK loads in the background and the notification view is prepared on the
-existing UI thread after Workspace starts. History widgets are created when you
-open it. The source workspace is prepared only when a source tool is used.
-Failed requests show the reason in a bubble and the timeline;
+The SDK loads in the background after Workspace starts. The source workspace
+is prepared only when a source tool is used.
+Failed requests show the reason as the turn's reply on the canvas;
 they also notify you and are recorded in
 `assistant.log`. Agent tasks use **GPT-6 Astra with low reasoning effort**
 by default. `WORKSPACE_AGENT_MODEL` selects another model for the agent, inbox
@@ -638,31 +633,20 @@ of two retained images.
 Response storage and tracing are disabled. Quick chat and transcription still
 use `assistant/llm.py` and their existing endpoints.
 
-The notifications in `desktop_ui/agent_toasts.py` and conversation history
-in the same floating feed share the main UI thread in `desktop_ui/ui.py` with
-prompts, answers, reviews, the key map and overlays. Qt owns the event loop;
+The island bar and the canvas share the main UI thread in `desktop_ui/ui.py`
+with prompts, answers, reviews, the key map and overlays. Qt owns the event loop;
 `desktop_ui/qt_ui.py` manages shared composition and UI timers. Closing a view
 leaves that loop available to the remaining views. The hidden Windows message
 window and its message loop have their own application control thread.
 `desktop_ui/agent_window.py` owns the session controller and queues
-immutable snapshots for painting through `desktop_ui/view_publication.py`, the
-lifecycle it shares with the work window. The model and inline questions stay on worker
-threads. `desktop_ui/notifications.py` projects bounded notifications with pure
-lifetime transitions; expiry never removes session messages. Background updates
-preserve keyboard focus; history preserves selection and scroll position.
-`desktop_ui/toast_card.py` draws the text and controls on a per-pixel transparent
-Qt surface. `winapi/composition.py` places native background blur and a soft
-shadow beneath it, clipped to a 26-pixel rounded shape. The glass tracks Qt's
-actual bounds after display scaling. `winapi/appearance.py` samples neighboring
-background pixels on one bounded worker to select readable text and tint.
-A shared timer rotates existing spinner shapes only while needed; it does not
-rebuild the text. Reading timers also observe hover over transparent pixels.
-`desktop_ui/components/text.py` measures Markdown in separate text documents before each
-final card layout, so updates never resize visible windows just to measure text.
-Agent messages render
-Markdown headings, nested emphasis, lists and checklists, quotes, code blocks,
-strikethrough and links. Tables use compact labelled rows to fit the narrow
-timeline. Text stays selectable, code stays literal, and questions stay inline.
+immutable snapshots through `desktop_ui/view_publication.py`, the
+lifecycle it shares with the work window. Its view, `ui.SessionDisplay`,
+publishes each snapshot to the bar and the canvas. The model and inline
+questions stay on worker threads. `desktop_ui/island_agent.py` reads the
+agent's phase, steps and news from each snapshot, and
+`desktop_ui/island_moment.py` decides when a notice shows, waits or joins the
+bell. `desktop_ui/plain_text.py` removes Markdown marks so the bar reads plain
+words; full replies stay on the canvas. Notices take no keyboard focus.
 There is no browser runtime, local UI server or separate agent UI process.
 
 `assistant/activity.py` samples foreground app/title changes once a second.
@@ -725,8 +709,8 @@ assistant/      llm.py (the endpoint), features.py (key actions), agent.py,
                 work_canvas_model.py, work_canvas_commands.py (shared contracts),
                 desktop.py and app.py (native application composition)
 desktop_ui/     ui.py and qt_ui.py (Qt dispatch and event-loop ownership),
-                agent_session.py and agent_window.py (conversation presentation),
-                agent_toasts.py and toast_card.py (floating feed and history),
+                agent_window.py (the session controller),
+                desktop_bar.py and island_*.py (the island bar and its notices),
                 work_canvas.py and work_canvas_*.py (desktop canvas owner/views),
                 components/ and fonts/ (shared controls, appearance and typography)
 ```
@@ -750,7 +734,7 @@ Use `main` in that single development checkout. The Linux path
 
 Use `Dev.cmd watch` for affected tests on save, or narrow with
 `Dev.cmd watch --tests tests/test_bar_model.py`. `Dev.cmd preview` restarts a real
-toolbar/feed preview with sample data on save. Install the development-only
+toolbar preview with sample data on save. Install the development-only
 watcher with `.venv\Scripts\python.exe -m pip install watchdog==6.0.0`.
 The [iteration pipeline](docs/iteration-pipeline.md) describes coverage, cached
 source analysis, preview options and final check/deployment commands.
@@ -802,8 +786,5 @@ keys and drags the real mouse, and has the keeper install, undo and refuse
 changes on a copy of Workspace (a few minutes, against a fake endpoint), so
 leave the keyboard alone while it runs.
 
-`tests/test_windows_agent_panel.py` exercises the actual Qt panel, including
-queued input, inline responses, cancellation and updates while hidden.
-`tests/test_windows_agent_toasts.py` exercises the Qt bubbles and native glass,
-including attached results, text selection, scrolling, stop targets, display
-scaling, reduced motion and cleanup.
+`tests/test_windows_island_bar.py` and `tests/test_windows_island_glass.py`
+exercise the real island bar and its native glass.

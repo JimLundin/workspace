@@ -9,14 +9,11 @@ from automation.task import TextAnswer
 from desktop_ui.desktop_attention import (
     AnswerQuestion,
     CanvasFocus,
-    Inbox,
-    OpenQuestion,
     Speech,
     ToSession,
     ToTask,
     Undeliverable,
     delivery,
-    inbox_target,
     interrupts,
     speech_target,
 )
@@ -41,17 +38,6 @@ def test_speech_answers_only_the_selected_waiting_question_and_yields_when_hidde
     assert speech_target((), focus) is Speech.INSTRUCT
     assert speech_target(waiting, replace(focus, visible=False)) is Speech.CONVERSATION
     assert speech_target(waiting, None) is Speech.CONVERSATION
-
-
-def test_inbox_opens_the_first_question_before_existing_work_or_conversation() -> None:
-    # Defect: inbox chooses the later question, ignores questions before work
-    # exists, or opens the conversation despite an existing work window.
-    waiting = questions()
-    assert inbox_target(waiting, work_open=True) == OpenQuestion(waiting[0].id)
-    assert inbox_target(waiting, work_open=False) == OpenQuestion(waiting[0].id)
-    assert inbox_target(tuple(reversed(waiting)), work_open=True) == OpenQuestion(waiting[1].id)
-    assert inbox_target((), work_open=True) is Inbox.WORK
-    assert inbox_target((), work_open=False) is Inbox.CONVERSATION
 
 
 def test_notices_interrupt_only_when_the_canvas_is_not_active() -> None:

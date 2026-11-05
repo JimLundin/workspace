@@ -115,9 +115,9 @@ def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path:
         shutil.copyfile(module, source / module.name)
     assert not (source / ".runtime").exists() and not (source / ".python").exists()
     script = (
-        "from runtime import activate; activate(); import assistant.sdk, desktop_ui.agent_toasts; "
+        "from runtime import activate; activate(); import assistant.sdk, desktop_ui.desktop_bar; "
         "from pathlib import Path; import os, runtime, PySide6; "
-        "assert all(Path(module.__file__).is_relative_to(Path.cwd()) for module in (runtime, assistant.sdk, desktop_ui.agent_toasts)); "
+        "assert all(Path(module.__file__).is_relative_to(Path.cwd()) for module in (runtime, assistant.sdk, desktop_ui.desktop_bar)); "
         "assert Path(PySide6.__file__).is_relative_to(Path(os.environ['WORKSPACE_BUNDLED_RUNTIME'])); "
         "from desktop_ui.qt_ui import EventLoop, application; "
         "root=application(); "

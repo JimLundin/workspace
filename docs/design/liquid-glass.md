@@ -6,6 +6,10 @@ repository, [JimLundin/liquid-glass](https://github.com/JimLundin/liquid-glass),
 which also carries the Workspace demo (`demo/index.html`, no dependencies or
 build step). Nothing here changes the Qt runtime yet.
 
+Since this study, the floating agent phase bubbles and notifications were
+removed. The agent's phase and news now appear in the island bar
+([toolbar design](../toolbar-design.md)); mentions of them below are historical.
+
 Earlier single-file versions are preserved as tags:
 
 - `liquid-glass-prototype-v1`: the first study.

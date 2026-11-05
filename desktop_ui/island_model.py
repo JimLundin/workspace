@@ -3,7 +3,8 @@
 The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 
 - The island is the user's point of attention. Only a moment takes it over:
-  something live from the user (dictation) or waiting on the user (a question).
+  something live from the user (dictation), waiting on the user (a question),
+  or news for the user (a notice), in that priority (`island_moment`).
 - Activities run concurrently and each keeps one identity wherever it shows:
   agent work (a ring spinner and its current phase), a quick job such as
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
@@ -11,7 +12,8 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   they detach beside it as compact capsules, phase and all.
 - Canvas anchors at the far left before apps; temporary keyboard and the combined
   volume/Wi-Fi/clock/power capsule anchor right. The system tray is in the controls menu.
-- That capsule expands into the controls menu; a question expands the centre island.
+- That capsule expands into the controls menu; a question or the bell's list expands the centre island.
+- Under the pointer, agent work reveals its recent steps below its phase, at the same width.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
 """
 
@@ -22,6 +24,7 @@ from typing import Final, assert_never
 from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
+from desktop_ui.island_moment import Notice
 from winapi.machine_status import Battery, PowerUnavailable
 
 
@@ -47,10 +50,11 @@ class Zone(Enum):
 
 
 class Expansion(Enum):
-    """What the bar has opened: the controls menu, or a question in the island."""
+    """What the bar has opened: the controls menu, a question in the island, or the bell's list there."""
 
     MENU = auto()
     REQUEST = auto()
+    INBOX = auto()
 
 
 class Action(Enum):
@@ -65,6 +69,8 @@ class Action(Enum):
     OPEN_KEYMAP = auto()
     STOP_AGENT = auto()
     STOP_RECORDING = auto()
+    OPEN_NOTICE = auto()
+    DISMISS_NOTICE = auto()
 
 
 class Marker(Enum):
@@ -111,6 +117,15 @@ type Slot = tuple[Part, ...]
 
 
 @dataclass(frozen=True, slots=True)
+class Detail:
+    """Quiet lines under a capsule's row: a notice's reply, or the agent's recent steps."""
+
+    paragraphs: tuple[str, ...]
+    rows: int  # Lines each paragraph may wrap to; the last one elides.
+    width: float = 0  # The capsule's width; 0 keeps the row's.
+
+
+@dataclass(frozen=True, slots=True)
 class CapsuleView:
     key: Key
     zone: Zone
@@ -118,6 +133,7 @@ class CapsuleView:
     label: str
     action: Action
     tint: meaning.Tint = meaning.Tint.NONE
+    detail: Detail | None = field(default=None, kw_only=True)
 
 
 class Job(Enum):
@@ -128,10 +144,11 @@ class Job(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Agent:
-    """Agent work in progress: its phase, and whether it waits for an answer from you."""
+    """Agent work in progress: its phase, its steps before it, and whether it waits for an answer from you."""
 
     phase: str
     waiting: bool = field(kw_only=True)
+    steps: tuple[str, ...] = field(default=(), kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,9 +160,11 @@ class Observed:
     recording: RecordingState
     ambient: Ambient
     system: SystemStatus
-    inbox: int
+    inbox: int  # Waiting questions.
     keyboard: str | None
     dictating: bool = field(kw_only=True)
+    unread: int = field(default=0, kw_only=True)  # Notices that collapsed into the bell.
+    notice: Notice | None = field(default=None, kw_only=True)  # The notice holding the island; `island_moment` decides.
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +203,8 @@ def keyboard(*, enabled: bool, layer: str | None) -> str | None:
 
 
 PHASE: Final = 28  # The phase's characters in the island before it elides.
+TITLE: Final = 44  # A notice title's characters before it elides.
+NOTICE_WIDTH: Final = 340
 
 
 def elided(text: str, limit: int) -> str:
@@ -233,8 +254,10 @@ def inbox_text(count: int) -> str:
     return "99+" if count > 99 else str(count)
 
 
-def inbox_label(count: int) -> str:
-    return f"{count} {'clarification needs' if count == 1 else 'clarifications need'} your input · Review request · Hold V + T"
+def inbox_label(questions: int, unread: int) -> str:
+    asking = f"{questions} {'clarification needs' if questions == 1 else 'clarifications need'} your input" if questions else ""
+    news = f"{unread} new from the agent" if unread else ""
+    return " · ".join(part for part in (asking, news, "Open inbox · Hold V + T") if part)
 
 
 def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:
@@ -252,13 +275,13 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
     """
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     asking = agent is not None and agent.waiting
-    detached = (observed.dictating or asking) and expanded is None
+    detached = (observed.dictating or asking or observed.notice is not None) and expanded is None
     layer: tuple[CapsuleView, ...] = ()
     if observed.keyboard is not None:
         layer = (CapsuleView(Key.LAYER, Zone.RIGHT, ((Glyph("keyboard"),),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),)
     lead: tuple[CapsuleView, ...] = ()
-    # Dictation detaches the agent; a waiting question already is the island, unless you're dictating.
-    if detached and agent is not None and observed.dictating:
+    # Dictation and a notice detach the agent; a waiting question already is the island, unless you're dictating.
+    if detached and agent is not None and (observed.dictating or not agent.waiting):
         tint = meaning.Tint.ATTENTION if agent.waiting else meaning.Tint.NONE
         slot = agent_slot(agent, compact=True)
         action = Action.OPEN_QUESTION if agent.waiting else Action.OPEN_MENU
@@ -288,18 +311,18 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
             Action.OPEN_MENU,
         ),
     )
-    if observed.inbox > 0:
-        trail += (
-            CapsuleView(Key.INBOX, Zone.TRAIL, ((Glyph("bell"), Badge(inbox_text(observed.inbox))),), inbox_label(observed.inbox), Action.OPEN_INBOX),
-        )
+    count = observed.inbox + observed.unread
+    if count > 0:
+        label = inbox_label(observed.inbox, observed.unread)
+        trail += (CapsuleView(Key.INBOX, Zone.TRAIL, ((Glyph("bell"), Badge(inbox_text(count))),), label, Action.OPEN_INBOX),)
     middle: tuple[CapsuleView, ...]
     match expanded:
         case Expansion.MENU:
             middle = ()
-        case Expansion.REQUEST:
+        case Expansion.REQUEST | Expansion.INBOX:
             middle = (CapsuleView(Key.ISLAND, Zone.ISLAND, (), "Workspace controls · Escape closes", Action.CLOSE_MENU),)
         case None:
-            active = observed.dictating or agent is not None or job is not None or recorded is not None
+            active = observed.dictating or observed.notice is not None or agent is not None or job is not None or recorded is not None
             middle = (centre(observed, hovered=hovered),) if active else ()
         case _:
             assert_never(expanded)
@@ -319,6 +342,8 @@ def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
         return CapsuleView(
             Key.ISLAND, Zone.ISLAND, slots, f"An agent question needs you: {agent.phase} · open it", Action.OPEN_QUESTION, meaning.Tint.ATTENTION
         )
+    if observed.notice is not None:
+        return notice_view(observed.notice, revealed=revealed)
     leading: tuple[Slot, ...] = (
         *((agent_slot(agent, compact=False),) if agent is not None else ()),
         *(((Marker.DOTS,),) if job is not None else ()),
@@ -330,10 +355,17 @@ def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
         recorded.title if recorded is not None else "",
     )
     label = ". ".join(value for value in described if value)
-    return CapsuleView(
-        Key.ISLAND,
-        Zone.ISLAND,
-        (*leading, *trailing),
-        f"{label} · Open Workspace controls",
-        Action.OPEN_MENU,
-    )
+    # Under the pointer, agent work shows the steps before its phase, without widening.
+    steps = Detail(agent.steps, 1) if revealed and agent is not None and agent.steps else None
+    return CapsuleView(Key.ISLAND, Zone.ISLAND, (*leading, *trailing), f"{label} · Open Workspace controls", Action.OPEN_MENU, detail=steps)
+
+
+def notice_view(notice: Notice, *, revealed: bool) -> CapsuleView:
+    """The agent's news: its title and up to two lines of it; the pointer reveals Dismiss."""
+    dismiss: Slot = (Control("close", "Dismiss", Action.DISMISS_NOTICE),) if revealed else ()
+    symbol = Glyph("bell") if notice.question else Glyph("agent")
+    slots: tuple[Slot, ...] = ((symbol, Text(elided(notice.title, TITLE), strong=True)), dismiss)
+    detail = Detail((notice.text,), 2, NOTICE_WIDTH) if notice.text else None
+    tint = meaning.Tint.ATTENTION if notice.question else meaning.Tint.NONE
+    label = ": ".join(part for part in (notice.title, notice.text) if part) + " · Open on canvas"
+    return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, label, Action.OPEN_NOTICE, tint, detail=detail)

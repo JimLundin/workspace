@@ -16,7 +16,7 @@ try {
     switch ($Command) {
         'check' { & $python -m scripts.check --native --standards @Arguments }
         'watch' { & $python -B -m scripts.watch @Arguments }
-        'preview' { & $python -B -m scripts.watch --preview-only --preview both @Arguments }
+        'preview' { & $python -B -m scripts.watch --preview-only --preview @Arguments }
         'deploy' { & $python -m scripts.deploy deploy @Arguments }
         'lint' { & $python -m ruff check @Arguments }
         'format' { & $python -m ruff format @Arguments }

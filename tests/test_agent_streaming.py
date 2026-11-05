@@ -8,12 +8,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from assistant.agent import Agent
-from assistant.agent_session import message_body
 from assistant.llm import Settings
 from assistant.task_profiles import General
 from automation.execution import WorkExecution
 from automation.json_value import Json
 from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
+from tests.agent_requests import body
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, no_feed, response, says
 from tests.test_agent_window import RecordingWindow
@@ -117,7 +117,7 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes(tmp_path
                 assert worker.is_alive() and not release.is_set()
                 panel.paint()
                 partial = panel.view.states[-1]
-                assert message_body(partial.messages[-1]) == "Found **budget"
+                assert body(partial.messages[-1]) == "Found **budget"
                 assert partial.busy and not panel.view.shown
             finally:
                 release.set()
@@ -127,7 +127,7 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes(tmp_path
             assert isinstance(panel.state.messages[-1], Answer)
             assert panel.state.messages[-1].state is StreamState.COMPLETE
             assert panel.state.all_text().count("Found **budget.xlsx**.") == 1
-            assert message_body(partial.messages[-1]) == "Found **budget"  # immutable snapshots
+            assert body(partial.messages[-1]) == "Found **budget"  # immutable snapshots
 
 
 def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_view(tmp_path: Path) -> None:
@@ -170,14 +170,14 @@ def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_vie
         agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))
         agent.run("Read the workbook")
         panel.finish()
-        assert [message_body(item) for item in panel.state.messages] == [
+        assert [body(item) for item in panel.state.messages] == [
             "Read the workbook",
             "First check.\n\nSecond check.",
             "First paragraph.\n\nSecond paragraph.",
         ]
         while not panel.events.empty():
             value = panel.events.get_nowait()
-            assert "private" not in message_body(value) and "duplicate" not in message_body(value) and "late delta" not in message_body(value)
+            assert "private" not in body(value) and "duplicate" not in body(value) and "late delta" not in body(value)
         assert "opaque-private-payload" in agent.history.encoded().decode(), "Model history still needs the opaque reasoning item."
         assert not panel.state.activity
 

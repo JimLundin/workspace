@@ -90,7 +90,7 @@ def run(rounds: int) -> Result:
     def inert(*_: object) -> None:
         return None
 
-    actions = BarActions(inert, inert, inert, inert, inert, inert, inert, inert, inbox=inert)
+    actions = BarActions(inert, inert, inert, inert, inert, inert, inert, inbox=inert, open_item=inert)
     observations = BarObservations(clock=lambda: now[0], motion=lambda: True, material=lambda: appearance.Material.GLASS)
     bar = DesktopBar(actions, native_shell=False, observations=observations)
     bar.timer.stop()  # The benchmark owns every frame.

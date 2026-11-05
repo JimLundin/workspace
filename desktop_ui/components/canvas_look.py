@@ -17,7 +17,7 @@ lazy from PySide6.QtCore import Qt
 from assistant.feed_origin import Origin
 from desktop_ui.components import text
 from desktop_ui.components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, Tokens
-from desktop_ui.components.bubble import Badge, BadgeSize, paint_badge, rim_gradient
+from desktop_ui.components.bubble import paint_badge, rim_gradient
 from desktop_ui.qt_runtime import prepare
 
 prepare()
@@ -171,7 +171,7 @@ def paint_badges(painter: QtGui.QPainter, origins: tuple[Origin, ...], at: QtCor
         bounds = QtCore.QRectF(at.x() + index * BADGE_STEP, at.y(), BADGE, BADGE)
         if index:
             painter.fillPath(rounded(bounds.adjusted(-2, -2, 2, 2), 9), ring)
-        paint_badge(painter, bounds.topLeft(), Badge(origin.app, BadgeSize.CANVAS))
+        paint_badge(painter, bounds.topLeft(), origin.app)
     painter.restore()
 
 

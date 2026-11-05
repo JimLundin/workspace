@@ -423,17 +423,6 @@ def activity_text(activity: ToolActivity) -> str:
             assert_never(activity.outcome)
 
 
-def message_body(message: Message) -> str:
-    """The visible text of a timeline message."""
-    match message:
-        case ToolActivity():
-            return activity_text(message)
-        case ChatMessage() | Answer() | ReasoningSummary() | MeetingMessage() | AgentRequest():
-            return message.text
-        case _:
-            assert_never(message)
-
-
 def message_text(message: Message) -> str:
     parts: tuple[str, ...]
     match message:
@@ -454,55 +443,3 @@ def message_text(message: Message) -> str:
         case _:
             assert_never(message)
     return "\n".join(part for part in parts if part)
-
-
-@dataclass(frozen=True, slots=True)
-class ResponseText:
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class Presentation:
-    role: str
-    style: Literal["plain", "error", "markdown"] = "markdown"
-    detail: str = ""
-    response: ResponseText | None = None
-    muted: bool = field(default=False, kw_only=True)
-
-
-def presentation(message: Message) -> Presentation:
-    match message:
-        case ChatMessage(speaker="You"):
-            return Presentation("You", "plain")
-        case ChatMessage(speaker="Error"):
-            return Presentation("Error", "error")
-        case ChatMessage():
-            return Presentation("Agent")
-        case Answer(state=state):
-            return Presentation("Agent · interrupted" if state is StreamState.INTERRUPTED else "Agent")
-        case ReasoningSummary(state=state):
-            label = "Reasoning summary · interrupted" if state is StreamState.INTERRUPTED else "Reasoning summary"
-            return Presentation(label, muted=True)
-        case ToolActivity(name=name, outcome=outcome):
-            match outcome:
-                case ToolStatus.RUNNING:
-                    status = "running"
-                case Succeeded():
-                    status = "done"
-                case Failed():
-                    status = "failed"
-                case ToolStatus.CANCELLED:
-                    status = "stopped"
-                case _:
-                    assert_never(outcome)
-            return Presentation(f"{action_text.title(name)} · {status}", "plain", muted=True)
-        case MeetingMessage():
-            return Presentation("Meeting")
-        case AgentRequest(detail=detail, reply=Pending()):
-            return Presentation("Question", detail=detail)
-        case AgentRequest(detail=detail, reply=TextAnswer(text)):
-            return Presentation("Question", detail=detail, response=ResponseText(text))
-        case AgentRequest(detail=detail, reply=reply):
-            return Presentation("Question", detail=detail, response=ResponseText(reply_text(reply).capitalize()))
-        case _:
-            assert_never(message)

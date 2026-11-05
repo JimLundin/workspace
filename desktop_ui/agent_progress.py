@@ -1,34 +1,136 @@
-"""Transient phases of agent work, independent of durable canvas contributions."""
+"""Agent work as the bar reads it: the session's turns, grouped into phases by their work context."""
 
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field, replace
-from textwrap import shorten
+from dataclasses import dataclass, replace
+from enum import Enum, auto
+from typing import assert_never
 
-from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, Message, Pending, Snapshot, notice_text, pending
+from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Message, Pending, Snapshot, notice_text, pending
 from assistant.attention import AttentionSnapshot, context_of
 from assistant.canvas_activity import Attention, CanvasRequest
 from assistant.feed_origin import FeedRequest, Initiation
-from automation.presentation import Answer, ReasoningSummary, ToolActivity
+from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from automation.task import Question, TextAnswer
-from desktop_ui.notifications import (
-    Busy,
-    Entry,
-    Expires,
-    Held,
-    PhaseKey,
-    Response,
-    Settled,
-    Stack,
-    Toast,
-    Turn,
-    Working,
-    advance,
-    expire_in_order,
-    observe,
-    reading_seconds,
-)
 
-TRAIL_LENGTH = 3
+
+class Busy(Enum):
+    THINKING = auto()
+    WAITING = auto()
+    STOPPING = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseKey:
+    identity: str
+
+
+@dataclass(frozen=True, slots=True)
+class Working:
+    generation: int
+    phase: Busy
+    queued: int
+
+
+class Settled(Enum):
+    FINISHED = auto()
+    STOPPED = auto()
+    ATTENTION = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class Entry:
+    index: int
+    message: ChatMessage | Answer | ToolActivity | AgentRequest
+
+
+@dataclass(frozen=True, slots=True)
+class Response:
+    index: int
+    text: str
+    created_at: float = 0
+
+
+@dataclass(frozen=True, slots=True)
+class Turn:
+    """One assistant bubble owns its steps and result, even after completion."""
+
+    request: int
+    entries: tuple[Entry | Response, ...]
+    state: Working | Settled
+    created_at: float = 0
+
+
+def observe(session: Snapshot) -> tuple[Turn | Entry | Response, ...]:
+    """The session's turns: each request with its steps, questions and replies."""
+    result: list[Turn | Entry | Response] = []
+    requests = tuple(index for index, message in enumerate(session.messages) if isinstance(message, ChatMessage) and message.speaker == "You")
+    latest = requests[-1] if requests else -1
+    initial_input = any(isinstance(message, AgentRequest) for message in session.messages[: requests[0] if requests else None])
+    request: int | None = -1 if initial_input or (latest == -1 and session.busy) else None
+    entries: list[Entry | Response] = []
+
+    def finish_turn() -> None:
+        if request is None:
+            return
+        state: Working | Settled = settled(tuple(entries))
+        if request == latest:
+            if session.busy or session.waiting:
+                phase = Busy.STOPPING if session.stopping else Busy.WAITING if session.waiting else Busy.THINKING
+                state = Working(session.generation, phase, len(session.queued))
+            elif session.result == "Stopped":
+                state = Settled.STOPPED
+            elif session.result == "Needs attention":
+                state = Settled.ATTENTION
+        at = (
+            session.messages[request].created_at
+            if request >= 0
+            else min((entry.message.created_at for entry in entries if isinstance(entry, Entry)), default=0)
+        )
+        result.append(Turn(request, tuple(entries), state, at))
+
+    for index, message in enumerate(session.messages):
+        match message:
+            case ChatMessage(speaker="You"):
+                finish_turn()
+                request, entries = index, [Entry(index, message)]
+            case ChatMessage() | Answer() | ToolActivity() | AgentRequest():
+                target = result if request is None else entries
+                target.append(Entry(index, message))
+                match message:
+                    case AgentRequest(reply=TextAnswer(text)):
+                        target.append(Response(index, text, message.created_at))
+                    case _:
+                        pass
+            case MeetingMessage() | ReasoningSummary():
+                pass
+            case _:
+                assert_never(message)
+    finish_turn()
+    return tuple(result)
+
+
+def settled(entries: tuple[Entry | Response, ...]) -> Settled:
+    for entry in reversed(entries):
+        match entry:
+            case Entry(message=ChatMessage(speaker="Error") | ToolActivity(outcome=Failed())):
+                return Settled.ATTENTION
+            case Entry(message=Answer(state=StreamState.INTERRUPTED) | ToolActivity(outcome=ToolStatus.CANCELLED)):
+                return Settled.STOPPED
+            case Entry(message=ChatMessage(speaker="Workspace", text=text)) if text.startswith("Stopped"):
+                return Settled.STOPPED
+            case Entry(message=AgentRequest(reply=Cancelled())):
+                return Settled.STOPPED
+            case Entry(message=ChatMessage() | Answer() | ToolActivity(outcome=Succeeded())):
+                return Settled.FINISHED
+            case _:
+                pass
+    return Settled.FINISHED
+
+
+def hint(turn: Turn) -> str:
+    """How to answer a pending request without leaving the bar."""
+    pending_request = any(isinstance(entry, Entry) and isinstance(entry.message, AgentRequest) and pending(entry.message) for entry in turn.entries)
+    return "N toggles a spoken reply" if pending_request else ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,13 +138,6 @@ class Phase:
     key: PhaseKey
     turn: Turn
     request: CanvasRequest | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Progress:
-    navigation: Stack = field(default_factory=Stack)
-    observed: tuple[Phase, ...] = ()
-    toasts: tuple[Toast, ...] = ()
 
 
 def phase_messages(messages: Iterable[Message]) -> Iterator[Message]:
@@ -249,63 +344,3 @@ def stable_phases(current: Iterable[Phase], previous: tuple[Phase, ...]) -> Iter
         identities = frozenset(entry_identity(entry) for entry in phase.turn.entries if entry_identity(entry)[0] in ("source", "request", "You"))
         before = next((item for item in previous if any(entry_identity(entry) in identities for entry in item.turn.entries)), None)
         yield replace(phase, key=before.key) if before is not None else phase
-
-
-def advance_progress(previous: Progress, session: Snapshot, now: float) -> Progress:
-    if previous.navigation.identity != session.identity:
-        previous = Progress()
-    navigation = advance(previous.navigation, replace(session, messages=(), phase="idle"), now)
-    observed = tuple(coalesced(stable_phases(phases(session), previous.observed)))[-TRAIL_LENGTH:]
-    remembered = frozendict((phase.key, phase.turn) for phase in previous.observed)
-    existing = frozendict((toast.key, toast) for toast in previous.toasts)
-    toasts: tuple[Toast, ...] = ()
-    for phase in observed:
-        if phase.key in navigation.hidden:
-            continue
-        toast = existing.get(phase.key)
-        changed = remembered.get(phase.key) != phase.turn
-        if toast is None and not changed:
-            continue
-        lifetime = toast.lifetime if toast is not None else Held.ACTIVE
-        if isinstance(phase.turn.state, Working):
-            lifetime = Held.ACTIVE
-        elif changed or lifetime is Held.ACTIVE:
-            lifetime = Expires(now + reading_seconds(phase.turn))
-        toasts = (*toasts, Toast(phase.key, phase.turn, lifetime, toast.order if toast is not None else navigation.serial + len(toasts) + 1))
-    return Progress(navigation, observed, expire_in_order(toasts, now))
-
-
-def visible(progress: Progress, capacity: int) -> Stack:
-    navigation = progress.navigation
-    notices = navigation.toasts[-capacity:]
-    room = max(0, capacity - len(notices))
-    trail = progress.toasts[-room:] if room else ()
-    return replace(navigation, toasts=(*trail, *notices))
-
-
-def retain_lifetimes(progress: Progress, stack: Stack) -> Progress:
-    """Carry the native reader/hover observations into the next projection."""
-    lifetimes = frozendict((toast.key, toast.lifetime) for toast in stack.toasts)
-
-    def retained(toasts: tuple[Toast, ...]) -> tuple[Toast, ...]:
-        return tuple(replace(toast, lifetime=lifetimes.get(toast.key, toast.lifetime)) for toast in toasts)
-
-    return replace(
-        progress,
-        navigation=replace(progress.navigation, hidden=stack.hidden, toasts=retained(progress.navigation.toasts)),
-        toasts=retained(progress.toasts),
-    )
-
-
-def compact(turn: Turn) -> Turn:
-    """Earlier phases retain their summary, with full text available in history."""
-
-    def entries() -> Iterator[Entry | Response]:
-        for entry in turn.entries:
-            match entry:
-                case Entry(message=ChatMessage() | Answer() as message):
-                    yield replace(entry, message=replace(message, text=shorten(message.text, width=180, placeholder="…")))
-                case _:
-                    yield entry
-
-    return replace(turn, entries=tuple(entries()))

@@ -21,8 +21,16 @@ The bar is the application's main surface: it is where Workspace shows what it
 is doing for you. Its policy decides what may change it.
 
 1. **The island is your point of attention.** Only a *moment* takes it over:
-   something live from you (dictation) or waiting on you (a question). Dictation
-   wins over a question; the question then waits beside it, tinted.
+   something live from you (dictation), waiting on you (a question) or news for
+   you (a notice). Dictation wins over a question, and both win over a notice.
+   A question then waits beside dictation, tinted.
+   A notice is the agent's finished reply or a canvas finding or question it
+   announces. Each is announced once. It waits while dictation, a question or
+   an open menu, request or bell list holds the island, then shows for 6 s.
+   It stays while the pointer is over it and collapses 1.5 s after the pointer
+   leaves. A notice that waited more than 30 s goes straight to the bell.
+   Collapsed unread notices add to the bell's count; a question announced as
+   a notice counts once, as a question.
 2. **Activities run concurrently, each with one identity wherever it shows.**
    Agent work is a ring spinner with its current phase. A quick job is three
    pulsing dots: transcription after dictation. A meeting recording is a red dot with its timer.
@@ -30,6 +38,8 @@ is doing for you. Its policy decides what may change it.
 3. **Activities alone join the island.** The agent's spinner and phase lead,
    then a job's dots, and the recording last. During a moment they detach beside
    it as compact capsules; a detached agent keeps its phase in its label.
+   Under the pointer, agent work reveals up to three earlier steps as quiet
+   lines below its phase.
    Clock, power and device status never enter the activity centre.
 4. **Pending clarifications are dynamic:** their bell sits beside activity,
    or near the centre by itself. Keyboard state is temporary but belongs to
@@ -39,18 +49,22 @@ is doing for you. Its policy decides what may change it.
 6. **Each fact has one owner, and only that owner changes it.** Dictation and
    quick jobs come from the voice controller (`Desktop.busy`), the agent's phase
    from its live session (the step it is running, or the heading of its latest
-   reasoning summary), the recording from meetings, the inbox from pending
-   questions and the layer from the keyboard. Routine notifications stay quiet.
+   reasoning summary), the agent's news from the same session, the recording
+   from meetings, the inbox from pending questions and unread notices, and the
+   layer from the keyboard. Routine Windows notifications stay quiet.
 
 | Situation | Island | Beside it |
 | --- | --- | --- |
 | Rest | Empty | Fixed navigation, volume, Wi-Fi and clock/power on the right |
 | Agent working | Spinner, phase and Stop | — |
+| Agent work under the pointer | Its phase, with up to three earlier steps as quiet lines below | — |
+| A notice | The agent symbol (a bell, tinted orange, for a question), a bold title and up to two quiet lines, 340 px wide; Dismiss under the pointer | Agent, job and recording, detached |
 | Quick job | Pulsing dots | — |
 | Meeting recording | Red dot and timer last; hovering reveals Stop | — |
 | Dictating | The live microphone and its trace; no text | Agent, job and recording, detached |
 | A question waits | "Needs you", tinted orange | Job and recording, detached |
 | Items wait in the inbox | — | A bell with a count badge, last |
+| The bell list is open | Pending questions and the five most recent notices, newest first | — |
 | Temporary layer or layout off | — | Keyboard icon in the right cluster; layer/Colemak in tooltip and accessible name |
 
 "Starting…", "Stopping…" and "Saving…" replace the recording's timer; "Check
@@ -69,7 +83,7 @@ pattern; tray icons take one column and other tiles span pairs:
 | Section | Cells |
 | --- | --- |
 | Activities | One full-width card per running activity, with its reading and Stop |
-| Settings and views | Auto-record, keyboard overlay, Windows taskbar, window placement and dark-when-away toggles beside Canvas and Feed tiles |
+| Settings and views | A 2 by 3 grid: Auto-record, the Canvas tile, keyboard overlay, Windows taskbar, window placement and dark when away |
 | Recording | Record a meeting, absent while one runs |
 | Sound | The speaker level as a slider; its symbol shows mute |
 | Tools | Switch windows, transcript and key map as small tiles |
@@ -96,13 +110,23 @@ application before an icon click. Menu opening enables activation; closing
 restores the idle policy.
 
 Pressing the island while dictating stops dictation; pressing "Needs you"
-expands the island to present the complete request. The bell and Hold V + T use
-the same expansion. The request has voice guidance,
-plus an optional canvas icon that opens the exact contribution. Reviewing a
-request does not open the canvas. Escape or clicking elsewhere closes it.
+expands the island to present the session's own question. The request reads as
+plain text: the question in bold, its detail in a read-only text box that
+scrolls past 220 px, a voice hint, and an optional canvas icon that opens the
+exact contribution. Reviewing a request does not open the canvas.
+The bell and Hold V + T expand the island into the inbox list: questions and
+the five most recent notices, newest first. One question alone opens straight
+into its request. A notice row opens its canvas item, and opening the list
+marks its notices read. Escape or clicking elsewhere closes the request or the
+list.
+Pressing a notice opens the canvas at its item. A notice never takes the
+keyboard, so Escape cannot dismiss it; Dismiss and its timeout do. Hover is
+Qt's enter and leave on the capsule, with no global hook or cursor polling.
 The recording opens the canvas and the layer opens the key map.
 The bell's badge reads `99+` above 99; its tooltip
-and accessible name keep the exact count and the **Hold V + T** shortcut. Hold
+and accessible name keep the exact counts and the **Hold V + T** shortcut, such
+as "1 clarification needs your input · 2 new from the agent · Open inbox · Hold
+V + T". Hold
 V + T opens the same inbox while the layout is on, including when no bell shows.
 Space holds dictation; B toggles dictation; N toggles agent speech.
 
@@ -204,6 +228,9 @@ spring would be. Any change retargets from the value and velocity on screen;
 a capsule called back while leaving reverses without a flicker. New parts fade
 in over the previous ones at their own measured size, centred while the width
 morphs; a reading whose text changes, such as the timer, updates in place.
+A notice and the steps revealed under agent work reuse the same morph: detail
+lines sit 16 px apart under the capsule's row, and words that do not fit end in
+an ellipsis.
 
 The frame loop runs only while a spring moves or the spinner turns, and holds a
 fine timer resolution only while springs move. Windows' reduced-motion setting
@@ -251,11 +278,15 @@ each group's offset, size and opacity, so publishing a frame writes only those
 three properties. Changes within one Qt turn publish one final glass frame, and
 capsule changes never move a window.
 
-`island_model` turns observations into capsule views, `island_menu` holds the
+`island_moment` decides which moment holds the island and how a notice comes
+and goes, `island_agent` reads the agent's phase, steps and news from its
+session, `island_model` turns observations into capsule views, `island_menu` holds the
 menu's entries and navigation, `island_layout` arranges parts, rows and capsules,
 `island_motion` and `motion` carry capsules between views, and
-`ui_components.appearance.look` decides how each reads. All are pure. `DesktopBar` owns the observations and timers, and
-`island_surface` owns the Qt window and glass.
+`ui_components.appearance.look` decides how each reads, and `plain_text` strips
+Markdown marks from agent text. All are pure. `DesktopBar` owns the observations
+and timers, `island_surface` owns the Qt window and glass, and `request_panel`
+draws the request and the inbox list inside the expanded island.
 
 ## Observations
 

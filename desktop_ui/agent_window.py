@@ -33,9 +33,8 @@ from assistant.attention import AttentionSnapshot
 from assistant.canvas_activity import CanvasRequest
 from assistant.feed_origin import FeedRequest
 from assistant.recording_state import RecordingAction, RecordingState
-from automation.presentation import Answer, Done, Finished, LiveMessage, Problem, Progress, ReasoningSummary, Said
+from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
 from automation.task import TextAnswer
-from desktop_ui.notification_text import prepared_answer
 from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
 
 
@@ -73,7 +72,6 @@ class _Callbacks:
     waiting: Callable[[bool], None] | None
     recording: Callable[[RecordingAction], None] | None
     work: Callable[[], None] | None
-    snapshot: Callable[[Snapshot], None] | None
 
 
 class AgentWindow:
@@ -99,12 +97,11 @@ class AgentWindow:
         on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
-        on_snapshot: Callable[[Snapshot], None] | None = None,
     ) -> None:
         # This conversation owns one view, request lifetime and snapshot stream.
         # Its independent interaction callbacks are composed together here so a
         # caller can connect the actual effect owners before the first render.
-        self._callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording, on_work, on_snapshot)
+        self._callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording, on_work)
         self._input: _Projected | None = None
         self.state = Session(identity=uuid.uuid4().hex)
         self.lock = threading.RLock()
@@ -143,8 +140,6 @@ class AgentWindow:
     def _render(self, view: View | None) -> None:
         with self.lock:
             state = self.state
-        if self._callbacks.snapshot is not None:
-            self._callbacks.snapshot(state)
         if view is not None:
             view.render(state)
 
@@ -306,11 +301,6 @@ class AgentWindow:
             identity, generation = self.state.identity, self.state.generation
 
         def publish(message: LiveMessage) -> None:
-            match message:
-                case Answer(text=text) | ReasoningSummary(text=text):
-                    prepared_answer(text)
-                case _:
-                    pass
             with self.lock:
                 if self.state.identity == identity and self.state.generation == generation:
                     self._event(message)
@@ -323,7 +313,6 @@ class AgentWindow:
             self._callbacks.problem(text)
 
     def done(self, text: str) -> None:
-        prepared_answer(text)
         self._event(Done(text, time.time()))
 
     def finish(self) -> None:

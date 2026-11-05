@@ -4,12 +4,12 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
-from assistant.agent_session import Snapshot, message_body, pending
+from assistant.agent_session import Snapshot, pending
 from assistant.recording_state import RecordingAction
 from automation.presentation import Answer, StreamState
 from automation.task import TextAnswer
 from desktop_ui.agent_window import AgentWindow, View
-from tests.agent_requests import asked
+from tests.agent_requests import asked, body
 
 
 class RecordingView:
@@ -127,7 +127,7 @@ def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() ->
     first(Answer("late", "This belongs to the first request", 2))
     assert panel.snapshot() is before and not panel.jobs
     second(Answer("second-answer", "Second answer", 3))
-    assert message_body(panel.snapshot().messages[-1]) == "Second answer"
+    assert body(panel.snapshot().messages[-1]) == "Second answer"
     panel.reset()
     panel.begin("Fresh conversation")
     before = panel.snapshot()
@@ -202,21 +202,16 @@ def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
         jobs.popleft()()
 
 
-def test_snapshot_callbacks_follow_the_ui_queue_and_stop_after_close() -> None:
+def test_snapshot_renders_follow_the_ui_queue_and_stop_after_close() -> None:
     # Defect: snapshot publication bypasses the UI queue or runs after close.
     # The fixture owns the event-loop FIFO while callbacks enqueue work.
     jobs: deque[Callable[[], None]] = deque()
-    counts: tuple[int, ...] = ()
     view = RecordingView()
 
-    def publish(state: Snapshot) -> None:
-        nonlocal counts
-        counts = (*counts, sum(pending(message) for message in state.messages))
-
     def observed_counts() -> tuple[int, ...]:
-        return counts
+        return tuple(sum(pending(message) for message in state.messages) for state in view.states)
 
-    panel = AgentWindow(lambda: None, post=jobs.append, create_view=lambda _: view, on_snapshot=publish)
+    panel = AgentWindow(lambda: None, post=jobs.append, create_view=lambda _: view)
     try:
         while jobs:
             jobs.popleft()()

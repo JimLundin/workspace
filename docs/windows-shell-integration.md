@@ -15,9 +15,7 @@ package identity, so the worker stats Windows' `wpndatabase.db` and its WAL ever
 250 ms and reads only after they change, with a 30-second fallback read. A full
 read costs about 0.2 s of process CPU for 50 notices; reads reuse known notices
 by key because each row's app display name costs about 40 ms. `system_notices.py` seeds history quietly and deduplicates later changes.
-`system_toasts.py` renders source-labeled glass cards using Workspace's existing
-material and composition, with local source-app opening and individual dismissal.
-The Notification Center remains the durable history; Workspace does not save or
+Workspace draws no cards of its own for these notices. The Notification Center remains the durable history; Workspace does not save or
 submit these notification bodies to the agent.
 
 Cards use a small source-app monogram, a compact source line, a stronger title,

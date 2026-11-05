@@ -1,16 +1,13 @@
-"""Restartable real toolbar/feed views, with sample data and inert callbacks."""
+"""A restartable real toolbar, with sample data and inert callbacks."""
 
 import argparse
 import inspect
 import json
 import os
-import queue
 import tempfile
-import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final
 
 from pydantic import TypeAdapter, ValidationError
 lazy from PySide6 import QtCore, QtWidgets
@@ -19,14 +16,10 @@ lazy from PySide6.QtCore import Qt
 from desktop_ui.qt_runtime import prepare
 from runtime import activate
 lazy from assistant.recording_state import RecordingState
-lazy from automation.presentation import Answer, StreamState, Succeeded, ToolActivity
-lazy from desktop_ui.agent_toasts import AgentToasts
-lazy from desktop_ui.agent_window import AgentWindow
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.island_model import Agent, Job
 lazy from desktop_ui.qt_ui import application
 lazy from winapi import screen
-lazy from winapi.shapes import Rect
 
 prepare()
 
@@ -53,7 +46,6 @@ class Files:
 
 @dataclass(frozen=True, slots=True)
 class Options:
-    surface: Literal["toolbar", "feed", "both"] = "both"
     session: Path | None = None
     state: Path | None = None
     duration: float | None = None
@@ -78,9 +70,9 @@ class PreviewBar(DesktopBar):
 class Preview:
     """UI-thread owner. Sample actions never reach production effect owners."""
 
-    __slots__ = ("agent", "bar", "closed", "control", "feed", "files", "jobs", "root", "selector", "status", "timer")
+    __slots__ = ("bar", "closed", "control", "files", "root", "selector", "status", "timer")
 
-    def __init__(self, surface: Literal["toolbar", "feed", "both"], files: Files) -> None:
+    def __init__(self, files: Files) -> None:
         screen.use_physical_pixels()
         self.closed = False
         self.files = files
@@ -100,36 +92,25 @@ class Preview:
         close.clicked.connect(self.root.quit)
         layout.addWidget(close)
         self.control.resize(440, 160)
-        self.jobs: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
-        self.feed: AgentToasts | None = None
-        self.agent: AgentWindow | None = None
         self.bar: DesktopBar | None = None
         self.timer = QtCore.QTimer(self.control)
         self.timer.setInterval(50)
         self.timer.timeout.connect(self.tick)
         try:
-            if surface in ("feed", "both"):
-                self.agent = AgentWindow(
-                    lambda: self.action("Stop"), post=self.jobs.put, create_view=self.build_feed, on_submit=self.submitted, on_problem=self.action
-                )
-                self.drain()
-                if not self.agent.publication.ready.is_set():
-                    raise RuntimeError("The preview feed did not initialize.")
-            if surface in ("toolbar", "both"):
-                actions = BarActions(
-                    lambda: self.action("Agent"),
-                    lambda: self.action("Work"),
-                    lambda: self.action("Stop"),
-                    lambda action: self.action("Recording: " + action),
-                    lambda: self.action("Keyboard"),
-                    lambda: self.action("Overlay"),
-                    lambda: self.action("Menu"),
-                    self.action,
-                    inbox=lambda: self.action("Inbox"),
-                )
-                self.bar = PreviewBar(actions, native_shell=False)
-                self.bar.visible = True
-                self.bar.window.setWindowTitle("Workspace preview toolbar")
+            actions = BarActions(
+                lambda: self.action("Work"),
+                lambda: self.action("Stop"),
+                lambda action: self.action("Recording: " + action),
+                lambda: self.action("Keyboard"),
+                lambda: self.action("Overlay"),
+                lambda: self.action("Menu"),
+                self.action,
+                inbox=lambda: self.action("Inbox"),
+                open_item=lambda identity: self.action("Open canvas at " + identity),
+            )
+            self.bar = PreviewBar(actions, native_shell=False)
+            self.bar.visible = True
+            self.bar.window.setWindowTitle("Workspace preview toolbar")
             try:
                 choice = CHOICE.validate_json(files.state.read_bytes())
             except OSError, ValidationError:
@@ -143,25 +124,8 @@ class Preview:
             self.close()
             raise
 
-    def build_feed(self, agent: AgentWindow) -> AgentToasts:
-        self.feed = AgentToasts(self.root, agent, self.open_canvas, monitor=Rect(40, 200, 440, 900))
-        return self.feed
-
-    def open_canvas(self, target: str) -> None:
-        self.action("Open canvas at " + target)
-
     def action(self, text: str) -> None:
         self.status.setText("Preview action: " + text)
-
-    def submitted(self, text: str) -> None:
-        self.action("Sample reply: " + text)
-
-    def drain(self) -> None:
-        while True:
-            try:
-                self.jobs.get_nowait()()
-            except queue.Empty:
-                return
 
     def select(self, index: int) -> None:
         if self.closed:
@@ -175,25 +139,11 @@ class Preview:
             self.bar.agent_changed(WORKING if index in (1, 7) else asking if index == 4 else None)
             self.bar.job_changed(Job.TRANSCRIBING if index in (5, 7) else None)
             self.bar.dictation(active=index in (6, 7))
-        if self.agent is not None:
-            self.agent.reset()
-            self.agent.begin("Review the sample workbook")
-            publish = self.agent.updates()
-            publish(
-                ToolActivity(
-                    "preview-tool", "run_powershell", 'Write-Output "sample result"', time.time(), Succeeded("The sample workbook has 12 rows.")
-                )
-            )
-            publish(Answer("preview-reply", "The **sample totals** are ready for review.", time.time(), StreamState.COMPLETE))
-            self.agent.finish()
-            self.agent.show(focus=False)
-            self.drain()
         self.status.setText("Sample state: " + SCENARIOS[index])
 
     def tick(self) -> None:
         if self.closed:
             return
-        self.drain()
         if (self.files.session / "stop").exists():
             self.root.quit()
 
@@ -202,9 +152,6 @@ class Preview:
             return
         self.closed = True
         self.timer.stop()
-        if self.agent is not None:
-            self.agent.close()
-            self.drain()
         if self.bar is not None:
             self.bar.close()
         self.control.close()
@@ -214,10 +161,10 @@ class Preview:
 
 
 def run(options: Options, files: Files) -> None:
-    preview = Preview(options.surface, files)
+    preview = Preview(files)
     try:
         preview.root.processEvents()
-        ready: dict[str, int | str] = {"pid": os.getpid(), "surface": options.surface}
+        ready: dict[str, int | str] = {"pid": os.getpid()}
         (files.session / "ready.json").write_text(json.dumps(ready), encoding="utf-8")
         if options.duration is not None:
             QtCore.QTimer.singleShot(round(options.duration * 1000), preview.root.quit)
@@ -229,7 +176,6 @@ def run(options: Options, files: Files) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--surface", choices=("toolbar", "feed", "both"), default="both")
     parser.add_argument("--session", type=Path)
     parser.add_argument("--state", type=Path)
     parser.add_argument("--duration", type=float, help="bounded smoke run in seconds")

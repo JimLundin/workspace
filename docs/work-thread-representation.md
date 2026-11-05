@@ -148,23 +148,22 @@ Questions stay in the selected context when one exists. Startup can recover the
 exact saved instruction when its task was not committed. Old generated request
 cards and action reports are removed while their useful children are preserved.
 
-Public agent updates appear in temporary cards at the lower-right desktop corner.
-One requested outcome keeps its updates, tool calls and final reply in one card.
-Related sources, questions and useful findings share that desktop card through
-their work context, even when the canvas arranges them in separate groups.
-New work connections retain the existing card's identity. The trail is bounded
-to three cards; hover pauses expiry and full interaction history remains available.
-Execution steps stay off the canvas.
+Public agent updates appear in the island bar at the top of the screen. Running
+work shows its current phase; under the pointer it reveals up to three earlier
+steps. A finished reply, or a finding or question the canvas announces, shows
+once as a notice and then joins the bell as unread. Each finished conversation
+reply is mirrored onto the canvas in full. Execution steps stay off the canvas.
 
-The desktop Working label has the existing 300-degree/second linear arc spinner.
+The island's agent capsule has the existing 300-degree/second linear arc spinner.
 It stops when work ends; disabled Windows animations show a static arc. Busy frames
 repaint the small status control without repositioning unchanged toolbar capsules.
 
 The agent builds and connects information on the canvas autonomously. App arrivals
 are context, not floating notifications. Clarification bubbles live alongside
-the work and evidence. Desktop cards expand the complete request in place.
-The toolbar bell counts pending questions; clicking it, clicking Needs you or
-holding V + T expands the toolbar to present the request. A separate canvas icon
+the work and evidence. Clicking Needs you expands the island to present the
+complete request. The toolbar bell counts pending questions and unread notices;
+clicking it or holding V + T opens the inbox list, and one question alone opens
+straight into its request. A separate canvas icon
 opens the exact contribution when more context is useful.
 
 The agent uses `work_canvas_read` and revision-bound `work_canvas_update` batches
@@ -221,10 +220,10 @@ submitting research. Questions and useful research results use that binding.
 Drafts are actual prepared content; a returned draft never claims an email was
 sent. Execution attempts and effect acknowledgments remain in the task journal,
 which retains their distinct states and complete ledger. Existing work state transitions and
-attached research results update their work's desktop card with an optional
-canvas icon when the canvas is not active. Routine source and summary refreshes remain quiet.
-Initial catalog loading establishes a silent baseline. Explicit agent history
-retains the full work timeline without presenting app observations as alerts.
+attached research results are announced as an island notice that opens their
+canvas item. Routine source and summary refreshes remain quiet.
+Initial catalog loading establishes a silent baseline. App observations are
+never presented as alerts.
 
 ## UI ownership
 
@@ -309,8 +308,8 @@ without this interlude.
 Desktop startup prepares the hidden canvas using the current saved catalog and
 paints its initial viewport once before exposing the toolbar. This keeps Qt's
 first font/control setup outside the first canvas click. Preparation does not
-show or focus the window. Headings share the floating bubble's font, elision and
-expanded wrapping but paint directly on the graphics scene. Leaf bubbles create
+show or focus the window. Headings use the shared bubble font, elision and
+expanded wrapping and paint directly on the graphics scene. Leaf bubbles create
 no embedded title/disclosure widgets. Collapsed children are materialized only
 when their scope becomes visible; search and agent redirects resolve catalog
 identities before opening that scope. Existing bubbles, drafts and group headers

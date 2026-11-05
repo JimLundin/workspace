@@ -7,12 +7,13 @@ from typing import cast
 
 from assistant import browser_tools, business_tools, meeting_tools
 from assistant.agent import Agent
-from assistant.agent_session import activity_text, message_body
+from assistant.agent_session import activity_text
 from assistant.llm import Settings, ToolCall
 from assistant.task_profiles import General
 from automation.ipc import MeetingCommand, StartMeeting
 from automation.json_value import Json
 from automation.presentation import ToolActivity
+from tests.agent_requests import body
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, no_feed, says
 
@@ -116,4 +117,4 @@ def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(t
         assert not result.ok
     assert not machine.log
     assert "private-secret" not in str(window.log)
-    assert all("private-secret" not in message_body(item) for item in window.live)
+    assert all("private-secret" not in body(item) for item in window.live)

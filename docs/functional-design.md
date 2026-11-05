@@ -1,23 +1,17 @@
 # Functional design
 
-Live requested agent activity appears in a bounded lower-right trail. One
-requested outcome owns one card: public updates, actions and the final reply
-stay together. Questions resume that same turn. Headings stay on
-one elided line even when steps are opened. Completed cards expire oldest first.
-Older cards pushed into the upper eight-line edge band begin their ordinary exit;
-hover, expansion, pending input and recording protect them from that exit.
-Hover also pauses the reading timeout. Full history retains the complete interaction.
-Notification-owned background tasks stay quiet; their useful findings and
-questions join the desktop card for their factual work context. Related canvas
-contributions retain one desktop card even across different visual groups.
-New connections keep an existing card's native identity. Requests expand in the
-toolbar or notification card; canvas navigation is an explicit icon action.
-Bubbles remain read-only; a tooltip directs replies to the agent voice button.
-An expanded request selects its exact session/task owner for the spoken reply.
-The canvas retains useful findings, sources, documents, drafts and clarifications.
-Requests and execution history do not create work bubbles. Arrangement instructions
-edit the existing canvas directly; substantive new work gets a meaningful context.
-Closing the bubble hides it without stopping its worker; stopping is a separate action.
+Live agent work appears in the island bar as a spinner and its current phase;
+under the pointer it reveals up to three earlier steps. The agent's news, a
+finished reply or an announced canvas finding or question, appears once as a
+notice in the island and then joins the bell as unread
+([island bar](toolbar-design.md)). Each finished conversation reply is also
+mirrored onto the canvas in full. Notification-owned background tasks stay
+quiet; their useful findings and questions reach the canvas and its
+announcements. Requests expand in the island; canvas navigation is an explicit
+icon action. An expanded request selects its exact session/task owner for the
+spoken reply. The canvas retains useful findings, sources, documents, drafts,
+replies and clarifications. Arrangement instructions edit the existing canvas
+directly; substantive new work gets a meaningful context.
 There is no standalone feed composer or manual filter window.
 
 Workspace models domain alternatives like Rust enums: a union of frozen, slotted
@@ -48,7 +42,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/llm.py` | shared | System, user, assistant, and tool-result message variants; request serialization; a fast model for dictation cleanup and notification screening and an agent model for everything else | HTTP client functions and validated environment configuration entry |
 | `assistant/sdk.py` | work | Replayable SDK history items, the task's function tools and the streamed run | The SDK owns the model/tool loop; the adapter owns stream cancellation, timeline updates and checkpointing the conversation |
 | `automation/presentation.py` | shared | Shared progress, result and live-row values | `automation/app.py` publishes live updates through `ipc.py`; the assistant synthesizes completion from durable outcomes and renders the timeline |
-| `assistant/agent_session.py` | desktop | Typed events, messages, agent request rows over the durable questions, session transitions, and presentation | `agent_window.py`, `agent_toasts.py`, `toast_card.py` |
+| `assistant/agent_session.py` | desktop | Typed events, messages, agent request rows over the durable questions, session transitions, and presentation | `agent_window.py`; `canvas_session.py` mirrors finished replies onto the canvas; `desktop_ui/island_agent.py` reads phase, steps and notices for the bar |
 | `assistant/agent.py`, `task_profiles.py`, `agent_execution.py` | work | Tool dispatch and observation recording for one durable work claim; each task profile's toolset and execution (conversation, admitted desktop context, recovery and completion check) | `Profiles` selects the profile run and owns its dependencies, per-conversation SDK history and source drafts; `AgentExecution` owns metrics, error reporting and run cleanup; `WorkExecution` owns the claim's effects |
 | `assistant/agent_tools.py`, `desktop_tools.py`, `browser_tools.py`, `business_tools.py`, `self_change_tools.py`, `meeting_tools.py`, `feed_agent_tools.py`, `work_canvas_tools.py`, `personal_work_tools.py`, `task_tools.py` | shared: `agent_tools.py`, `business_tools.py`, `personal_work_tools.py`; work: other listed tools | Tool families: each `Tool` declares its schema, handler, read/change classification with resources, reconciliation proof, readback evidence and visible display; handlers describe each exact `Operation` to its effect | The agent composes the families over its `Session`; `SelfChange` owns the source draft's check/install state |
 | `automation/task.py`, `store.py` | shared | Durable task, request profile, agent request, reply, action, and run variants, each tagged by its `kind` or enum value; controls and stale-run decisions | `TaskStore` owns the task journal's queries and stores those records through strict Pydantic adapters; schema version 5 converts version 4 journals in place |
@@ -60,7 +54,7 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `desktop_ui/view_publication.py` | desktop | One view per owner: coalesced renders, lazy creation with retry, a single confirmed close | `AgentWindow` and `WorkWindow` keep their immutable state and post through it; `Ui.close_windows` closes both and waits for each confirmation |
 | `automation/ipc.py`, `outbox.py`, `bridge.py`, `profile_lease.py` | shared: IPC/outbox/bridge; work: profile lease | Validated process messages, typed meeting operations and bounded desktop-call text, plus immutable event retention/coalescing with explicit history loss | Bridge client/server own the one authenticated pipe and replace outbox snapshots under the server lock; `ProfileLease` owns the OS-released exclusive work-folder lock; `automation/app.py` composes the worker and its `OwnerCalls` adapter, binding calls to the current execution run and cancellation handle |
 | `assistant/action_text.py` | shared | Readable action targets and results, formatted before preview limits | `agent.py` publishes previews; session presentation handles raw payloads too |
-| `desktop_ui/agent_progress.py`, `notifications.py`, `notification_text.py`, `notification_reading.py`, `toast_stack.py`, `request_panel.py` | desktop | One stable desktop card per requested outcome/work context, complete inline requests in cards and the toolbar, optional canvas actions and agent turns; reading states and lifetimes; measured stack placement and synchronized frame springs | `AgentToasts` owns the card pool, shared measurement, frame clock, timers and history; `toast_card.Card` owns each native window and glass through `CardOwner` |
+| `desktop_ui/agent_progress.py`, `island_agent.py`, `island_moment.py`, `request_panel.py`, `plain_text.py` | desktop | Session turns grouped into phases; the agent's phase, earlier steps and notices; which moment holds the island and each notice's waiting, showing, held and read states; the bell's rows; plain text from Markdown | `DesktopBar` owns the notice clock, hover and expansion; `RequestPanel` and `InboxPanel` draw the request and the bell list inside the expanded island |
 | `assistant/browser_requests.py`, `browser_values.py`, `browser_session.py`, `browser.py` | shared | Browser requests (one typed variant per operation, validated once at the browser tool seam), immutable page observations, validated DevTools replies, typed paginated projections | `Browser`, `NativeSessions`, `Cdp`, the `browser_host` exchange of typed flat requests, and a cancellable connection wait |
 | `assistant/recording_state.py` | shared | Audio batches, stored observations, completion rules, retry policy, stale-update rejection, and recording controls | `meetings.py` and `meeting_store.py` |
 | `assistant/meeting_detection.py` | desktop | Immutable joined-call observations, saved opt-in, departure debounce, continuous thirty-second failure/recovery warning policy and manual-stop suppression | `meeting_browser.py` reads the existing approved Edge tabs without focus/navigation; `automatic_meetings.py` owns five-second polling, the encrypted preference and command serialization over the existing recorder; `App` routes manual starts/stops through it and `Ui` retains its toolbar-menu status. This uses the existing browser and recording dependencies: lifecycle decisions are Workspace policy, not a general-purpose polling library. |
@@ -70,16 +64,16 @@ process, such as the browser host. Effect ownership stays in the last column.
 | `assistant/control_policy.py` | desktop | Immutable native message actions and tray observations, menu projection, key-edge and captured menu-target decoding, startup ordering and queued file handoff | `AssistantApp` owns native interpretation, layout transport, UI feedback and worker lifetime; Qt menu choices post to its control thread and share the hotkey dispatcher |
 | `automation/activity.py` | shared | Bounded window history reduced from a window or desktop-state observation, shared by both processes | `ActivityTracker` in `assistant/activity.py` and the work process's `DesktopContext` own sampling |
 | `assistant/communications.py` | desktop | Teams' `Feed` observations, source identities, grouped pending chat tickets, captured handling revisions and reply evidence | `communications_service.py` owns encrypted settings/drafts/handling, collection and effects; `communications_browser.py` owns exact-chat and Activity DOM boundaries and reads chats with the Teams web-app operation's result type; `Ui` supplies source observations as agent context; canvas activity owns user attention |
-| `assistant/feed_sources.py` | desktop | `PendingFeed` retains only the latest Teams and notice reports; one pending listing derives their ordered updates, handling revisions and notice filter. Source variants own their key, origin, attention and triage evidence | `Ui` marshals each report onto Qt's thread and hands `PendingFeed` to triage; routine arrivals never reach the floating bubbles. Every consumer reads the same list: `feed_triage_service.py` collects evidence and `feed_agent_tools.py` shows the voice agent the feed |
-| `assistant/feed_triage.py` | desktop | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the desktop owner routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; ordinary arrivals do not become floating cards |
-| `assistant/feed_origin.py` | shared | Source application identity and assessment provenance | `desktop_ui/vector_icons.py` owns native vector marks; canvas bubbles and the Workspace badge on floating bubbles paint them; the triage board keeps reaction counts quiet |
+| `assistant/feed_sources.py` | desktop | `PendingFeed` retains only the latest Teams and notice reports; one pending listing derives their ordered updates, handling revisions and notice filter. Source variants own their key, origin, attention and triage evidence | `Ui` marshals each report onto Qt's thread and hands `PendingFeed` to triage; routine arrivals never reach the island. Every consumer reads the same list: `feed_triage_service.py` collects evidence and `feed_agent_tools.py` shows the voice agent the feed |
+| `assistant/feed_triage.py` | desktop | Revision-bound grouped assessments with their captured origins, quiet/action/completed/dismissed dispositions, explicit feedback and stale-result rejection | `feed_triage_service.py` owns coalesced background model calls, DPAPI plan/preferences and the feed commands the desktop owner routes to it, with an explicit cancellable-wait dependency; `feed_agent_tools.py` lets the main voice agent inspect and maintain the same plan; ordinary arrivals do not become island notices |
+| `assistant/feed_origin.py` | shared | Source application identity and assessment provenance | `desktop_ui/vector_icons.py` owns native vector marks; canvas bubbles paint them; the triage board keeps reaction counts quiet |
 | `assistant/notification_sources.py` | desktop | Windows notice updates, loaded handling marks and the `NotificationFilter` definition | `NotificationSources` loads stored attention choices and retains notice observations on Qt's thread, apart from the Teams worker; routine observations preserve those choices and expose revised notices as pending |
 | `assistant/notification_agent.py` | desktop | Reviewed actionable notification evidence, current source-revision/date selection, exact task IDs and stable prompts | `NotificationAgent` owns a separate admission thread for reviewed ACTION sources from Windows notices, Teams activities and unseen messages. Only current eligible revisions and dates enter quick tool-free screening; refused admissions retry on worker ticks. `WorkAgent.submit_identified` owns durable admission, replay and execution with the existing general tools. The agent investigates and executes actions covered by existing user authorization, recording useful findings in their canvas context. |
-| `assistant/card_actions.py` | desktop | The open-canvas card action and its one `workspace://` encoding; any other link parses to nothing | `notification_text.py` and `agent_session.notice_text` build it; `rich_text.py` keeps only canvas redirects clickable in Markdown; `agent_toasts.py` follows the parsed action |
+| `assistant/card_actions.py` | desktop | The open-canvas card action and its one `workspace://` encoding; any other link parses to nothing | `agent_session.notice_text` builds it; `plain_text.py` turns a canvas link into its target; `request_panel.py` and `ui.py` follow the parsed action |
 | `winapi/system_notices.py` | desktop | Native notification identities, quiet history baselines, banner coverage and validated timestamps | `winapi/notifications.py` owns native observations; `notification_banners.py` owns the recoverable banner-setting lease; `desktop_bar.py` forwards observations through `Ui.system_notices` to `NotificationSources` and the joined feed; the island has no individual-notice dismissal control |
 | `desktop_ui/shell_state.py` | desktop | Windows-key tap decisions | `shell_controls.py` owns taskbar recovery and a dedicated Windows-key message thread; keyboard callbacks post toggles and pass other input through |
 | `desktop_ui/shell_items.py`; `winapi/tray_host.py` | desktop | Pinned Outlook/Teams web-app slots claimed by Edge AppUserModelID, launch dedupe, stable running-app/window grouping, live tray registration updates, callback/version routing and popup geometry | `application_observer.py` reads Edge windows' AppUserModelIDs (`winapi/app_user_model.py`) and copies window icons off Qt; `shell_surface.py` owns scrollable icon sections; `TrayHost` forwards shell traffic to Explorer and owns its hidden proxy; the desktop bar composes their lifetimes and excludes the proxy from taskbar recovery |
-| `assistant/geometry.py`; `desktop_ui/rich_text.py` | shared: geometry; desktop: rich text | Geometry and Markdown values | Native geometry adapters and Qt text views |
+| `assistant/geometry.py` | shared | Geometry values | Native geometry adapters |
 
 ## Presentation ownership
 
@@ -162,7 +156,7 @@ public snapshots and handoff receipts from stored retry prompts;
 `communications_state.py` owns saved communication contracts and `state_store.py`
 serializes their immutable values at encrypted IO.
 
-Routine arrivals stay quiet: the floating bubbles only direct the person to the
+Routine arrivals stay quiet: island notices only direct the person to the
 canvas and report important changes. The triage plan
 belongs to the voice agent, which reads, dismisses, chooses solutions and
 answers through `feed_agent_tools.py`. Dismissal saves the exact observed
@@ -215,7 +209,7 @@ operation is one `FeedCommand` variant, validated by the agent tool adapter and
 again at the desktop owner boundary. `feed_triage.edited` is the single pure transition for explicit
 board edits: it owns dispositions, rule preservation, reconciliation and the
 recorded decision, so `Triage` only persists the result.
-History stays in the same floating feed; the separate legacy panel is removed.
+Full conversation replies live on the canvas; there is no separate history view.
 Typed input is available on explicit request and closes after submitting to Workspace.
 The reply composer begins with one row and grows to four rows before scrolling.
 Its submit action sits inside the same rounded surface, aligned with the last row.
@@ -300,16 +294,11 @@ owns the mutable text fragments and only publishes public response text and
 reasoning summaries. Request-bound publishers reject events from an earlier
 turn or a reset conversation before they reach the pure transition.
 
-Notifications retain the last observed content separately from the visible
-stack, so an expired reply does not reappear on an unrelated session update.
-Current conversation entries stay while work or pending input is active;
-completion starts monotonic reading timers. Hovering preserves their remaining
-duration. Overflowing entries use `Held.READING` until their last line is shown,
-then receive the ordinary expiry delay. `Waiting`, `Scrolling`, `Paused` and
-`Finished` carry a pixel offset; time, content height and reading pace enter a
-pure transition. Replies take turns, and waiting replies retain their lifetime.
-Reduced motion advances pages with an overlapping line and keeps a manually
-chosen starting position. None of these presentation transitions remove conversation messages.
+A notice is announced once by its identity. `island_moment` moves it through
+`Waiting`, `Showing` and `Held` from pure inputs: the clock, whether a higher
+moment or an expansion blocks the island, and Qt's enter and leave on the
+capsule. Reading or dismissing it removes it from the unread set. None of these
+presentation transitions remove conversation messages.
 `Entry` uses the session index as its stable key; an answered question adds a
 `Response` keyed by that question's index. `Turn` groups these immutable entries
 under a stable `TurnKey(request)`, immediately after its user request. Its state
@@ -318,8 +307,8 @@ The `Busy` enum distinguishes thinking, waiting, and stopping. `results` keeps
 the latest reply and pending input attached; `steps` contains earlier replies,
 resolved questions and action activity. An answered question stays with its
 response until another reply supersedes it. Follow-ups cannot acquire an earlier
-turn's entries or revive its expired terminal state. `notification_text` formats
-the attached result and expanded steps separately. Raw reasoning rows do not create cards; public summary updates change the existing outcome card. Action previews format complete payloads before shortening
+turn's entries or revive its expired terminal state. Raw reasoning rows do not
+become steps; a public summary's heading becomes the phase. Action previews format complete payloads before shortening
 them, omit transport IDs and search controls, and leave the model's tool results
 unchanged. Both conversation views use the same readable presentation.
 
@@ -333,45 +322,11 @@ UI uses Qt; no GUI objects cross the keyboard process boundary.
 The Meetings view reads the recording archive when it is shown and lists saved
 recordings with their transcripts.
 
-The owner animates at most five cards. Retargeting keeps current geometry and
-velocity. Each notification fits its rendered content up to 360 logical pixels
-(280 for user requests), independent of the history window. Headers, the stop
-icon and voice hints contribute to that width. The pure `allocate` function reserves readable
-previews and gives pending questions and recent messages the remaining height.
-On very small work areas it removes older entries from the projection.
-`ui_components.text.Document` measures Markdown using separate `QTextDocument`
-instances, with the same fonts, paragraph margins and wrapping as the visible
-text. A line that wraps at the maximum width already needs that width; shorter lines get an
-exact pixel measurement. No visible window is resized for measurement.
-
-Steps, result, header and footer get separate rectangles; viewports end on
-complete display lines. All reply text remains in the native text document,
-with no character cutoff. The result and steps have independent scroll positions
-and small overflow markers. Steps use smaller type and a 200-logical-pixel
-height budget, reserving room for the attached result. Collapsing only changes
-the steps' viewport; the result retains its widget, selection and reading
-position. `toast_stack.Frame` carries top, width, height, opacity and steps height
-together. Its five springs share one critically damped response and clock, so
-growing and shrinking neighbors retain their gaps through interruptions and
-retirement. Native positioning anchors the right edge; the text wraps at
-its destination width, and the stop icon follows the visible right edge.
-Unchanged frames do not repeat native movement after fractional DPI rounding.
-
-`rich_text.changed_tail` preserves the unchanged styled prefix, including a
-partially expanded span. Qt cursor offsets count UTF-16 units, so astral emoji
-and closing Markdown preserve earlier text and selection. The display cursor
-stays at its existing position when text arrives; new replies start at the top.
-Recording previews explicitly follow their newest line after Qt resolves layout.
-New reply text gets a bounded set of short-lived extra selections to reveal its
-ink; later packets do not dim earlier text. Floating frames use the shared spring
-model with damping 1.0 and response 0.32 s; the text reveal keeps its 160 ms fade.
-Keyboard disclosure and Windows reduced motion place frames immediately.
-The frame timer accounts for drawing time and requests Windows' finer timer
-resolution only while movement, text reveals or smooth reading run. Reduced
-motion, opening history and closing release that request. A shared callback
-rotates existing spinner shapes without measuring text again. The desktop bar
-uses that same loop for agent work and transcription. Static busy frames do not
-reposition unchanged capsules, and Windows reduced motion retains a static arc.
+The island bar's notices and revealed steps reuse its capsule springs
+([motion](toolbar-design.md#motion)); Windows reduced motion places them
+immediately. The bar's frame loop runs only while a spring moves or a spinner
+turns. Static busy frames do not reposition unchanged capsules, and reduced
+motion retains a static arc.
 
 The native canvas keeps one scene. Focusing a bubble expands its ancestors and
 centers that bubble without replacing neighboring work or maintaining a second
@@ -711,9 +666,6 @@ manifest fields stay objects; ABI fields are validated before activation. The
 keeper's native function prototypes preserve pointer-sized handles and message
 payloads, replacing the former unprototyped DLL assertion.
 
-Panel storage validates the saved bounds used to select the conversation monitor.
-Retired pin/display options, preference saving and unused panel fitting/docking
-helpers are removed; native toast placement remains with its active view.
 Activity `Sample` binds the observation, time and agent state;
 `Policy` owns retention and whether collection is enabled. Public activity
 context has an immutable typed projection until its JSON serialization boundary.

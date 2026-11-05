@@ -67,7 +67,6 @@ def rest(bar: DesktopBar) -> None:
 
 def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None) -> BarActions:
     return BarActions(
-        lambda: invoked.append("feed"),
         lambda: invoked.append("canvas"),
         lambda: invoked.append("stop"),
         lambda action: invoked.append("record-" + action),
@@ -77,6 +76,7 @@ def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None)
         lambda message: invoked.append("problem: " + message),
         (lambda tool, hwnd: tools.append((tool, hwnd))) if tools is not None else (lambda tool, hwnd: None),
         inbox=lambda: invoked.append("inbox"),
+        open_item=lambda identity: invoked.append("open " + identity),
     )
 
 
@@ -112,7 +112,7 @@ def remember(focused: list[int], hwnd: int) -> bool:
 
 def menu(bar: DesktopBar) -> Menu | None:
     """The open menu, read fresh: the bar changes it between steps."""
-    return bar.expanded
+    return bar.opened if isinstance(bar.opened, Menu) else None
 
 
 def menu_row(bar: DesktopBar, label: str) -> MenuCell:
@@ -181,7 +181,7 @@ def test_status_icons_open_the_controls_menu_like_the_rest_of_the_capsule() -> N
         bar.timer.stop()
         capsule = bar.window.capsules[Key.STATUS]
         QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(14, TOP + 17))
-        assert bar.expanded is not None
+        assert bar.opened is not None
     finally:
         closed(app, bar)
 
@@ -212,7 +212,7 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         status = bar.window.capsules[Key.STATUS]
         assert "20:59" in status.accessibleName() and "73%" in status.accessibleName()
         press(bar, Key.STATUS)
-        assert bar.expanded is not None and menu_row(bar, "Your work canvas").accessibleName() == "Your work canvas"
+        assert bar.opened is not None and menu_row(bar, "Your work canvas").accessibleName() == "Your work canvas"
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         bar.agent_changed(WORKING)
         island = bar.window.capsules[Key.ISLAND]
@@ -303,7 +303,7 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
                     # covered elsewhere. Supply the immutable expanded observation
                     # without requesting foreground on the unshown desktop.
                     app.processEvents()
-                    bar.expanded = bar.menu()
+                    bar.opened = bar.menu()
                     bar.render()
                     app.processEvents()
                     assert windows.outer_rect(handle).height > rest_height
@@ -403,11 +403,11 @@ def test_tray_icons_sit_in_the_menu_and_hand_their_clicks_to_the_application() -
             point = cell.mapTo(bar.window, QtCore.QPoint())
             assert (each.bounds.left, each.bounds.top) == (outer.left + round(point.x() * scale), outer.top + round(point.y() * scale))
         QTest.mouseClick(cells[3], QtCore.Qt.MouseButton.RightButton)
-        assert bar.expanded is None and focused == []
+        assert bar.opened is None and focused == []
         bar.open_menu()
         app.processEvents()
         QTest.mouseClick(menu_row(bar, "Fixture 0"), QtCore.Qt.MouseButton.LeftButton)
-        assert bar.expanded is None and focused == []
+        assert bar.opened is None and focused == []
     finally:
         closed(app, bar)
 
@@ -655,14 +655,14 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
         QtCore.QTimer.singleShot(75, bar.open_menu)
         QtCore.QTimer.singleShot(300, waiting.quit)
         waiting.exec()
-        assert bar.expanded is not None, "Native activation closed the menu immediately after opening it."
+        assert bar.opened is not None, "Native activation closed the menu immediately after opening it."
         target.show()
         target.activateWindow()
         deadline = time.monotonic() + 2
         while (not target.isActiveWindow() or menu(bar) is not None) and time.monotonic() < deadline:
             QTest.qWait(20)
         assert target.isActiveWindow(), "The fixture did not transfer native focus."
-        assert bar.expanded is None, "A real focus transfer left the menu open."
+        assert bar.opened is None, "A real focus transfer left the menu open."
     finally:
         target.close()
         target.deleteLater()
@@ -718,7 +718,7 @@ def test_tool_choice_acts_on_the_window_captured_before_the_menu_opened() -> Non
         bar.open_menu()
         foreground[0] = 999
         QTest.mouseClick(menu_row(bar, "Switch windows"), QtCore.Qt.MouseButton.LeftButton)
-        assert invoked == [(Tool.WINDOW_SWITCHER, 42)] and focused == [42] and bar.expanded is None
+        assert invoked == [(Tool.WINDOW_SWITCHER, 42)] and focused == [42] and bar.opened is None
     finally:
         closed(app, bar)
 
@@ -752,7 +752,7 @@ def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
         assert island.toolTip() == "" and all(cell.toolTip() == "" for cell in island.cells)
         assert "Workspace controls" in island.accessibleName()
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        assert bar.expanded is None and bar.window.capsules[Key.STATUS].toolTip()
+        assert bar.opened is None and bar.window.capsules[Key.STATUS].toolTip()
     finally:
         closed(app, bar)
 
@@ -782,7 +782,7 @@ def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_
         assert invoked == ["keymap"] and focused == [42]
         bar.open_menu()
         bar.deactivated()
-        assert bar.expanded is None and focused == [42]
+        assert bar.opened is None and focused == [42]
         bar.recording_changed(RecordingState(phase="recording", seconds=125))
         bar.open_menu()
         live = menu_row(bar, "Recording")
@@ -790,6 +790,6 @@ def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_
         QTest.mouseClick(live, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(40, live.height() // 2))
         assert invoked == ["keymap"], "Clicking the live row's reading stopped the recording."
         QTest.mouseClick(live, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(live.width() - 17, live.height() // 2))
-        assert invoked == ["keymap", "record-stop"] and bar.expanded is None
+        assert invoked == ["keymap", "record-stop"] and bar.opened is None
     finally:
         closed(app, bar)

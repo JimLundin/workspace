@@ -22,7 +22,6 @@ from protocol import Tool
 
 class Command(Enum):
     CANVAS = auto()
-    FEED = auto()
     RECORD = auto()
     STOP_RECORDING = auto()
     AUTOMATIC_RECORDING = auto()
@@ -196,14 +195,13 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
     )
     modules = (
         Cell(toggles[0], Face.TOGGLE, 0, 4, top, 4),
-        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 10, "Canvas"),
+        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 4, "Canvas"),
         Cell(toggles[1], Face.TOGGLE, 0, 4, top + 4, 4),
-        Cell(toggles[2], Face.TOGGLE, 0, 4, top + 8, 4),
-        Cell(Item("Your work feed", "chat", Command.FEED), Face.TILE, 4, 4, top + 10, 10, "Feed"),
-        Cell(toggles[3], Face.TOGGLE, 0, 4, top + 12, 4),
-        Cell(toggles[4], Face.TOGGLE, 0, 4, top + 16, 4),
+        Cell(toggles[2], Face.TOGGLE, 4, 4, top + 4, 4),
+        Cell(toggles[3], Face.TOGGLE, 0, 4, top + 8, 4),
+        Cell(toggles[4], Face.TOGGLE, 4, 4, top + 8, 4),
     )
-    top += 20
+    top += 12
     record = () if controls.recording is not None else (Cell(Item("Record a meeting", "mic", Command.RECORD), Face.WIDE, 0, COLUMNS, top, 5),)
     top += 5 * len(record)
     sound = Cell(controls.sound, Face.SLIDER, 0, COLUMNS, top, 6)
@@ -396,7 +394,7 @@ def restores_focus(choice: Choice) -> bool:
             | Command.AUTOMATIC_RECORDING
         ):
             return True
-        case Command.CANVAS | Command.FEED | Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
+        case Command.CANVAS | Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
             return False
         case _:
             assert_never(choice)

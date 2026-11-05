@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Final, assert_never
 
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
-from desktop_ui.island_model import Badge, Control, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
+from desktop_ui.island_model import Badge, Control, Detail, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
 
 # A 34 px capsule with a 3 px inset holds concentric 28 px controls.
 HEIGHT: Final = 34
@@ -38,6 +38,10 @@ MENU_HEAD: Final = 34
 TRACK: Final = 10
 GUTTER: Final = 8
 COLUMN: Final = (MENU_WIDTH - 2 * MENU_PAD) / COLUMNS
+# Detail lines under a capsule's row: 16 px apart, the first tucked into the row's lower padding.
+LINE: Final = 16
+LINES_TOP: Final = 28
+LINES_BOTTOM: Final = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +58,7 @@ class Content:
     width: float
     spots: tuple[Spot, ...]
     height: float = HEIGHT
+    lines: tuple[str, ...] = ()  # Detail under the row, already fitted to the width.
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,9 +125,13 @@ def textual(part: Part) -> bool:
             return False
 
 
-def arrange(slots: Sequence[Slot], measure: Callable[[Text], float]) -> Content:
+def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], detail: Detail | None = None) -> Content:
     """Parts left to right with their gaps. A control at either end sits concentric, 3 px from the edge;
-    content without text pads like an icon and is never narrower than a circle."""
+    content without text pads like an icon and is never narrower than a circle.
+
+    Detail lines go under the row, fitted to the capsule's width. A detail wider
+    than the row keeps the row at its leading edge and a trailing control at the far one.
+    """
     parts = tuple(part for slot in slots for part in slot)
     pad = TEXT_PAD if any(textual(part) for part in parts) else ICON_PAD
     inset = (HEIGHT - CONTROL) / 2
@@ -147,9 +156,36 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float]) -> Content:
             spots.append(Spot(part, x, width))
             x += width
     end = x + (edge(parts[-1]) if parts else pad)
-    width = max(float(HEIGHT), end)
-    shift = (width - end) / 2
-    return Content(width, tuple(Spot(spot.part, spot.x + shift, spot.width) for spot in spots))
+    if detail is None:
+        width = max(float(HEIGHT), end)
+        shift = (width - end) / 2
+        return Content(width, tuple(Spot(spot.part, spot.x + shift, spot.width) for spot in spots))
+    width = max(float(HEIGHT), end, detail.width)
+    trailing = len(spots) - next((index for index, spot in enumerate(reversed(spots)) if not isinstance(spot.part, Control)), len(spots))
+    moved = tuple(Spot(spot.part, spot.x + (width - end if index >= trailing else 0), spot.width) for index, spot in enumerate(spots))
+    lines = tuple(
+        row for paragraph in detail.paragraphs for row in wrap(paragraph, width - 2 * TEXT_PAD, detail.rows, lambda text: measure(Text(text)))
+    )
+    return Content(width, moved, LINES_TOP + LINE * len(lines) + LINES_BOTTOM if lines else HEIGHT, lines)
+
+
+def wrap(text: str, width: float, rows: int, measure: Callable[[str], float]) -> tuple[str, ...]:
+    """Words filled into at most `rows` lines of `width`; text that doesn't fit ends the last line with an ellipsis."""
+    words = text.split()
+    lines: tuple[str, ...] = ()
+    while words and len(lines) < rows:
+        count = 1
+        while count < len(words) and measure(" ".join(words[: count + 1])) <= width:
+            count += 1
+        lines, words = (*lines, " ".join(words[:count])), words[count:]
+    if not lines:
+        return ()
+    last = lines[-1]
+    if words or measure(last) > width:
+        last = last + "…"
+        while measure(last) > width and len(last) > 1:
+            last = last[:-2].rstrip() + "…"
+    return (*lines[:-1], last)
 
 
 @dataclass(frozen=True, slots=True)

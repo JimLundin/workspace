@@ -19,15 +19,17 @@ from assistant.canvas_activity import (
     TaskRequest,
     important_changes,
 )
+from assistant.feed_origin import FeedRequest, Initiation
 from assistant.work_canvas import WorkCanvas
 from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
 from assistant.work_snapshot import ReplyProblem, WorkSnapshot
 from automation.actions import Change, Operation
 from automation.json_value import Json
 from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
+from automation.presentation import Answer, StreamState
 from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, TextAnswer, Waiting
-from desktop_ui.agent_progress import Progress, advance_progress
-from desktop_ui.notifications import Tone, active, body, tone
+from desktop_ui.agent_progress import phases
+from desktop_ui.request_panel import Request, request
 from tests.agent_requests import asked
 from tests.personal_work_fixture import source
 from tests.test_work_agent import WorkRig
@@ -100,16 +102,13 @@ def test_new_session_closes_old_questions_without_closing_live_durable_questions
     assert old.reply is Attention.CLOSED and durable.reply is Attention.WAITING
 
 
-def test_floating_attention_retains_complete_requests() -> None:
-    # Defect: questions become navigation-only cards or lose their detail when
-    # attention joins the request card.
+def test_a_waiting_question_keeps_its_complete_request_for_the_bar() -> None:
+    # Defect: a question becomes navigation only, or loses its detail when it
+    # joins the request's phase.
     question = asked("question with spaces", "Which supplier?", "Background context", 10)
     session = Session(messages=(ChatMessage("Workspace", "Fetched the next mail", 9), question), phase="running")
-    projected = advance_progress(Progress(), session, 12)
-    assert len(projected.toasts) == 1
-    content = projected.toasts[0].content
-    assert active(content) and tone(content) is Tone.QUESTION
-    assert "Background context" in body(content)
+    (phase,) = phases(session)
+    assert request(phase) == Request("Which supplier?", "Background context", None, "N toggles a spoken reply")
 
 
 def test_classification_stays_quiet_and_state_transitions_redirect_to_the_context() -> None:
@@ -229,3 +228,31 @@ def test_another_research_run_does_not_turn_an_arrangement_report_into_context(t
     store.observe_work(WorkSnapshot(tasks=(arrangement, research)))
     document = store.read()
     assert document.activity == (CanvasUpdate("result:research", research.title, "The current plan is version 3", 200, ("work:atlas",)),)
+
+
+def test_finished_conversation_replies_join_the_canvas_once_and_quiet_work_stays_off_it(tmp_path: Path) -> None:
+    # Defects: a streaming reply is saved before its turn ends, an automatic
+    # investigation's reply lands on the canvas, a failure is lost, or each
+    # refresh adds the same reply again.
+    automatic = FeedRequest("chat:notice", "Routine update", initiation=Initiation.AUTOMATIC)
+    session = Session(
+        identity="talk",
+        phase="running",
+        messages=(
+            ChatMessage("You", "Compare the budget sheets", 1, FeedRequest("work:budget", "Budget")),
+            Answer("a", "Revenue is **up**.", 2, StreamState.COMPLETE),
+            ChatMessage("You", "Routine update", 3, automatic),
+            ChatMessage("Workspace", "No action is needed.", 4),
+            ChatMessage("You", "Open the workbook", 5),
+            ChatMessage("Error", "The workbook is unavailable.", 6),
+            ChatMessage("You", "Check again", 7),
+            Answer("b", "Still check", 8),
+        ),
+    )
+    first = CanvasUpdate("reply:talk:1", "Compare the budget sheets", "Revenue is **up**.", 2, ("work:budget",))
+    failed = CanvasUpdate("reply:talk:5", "Open the workbook", "The workbook is unavailable.", 6)
+    store = local_canvas(tmp_path)
+    assert observed_session(store, session).activity == (first, failed)
+    finished = replace(session, phase="idle", messages=(*session.messages[:7], Answer("b", "Checked again.", 8, StreamState.COMPLETE)))
+    again = CanvasUpdate("reply:talk:7", "Check again", "Checked again.", 8)
+    assert observed_session(store, finished).activity == (first, failed, again)

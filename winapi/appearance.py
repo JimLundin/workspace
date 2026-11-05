@@ -10,7 +10,7 @@ import winreg
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from ctypes import wintypes
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Protocol
 
@@ -165,15 +165,6 @@ def light_apps() -> bool:
     except OSError:
         return False
     return light == 1
-
-
-@dataclass(frozen=True, slots=True)
-class Environment:
-    """How the desktop asks a view to look and move: animation setting, material and frame timer."""
-
-    animations: Callable[[], bool] = animations_enabled
-    material: Callable[[], Preference] = preference
-    timer: TimerResolution = field(default_factory=TimerResolution)
 
 
 def system_color(index: int) -> str:

@@ -22,7 +22,8 @@ from win32more.Windows.Win32.System.StationsAndDesktops import (
 from win32more.Windows.Win32.System.Threading import GetCurrentThreadId
 from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindowThreadProcessId
 
-from tests.test_windows_agent_toasts import notifications
+from desktop_ui.desktop_bar import BarActions, DesktopBar
+from desktop_ui.qt_ui import application
 from tests.test_windows_computer import fixture
 from winapi import windows
 
@@ -51,13 +52,28 @@ def test_qt_and_accessibility_children_stay_off_the_input_desktop(tmp_path: Path
     try:
         before = object_name(input_desktop)
         assert expected != before, "Native test fixtures were attached to the user's desktop"
-        with notifications() as panel, fixture(tmp_path) as accessibility:
-            panel.agent.say("Isolated native fixture")
-            panel.pump()
-            card = next(iter(panel.view.cards.values()))
-            for handle in (card.handle, accessibility):
-                assert windows.is_visible(handle), "Isolation hid the fixture instead of exercising native presentation"
-                assert desktop_name(GetWindowThreadProcessId(handle, None)) == expected
+        inert = BarActions(
+            lambda: None,
+            lambda: None,
+            lambda _: None,
+            lambda: None,
+            lambda: None,
+            lambda: None,
+            lambda _: None,
+            inbox=lambda: None,
+            open_item=lambda _: None,
+        )
+        bar = DesktopBar(inert, native_shell=False)
+        try:
+            bar.visible = True
+            bar.render()
+            application().processEvents()
+            with fixture(tmp_path) as accessibility:
+                for handle in (int(bar.window.winId()), accessibility):
+                    assert windows.is_visible(handle), "Isolation hid the fixture instead of exercising native presentation"
+                    assert desktop_name(GetWindowThreadProcessId(handle, None)) == expected
+        finally:
+            bar.close()
         assert object_name(input_desktop) == before, "Tests switched the input desktop"
     finally:
         assert CloseDesktop(input_desktop)

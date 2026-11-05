@@ -8,18 +8,27 @@ from assistant.agent_session import (
     Cancelled,
     Enqueued,
     Event,
+    Message,
     RecordingUpdated,
     Resolution,
     Session,
     StopRequested,
-    message_body,
-    presentation,
     transition,
 )
 from assistant.recording_state import RecordingState
-from automation.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity
+from automation.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity, ToolStatus
 from automation.task import TextAnswer
-from tests.agent_requests import asked
+from tests.agent_requests import asked, body
+
+
+def state_of(message: Message) -> object:
+    match message:
+        case ToolActivity(outcome=outcome):
+            return outcome
+        case Answer(state=state) | ReasoningSummary(state=state):
+            return state
+        case _:
+            return None
 
 
 def test_live_messages_replace_their_row_and_final_completion_is_not_duplicated() -> None:
@@ -30,14 +39,12 @@ def test_live_messages_replace_their_row_and_final_completion_is_not_duplicated(
     session = transition(session, ReasoningSummary("summary", "Checking the files.", 4, StreamState.COMPLETE))
     session = transition(session, Answer("answer", "Found budget.xlsx.", 5, StreamState.COMPLETE))
     assert [message.created_at for message in session.messages] == [1, 2, 3]
-    assert message_body(before.messages[-1]) == "Found"
+    assert body(before.messages[-1]) == "Found"
     assert len(session.messages) == 3 and session.last_said == "Found budget.xlsx."
     assert transition(session, Answer("answer", "A late chunk", 6)) is session
     session = transition(session, Done("Found budget.xlsx.", 6))
     session = transition(session, Finished())
     assert len(session.messages) == 3 and session.status == "Ready"
-    assert presentation(session.messages[1]).muted and presentation(session.messages[1]).style == "markdown"
-    assert not presentation(session.messages[2]).muted
     assert "Reasoning summary\nChecking the files." in session.all_text()
 
 
@@ -45,13 +52,13 @@ def test_stop_seals_partial_text_but_accepts_the_result_of_an_already_running_to
     session = transition(Session(), Begin("Read the file", 1))
     session = transition(session, Answer("answer", "Reading", 2))
     session = transition(session, ToolActivity("tool", "read_file", "budget.xlsx", 3))
-    assert presentation(session.messages[-1]).role == "Read file · running"
+    assert state_of(session.messages[-1]) is ToolStatus.RUNNING
     session = transition(session, StopRequested())
     assert transition(session, Answer("answer", "Late text", 4, StreamState.COMPLETE)) is session
     assert transition(session, ToolActivity("late", "open", "", 4)) is session
     assert transition(session, ToolActivity("late", "open", "", 4, Succeeded("Done"))) is session
     session = transition(session, ToolActivity("tool", "read_file", "budget.xlsx", 4, Succeeded("Read it.")))
-    assert presentation(session.messages[-1]).role == "Read file · done"
+    assert state_of(session.messages[-1]) == Succeeded("Read it.")
     assert transition(session, ToolActivity("tool", "read_file", "", 5, Failed("Too late"))) is session
     session = transition(session, Done("Stopped.", 5))
     session = transition(session, Finished())
@@ -65,9 +72,9 @@ def test_finishing_marks_unfinished_summaries_and_tools_and_preserves_completed_
     session = transition(session, ToolActivity("pending", "read_file", "a.txt", 3))
     session = transition(session, ToolActivity("failed", "read_file", "b.txt", 4, Failed("File not found")))
     session = transition(session, Finished())
-    assert presentation(session.messages[1]).role == "Reasoning summary · interrupted"
-    assert presentation(session.messages[2]).role == "Read file · stopped"
-    assert presentation(session.messages[3]).role == "Read file · failed"
+    assert state_of(session.messages[1]) is StreamState.INTERRUPTED
+    assert state_of(session.messages[2]) is ToolStatus.CANCELLED
+    assert state_of(session.messages[3]) == Failed("File not found")
     assert "b.txt\nFile not found" in session.all_text()
 
 
@@ -81,8 +88,8 @@ def test_meeting_preview_updates_without_adding_messages_or_changing_the_agent_t
     for index in range(500):
         session = transition(session, RecordingUpdated(replace(state, seconds=index, preview=f"Recent sentence {index}."), 0))
     assert len(session.messages) == 3 and session.busy and session.last_said == "Found it."
-    assert message_body(previous.messages[1]).endswith("First sentence.")
-    assert "Recent sentence 499" in message_body(session.messages[1])
+    assert body(previous.messages[1]).endswith("First sentence.")
+    assert "Recent sentence 499" in body(session.messages[1])
     assert session.recording.seconds == 499
 
 
@@ -91,13 +98,13 @@ def test_meeting_message_states_whether_its_transcript_was_saved_or_interrupted(
     state = RecordingState(phase="recording", identity="meeting-1", preview="First sentence.")
     session = transition(Session(), RecordingUpdated(state, 0))
     saved = transition(session, RecordingUpdated(replace(state, phase="saved", detail="12 minutes."), 1))
-    assert message_body(saved.messages[0]) == ("**Meeting**\n\nFirst sentence.\n\n12 minutes.\n\n*Transcript saved. Use Open for the full text.*")
+    assert body(saved.messages[0]) == ("**Meeting**\n\nFirst sentence.\n\n12 minutes.\n\n*Transcript saved. Use Open for the full text.*")
     interrupted = transition(session, RecordingUpdated(replace(state, phase="interrupted", preview=""), 1))
-    assert message_body(interrupted.messages[0]) == (
+    assert body(interrupted.messages[0]) == (
         "**Meeting**\n\nThe transcript will appear here as speech is transcribed.\n\n*Open the transcript for the saved part.*"
     )
     silent = transition(session, RecordingUpdated(replace(state, phase="saved", preview=""), 1))
-    assert message_body(silent.messages[0]).startswith("**Meeting**\n\nNo speech was transcribed.")
+    assert body(silent.messages[0]).startswith("**Meeting**\n\nNo speech was transcribed.")
 
 
 def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_answer() -> None:
@@ -107,7 +114,7 @@ def test_follow_ups_keep_messages_and_only_deduplicate_the_current_turns_final_a
         session = transition(session, Said("I found budget.xlsx.", 0))
         session = transition(session, Done("I found budget.xlsx.", 0))
         session = transition(session, Finished())
-    assert [message_body(message) for message in session.messages] == [
+    assert [body(message) for message in session.messages] == [
         "Find my workbook",
         "I found budget.xlsx.",
         "Look for it again",

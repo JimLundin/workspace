@@ -21,6 +21,7 @@ lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
 from desktop_ui.island_model import Key
+from desktop_ui.island_motion import settled
 from desktop_ui.qt_runtime import prepare
 from scripts.preview import Files, Preview
 from tests.check_fixture import copy_check_scripts
@@ -176,13 +177,16 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
     # Detect accidentally starting the production taskbar/hook/communication
     # services or failing to route sample-state changes to the real views.
     files = Files(tmp_path, tmp_path / "state.json")
-    preview = Preview("both", files)
+    preview = Preview(files)
     try:
-        assert preview.bar is not None and preview.feed is not None
+        assert preview.bar is not None
         assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None
         assert preview.bar.keys is None and not preview.bar.taskbar.ready
         assert preview.bar.notification_service is None
         assert preview.bar.status_service is None
+        deadline = time.monotonic() + 5
+        while not settled(preview.bar.motion) and time.monotonic() < deadline:
+            QTest.qWait(20)
         island = preview.bar.window.capsules[Key.ISLAND]
         preview.selector.setCurrentIndex(2)
         preview.root.processEvents()
@@ -194,7 +198,7 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         assert "Transcribing" in island.accessibleName()
         preview.selector.setCurrentIndex(2)
         preview.root.processEvents()
-        assert preview.feed.cards and json_value(files.state.read_text()) == {"scenario": 2}
+        assert json_value(files.state.read_text()) == {"scenario": 2}
         assert preview.control.isVisible()
         assert preview.bar.window.windowTitle().startswith("Workspace preview")
         for name, label in (("Windows taskbar: Hidden", "Windows taskbar"), ("Windows notification settings", "Windows notification settings")):
@@ -205,4 +209,4 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
     finally:
         preview.close()
     preview.close()
-    assert preview.bar.closed and preview.feed.closed and not shiboken6.isValid(preview.control)
+    assert preview.bar.closed and not shiboken6.isValid(preview.control)

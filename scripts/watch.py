@@ -17,7 +17,6 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from pydantic import TypeAdapter
 lazy from watchdog.events import FileSystemEvent, FileSystemMovedEvent
@@ -44,7 +43,6 @@ IGNORED = frozenset(
     }
 )
 TRANSIENT = frozenset({".pyc", ".pyo", ".log", ".jsonl", ".tmp", ".swp", ".pending"})
-type Surface = Literal["toolbar", "feed", "both"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -52,7 +50,7 @@ class Settings:
     full: bool = False
     native: bool = True
     tests: tuple[str, ...] = ()
-    preview: Surface | None = None
+    preview: bool = False
     checks: bool = True
     once: bool = False
     stop_file: Path | None = None
@@ -153,10 +151,10 @@ def run_check(settings: Settings, receipt: Path) -> int:
 class PreviewProcess:
     """Own exactly one preview child and its clean-close control files."""
 
-    __slots__ = ("folder", "process", "scratch", "surface")
+    __slots__ = ("folder", "process", "scratch")
 
-    def __init__(self, scratch: Path, surface: Surface) -> None:
-        self.scratch, self.surface = scratch, surface
+    def __init__(self, scratch: Path) -> None:
+        self.scratch = scratch
         self.folder: Path | None = None
         self.process: subprocess.Popen[bytes] | None = None
 
@@ -170,8 +168,6 @@ class PreviewProcess:
                 "-B",
                 "-m",
                 "scripts.preview",
-                "--surface",
-                self.surface,
                 "--session",
                 str(self.folder),
                 "--state",
@@ -214,7 +210,7 @@ def supervise(settings: Settings, scratch: Path) -> int:
     pending: queue.SimpleQueue[Path] = queue.SimpleQueue()
     observer = Observer()
     observer.schedule(Events(ROOT, pending), str(ROOT), recursive=True)
-    preview = PreviewProcess(scratch, settings.preview) if settings.preview is not None else None
+    preview = PreviewProcess(scratch) if settings.preview else None
     observer.start()
     try:
         preview_ready = preview.restart() if preview is not None else True
@@ -255,7 +251,7 @@ def main() -> None:
     parser.add_argument("--tests", nargs="+", default=())
     parser.add_argument("--full", action="store_true")
     parser.add_argument("--source-only", dest="native", action="store_false")
-    parser.add_argument("--preview", choices=("toolbar", "feed", "both"))
+    parser.add_argument("--preview", action="store_true", help="restart the toolbar preview after each save")
     parser.add_argument("--preview-only", dest="checks", action="store_false")
     parser.add_argument("--once", action="store_true", help="run one cycle and close; useful for smoke checks")
     parser.add_argument("--stop-file", type=Path, help="an optional automation control file")
@@ -263,7 +259,7 @@ def main() -> None:
     settings = SETTINGS.validate_python(observed)
     if settings.full and settings.tests:
         parser.error("--full and --tests select different profiles")
-    if not settings.checks and settings.preview is None:
+    if not settings.checks and not settings.preview:
         parser.error("--preview-only needs --preview")
     if importlib.util.find_spec("watchdog") is None:
         parser.error("Install the development watcher: .venv\\Scripts\\python.exe -m pip install watchdog==6.0.0")

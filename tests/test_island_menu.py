@@ -116,9 +116,9 @@ def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     menu = Menu(entries(RESTING))
     assert selected(press(menu, Key.DOWN)) == "Auto-record"
     assert selected(press(at(menu, "Auto-record"), Key.RIGHT)) == "Your work canvas"
-    assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Windows taskbar"
-    assert selected(press(at(menu, "Your work feed"), Key.LEFT)) == "Window placement"
-    assert selected(press(at(menu, "Your work feed"), Key.DOWN)) == "Record a meeting"
+    assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Window placement"
+    assert selected(press(at(menu, "Windows taskbar"), Key.LEFT)) == "Keyboard overlay"
+    assert selected(press(at(menu, "Dark when away"), Key.DOWN)) == "Record a meeting"
     assert selected(press(at(menu, "Record a meeting"), Key.DOWN)) == "Sound"
     assert selected(press(at(menu, "Copy latest transcript"), Key.RIGHT)) == "Keyboard map"
     assert selected(press(at(menu, "Switch windows"), Key.LEFT)) == "Switch windows"

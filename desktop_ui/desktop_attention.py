@@ -48,26 +48,6 @@ def speech_target(waiting: Sequence[CanvasQuestion], focus: CanvasFocus | None) 
             assert_never(focus)
 
 
-@dataclass(frozen=True, slots=True)
-class OpenQuestion:
-    identity: str
-
-
-class Inbox(Enum):
-    WORK = "work"
-    CONVERSATION = "conversation"
-
-
-type InboxTarget = OpenQuestion | Inbox
-
-
-def inbox_target(waiting: Sequence[CanvasQuestion], *, work_open: bool) -> InboxTarget:
-    """The first waiting question precedes the existing work window and conversation."""
-    if waiting:
-        return OpenQuestion(waiting[0].id)
-    return Inbox.WORK if work_open else Inbox.CONVERSATION
-
-
 def interrupts(notice: Announcement | None, focus: CanvasFocus | None) -> Announcement | None:
     """The active canvas already presents its changes without a desktop announcement."""
     match focus:

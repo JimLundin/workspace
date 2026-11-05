@@ -30,8 +30,8 @@ shows every source that is not resolved.
 _Avoid_: Source string, identity prefix
 
 **Card action**:
-What a floating bubble's link does: open the canvas at a target. Bubbles
-direct the person; app arrivals never become cards. A link that is not exactly
+What a canvas link in agent text does: open the canvas at a target. The island
+turns it into a canvas button; app arrivals never become notices. A link that is not exactly
 one card action does nothing.
 _Avoid_: Action URL, link string, feed card
 

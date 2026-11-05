@@ -4,8 +4,10 @@ from dataclasses import replace
 from typing import assert_never
 
 import assistant.agent_session
+import automation.presentation
 import automation.task
-from assistant.canvas_activity import Attention, CanvasActivity, CanvasQuestion, CanvasReply, SessionRequest, question_body
+from assistant.canvas_activity import Attention, CanvasActivity, CanvasQuestion, CanvasReply, CanvasUpdate, SessionRequest, question_body
+from assistant.feed_origin import Initiation
 
 
 def canvas_reply(reply: assistant.agent_session.RequestReply) -> CanvasReply:
@@ -44,7 +46,38 @@ def session_activity(session: assistant.agent_session.Snapshot) -> tuple[CanvasA
                 )
             case _:
                 pass
-    return result
+    return (*result, *session_replies(session))
+
+
+def session_replies(session: assistant.agent_session.Snapshot) -> tuple[CanvasUpdate, ...]:
+    """Each finished conversation turn's final reply, which the canvas keeps readable in full.
+
+    A turn finishes when the next request begins or the session goes idle. Quiet
+    automatic investigations and canvas announcements are not replies.
+    """
+    request: assistant.agent_session.ChatMessage | None = None
+    replies: tuple[CanvasUpdate, ...] = ()
+    for message in session.messages:
+        match message:
+            case assistant.agent_session.ChatMessage(speaker="You", source=source):
+                request = None if source is not None and source.initiation is Initiation.AUTOMATIC else message
+            case (
+                assistant.agent_session.ChatMessage(speaker="Workspace" | "Error", source=None, text=text, created_at=at)
+                | automation.presentation.Answer(
+                    text=text, created_at=at, state=automation.presentation.StreamState.COMPLETE | automation.presentation.StreamState.INTERRUPTED
+                )
+            ) if request is not None and text.strip():
+                work_ids = (request.source.identity,) if request.source is not None else ()
+                reply = CanvasUpdate(reply_id(session, request), request.text[:240] or "Workspace", text.strip()[:32000], at, work_ids)
+                replies = (*(each for each in replies if each.id != reply.id), reply)
+            case _:
+                pass
+    running = reply_id(session, request) if session.busy and request is not None else None
+    return tuple(reply for reply in replies if reply.id != running)
+
+
+def reply_id(session: assistant.agent_session.Snapshot, request: assistant.agent_session.ChatMessage) -> str:
+    return f"reply:{session.identity}:{request.created_at}"
 
 
 def settle_session(activity: tuple[CanvasActivity, ...], session: assistant.agent_session.Snapshot) -> tuple[CanvasActivity, ...]:
