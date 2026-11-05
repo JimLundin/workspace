@@ -505,8 +505,8 @@ class AssistantApp:
     def recording_action(self, action: RecordingAction) -> None:
         try:
             match action:
-                case "start" | "start_microphone":
-                    self.automatic_meetings.start_recording("both" if action == "start" else "microphone")
+                case "start":
+                    self.automatic_meetings.start_recording("both")
                     self.agent.prepare()
                     if self.agent.window is not None:
                         self.agent.window.show()

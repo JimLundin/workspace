@@ -9,7 +9,7 @@ from automation.capture import AudioSource
 from winapi.pcm import RATE
 
 type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]
-type RecordingAction = Literal["start", "start_microphone", "stop", "open", "folder", "retry", "automatic"]
+type RecordingAction = Literal["start", "stop", "open", "folder", "retry", "automatic"]
 type CompletionPhase = Literal["finishing", "interrupted", "saved"]
 
 

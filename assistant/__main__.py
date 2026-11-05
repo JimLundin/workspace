@@ -1,6 +1,6 @@
-"""Run Workspace: `pythonw -m assistant` (or double-click `workspace.pyw`). It starts
-the layout too, puts an icon in the notification area, and runs until you choose
-Quit there. See the README for the keys and the settings.
+"""Run the assistant: `pythonw -m assistant`. It puts an icon in the notification
+area and runs until you choose Quit there. The keeper (`workspace.pyw`) starts the
+layout and the assistant. See the README for the keys and the settings.
 """
 
 import os
