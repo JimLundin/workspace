@@ -529,7 +529,8 @@ def test_transient_endpoint_failures_resume_without_repeating_completed_effects(
 
 def test_permanent_and_exhausted_endpoint_failures_end_the_turn(tmp_path: Path) -> None:
     # Defect: retrying invalid/auth requests or unlimited retries leaves the task running.
-    for status, attempts in ((400, 1), (401, 1), (403, 1), (429, 3), (503, 3)):
+    # One permanent and one transient status; the SDK owns the rest of its classification.
+    for status, attempts in ((401, 1), (503, 3)):
         with fake_endpoint() as endpoint:
             rig = Rig(endpoint, Reply(b'{"error": {"message": "request refused"}}', status=status), work=durable(tmp_path))
             rig.run()

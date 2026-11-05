@@ -37,18 +37,6 @@ def repository(tmp_path: Path) -> tuple[Path, Path, Path]:
     return live, workspace, remote
 
 
-def test_checked_change_is_pushed_to_new_branch(tmp_path: Path) -> None:
-    live, workspace, remote = repository(tmp_path)
-    main = git(remote, "rev-parse", "refs/heads/main")
-    result = publish_source(live, workspace, "English greeting", lambda: False, remote=str(remote))
-    refs = git(remote, "for-each-ref", "--format=%(refname)", "refs/heads/workspace/")
-    assert refs.startswith("refs/heads/workspace/agent-")
-    assert git(remote, "show", f"{refs}:config.py") == "GREETING = 'hello'"
-    assert git(remote, "rev-parse", "refs/heads/main") == main
-    assert "'hej'" in (live / "config.py").read_text(encoding="utf-8")
-    assert "Published" in result
-
-
 def test_an_installed_change_lands_on_main_once_and_never_over_newer_work(tmp_path: Path) -> None:
     # Detect a verified install never reaching main, landing twice, or overwriting a change pushed meanwhile.
     live, workspace, remote = repository(tmp_path)
@@ -98,6 +86,7 @@ def test_failed_checks_and_diverged_base_refuse_publication(tmp_path: Path) -> N
 def test_durable_publication_records_before_candidate_code_and_remote_push(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
     live, workspace, remote = repository(tmp_path / "repo")
+    main = git(remote, "rev-parse", "refs/heads/main")
     work = WorkExecution(claim, store, Resources(), clock=clock)
     marker = tmp_path / "candidate-executed"
     (workspace / "probe.py").write_text(
@@ -126,6 +115,9 @@ def test_durable_publication_records_before_candidate_code_and_remote_push(tmp_p
     result = publish_source(live, workspace, "Checked update", lambda: False, remote=str(remote), branch="workspace/agent-durable", execute=execute)
     assert marker.exists() and "Published" in result
     assert git(remote, "show", "refs/heads/workspace/agent-durable:config.py") == "GREETING = 'hello'"
+    # Publication pushes a review branch only: main and the running source stay put.
+    assert git(remote, "rev-parse", "refs/heads/main") == main
+    assert "'hej'" in (live / "config.py").read_text(encoding="utf-8")
     assert isinstance(store.actions("task")[0].outcome, ActionVerified)
 
 
