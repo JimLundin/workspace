@@ -267,7 +267,7 @@ rule = "immutable-data"
 module = "miryoku.engine"
 declaration = "Engine"
 expression = "Engine"
-reason = "The isolated keyboard path uses bounded mutable buffers and direct updates; docs/functional-design.md records latency, allocation and GC measurements."
+reason = "The isolated keyboard path uses bounded mutable buffers and direct updates; scripts/benchmark_keyboard.py measures their latency, allocation and GC."
 
 [[tool.workspace.architecture.exceptions]]
 rule = "immutable-data"
