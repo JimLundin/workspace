@@ -130,6 +130,11 @@ class MeetingStore:
             if connection.execute("SELECT name FROM sqlite_master WHERE name='capture_end'").fetchone() is not None
             else None
         )
+        gaps = (
+            connection.execute("SELECT gaps, frames FROM capture_gaps WHERE id=1").fetchone()
+            if connection.execute("SELECT name FROM sqlite_master WHERE name='capture_gaps'").fetchone() is not None
+            else None
+        ) or (0, 0)
         if row is None or row[1] not in ("both", "microphone") or not isinstance(row[2], (int, float)):
             raise ValueError("The local meeting journal is incomplete.")
         return StoredState(
@@ -143,6 +148,8 @@ class MeetingStore:
             revision=_integer(row[7]),
             exported_revision=_integer(row[8]),
             ended_at=_END.validate_python(ending[0] if ending is not None else None, strict=True),
+            gaps=_integer(gaps[0]),
+            gap_frames=_integer(gaps[1]),
         )
 
     def append(self, pcm: bytes) -> None:
@@ -162,6 +169,19 @@ class MeetingStore:
             pending = connection.execute("SELECT pending FROM meeting WHERE id=1").fetchone()
         if pending is not None and _integer(pending[0]) * 2 >= self.max_pending_bytes:
             raise BacklogFullError("Recording stopped because untranscribed audio reached its storage limit. Saved audio can be retried.")
+
+    def record_gaps(self, gaps: int, frames: int) -> None:
+        """Add recovered capture gaps to the recording's notes; they never finish it."""
+        with self.writing() as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS capture_gaps (id INTEGER PRIMARY KEY CHECK(id=1), gaps INTEGER NOT NULL, frames INTEGER NOT NULL)"
+            )
+            connection.execute(
+                "INSERT INTO capture_gaps (id, gaps, frames) VALUES (1, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET gaps=gaps+excluded.gaps, frames=frames+excluded.frames",
+                (gaps, frames),
+            )
+            connection.execute("UPDATE meeting SET revision=revision+1 WHERE id=1")
 
     def finish_capture(self, problem: str = "", *, at: float | None = None) -> None:
         """Persist the observed capture end, independently of audio duration and export time."""
@@ -284,6 +304,8 @@ class MeetingStore:
                 output.write(f"{source_name(state.source)} · {duration(state.frames / RATE)} captured · {status}\n\n")
                 if state.problem:
                     output.write(f"> {state.problem}\n\n")
+                if state.gap_note:
+                    output.write(f"> {state.gap_note}\n\n")
                 for row in connection.execute("SELECT start, end, text FROM segments ORDER BY start"):
                     if text := _text(row[2]):
                         output.write(f"## {duration(_integer(row[0]) / RATE)} - {duration(_integer(row[1]) / RATE)}\n\n{text}\n\n")

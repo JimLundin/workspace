@@ -82,41 +82,140 @@ class Converter:
         return result.tobytes()
 
 
+CAPACITY: Final = RATE * 10
+"""The mixer's ring: how far one device may run ahead of the published cursor before the cursor is pushed."""
+MAX_JUMP: Final = RATE * 60
+"""The longest silence the mixer inserts; a larger clock jump (sleep, a broken clock) ends the recording."""
+
+
+@dataclass(frozen=True, slots=True)
+class LateAudio:
+    """A packet began before audio already published; its first `frames` were dropped."""
+
+    at: int
+    frames: int
+
+
+@dataclass(frozen=True, slots=True)
+class Skipped:
+    """Capture fell further behind than the ring holds; `frames` of silence stand in for unheard audio."""
+
+    at: int
+    frames: int
+
+
+@dataclass(frozen=True, slots=True)
+class Dropout:
+    """The microphone reported a discontinuity: `frames` it captured were lost before Workspace read them."""
+
+    at: int
+    frames: int
+
+
+type Gap = LateAudio | Skipped | Dropout
+
+DROPOUT_TOLERANCE: Final = RATE // 100
+"""Timestamp rounding across a flagged discontinuity is not lost audio."""
+
+
+def dropout(previous_end: int | None, start: int, *, discontinuous: bool) -> Dropout | None:
+    """A continuous stream's flagged hole between its previous packet and this one."""
+    if previous_end is None or not discontinuous or start - previous_end <= DROPOUT_TOLERANCE:
+        return None
+    return Dropout(previous_end, start - previous_end)
+
+
+@dataclass(frozen=True, slots=True)
+class Placement:
+    """Where a packet goes on the ring, decided before any sample moves."""
+
+    cursor: int
+    """The published cursor after any forced advance."""
+    clipped: int
+    """Leading packet frames that precede that cursor."""
+    silence: int
+    """Frames of the forced advance after the last mixed audio."""
+
+
+def place(cursor: int, end: int, start: int, length: int, capacity: int) -> Placement:
+    """Push the cursor just far enough for the packet's end to fit, then clip what precedes it."""
+    advanced = max(cursor, start + length - capacity)
+    return Placement(advanced, min(length, max(0, advanced - start)), max(0, advanced - max(cursor, end)))
+
+
+def jump(cursor: int, end: int, until: int, capacity: int) -> int:
+    """Silent frames a take inserts beyond the ring, where no device delivered audio in time."""
+    return until - max(cursor, end) if until - cursor > capacity else 0
+
+
 class Mixer:
-    """A two-second ring on the shared device clock; absent playback is silence."""
+    """A bounded ring on the shared device clock; absent playback is silence.
 
-    __slots__ = ("cursor", "samples")
+    The mixer recovers rather than failing: audio that arrives after its time
+    was published loses only the part already published, and a device far
+    ahead of the cursor pushes it forward, publishing what the ring holds and
+    silence for the rest. Each recovery is a reported gap.
+    """
 
-    def __init__(self) -> None:
-        self.samples = array("i", [0]) * (RATE * 2)
-        self.cursor = 0
+    __slots__ = ("cursor", "end", "gaps", "limit", "ready", "samples")
+
+    def __init__(self, capacity: int = CAPACITY, limit: int = MAX_JUMP) -> None:
+        self.samples = array("i", [0]) * capacity
+        self.limit = limit
+        self.cursor = self.end = 0
+        self.ready = array("h")
+        self.gaps: list[Gap] = []
 
     def add(self, start: int, pcm: bytes) -> None:
         samples = array("h", pcm)
         # Idle WASAPI playback can timestamp silence from its last active
         # clock. Zero contributions cannot alter published or buffered audio;
-        # ignore them before timing checks, while still rejecting late speech.
+        # ignore them before timing checks, while still accounting for late speech.
         if not any(samples):
             return
-        if start + len(samples) > self.cursor + len(self.samples):
-            raise OSError("Recording fell behind the audio device. The captured part has been saved; start a new recording.")
-        offset = max(0, self.cursor - start)
-        if self.cursor and offset > 1:
-            raise OSError("Audio arrived too late to keep a complete recording. The captured part has been saved; check the audio device.")
-        for index in range(offset, len(samples)):
+        placement = place(self.cursor, self.end, start, len(samples), len(self.samples))
+        if placement.cursor > self.cursor:
+            silence_at = max(self.cursor, self.end)
+            self._publish(placement.cursor)
+            if placement.silence:
+                self.gaps.append(Skipped(silence_at, placement.silence))
+        # One overlapping sample is packet-boundary rounding, not lost audio;
+        # before the first take, audio timestamped before Start is not part of the recording.
+        if placement.clipped > 1 and self.cursor:
+            self.gaps.append(LateAudio(start, placement.clipped))
+        for index in range(placement.clipped, len(samples)):
             self.samples[(start + index) % len(self.samples)] += samples[index]
+        if placement.clipped < len(samples):
+            self.end = max(self.end, start + len(samples))
 
     def take(self, until: int) -> bytes:
         until = max(self.cursor, until)
-        if until - self.cursor > len(self.samples):
-            raise OSError("The audio clock jumped, possibly during sleep. The captured part has been saved.")
-        result = array("h")
-        for frame in range(self.cursor, until):
-            index = frame % len(self.samples)
-            result.append(max(-32768, min(32767, self.samples[index])))
+        if silence := jump(self.cursor, self.end, until, len(self.samples)):
+            self.gaps.append(Skipped(max(self.cursor, self.end), silence))
+        self._publish(until)
+        result = self.ready.tobytes()
+        self.ready = array("h")
+        return result
+
+    def reported(self) -> tuple[Gap, ...]:
+        gaps = tuple(self.gaps)
+        self.gaps.clear()
+        return gaps
+
+    def _publish(self, until: int) -> None:
+        if until - self.cursor > self.limit:
+            raise OSError(
+                f"Recording stopped: the audio clock jumped {(until - self.cursor) / RATE:.0f} s, possibly during sleep. "
+                "The captured part has been saved."
+            )
+        capacity = len(self.samples)
+        for frame in range(self.cursor, min(until, self.cursor + capacity)):
+            index = frame % capacity
+            self.ready.append(max(-32768, min(32767, self.samples[index])))
             self.samples[index] = 0
+        if until > self.cursor + capacity:
+            self.ready.extend(array("h", bytes(2 * (until - self.cursor - capacity))))
         self.cursor = until
-        return result.tobytes()
 
 
 def quiet_tail(pcm: bytes) -> bool:

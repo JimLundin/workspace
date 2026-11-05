@@ -17,7 +17,7 @@ from assistant.recording_state import RecordingState, RetryPolicy
 from automation.capture import AudioSource
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.test_llm import settings
-from winapi.pcm import RATE
+from winapi.pcm import RATE, Gap, LateAudio, Skipped
 
 SPEECH = array("h", [1400] * RATE).tobytes()
 
@@ -40,7 +40,7 @@ class GeneratedCapture:
         self.blocks, self.tail, self.hold = blocks, tail, hold
         self.opened, self.finished = threading.Event(), threading.Event()
 
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None:
+    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
         self.opened.set()
         ready()
         for _ in range(self.blocks):
@@ -232,7 +232,7 @@ def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> N
     class LockingCapture:
         __slots__ = ()
 
-        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None:
+        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
             ready()
             holder = sqlite3.connect(next(tmp_path.glob("*/session.sqlite3")), isolation_level=None)
             try:
@@ -288,6 +288,33 @@ def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(tm
             wait_for(lambda: service.snapshot().phase == "saved")
             assert not blocked, "A view reading the recording state from another thread waited for the publisher."
             assert len(capturing) < 10, [state.seconds for state in capturing]
+        finally:
+            service.close()
+
+
+def test_recovered_capture_gaps_are_noted_without_ending_the_recording(tmp_path: Path) -> None:
+    # Defect: a recovered timing problem ends or interrupts the recording, or
+    # the saved transcript never says that audio is missing.
+    class GappedCapture:
+        __slots__ = ()
+
+        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None:
+            ready()
+            consume(SPEECH)
+            report(LateAudio(RATE, RATE // 4))
+            consume(SPEECH)
+            report(Skipped(RATE * 2, RATE))
+
+    with fake_endpoint() as endpoint:
+        service = Meetings(settings(endpoint.url), lambda source: GappedCapture(), archive=MeetingArchive(tmp_path))
+        try:
+            service.start()
+            wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
+            state = service.snapshot()
+            assert state.phase == "saved" and state.seconds == 2, state.detail
+            saved = MeetingStore(Path(state.path).parent).state()
+            assert (saved.gaps, saved.gap_frames, saved.problem) == (2, RATE * 5 // 4, "")
+            assert "through 2 gaps totalling 1.2 s" in Path(state.path).read_text(encoding="utf-8")
         finally:
             service.close()
 

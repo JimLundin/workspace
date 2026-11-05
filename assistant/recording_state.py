@@ -76,6 +76,19 @@ class StoredState:
     revision: int
     exported_revision: int
     ended_at: float | None = field(default=None, kw_only=True)
+    gaps: int = field(default=0, kw_only=True)
+    """Recovered capture timing problems: late audio clipped, or silence where capture fell behind."""
+    gap_frames: int = field(default=0, kw_only=True)
+
+    @property
+    def gap_note(self) -> str:
+        if not self.gaps:
+            return ""
+        plural = "gap" if self.gaps == 1 else "gaps"
+        return (
+            f"Recording continued through {self.gaps} {plural} totalling {self.gap_frames / RATE:.1f} s "
+            "where audio arrived late or capture fell behind; that audio is missing from the transcript."
+        )
 
     @property
     def export_current(self) -> bool:

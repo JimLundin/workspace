@@ -23,7 +23,7 @@ from assistant.meeting_store import MeetingArchive, MeetingStore
 from assistant.recording_state import Exhausted, Phase, Publication, RecordingState, RetryPolicy, published, source_name
 from automation.capture import AudioSource
 from usage import DIRECTORY
-from winapi.pcm import RATE
+from winapi.pcm import RATE, Gap
 
 
 class Transcriber(Protocol):
@@ -31,7 +31,7 @@ class Transcriber(Protocol):
 
 
 class Capture(Protocol):
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None: ...
+    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Gap], None]) -> None: ...
 
 
 SPOOL_SECONDS: Final = 60
@@ -49,6 +49,7 @@ class Handover:
     """What the journal thread takes from the spool in one wake."""
 
     pcm: bytes
+    gaps: tuple[Gap, ...] = ()
     flagged: bool = False
     closed: bool = False
 
@@ -60,12 +61,13 @@ class Spool:
     would exceed the bound is refused, which ends the recording.
     """
 
-    __slots__ = ("_blocks", "_closed", "_condition", "_flagged", "_size", "limit")
+    __slots__ = ("_blocks", "_closed", "_condition", "_flagged", "_gaps", "_size", "limit")
 
     def __init__(self, limit: int = RATE * 2 * SPOOL_SECONDS) -> None:
         self.limit = limit
         self._condition = threading.Condition()
         self._blocks: deque[bytes] = deque()
+        self._gaps: list[Gap] = []
         self._size = 0
         self._flagged = self._closed = False
 
@@ -82,6 +84,11 @@ class Spool:
             self._size += len(pcm)
             self._condition.notify()
 
+    def report(self, gap: Gap) -> None:
+        with self._condition:
+            self._gaps.append(gap)
+            self._condition.notify()
+
     def flag(self) -> None:
         """Ask the journal thread to publish the current state soon."""
         with self._condition:
@@ -95,11 +102,11 @@ class Spool:
 
     def take(self, timeout: float) -> Handover:
         with self._condition:
-            self._condition.wait_for(lambda: self._blocks or self._flagged or self._closed, timeout)
-            pcm = b"".join(self._blocks)
+            self._condition.wait_for(lambda: self._blocks or self._gaps or self._flagged or self._closed, timeout)
+            taken = Handover(b"".join(self._blocks), tuple(self._gaps), flagged=self._flagged, closed=self._closed)
             self._blocks.clear()
+            self._gaps.clear()
             self._size = 0
-            taken = Handover(pcm, flagged=self._flagged, closed=self._closed)
             self._flagged = False
             return taken
 
@@ -147,6 +154,10 @@ class _Journal:
                 taken = self.spool.take(max(0.0, due) if dirty else PUBLISH_SECONDS)
                 if writer.feed(taken.pcm):
                     self.changed()
+                    dirty = True
+                if taken.gaps:
+                    # Recovered timing problems are notes on the recording, never its end.
+                    self.store.record_gaps(len(taken.gaps), sum(gap.frames for gap in taken.gaps))
                     dirty = True
                 now = time.monotonic()
                 # A phase change publishes even when capture has already ended.
@@ -352,7 +363,7 @@ class Meetings:
                     self._state = replace(self._state, phase="recording")
                 spool.flag()
 
-            self.factory(source).record(stop, spool.put, ready)
+            self.factory(source).record(stop, spool.put, ready, spool.report)
         except (OSError, ValueError, sqlite3.Error) as error:
             problem = str(error)
         except Exception:
