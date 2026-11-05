@@ -12,12 +12,12 @@ from unittest import TestCase
 
 from assistant.llm import Failure
 from assistant.meeting_store import BacklogFullError, MeetingArchive, MeetingStore
-from assistant.meetings import Meetings
+from assistant.meetings import Meetings, Spool, SpoolFullError
 from assistant.recording_state import RecordingState, RetryPolicy
 from automation.capture import AudioSource
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.test_llm import settings
-from winapi.pcm import RATE
+from winapi.pcm import RATE, LateAudio, Problem, Skipped, Stall
 
 SPEECH = array("h", [1400] * RATE).tobytes()
 
@@ -40,7 +40,7 @@ class GeneratedCapture:
         self.blocks, self.tail, self.hold = blocks, tail, hold
         self.opened, self.finished = threading.Event(), threading.Event()
 
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None:
+    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
         self.opened.set()
         ready()
         for _ in range(self.blocks):
@@ -81,6 +81,19 @@ def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_seco
         assert connection.execute("PRAGMA auto_vacuum").fetchone() == (1,)
     assert (store.folder / "session.sqlite3").stat().st_size < len(first.pcm) // 4
     assert SPEECH[:512] not in (store.folder / "session.sqlite3").read_bytes()
+
+
+def test_an_open_read_snapshot_does_not_hold_up_journaling_audio(tmp_path: Path) -> None:
+    # Defect: a transcription or catalog read holding its snapshot makes the
+    # audio append wait out the busy timeout and stop the recording.
+    store = MeetingStore.create(tmp_path, "both")
+    with store.reading() as connection:
+        assert connection.execute("SELECT frames FROM meeting").fetchone() == (0,)
+        began = time.monotonic()
+        store.append(SPEECH)
+        assert time.monotonic() - began < 1
+        assert connection.execute("SELECT frames FROM meeting").fetchone() == (0,), "The snapshot saw a later commit."
+    assert store.state().frames == RATE
 
 
 def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Path) -> None:
@@ -224,6 +237,125 @@ def test_recording_uses_the_configured_endpoint_and_saves_incremental_text(tmp_p
             service.close()
 
 
+def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> None:
+    # Defect: the capture thread writes the journal itself, so another connection
+    # holding the meeting journal stalls the device drain and ends the recording.
+    handed: list[float] = []
+
+    class LockingCapture:
+        __slots__ = ()
+
+        def record(
+            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+        ) -> None:
+            ready()
+            holder = sqlite3.connect(next(tmp_path.glob("*/session.sqlite3")), isolation_level=None)
+            try:
+                holder.execute("BEGIN EXCLUSIVE")
+                for _ in range(31):
+                    began = time.monotonic()
+                    consume(SPEECH)
+                    handed.append(time.monotonic() - began)
+            finally:
+                holder.rollback()
+                holder.close()
+
+    with fake_endpoint() as endpoint:
+        service = Meetings(settings(endpoint.url), lambda source: LockingCapture(), archive=MeetingArchive(tmp_path))
+        try:
+            service.start()
+            wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
+            state = service.snapshot()
+            assert state.phase == "saved", state.detail
+            assert state.seconds == 31 and len(handed) == 31
+            assert max(handed) < 1, "Handing audio to the journal waited for storage."
+        finally:
+            service.close()
+
+
+def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(tmp_path: Path) -> None:
+    # Defect: on_update runs under the service lock, so a view that waits for
+    # another thread reading snapshot() deadlocks the recorder; or every
+    # journaled second publishes, running reads and view work once a second.
+    capturing: list[RecordingState] = []
+    blocked: list[RecordingState] = []
+    service: Meetings | None = None
+
+    def update(state: RecordingState) -> None:
+        assert service is not None
+        reader = threading.Thread(target=service.snapshot)
+        reader.start()
+        reader.join(5)
+        if reader.is_alive():
+            blocked.append(state)
+        if state.capturing and state.seconds:
+            capturing.append(state)
+
+    capture = GeneratedCapture(31, hold=True)
+    with fake_endpoint() as endpoint:
+        service = Meetings(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=update)
+        try:
+            service.start()
+            wait_for(lambda: bool(service.snapshot().path))
+            store = MeetingStore(Path(service.snapshot().path).parent)
+            wait_for(lambda: store.state().frames == RATE * 31)
+            service.stop()
+            wait_for(lambda: service.snapshot().phase == "saved")
+            assert not blocked, "A view reading the recording state from another thread waited for the publisher."
+            assert len(capturing) < 10, [state.seconds for state in capturing]
+        finally:
+            service.close()
+
+
+def test_recovered_capture_gaps_are_noted_without_ending_the_recording(tmp_path: Path) -> None:
+    # Defect: a recovered timing problem ends or interrupts the recording, or
+    # the saved transcript never says that audio is missing.
+    class GappedCapture:
+        __slots__ = ()
+
+        def record(
+            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+        ) -> None:
+            ready()
+            consume(SPEECH)
+            report(LateAudio(RATE, RATE // 4))
+            consume(SPEECH)
+            report(Stall(RATE * 2, 12.5))
+            report(Skipped(RATE * 2, RATE))
+
+    # Defect: capture problems never reach the assistant log, so a shortened
+    # recording leaves no trace of which condition or how long the stall was;
+    # or a stall without lost audio is counted as a gap.
+    logged: list[str] = []
+    with fake_endpoint() as endpoint:
+        service = Meetings(settings(endpoint.url), lambda source: GappedCapture(), archive=MeetingArchive(tmp_path), log=logged.append)
+        try:
+            service.start()
+            wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
+            state = service.snapshot()
+            assert state.phase == "saved" and state.seconds == 2, state.detail
+            saved = MeetingStore(Path(state.path).parent).state()
+            assert (saved.gaps, saved.gap_frames, saved.problem) == (2, RATE * 5 // 4, "")
+            assert "through 2 gaps totalling 1.2 s" in Path(state.path).read_text(encoding="utf-8")
+            text = "\n".join(logged)
+            assert "stalled 1x, longest 12.5 s" in text and "late audio clipped" in text and "250 ms" in text, text
+            assert "silence inserted" in text and "1000 ms" in text, text
+            assert "ended:" not in text, "A recovered recording was logged as ended by a problem."
+        finally:
+            service.close()
+
+
+def test_a_full_spool_refuses_audio_and_says_the_recording_stopped() -> None:
+    # Defect: a hung journal lets capture memory grow without bound, or a full
+    # spool silently drops audio while the recording appears to continue.
+    spool = Spool(limit=8)
+    spool.put(bytes(8))
+    with TestCase().assertRaisesRegex(SpoolFullError, "Recording stopped"):
+        spool.put(bytes(2))
+    assert spool.take(0).pcm == bytes(8)
+    spool.put(bytes(8))
+
+
 def test_a_tiny_final_fragment_is_padded_for_upload_without_changing_recorded_duration(tmp_path: Path) -> None:
     tail = SPEECH[:1000]
     with fake_endpoint() as endpoint:
@@ -336,6 +468,8 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
 
 def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: Path) -> None:
     capture = GeneratedCapture(50)
+    # Defect: a recording that ends early leaves no reason in the assistant log.
+    logged: list[str] = []
 
     def unavailable(audio: bytes, *, context: str) -> Failure:
         return Failure("fixture offline")
@@ -345,6 +479,7 @@ def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: 
         lambda source: capture,
         archive=MeetingArchive(tmp_path, max_pending_bytes=RATE * 4),
         transcribe_audio=unavailable,
+        log=logged.append,
     )
     try:
         service.start()
@@ -352,6 +487,7 @@ def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: 
         store = MeetingStore(Path(service.snapshot().path).parent)
         assert store.state().finished and store.state().frames == RATE * 2
         assert "storage limit" in store.state().problem
+        assert any(f"{store.folder.name} ended: Recording stopped because" in line for line in logged), logged
     finally:
         service.close()
 

@@ -29,6 +29,21 @@ def test_a_failed_write_keeps_none_of_its_statements(tmp_path: Path) -> None:
     assert _rows(path) == [(1, "kept"), (2, "later")]
 
 
+def test_only_a_journal_that_chooses_a_write_ahead_log_relaxes_its_commits(tmp_path: Path) -> None:
+    # Defect: the meeting journal's WAL option weakens every other journal's
+    # durability, or never reaches the meeting journal's own connections.
+    for durability, mode, synchronous in ((journal.Durability.FULL, "delete", 2), (journal.Durability.WAL, "wal", 1)):
+        path = tmp_path / f"{durability.name}.sqlite3"
+        with journal.writing(path, durability=durability) as connection:
+            connection.execute(_CREATE[0])
+            assert connection.execute("PRAGMA synchronous").fetchone() == (synchronous,)
+        with journal.writing(path) as connection:
+            assert connection.execute("PRAGMA synchronous").fetchone() == (2,)
+        with journal.reading(path) as connection:
+            assert connection.execute("PRAGMA journal_mode").fetchone() == (mode,)
+            assert connection.execute("PRAGMA auto_vacuum").fetchone() == (1,)
+
+
 def test_a_new_journal_is_created_at_its_schema_version(tmp_path: Path) -> None:
     # Defect: a new journal is not created at its version, or reopening it recreates its tables.
     schema = journal.Schema(3, (*_CREATE, "CREATE TABLE tags (note INTEGER NOT NULL)"))

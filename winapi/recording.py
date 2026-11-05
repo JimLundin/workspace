@@ -14,7 +14,7 @@ from typing import Final, Protocol
 
 from winapi._core import fn, kernel32
 from winapi.audio import WAVEFORMATEX
-from winapi.pcm import RATE, Converter, Mixer, PcmFormat
+from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, Problem, Stall, dropout
 
 _ole32 = ctypes.WinDLL("ole32", use_last_error=True)
 _CoInitializeEx = fn(_ole32, "CoInitializeEx", ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)
@@ -29,6 +29,11 @@ _DISCONTINUITY: Final = 1
 _SILENT: Final = 2
 _TIMESTAMP_ERROR: Final = 4
 _LATENCY: Final = 0.5
+_BUFFER: Final = 30_000_000
+"""The engine buffer in 100 ns units: three seconds of audio survive a stalled drain."""
+_DEVICE_INVALIDATED: Final = 0x8889_0004
+_STALL: Final = 1.0
+"""Seconds between deliveries (normally 0.1) that count as a stalled capture loop."""
 
 
 def _guid(value: str) -> ctypes.Array[ctypes.c_char]:
@@ -42,6 +47,8 @@ _IID_CAPTURE = _guid("C8ADBD64-E71E-48A0-A4DE-185C395CD317")
 
 
 def _check(result: int, action: str) -> None:
+    if result < 0 and result & 0xFFFF_FFFF == _DEVICE_INVALIDATED:
+        raise OSError(f"{action} failed: the audio device was removed or changed. Recording stopped; the captured part has been saved.")
     if result < 0:
         raise OSError(
             f"{action} failed (Windows audio 0x{result & 0xFFFF_FFFF:08X}). Check the selected audio devices and desktop microphone access."
@@ -136,7 +143,7 @@ def _format(pointer: ctypes.c_void_p) -> PcmFormat:
 
 
 class Stream:
-    __slots__ = ("api", "capture", "client", "converter", "device", "label", "loopback", "position", "started")
+    __slots__ = ("api", "capture", "client", "converter", "device", "end", "gaps", "label", "loopback", "position", "started")
 
     def __init__(self, enumerator: ctypes.c_void_p, api: WasapiApi, *, loopback: bool) -> None:
         self.api = api
@@ -145,6 +152,8 @@ class Stream:
         self.loopback = loopback
         self.started = False
         self.position: int | None = None
+        self.end: int | None = None
+        self.gaps: list[Gap] = []
         try:
             # Multimedia default matches normal app playback and the system's
             # selected microphone. Both use shared mode, including alongside B/N.
@@ -167,7 +176,7 @@ class Stream:
                 _check(
                     self.api.method(
                         self.client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_void_p, ctypes.c_void_p
-                    )(self.client, 0, _LOOPBACK if loopback else 0, 10_000_000, 0, format, None),
+                    )(self.client, 0, _LOOPBACK if loopback else 0, _BUFFER, 0, format, None),
                     f"Initializing {self.label.lower()}",
                 )
             finally:
@@ -222,6 +231,12 @@ class Stream:
                 pcm = self.converter.convert(raw)
             finally:
                 _check(self.api.method(self.capture, 4, wintypes.UINT)(self.capture, frames), "Returning audio packet")
+            # The microphone streams continuously, silence included, so a flagged
+            # hole is audio lost before this drain (an overflowed engine buffer).
+            # Idle playback sends no packets at all; its holes are not losses.
+            if not self.loopback and (hole := dropout(self.end, start, discontinuous=bool(flags.value & _DISCONTINUITY))) is not None:
+                self.gaps.append(hole)
+            self.end = start + len(pcm) // 2
             yield start, pcm
 
     def stop(self) -> None:
@@ -249,7 +264,8 @@ class MeetingAudio:
         self.api = api if api is not None else NativeWasapi()
         self.computer_audio = computer_audio
 
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None:
+    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
+        """Capture until `stop`; `consume` and `report` run on this real-time thread and must not block."""
         _check(self.api.initialize(), "Preparing Windows audio")
         enumerator = ctypes.c_void_p()
         streams: list[Stream] = []
@@ -264,7 +280,30 @@ class MeetingAudio:
             for stream in streams:
                 stream.start()
             ready()
-            self._capture(streams, mixer, origin, stop, consume)
+
+            def gaps() -> None:
+                for stream in streams:
+                    for gap in stream.gaps:
+                        report(gap)
+                    stream.gaps.clear()
+                for gap in mixer.reported():
+                    report(gap)
+
+            delivered = origin
+
+            def deliver(pcm: bytes) -> None:
+                nonlocal delivered
+                now = self.api.clock()
+                if now - delivered > _STALL:
+                    report(Stall(max(0, round((delivered - origin) * RATE)), now - delivered))
+                delivered = now
+                consume(pcm)
+                gaps()
+
+            try:
+                self._capture(streams, mixer, origin, stop, deliver)
+            finally:
+                gaps()
         finally:
             for stream in reversed(streams):
                 with contextlib.suppress(OSError):

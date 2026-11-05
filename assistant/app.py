@@ -280,6 +280,7 @@ class AssistantApp:
             archive=archive,
             on_update=self.recording_changed,
             on_meeting=self.observe_meeting,
+            log=log,
         )
         self.automatic_meetings = AutomaticMeetings(
             self.meetings,

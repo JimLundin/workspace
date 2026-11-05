@@ -20,7 +20,7 @@ from tests.fake_endpoint import fake_endpoint
 from tests.test_llm import settings
 from tests.test_meetings import wait_for
 from winapi import audio, recording
-from winapi.pcm import RATE
+from winapi.pcm import RATE, Dropout, Problem, Stall
 
 
 def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(tmp_path: Path) -> None:
@@ -43,6 +43,11 @@ def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(
         finally:
             closer.join(timeout=2)
     assert "The complete transcript." in store.transcript.read_text(encoding="utf-8")
+
+
+def no_gap(problem: Problem) -> None:
+    # Defect: on-time synthetic packets are misreported as late or skipped audio.
+    raise AssertionError(f"An on-time capture reported a problem: {problem}")
 
 
 def set_pointer(argument: object, value: int) -> None:
@@ -69,10 +74,12 @@ class Wasapi:
         "fail",
         "flags",
         "format",
+        "lag",
         "microphone_positions",
         "now",
         "origin",
         "packet_frames",
+        "stalls",
         "stop_at",
         "ticks",
     )
@@ -81,6 +88,8 @@ class Wasapi:
         self.format = audio.WAVEFORMATEX(3, 2, 48_000, 48_000 * 8, 8, 32, 0)
         self.origin = self.now = 1000.0
         self.ticks, self.stop_at = 0, 127
+        self.stalls: dict[int, float] = {}
+        self.lag = 0.0
         self.delivered = {30: 0, 31: 0}
         self.dropouts: dict[tuple[int, int], int] = {}
         self.discontinuous: set[int] = set()
@@ -109,7 +118,8 @@ class Wasapi:
 
     def wait(self, stop: threading.Event, timeout: float) -> bool:
         self.ticks += 1
-        self.now = self.origin + self.ticks * timeout
+        self.lag += self.stalls.get(self.ticks, 0)
+        self.now = self.origin + self.ticks * timeout + self.lag
         return self.ticks >= self.stop_at
 
     def method(self, pointer: ctypes.c_void_p, index: int, *types: object) -> recording.NativeCall:
@@ -136,8 +146,8 @@ class Wasapi:
                 set_pointer(arguments[-1], ctypes.addressof(self.format))
             elif index == 14:  # client.GetService
                 set_pointer(arguments[-1], handle + 10)
-            elif index == 3:  # client.Initialize, shared mode and one-second engine buffer
-                assert arguments[1] == 0 and arguments[3] == 10_000_000
+            elif index == 3:  # client.Initialize, shared mode and a three-second engine buffer
+                assert arguments[1] == 0 and arguments[3] == 30_000_000
                 assert arguments[2] == (0 if handle == 20 else 0x0002_0000)
             else:
                 assert index in (10, 11), (handle, index)
@@ -178,7 +188,7 @@ def test_continuous_loopback_and_microphone_share_a_clock_and_flush_on_stop() ->
     stop, ready = threading.Event(), threading.Event()
     blocks: list[bytes] = []
     api = Wasapi()
-    recording.MeetingAudio(api).record(stop, blocks.append, ready.set)
+    recording.MeetingAudio(api).record(stop, blocks.append, ready.set, no_gap)
     assert ready.is_set()
     assert b"".join(blocks) == array("h", [3000] * round(2.54 * RATE)).tobytes()
     assert max(map(len, blocks)) < RATE * 2  # small callbacks even at final Stop
@@ -193,7 +203,7 @@ def test_microphone_only_never_opens_the_playback_device() -> None:
     stop = threading.Event()
     blocks: list[bytes] = []
     api = Wasapi()
-    recording.MeetingAudio(api, computer_audio=False).record(stop, blocks.append, lambda: None)
+    recording.MeetingAudio(api, computer_audio=False).record(stop, blocks.append, lambda: None, no_gap)
     assert b"".join(blocks) == array("h", [1000] * round(2.54 * RATE)).tobytes()
     assert not any(handle in (11, 21, 31) for handle, _ in api.calls)
 
@@ -203,7 +213,7 @@ def test_microphone_discontinuities_do_not_end_a_meeting() -> None:
     blocks: list[bytes] = []
     api = Wasapi()
     api.flags = 1
-    recording.MeetingAudio(api, computer_audio=False).record(stop, blocks.append, lambda: None)
+    recording.MeetingAudio(api, computer_audio=False).record(stop, blocks.append, lambda: None, no_gap)
     assert api.ticks == api.stop_at, "A microphone discontinuity ended capture before Stop."
     assert b"".join(blocks) == array("h", [1000] * round(2.54 * RATE)).tobytes()
     assert api.calls.count((20, 10)) == 1
@@ -215,22 +225,48 @@ def test_a_microphone_dropout_preserves_timing_and_other_speakers_until_stop() -
         blocks: list[bytes] = []
         api = Wasapi()
         api.dropouts = {(30, 48_000): 9_600}
-        recording.MeetingAudio(api, computer_audio=computer_audio).record(stop, blocks.append, lambda: None)
+        gaps: list[Problem] = []
+        recording.MeetingAudio(api, computer_audio=computer_audio).record(stop, blocks.append, lambda: None, gaps.append)
         assert api.ticks == api.stop_at
         audio = array("h", b"".join(blocks))
         normal, gap = (3000, 2000) if computer_audio else (1000, 0)
         assert audio == array("h", [normal] * RATE + [gap] * (RATE // 5) + [normal] * round(1.34 * RATE))
         assert api.calls.count((20, 10)) == api.calls.count((20, 11)) == 1
+        # Defect: audio the microphone lost before the drain is missing without a note.
+        assert gaps == [Dropout(RATE, RATE // 5)]
+
+
+def test_a_stalled_drain_keeps_every_buffered_packet_without_reporting_a_gap() -> None:
+    # Defect: a capture loop that resumes after a multi-second stall (a busy
+    # GIL, a slow journal) finds packets beyond its mixing ring and ends the
+    # recording, though the engine buffered all of them.
+    api = Wasapi()
+    api.format = audio.WAVEFORMATEX(1, 1, RATE, RATE * 2, 2, 16, 0)
+    api.packet_frames = 160
+    api.stalls = {40: 5.0}
+    blocks: list[bytes] = []
+    problems: list[Problem] = []
+    recording.MeetingAudio(api).record(threading.Event(), blocks.append, lambda: None, problems.append)
+    assert api.ticks == api.stop_at
+    assert b"".join(blocks) == array("h", [3000] * round(7.54 * RATE)).tobytes()
+    # Defect: the stall that put the recording at risk leaves no measurement.
+    match problems:
+        case [Stall(seconds=seconds)]:
+            assert 5 < seconds < 5.2, seconds
+        case _:
+            raise AssertionError(problems)
 
 
 def test_meeting_service_saves_speech_after_a_microphone_dropout(tmp_path: Path) -> None:
     class Capture:
         __slots__ = ()
 
-        def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None]) -> None:
+        def record(
+            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+        ) -> None:
             api = Wasapi()
             api.dropouts = {(30, 48_000): 9_600}
-            recording.MeetingAudio(api).record(stop, consume, ready)
+            recording.MeetingAudio(api).record(stop, consume, ready, report)
             assert api.ticks == api.stop_at
 
     with fake_endpoint() as endpoint:
@@ -241,6 +277,7 @@ def test_meeting_service_saves_speech_after_a_microphone_dropout(tmp_path: Path)
             state = service.snapshot()
             assert state.phase == "saved", state.detail
             assert state.seconds == 2.54 and state.pending_seconds == 0
+            assert MeetingStore(Path(state.path).parent).state().gaps == 1
             assert "hello there" in Path(state.path).read_text(encoding="utf-8")
             assert len(endpoint.received) == 1
         finally:
@@ -254,7 +291,7 @@ def test_forward_device_positions_need_not_advance_by_stream_packet_frames() -> 
     api = Wasapi()
     api.microphone_positions = tuple(index * 441 for index in range(300))
     blocks: list[bytes] = []
-    recording.MeetingAudio(api, computer_audio=False).record(threading.Event(), blocks.append, lambda: None)
+    recording.MeetingAudio(api, computer_audio=False).record(threading.Event(), blocks.append, lambda: None, no_gap)
     result = b"".join(blocks)
     assert len(result) == round(2.54 * RATE) * 2
     assert result[1000:1200] == array("h", [1000] * 100).tobytes()
@@ -265,14 +302,14 @@ def test_a_backward_device_position_still_stops_recording() -> None:
     api = Wasapi()
     api.microphone_positions = (1000, 500)
     with unittest.TestCase().assertRaisesRegex(OSError, "restarted its audio clock"):
-        recording.MeetingAudio(api).record(threading.Event(), lambda pcm: None, lambda: None)
+        recording.MeetingAudio(api).record(threading.Event(), lambda pcm: None, lambda: None, no_gap)
 
 
 def test_cancelling_during_device_setup_never_starts_capture() -> None:
     stop = threading.Event()
     stop.set()
     api = Wasapi()
-    recording.MeetingAudio(api).record(stop, lambda pcm: None, lambda: None)
+    recording.MeetingAudio(api).record(stop, lambda pcm: None, lambda: None, no_gap)
     assert not any(index == 10 for _, index in api.calls)
     assert (20, 2) in api.calls and (21, 2) in api.calls
 
@@ -281,7 +318,7 @@ def test_a_failed_second_device_start_releases_both_devices_and_stops_the_first(
     api = Wasapi()
     api.fail = (21, 10)
     with unittest.TestCase().assertRaises(OSError):
-        recording.MeetingAudio(api).record(threading.Event(), lambda pcm: None, lambda: None)
+        recording.MeetingAudio(api).record(threading.Event(), lambda pcm: None, lambda: None, no_gap)
     assert (20, 11) in api.calls
     for handle in (1, 10, 11, 20, 21, 30, 31):
         assert api.calls.count((handle, 2)) == 1
@@ -292,7 +329,7 @@ def test_packet_clock_errors_return_the_driver_buffer_before_releasing_devices()
     api = Wasapi()
     api.flags = 4
     with unittest.TestCase().assertRaisesRegex(OSError, "audio clock"):
-        recording.MeetingAudio(api).record(stop, lambda pcm: None, lambda: None)
+        recording.MeetingAudio(api).record(stop, lambda pcm: None, lambda: None, no_gap)
     assert api.calls.count((30, 4)) == 2
     assert api.calls.index((30, 4)) < api.calls.index((30, 2))
     assert (20, 11) in api.calls and (21, 11) in api.calls
@@ -303,7 +340,7 @@ def test_digital_silence_is_kept() -> None:
     blocks: list[bytes] = []
     api = Wasapi()
     api.flags = 2
-    recording.MeetingAudio(api, computer_audio=False).record(stop, blocks.append, lambda: None)
+    recording.MeetingAudio(api, computer_audio=False).record(stop, blocks.append, lambda: None, no_gap)
     result = b"".join(blocks)
     assert result[:320] == array("h", [1000] * 160).tobytes()
     assert not any(result[320:])
