@@ -379,6 +379,22 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         assert count == 1 and not rig.agent.running() and rig.finished == [False]
 
 
+def test_output_said_just_before_completion_is_shown_before_the_result(tmp_path: Path) -> None:
+    # Defect: the frontend reads the completed task before presenting the run's
+    # queued output, then drops that output because the run no longer owns its task.
+    with work(tmp_path) as rig:
+        rig.agent.start("Check the outcome")
+        rig.refresh()
+        claim = rig.tasks.claim("worker-one", "first-run", at=rig.clock())
+        assert claim is not None
+        rig.refresh()
+        rig.agent.deliver(claim.run, Said("Last progress before completing", rig.clock()))
+        rig.tasks.finish(claim.run, Completed("Verified durable result", ("Output exists",)), at=rig.clock())
+        rig.refresh()
+        text = rig.panel.all_text()
+        assert text.index("Last progress before completing") < text.index("Verified durable result")
+
+
 def test_question_and_resumed_action_keep_one_phase_and_one_reply(tmp_path: Path) -> None:
     # Defect: ending the UI turn at each question cancels its running action row,
     # then resuming creates a second phase beside the falsely stopped one.

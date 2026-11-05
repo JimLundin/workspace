@@ -592,57 +592,70 @@ class WorkAgent:
         self.on_snapshot(snapshot)
 
     def deliver(self, run: RunRef, event: PresentationEvent) -> None:
-        """A run's live update, from the worker's execution thread; the observer presents it."""
-        self._events.put((run, event))
-        self._wake.set()
+        """A run's live update, from the worker's execution thread; the observer presents it.
 
-    def _log(self, run: RunRef, event: PresentationEvent) -> None:
+        Ownership is decided here, when the run speaks: by the time the observer
+        reads the journal the run may have finished, which keeps its output, or
+        been superseded, which already dropped it.
+        """
         try:
-            self._present_log(run, event)
+            task = self._service.tasks.get(run.task_id)
         except Exception:
             self.report_error(traceback.format_exc())
+            return
+        if task is not None and owns(task, run):
+            self._events.put((run, event))
+            self._wake.set()
 
-    def _present_log(self, run: RunRef, event: PresentationEvent) -> None:
-        task = self._service.tasks.get(run.task_id)
+    def _log(self, run: RunRef, event: PresentationEvent) -> bool:
+        """Present the event if its run owns the displayed task; False leaves it unpresented."""
+        try:
+            return self._present_log(run, event)
+        except Exception:
+            self.report_error(traceback.format_exc())
+            return True
+
+    def _present_log(self, run: RunRef, event: PresentationEvent) -> bool:
         with self._lock:
-            if task is None or not owns(task, run) or not in_conversation(task, self._conversation):
-                return
-            if self._displayed is None or self._displayed.id != task.id or self.window is None or self._closing.is_set():
-                return
+            task = self._displayed
+            if task is None or not owns(task, run) or self.window is None or self._closing.is_set():
+                return False
             match event:
                 case automation.presentation.Progress(text):
                     self.window.step(text)
-                    return
+                    return True
                 case automation.presentation.Said(text, _):
                     self.window.say(text)
-                    return
+                    return True
                 case automation.presentation.Problem(text, _):
                     if source_is_automatic(task):
                         self.window.say(text)
                     else:
                         self.window.problem(text)
-                    return
+                    return True
                 case automation.presentation.Answer(text=text) | automation.presentation.ReasoningSummary(text=text):
                     live = self._live
                     if live is None:
-                        return
+                        return True
                 case automation.presentation.ToolActivity():
                     if self._live is not None:
                         self._live(event)
-                    return
+                    return True
                 case _:
                     assert_never(event)
         # The output adapter owns prose preparation outside the frontend lock.
         # The captured producer is fenced to its session generation.
         live(event)
+        return True
 
-    def _drain_events(self) -> None:
+    def _take_events(self) -> tuple[tuple[RunRef, PresentationEvent], ...]:
+        events: list[tuple[RunRef, PresentationEvent]] = []
         for _ in range(512):
             try:
-                run, event = self._events.get_nowait()
+                events.append(self._events.get_nowait())
             except queue.Empty:
-                return
-            self._log(run, event)
+                break
+        return tuple(events)
 
     def _jobs_ready(self) -> tuple[Observe, ...]:
         observed: list[Observe] = []
@@ -704,9 +717,16 @@ class WorkAgent:
                 observed = self._jobs_ready()
                 try:
                     if not self._closing.is_set():
+                        # Events taken before the journal read were said before the
+                        # state it shows: present those of the displayed run first,
+                        # and those of a run this snapshot first displays after it.
+                        events = self._take_events()
                         watched, pending = self._observed_ids()
-                        self._publish(self._service.snapshot(watched=watched, pending=pending))
-                        self._drain_events()
+                        snapshot = self._service.snapshot(watched=watched, pending=pending)
+                        later = tuple((run, event) for run, event in events if not self._log(run, event))
+                        self._publish(snapshot)
+                        for run, event in later:
+                            self._log(run, event)
                 except Exception as error:
                     self._service.problem = str(error) or "Work could not be refreshed."
                     self._publish_unavailable()
