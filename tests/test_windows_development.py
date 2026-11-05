@@ -86,6 +86,8 @@ def test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits(tmp
         subprocess.Popen(
             (sys.executable, "-B", "-m", "scripts.watch", "--tests", "tests/test_value.py", "--stop-file", str(stop)),
             cwd=root,
+            # The check's selection reads the protected selfcheck, which the fixture leaves out.
+            env=dict(os.environ, PYTHONPATH=os.pathsep.join((str(ROOT), *sys.path))),
             stdout=stream,
             stderr=stream,
         ) as process,
