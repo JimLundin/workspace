@@ -1,4 +1,4 @@
-"""Install checked source into the Downloads copy of Workspace through its keeper.
+"""Install checked source into the installed copy of Workspace through its keeper.
 
 python -m scripts.deploy --check-receipt %TEMP%\\workspace-check.json
 

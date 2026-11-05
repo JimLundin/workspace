@@ -3,8 +3,8 @@
 Run native commands from the checkout in PowerShell. `Dev.cmd` uses the Windows
 `.venv`, adds native Git to PATH and reuses Qt and the application dependencies
 from the installed `.runtime` through a local `.pth` file. The virtual
-environment uses the user-installed Python 3.15.1. Keep the Downloads client
-separate so edits and tests never replace files in the running application.
+environment uses the user-installed Python 3.15.1. Keep the installed client
+(`%LOCALAPPDATA%\Programs\workspace-sdk\workspace`) separate so edits and tests never replace files in the running application.
 
 ```powershell
 .\Dev.cmd check --tests tests/test_feed_triage.py --receipt "$env:TEMP\workspace-check.json"
@@ -118,5 +118,5 @@ the files and restarts only the programs the change affects. A change to a
 protected file relaunches the keeper. Deploy waits for the keeper's result and
 reports it; a refusal or undo fails the command. When no keeper is running,
 deploy takes the keeper's lock and installs the files through the same version
-store, and the copy stays stopped. The Downloads ZIP changes only when
+store, and the copy stays stopped. The release ZIP changes only when
 `scripts/bundle.py` rebuilds it.

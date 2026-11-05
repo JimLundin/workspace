@@ -2,7 +2,7 @@
 
 The coordinator owns source hashing and receipt binding. The native runner
 imports the selected source tree and executes its reviewed plan, without
-installing or launching Workspace or needing Git in the Downloads installation.
+installing or launching Workspace or needing Git in the installed copy.
 """
 
 import os
