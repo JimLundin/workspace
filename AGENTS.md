@@ -1,8 +1,8 @@
 # Project scope
 
 Workspace owns the Windows keyboard, dictation, assistant, floating desktop bar,
-automation and the native Qt work canvas
-([docs/work-thread-representation.md](docs/work-thread-representation.md)).
+automation and the native Qt work canvas. [GLOSSARY.md](GLOSSARY.md) defines
+its terms.
 Keep its Python/Qt runtime. The embedded browser belongs to the paused
 [Shared Workspace](https://github.com/JimLundin/shared-workspace) project.
 Use `workspace` for installation and data paths, environment variables, window
@@ -24,8 +24,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Patches and mocks are banned everywhere, tests included. Pass typed
   dependencies into effect owners and test with pure inputs, real local
   resources or concrete adapters. The architecture review enforces the ban.
-- Use Hypothesis with bounded valid inputs for generated properties; see
-  [docs/property-testing.md](docs/property-testing.md).
+- Use Hypothesis with bounded valid inputs for generated properties, in
+  `tests/properties/`. Test our adapters, not a dependency's algorithms.
 
 # Design
 
@@ -51,13 +51,13 @@ their tests. Legacy data and backwards compatibility are not requirements.
   to defer loading. No re-exports or cosmetic aliases.
 - Boolean parameters are keyword-only. Functions take at most five inputs; Ruff
   blocks more. Where a wider signature is genuinely needed, add
-  `# noqa: PLR0913 - <reason>` on the `def` line. See
-  [docs/code-quality-policies.md](docs/code-quality-policies.md).
+  `# noqa: PLR0913 - <reason>` on the `def` line. Never suppress a whole file.
+- Modules listed under `tool.workspace.architecture.headless` in
+  `pyproject.toml` must not import `desktop_ui` or Qt, even indirectly.
 - Before writing general-purpose code, check for a small focused dependency and
   prefer it when its footprint and integration cost are reasonable.
-- Pyright (strict) is the only type checker. Read
-  [docs/functional-design.md](docs/functional-design.md) when changing domain
-  models or the module map.
+- Pyright (strict) is the only type checker. The
+  [module map](docs/functional-design.md) says which module owns what.
 
 # Checking
 

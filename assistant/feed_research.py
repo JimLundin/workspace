@@ -14,11 +14,11 @@ lazy import agents
 lazy from agents import AgentsException, FunctionTool, ModelSettings, OpenAIResponsesModel, RunConfig, Runner
 lazy from agents.run_config import ToolExecutionConfig
 lazy from agents.tool_context import ToolContext
-lazy from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
+lazy from openai import APIError, AsyncOpenAI
 lazy from openai.types.shared import Reasoning
 
 from assistant.feed_contracts import REVIEW_INPUT, REVIEW_OUTPUT, SCREENING, ReviewInput
-from assistant.llm import Settings
+from assistant.llm import Settings, async_client
 from automation.files import filesystem_path
 
 _SCHEMA = TypeAdapter(dict[str, object])
@@ -173,10 +173,7 @@ class Research:
             raise OSError("Inbox research stopped.")
         reasoning_fields: dict[str, str] = {"effort": self.settings.agent_reasoning_effort, "summary": "auto"}
         reasoning = Reasoning.model_validate(reasoning_fields)
-        http = DefaultAsyncHttpxClient(trust_env=True)
-        async with AsyncOpenAI(
-            base_url=self.settings.base_url, api_key=self.settings.api_key, max_retries=0, timeout=120, http_client=http
-        ) as client:
+        async with async_client(self.settings, timeout_s=120) as client:
 
             async def search(context: ToolContext[Research], arguments: str) -> object:
                 if self.stop.is_set():

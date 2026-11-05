@@ -4,10 +4,9 @@ import asyncio
 import threading
 
 lazy from agents import Agent, ModelSettings, OpenAIResponsesModel, RunConfig, Runner
-lazy from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 lazy from openai.types.shared import Reasoning
 
-from assistant.llm import Settings
+from assistant.llm import Settings, async_client
 from automation.personal_work import CORRELATION_INPUT, WORK_PLAN, CorrelationInput, WorkPlan
 
 INSTRUCTIONS = """Maintain the user's ongoing personal work by connecting observed Teams conversations, Outlook conversations
@@ -54,10 +53,7 @@ class Correlator:
         return asyncio.run(self.review(request, cancel))
 
     async def review(self, request: CorrelationInput, cancel: threading.Event) -> WorkPlan:
-        http = DefaultAsyncHttpxClient(trust_env=True)
-        async with AsyncOpenAI(
-            base_url=self.settings.base_url, api_key=self.settings.api_key, max_retries=0, timeout=120, http_client=http
-        ) as client:
+        async with async_client(self.settings, timeout_s=120) as client:
             reasoning_fields: object = {"effort": self.settings.agent_reasoning_effort}
             reasoning = Reasoning.model_validate(reasoning_fields)
             agent: Agent[None] = Agent(
