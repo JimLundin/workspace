@@ -33,7 +33,6 @@ from desktop_ui.shell_items import (
 )
 from desktop_ui.shell_surface import ShellSections, page_font
 from desktop_ui.ui import Ui
-from desktop_ui.vector_icons import icon
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import Pixels, pixels
 from winapi.shapes import Rect, Window
@@ -265,7 +264,7 @@ def face(button: QtWidgets.QWidget) -> QtGui.QImage:
 
 
 def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_workspace_process() -> None:
-    # Defects: a stylesheet squeezes a pager digit or chevron, an application's
+    # Defects: a stylesheet squeezes a pager digit, an application's
     # bitmap or a slot symbol paints larger than the bar's 16 px symbols, or the
     # first control loses its concentric 3 px inset.
     ui = Ui()
@@ -294,11 +293,9 @@ def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_work
         painter.setPen(ink_colour)
         painter.drawText(QtCore.QRectF(0, 0, 32, 32), QtCore.Qt.AlignmentFlag.AlignCenter, "3")
         painter.end()
-        chevron = icon("chevron", chosen.lettering.ink.color, 16).pixmap(QtCore.QSize(16, 16), scale).toImage()
-        three, following = sections.pager.buttons[3], sections.pager.buttons[4]
+        three = sections.pager.buttons[2]
         for (width, height), (expected_width, expected_height) in (
             (ink(face(three)), ink(digit)),
-            (ink(face(following)), ink(chevron)),
             (ink(face(sections.apps.buttons[0])), (side, side)),
         ):
             assert abs(width - expected_width) <= 1 and abs(height - expected_height) <= 1, (width, height, expected_width, expected_height)
@@ -312,7 +309,7 @@ def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_work
 
 
 def test_a_pager_of_one_desktop_leaves_no_targets_behind() -> None:
-    # Defect: building a hidden pager's chevrons anyway leaves them in the
+    # Defect: building a hidden pager's targets anyway leaves them in the
     # section, unplaced, until it shows and they stack over its first target.
     app = application()
     parent = QtWidgets.QWidget()

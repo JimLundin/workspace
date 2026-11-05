@@ -22,8 +22,6 @@ def symbol(name: str) -> str:
     """The SVG body for a symbol name; unknown names fall back to the document symbol."""
     if name in ("stop", "stop.fill"):
         return _STOP
-    if name == "chevron-left":
-        return '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
     # Unavailable is not muted or disconnected: a question badge retains the
     # device identity without asserting a state Windows could not observe.
     if name in ("speaker-unknown", "wifi-unknown", "wifi-absent"):

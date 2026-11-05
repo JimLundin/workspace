@@ -168,7 +168,6 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
             assert bar.ambient.battery_text in status.accessibleName()
             assert status.view is not None
             assert abs(bar.window.measure(status.view).width - status.width()) <= 1
-        assert symbol("chevron-left") == '<g transform="translate(16 0) scale(-1 1)">' + REGULAR["chevron"] + "</g>"
     finally:
         closed(app, bar)
 
