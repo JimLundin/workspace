@@ -34,7 +34,7 @@ from scripts.source_analysis import Cache
 lazy import selfcheck
 lazy from runtime import activate
 lazy from scripts import check_standards, quality
-lazy from scripts.check_native import execute_native
+lazy from scripts.check_native import execute_lanes
 lazy from scripts.native_desktop import current_name
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -205,11 +205,22 @@ class ExecutionPlan:
     sequential: tuple[str, ...]
 
 
+WORKERS = 6
+POOL_MINIMUM = 10
+"""Fewer modules finish sooner here than workers can start: each imports the SDK first."""
+
+
 def execution_plan(tests: tuple[str, ...]) -> ExecutionPlan:
-    portable = tuple(selector for name in selfcheck.PORTABLE for selector in tests if selector.partition("::")[0] == name)
-    if len(portable) < 2 or not any(name.startswith("tests/test_windows_") for name in tests):
+    # Workers own no native windows: native modules stay in this process, after
+    # the workers exit, as do strict-deadline modules.
+    candidates = tuple(selector for selector in tests if not selector.startswith("tests/test_windows_"))
+    if len(candidates) < POOL_MINIMUM:
         return ExecutionPlan((), tests)
-    return ExecutionPlan(portable, tuple(name for name in tests if name not in portable))
+    pooled = {selector for selector in candidates if selector.partition("::")[0] not in selfcheck.AFTER_WORKERS}
+    # Known heavy modules lead the queue so they do not finish last.
+    heavy = tuple(selector for name in selfcheck.PORTABLE for selector in tests if selector.partition("::")[0] == name and selector in pooled)
+    portable = (*heavy, *(selector for selector in tests if selector in pooled and selector not in heavy))
+    return ExecutionPlan(portable, tuple(name for name in tests if name not in pooled))
 
 
 def worker_result(result: Results) -> Results:
@@ -264,7 +275,7 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     if failures:
         return combined_results((first, Results(0, 0, tuple(failures), ())), tuple(phases))
     remaining = tuple(name for name in selection.tests if not name.startswith("tests/properties/"))
-    following = execute_overlapped(remaining, root) if broad else execute_tests(remaining, root, runtime.load)
+    following = execute_overlapped(remaining, root, runtime.load)
     return combined_results((first, following), tuple(phases))
 
 
@@ -277,26 +288,21 @@ def prepare_worker(root: Path) -> None:
         importlib.import_module("assistant.sdk")
 
 
-def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
+def execute_overlapped(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
     plan = execution_plan(tests)
     if not plan.portable:
-        return execute_tests(plan.sequential, root)
-    alongside = tuple(
-        name for name in plan.sequential if not name.startswith("tests/test_windows_") and name.partition("::")[0] not in selfcheck.AFTER_WORKERS
-    )
-    following = tuple(name for name in plan.sequential if name not in alongside)
+        return execute_tests(plan.sequential, root, load)
     phases: list[tuple[float, str]] = []
     results: list[Results] = []
     # The coordinator owns futures and ledgers until all children exit. Only
-    # immutable Results cross the stdlib pool boundary; no desktop work is
-    # submitted to it. Parent tests and each complete worker module keep their
-    # ordinary executor, fixtures, assertions and failure protocol.
+    # immutable Results cross the stdlib pool boundary; no native module is
+    # submitted to it. Each worker module keeps the ordinary executor, fixtures,
+    # assertions and failure protocol.
     with timed("phase:portable worker dispatch", phases):
-        pool = ProcessPoolExecutor(max_workers=selfcheck.WORKERS, initializer=prepare_worker, initargs=(root,))
+        pool = ProcessPoolExecutor(max_workers=WORKERS, initializer=prepare_worker, initargs=(root,))
     try:
         with timed("phase:portable worker submission", phases):
             pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in plan.portable)
-        results.append(execute_tests(alongside, root))
         with timed("phase:portable worker completion", phases):
             for name, future in pending:
                 try:
@@ -306,7 +312,7 @@ def execute_overlapped(tests: tuple[str, ...], root: Path) -> Results:
     finally:
         with timed("phase:portable worker shutdown", phases):
             pool.shutdown(wait=True, cancel_futures=True)
-    results.append(execute_tests(following, root))
+    results.append(execute_tests(plan.sequential, root, load))
     return combined_results(tuple(results), tuple(phases))
 
 
@@ -593,7 +599,8 @@ def main() -> None:
         if os.name == "nt" and current_name() == os.environ.get("WORKSPACE_TEST_DESKTOP"):
             results = execute(selection, ROOT)
         elif os.name == "nt" or args.native:
-            results = execute_native(ROOT, selection)
+            # Whole-tree pyright saturates the cores; native fixtures wait for it.
+            results = execute_lanes(ROOT, selection, typed if args.full else check_standards.unchecked)
         else:
             results = execute(selection, ROOT)
         with timed("phase:type standards", overhead):

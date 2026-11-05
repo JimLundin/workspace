@@ -135,8 +135,9 @@ def test_native_check_reviews_source_once_across_desktop_handoff(tmp_path: Path)
     for name in ("__init__.py", "desktop_session.py"):
         shutil.copyfile(ROOT / "tests" / name, root / "tests" / name)
     (root / "tests" / "test_value.py").rename(root / "tests" / "test_windows_value.py")
-    # Two registered portable modules exercise the real spawned-worker handoff.
-    # A re-executed runner would recursively launch checks or append twice.
+    # Two portable modules run in the main runner, which must exit before the
+    # native lane starts. A re-executed runner would recursively launch checks
+    # or append twice.
     markers = tuple(tmp_path / (name + ".ran") for name in ("test_commands", "test_llm"))
     for marker in markers:
         (root / "tests" / (marker.stem + ".py")).write_text(

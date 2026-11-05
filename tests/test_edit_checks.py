@@ -8,6 +8,7 @@ from pathlib import Path
 from scripts.architecture import Report, dependencies
 from scripts.check import (
     COST_RECORD,
+    POOL_MINIMUM,
     SUMMARY_LIMIT,
     CheckRun,
     ExecutionPlan,
@@ -198,16 +199,19 @@ def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(
 
 
 def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> None:
+    # Defects: a native or strict-deadline module runs in a worker, a selector
+    # loses its function, or a few modules wait for workers to start.
+    unreviewed = tuple(f"tests/test_unreviewed_{index}.py" for index in range(POOL_MINIMUM - 2))
     selectors: tuple[str, ...] = (
-        "tests/test_agent.py::test_declined",
-        "tests/test_work_store.py",
+        *unreviewed,
         "tests/test_windows_browser.py",
-        "tests/test_unreviewed.py",
+        "tests/test_agent_streaming.py",
+        "tests/test_work_store.py",
+        "tests/test_agent.py::test_declined",
     )
     plan = execution_plan(selectors)
-    assert plan == ExecutionPlan(selectors[:2], selectors[2:])
+    assert plan == ExecutionPlan(("tests/test_agent.py::test_declined", "tests/test_work_store.py", *unreviewed), selectors[-4:-2])
     assert execution_plan(selectors[2:]) == ExecutionPlan((), selectors[2:])
-    assert execution_plan(selectors[:2]) == ExecutionPlan((), selectors[:2])
     # Our aggregation must preserve failed child assertions and attribute child
     # costs separately from the sequential desktop lane's elapsed work.
     refusal = Failure("tests/test_agent.py::test_declined", "AssertionError", "Refusal failed")
