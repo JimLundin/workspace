@@ -444,8 +444,10 @@ class NativeSessions:
             while time.monotonic() < deadline:
                 if cancel.wait(0.05):
                     raise InterruptedError("Stopped while starting the browser.")
-                if process.poll() is not None:
-                    raise BrowserError("Edge exited before automation started. Its dedicated profile may already be open or blocked by policy.")
+                if (code := process.poll()) is not None:
+                    raise BrowserError(
+                        f"Edge exited with code {code} before automation started. Its dedicated profile may already be open or blocked by policy."
+                    )
                 try:
                     uri = read_endpoint(self.profile)
                 except BrowserError:
