@@ -318,18 +318,6 @@ class Claim:
             raise ValueError("The claim did not start from runnable work.")
 
 
-@dataclass(frozen=True, slots=True)
-class GoalRevision:
-    revision: int
-    prompt: str
-    at: float
-
-    def __post_init__(self) -> None:
-        integer(self.revision, "goal revision")
-        text(self.prompt, "goal prompt")
-        timestamp(self.at)
-
-
 class NoVerification(Enum):
     NONE = "none"
 
@@ -534,10 +522,6 @@ def allowed_controls(state: State) -> tuple[Control, ...]:
             return ()
         case _:
             assert_never(state)
-
-
-def redirected(task: Task, prompt: str, *, at: float) -> Task:
-    return replace(changed(task, TaskStatus.READY, at=at), prompt=prompt, goal_revision=task.goal_revision + 1)
 
 
 def answered(task: Task, request_id: str, reply: TextAnswer, *, at: float) -> tuple[Task, Response] | None:

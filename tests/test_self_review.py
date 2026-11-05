@@ -47,11 +47,9 @@ class Settles:
         return self.outcome
 
 
-def settle(store: TaskStore, identity: str, outcome: Outcome, source: RequestSource | None = None, *, revised: str = "") -> None:
+def settle(store: TaskStore, identity: str, outcome: Outcome, source: RequestSource | None = None) -> None:
     at = NOW.timestamp()
     store.submit(identity, "Requested work", "Do the work.", source or RequestSource("chat"), at=at)
-    if revised:
-        assert store.revise(identity, revised, at=at) is not None
     claim = store.claim("worker", identity + "-run", at=at)
     assert claim is not None and claim.task.id == identity
     result = ReviewingRunner(Settles(outcome), lambda: NOW).run_work(claim, store, FakeWindow(), threading.Event())
@@ -64,15 +62,14 @@ def reviews(store: TaskStore) -> list[tuple[str, str]]:
 
 def test_only_settled_runs_with_evidence_of_a_problem_are_reviewed(tmp_path: Path) -> None:
     # Defect: every run spends a review, a run still waiting on the user is reviewed
-    # before it settles, or failures and goal corrections go unreviewed.
+    # before it settles, or a failure goes unreviewed.
     store = TaskStore(tmp_path / "work.sqlite3")
     settle(store, "clean", Completed("Done.", ()))
     settle(store, "waiting", Waiting(Question("q", "Which folder?", "")))
     settle(store, "failed", Failed("The report could not be found."))
-    settle(store, "redirected", Completed("Done.", ()), revised="Do it in the Finance folder instead.")
-    assert [subject for _, subject in reviews(store)] == ["failed", "redirected"]
+    assert [subject for _, subject in reviews(store)] == ["failed"]
     prompts = {task.source.profile.subject: task.prompt for task in store.list_tasks() if isinstance(task.source.profile, SelfReview)}
-    assert "the task failed" in prompts["failed"] and "the user revised the goal" in prompts["redirected"]
+    assert "the task failed" in prompts["failed"]
 
 
 def test_a_review_is_never_reviewed_and_each_day_is_reviewed_once(tmp_path: Path) -> None:
@@ -91,15 +88,14 @@ def test_a_review_is_never_reviewed_and_each_day_is_reviewed_once(tmp_path: Path
 
 
 def test_history_shows_what_went_wrong_in_each_task(tmp_path: Path) -> None:
-    # Defect: the review cannot see the failure, the user's correction or the
-    # question it asked, so it has nothing to learn from.
+    # Defect: the review cannot see the failure or the question it asked, so it
+    # has nothing to learn from.
     store = TaskStore(tmp_path / "work.sqlite3")
-    settle(store, "failed", Failed("The report could not be found."), revised="Use the Finance folder.")
+    settle(store, "failed", Failed("The report could not be found."))
     task = store.get("failed")
     assert task is not None
-    text = describe_history((TaskRecord(task, store.actions(task.id), store.revisions(task.id), store.responses(task.id)),))
+    text = describe_history((TaskRecord(task, store.actions(task.id), store.responses(task.id)),))
     assert "failed: The report could not be found." in text
-    assert "Goal revision 1: Use the Finance folder." in text
 
 
 def test_history_preserves_install_evidence_and_unsettled_actions(tmp_path: Path) -> None:
@@ -118,7 +114,7 @@ def test_history_preserves_install_evidence_and_unsettled_actions(tmp_path: Path
         Action(f"action-{index}", task.id, "original-run", ActionSpec("apply_changes", "Install", "a" * 64), 1, 2, outcome)
         for index, outcome in enumerate(outcomes)
     )
-    text = describe_history((TaskRecord(task, actions, store.revisions(task.id), ()),))
+    text = describe_history((TaskRecord(task, actions, ()),))
     assert "Installed and pushed as abc123." in text
     assert "Command exited with code 1; effect not verified." in text
     assert "No settled outcome recorded." in text
@@ -147,7 +143,7 @@ def test_history_tool_pages_day_and_recent_then_drills_into_diagnostics(tmp_path
     # Defect: tool wiring ignores day page size/offset or replaces task diagnostics
     # with summaries, leaving daily reviews without a route to their evidence.
     store = TaskStore(tmp_path / "work.sqlite3")
-    settle(store, "failed", Failed("Missing report."), revised="Use Finance.")
+    settle(store, "failed", Failed("Missing report."))
     store.submit("older", "Old work", "Old goal.", RequestSource("chat"), at=(NOW - timedelta(days=2)).timestamp())
     machine, errors = FakeMachine(), list[str]()
     with fake_endpoint() as endpoint:
@@ -173,10 +169,9 @@ def test_history_tool_pages_day_and_recent_then_drills_into_diagnostics(tmp_path
     assert isinstance(outcome, Completed), (outcome, errors)
     bodies = tuple(request.body.decode("utf-8") for request in endpoint.received)
     assert "failed: Missing report." in bodies[1] and "next_offset: none" in bodies[1]
-    assert "Goal revision 1: Use Finance." not in bodies[1]
+    assert "Detail coverage" not in bodies[1]
     assert "No tasks match." in bodies[2]
     assert "next_offset: 1" in bodies[3]
-    assert "Goal revision 1: Use Finance." in bodies[4]
     assert "Detail coverage: newest 100 actions" in bodies[4]
 
 

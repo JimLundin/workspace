@@ -261,27 +261,6 @@ def test_timed_waits_wake_at_the_deadline_and_blocked_work_requires_explicit_res
     assert store.claim("worker", "retry-run", at=1_002) is not None
 
 
-def test_revise_records_new_goal_and_retains_observations_while_fencing_old_run(tmp_path: Path) -> None:
-    path = tmp_path / "work.sqlite3"
-    store = TaskStore(path)
-    store.submit("task", "Briefing", "Write a long briefing.", RequestSource("chat"), at=1)
-    run = store.claim("worker", "old-run", at=2)
-    assert run is not None
-    store.progress(run.run, "Read the project documents.", at=3)
-    store.begin_action(run.run, "observed-action", specification(), at=4)
-    store.finish_action("observed-action", ActionVerified("Existing notes were read back."), at=5)
-    revised = store.revise("task", "Write a one-page briefing instead.", at=6)
-    assert revised is not None
-    assert store.finish(run.run, Completed("Long briefing finished.", ("Wrong goal.",)), at=7) is None
-    reopened = TaskStore(path)
-    following = reopened.claim("worker", "new-run", at=8)
-    assert following is not None and following.task.prompt == "Write a one-page briefing instead."
-    assert following.task.checkpoint is not None and "project documents" in following.task.checkpoint.summary
-    assert isinstance(reopened.actions("task")[0].outcome, ActionVerified)
-    assert [entry.prompt for entry in reopened.revisions("task")] == ["Write a long briefing.", "Write a one-page briefing instead."]
-    assert reopened.finish(following.run, Completed("One-page briefing saved.", ("Saved briefing checked.",)), at=9) is not None
-
-
 def test_durable_attempt_requires_reconciliation_before_replay_or_completion(tmp_path: Path) -> None:
     path = tmp_path / "work.sqlite3"
     target = tmp_path / "notes.md"

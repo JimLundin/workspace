@@ -28,7 +28,6 @@ from automation.task import (
     Claim,
     Completed,
     Failed,
-    GoalRevision,
     Outcome,
     Question,
     RequestSource,
@@ -48,7 +47,6 @@ class Signal(Enum):
     BLOCKED = "the run ended blocked or was stopped"
     UNCERTAIN = "an action's outcome was uncertain"
     NOT_APPLIED = "an action was not applied"
-    REDIRECTED = "the user revised the goal"
     ASKED = "the agent had to ask the user"
 
 
@@ -59,7 +57,7 @@ LESSON_SOURCE: Final = "Workspace agent lesson, task "
 """Marks preferences the agent wrote, so it may retire its own lessons but never the user's."""
 
 
-def signals(outcome: Outcome, actions: Iterable[Action], revisions: Sequence[GoalRevision], responses: Sequence[Response]) -> tuple[Signal, ...]:
+def signals(outcome: Outcome, actions: Iterable[Action], responses: Sequence[Response]) -> tuple[Signal, ...]:
     """What a settled run shows; a run still waiting on the user or the keeper is not settled."""
     found: list[Signal] = []
     match outcome:
@@ -79,8 +77,6 @@ def signals(outcome: Outcome, actions: Iterable[Action], revisions: Sequence[Goa
         found.append(Signal.UNCERTAIN)
     if any(isinstance(item, ActionNotApplied) for item in outcomes):
         found.append(Signal.NOT_APPLIED)
-    if len(revisions) > 1:
-        found.append(Signal.REDIRECTED)
     if responses:
         found.append(Signal.ASKED)
     return tuple(found)
@@ -117,7 +113,7 @@ def task_review(task: Task, run_id: str, found: Sequence[Signal]) -> Submission:
     key = hashlib.sha256((task.id + "\0" + run_id).encode("utf-8")).hexdigest()[:32]
     prompt = (
         f"Review your own work on task {task.id} ({task.title}). What happened: {'; '.join(item.value for item in found)}. "
-        f"Read it with work_history (task_id {task.id}), including its action records, goal revisions and answers. " + _METHOD
+        f"Read it with work_history (task_id {task.id}), including its action records and answers. " + _METHOD
     )
     return Submission("self-review:" + key, f"Review: {task.title}"[:240], prompt, RequestSource(REVIEW_CONVERSATION, SelfReview(task.id)))
 
@@ -151,7 +147,6 @@ class TaskRecord:
 
     task: Task
     actions: tuple[Action, ...]
-    revisions: tuple[GoalRevision, ...]
     responses: tuple[Response, ...]
 
 
@@ -173,8 +168,6 @@ def _record_lines(record: TaskRecord) -> Iterator[str]:
     task = record.task
     yield f"## {task.id}: {task.title}"
     yield f"Source: {task.source.kind}; updated {datetime.fromtimestamp(task.updated_at).astimezone():%Y-%m-%d %H:%M}; {_state_text(task)}"
-    for revision in record.revisions:
-        yield f"Goal revision {revision.revision}: {revision.prompt[:800]}"
     for response in record.responses:
         yield f"Asked: {response.request.text[:400]}; answered: {response.reply.text[:400]}"
     for action in record.actions:
@@ -213,7 +206,7 @@ def describe_history_page(tasks: Sequence[Task], offset: int, recent: int) -> st
     lines = tuple(
         f"## {task.id}: {task.title}\n"
         f"Updated {datetime.fromtimestamp(task.updated_at).astimezone():%Y-%m-%d %H:%M}; {_state_text(task)}\n"
-        f"Goal revisions: {task.goal_revision}; detail: work_history(task_id='{task.id}')."
+        f"Detail: work_history(task_id='{task.id}')."
         for task in page
     )
     end = offset + len(page)
@@ -250,7 +243,7 @@ class ReviewingRunner:
         if not reviewable(task):
             return outcome
         now = self.clock()
-        found = signals(outcome, store.actions(task.id, limit=100), store.revisions(task.id), store.responses(task.id))
+        found = signals(outcome, store.actions(task.id, limit=100), store.responses(task.id))
         reviews = [task_review(task, claim.run.run_id, found)] if found else []
         yesterday = now.date() - timedelta(days=1)
         if worked_on(store.list_tasks(limit=200), yesterday):

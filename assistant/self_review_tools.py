@@ -68,7 +68,7 @@ class SelfReviewTools:
                     "work_history",
                     "Enumerate bounded task outcome summaries with explicit next_offset; repeat the same day/recent selection "
                     "with that offset until exhausted. Day filters the newest 1000 journal tasks; scan coverage is reported. "
-                    "Give task_id to drill into existing action diagnostics, goal revisions and answers (offset must be zero).",
+                    "Give task_id to drill into existing action diagnostics and answers (offset must be zero).",
                     _HISTORY,
                 ),
                 typed_run(_HISTORY, self.work_history),
@@ -107,8 +107,8 @@ class SelfReviewTools:
             found = self.store.get(request.task_id)
             if found is None:
                 raise ArgumentError(f"there's no task {request.task_id}.")
-            record = TaskRecord(found, self.store.actions(found.id, limit=100), self.store.revisions(found.id), self.store.responses(found.id))
-            return describe_history((record,)) + "\nDetail coverage: newest 100 actions and 100 goal revisions; current-goal answers."
+            record = TaskRecord(found, self.store.actions(found.id, limit=100), self.store.responses(found.id))
+            return describe_history((record,)) + "\nDetail coverage: newest 100 actions; current-goal answers."
         tasks: tuple[Task, ...] = self.store.list_tasks(limit=1_000)
         coverage = (
             "Scan coverage: newest 1000 journal tasks; older tasks may exist outside this scan."

@@ -19,7 +19,6 @@ from automation.task import (
     Completed,
     Control,
     Failed,
-    GoalRevision,
     Interrupted,
     Outcome,
     Question,
@@ -46,7 +45,6 @@ from automation.task import (
     owns,
     phase,
     progressed,
-    redirected,
     started,
     text,
     timestamp,
@@ -188,8 +186,6 @@ _SCHEMA = journal.Schema(
         "CREATE INDEX runnable_work ON tasks(phase,priority DESC,created_at,id)",
         "CREATE TABLE runs (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), owner TEXT NOT NULL, "
         "started_at REAL NOT NULL, previous_state TEXT NOT NULL, ended_at REAL, disposition TEXT, UNIQUE(id,task_id))",
-        "CREATE TABLE goals (task_id TEXT NOT NULL REFERENCES tasks(id), revision INTEGER NOT NULL, prompt TEXT NOT NULL, "
-        "at REAL NOT NULL, PRIMARY KEY(task_id,revision))",
         "CREATE TABLE requests (task_id TEXT NOT NULL REFERENCES tasks(id), id TEXT NOT NULL, goal_revision INTEGER NOT NULL, "
         "run_id TEXT NOT NULL REFERENCES runs(id), request TEXT NOT NULL, at REAL NOT NULL, closed_at REAL, PRIMARY KEY(task_id,id))",
         "CREATE TABLE responses (task_id TEXT NOT NULL REFERENCES tasks(id), request_id TEXT NOT NULL, goal_revision INTEGER NOT NULL, "
@@ -269,7 +265,6 @@ class TaskStore:
                 return existing
             marks = ",".join("?" for _ in _TASK_COLUMNS)
             connection.execute(f"INSERT INTO tasks ({_TASK_SELECT}) VALUES ({marks})", _task_values(task))
-            connection.execute("INSERT INTO goals(task_id,revision,prompt,at) VALUES (?,?,?,?)", (task.id, 0, task.prompt, at))
         return task
 
     def get(self, id: str) -> Task | None:
@@ -423,19 +418,6 @@ class TaskStore:
                         count += 1
                     cursor = task.id
 
-    def revise(self, task_id: str, prompt: str, *, at: float) -> Task | None:
-        identifier(task_id, "task identity")
-        text(prompt, "task prompt")
-        timestamp(at)
-        with journal.writing(self.path) as connection:
-            task = self._get(connection, task_id)
-            if task is None:
-                return None
-            result = redirected(task, prompt, at=at)
-            self._put(connection, task, result)
-            connection.execute("INSERT INTO goals(task_id,revision,prompt,at) VALUES (?,?,?,?)", (task.id, result.goal_revision, prompt, at))
-            return result
-
     def answer(self, id: str, request_id: str, reply: TextAnswer, *, at: float) -> Task | None:
         identifier(id, "task identity")
         identifier(request_id, "request identity")
@@ -476,15 +458,6 @@ class TaskStore:
                 raise ValueError("Invalid stored input request.")
             replies.append(Response(request, _answer(row[1]), timestamp(row[2])))
         return tuple(replies)
-
-    def revisions(self, task_id: str, *, limit: int = 100) -> tuple[GoalRevision, ...]:
-        identifier(task_id, "task identity")
-        integer(limit, "goal page size", minimum=1, maximum=MAX_PAGE)
-        with journal.reading(self.path) as connection:
-            rows = connection.execute(
-                "SELECT revision,prompt,at FROM goals WHERE task_id=? ORDER BY revision DESC LIMIT ?", (task_id, limit)
-            ).fetchall()
-        return tuple(GoalRevision(integer(row[0], "goal revision"), text(row[1], "goal prompt"), timestamp(row[2])) for row in reversed(rows))
 
     def recover(self, owner: str, *, at: float) -> tuple[Task, ...]:
         """Reconcile abandoned runs after the caller acquired exclusive ownership.
