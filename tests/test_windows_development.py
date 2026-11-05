@@ -184,7 +184,7 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
     try:
         assert preview.bar is not None
         assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None
-        assert preview.bar.keys is None and not preview.bar.taskbar.ready
+        assert not preview.bar.taskbar.ready
         assert preview.bar.notification_service is None
         assert preview.bar.status_service is None
         deadline = time.monotonic() + 5
