@@ -32,9 +32,8 @@ For feedback on save, install the development watcher once:
 .\Dev.cmd preview
 ```
 
-`watch` reruns affected tests, including native tests, in fresh processes after
-each debounced save. `--source-only` leaves native modules out of automatic
-selection. `preview` restarts the real toolbar with sample data and inert
+`watch` reruns the editing tier's affected tests in fresh processes after each
+debounced save. `--native` adds the affected native modules and slow tests. `preview` restarts the real toolbar with sample data and inert
 actions after each save; it starts no keeper, microphone, keyboard observer or
 live communications. `watch --preview` runs the same preview beside the tests.
 
@@ -57,23 +56,30 @@ live communications. `watch --preview` runs the same preview beside the tests.
    directly or through test helpers. Pin changes, application assets and a
    missing baseline select the full source suite.
 
-Any failure stops before a receipt. `--tests` accepts files and
-`tests/test_x.py::test_name` selectors. `--native` (always passed by
-`Dev.cmd check`) includes the affected Windows integration modules. `--full`
-runs everything; CI and the keeper also run the protected `selfcheck.py` full
-suite.
+Checks have two tiers. The editing tier, the default, runs only portable tests:
+it leaves out native modules (`tests/test_windows_*.py`) and the slow portable
+tests listed in `SLOW` in `scripts/check_tiers.py`. In a narrow editing check
+(direct imports, fewer than ten modules) a test that takes over 1.5 s fails the
+check by name; make it faster or add it to `SLOW`. `--native` adds the affected
+native modules and the slow tests. `--full` runs everything, natively, and types
+the whole tree: run it after changing native code and before a merge or deploy.
+CI and the keeper also run the protected `selfcheck.py` full suite.
+
+Any failure stops before a receipt. `--tests` runs exactly the named files and
+`tests/test_x.py::test_name` selectors, with no time budget.
 
 Execution order: one Windows runner on a private desktop takes the import
-review and the portable modules (three worker processes once ten or more are
-selected). After it exits, and in `--full` after whole-tree pyright finishes,
-native modules run in four parallel runners, each on its own private desktop:
+review and the portable modules (three worker processes once ten or more modules
+are selected). A narrow check imports the SDK packages its tests reach as its own
+phase first. After the runner exits, and in `--full` after whole-tree pyright
+finishes, native modules run in four parallel runners, each on its own private desktop:
 Edge, runtime launches, UIA and development tooling, and the rest together
 (`NATIVE_LANES` in `scripts/check_native.py`). Native fixtures have real
 deadlines; overlapping them with the pool or pyright made them fail.
 
 Typical cost on the four-core development laptop, warm policy cache:
-a one-file pure edit about 17 s, a one-file toolbar edit about 14 s, `--full`
-about 165 s (whole-tree pyright alone takes 85 s). Editing `scripts/check.py`
+a one-file pure edit about 8 s, `--full` about 165 s (whole-tree pyright alone
+takes 85 s). Editing `scripts/check.py`
 or the policy reviews invalidates the analysis cache; the next check pays
 about 80 s once.
 
@@ -89,8 +95,7 @@ Generated tests live in `tests/properties/` and need the `test` extra
 ## Receipts and deployment
 
 After the final edit, write a receipt with
-`Dev.cmd check --receipt "$env:TEMP\workspace-check.json"` (add `--full` for a
-broad change) and deploy with
+`Dev.cmd check --full --receipt "$env:TEMP\workspace-check.json"` and deploy with
 `Dev.cmd deploy --check-receipt "$env:TEMP\workspace-check.json"`. The receipt
 must match every source byte in the Git-listed working tree, and a receipt
 written without the standards is refused. A changed runtime pin

@@ -11,12 +11,14 @@ from typing import Final
 
 from scripts.check_results import Failure, Selection
 
-BUDGET_S: Final = 1.0
+BUDGET_S: Final = 1.5
 """A test in a narrow editing check that takes longer fails the check by name.
 
 Only a narrow check runs its tests one at a time beside a small type check;
 a broad run's worker pool and whole-diff pyright slow every test, and timing
-there blamed tests that take 0.3 s alone.
+there blamed tests that take 0.3 s alone. Tests that take 0.5 s warm took up
+to 1.3 s on the first run after a commit, so the budget sits above that and
+SLOW below it.
 """
 
 SLOW: Final = frozenset(
@@ -97,7 +99,7 @@ def over_budget(durations: tuple[tuple[float, str], ...]) -> tuple[Failure, ...]
     for seconds, label in durations:
         selector = node(label)
         if selector is not None and seconds > BUDGET_S:
-            summary = f"took {seconds:.1f} s, over the {BUDGET_S:.0f} s editing budget"
+            summary = f"took {seconds:.1f} s, over the {BUDGET_S:g} s editing budget"
             report = f"{selector} {summary}. Make it faster, or add it to SLOW in scripts/check_tiers.py so it runs with --native and --full."
             failures.append(Failure(selector, summary, report))
     return tuple(failures)

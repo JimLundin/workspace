@@ -25,15 +25,15 @@ def test_a_test_over_budget_fails_by_name_and_phases_never_do() -> None:
     # Defects: a slow editing test passes silently, its failure names a label the
     # selector syntax cannot rerun, or a long phase or module import is blamed.
     durations = (
-        (1.5, "worker:tests.test_agent.test_slow"),
-        (1.2, "tests.properties.test_pcm.test_generated"),
-        (0.4, "tests.test_agent.test_quick"),
+        (2.5, "worker:tests.test_agent.test_slow"),
+        (1.6, "tests.properties.test_pcm.test_generated"),
+        (1.4, "tests.test_agent.test_quick"),
         (9.0, "phase:import changed source"),
         (3.0, "worker:module:tests.test_agent"),
     )
     assert [(failure.node, failure.summary) for failure in over_budget(durations)] == [
-        ("tests/test_agent.py::test_slow", "took 1.5 s, over the 1 s editing budget"),
-        ("tests/properties/test_pcm.py::test_generated", "took 1.2 s, over the 1 s editing budget"),
+        ("tests/test_agent.py::test_slow", "took 2.5 s, over the 1.5 s editing budget"),
+        ("tests/properties/test_pcm.py::test_generated", "took 1.6 s, over the 1.5 s editing budget"),
     ]
 
 

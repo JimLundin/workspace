@@ -62,9 +62,11 @@ their tests. Legacy data and backwards compatibility are not requirements.
 # Checking
 
 Read [docs/iteration-pipeline.md](docs/iteration-pipeline.md). Use
-`Dev.cmd check` for affected tests while editing and `--full` for broad changes.
+`Dev.cmd check` for affected portable tests while editing, `--native` after
+changing native code, and `--full` before a merge or deploy. A test over the
+editing budget fails by name: speed it up or list it in `scripts/check_tiers.py`.
 Run native checks sequentially on the shared desktop. After the final edit,
-write a receipt with `--receipt "$env:TEMP\workspace-check.json"`. Do not
+write a receipt with `--full --receipt "$env:TEMP\workspace-check.json"`. Do not
 change the protected selfcheck gate or CI's full checks.
 
 # Committing and deploying
