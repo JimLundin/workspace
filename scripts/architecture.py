@@ -98,6 +98,7 @@ class Observation:
 CONFIGURATION = TypeAdapter[Configuration](Configuration)
 OBSERVATION = TypeAdapter[Observation](Observation)
 DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
+FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 
 
 def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str, ...]:
@@ -372,6 +373,16 @@ def testing_dependencies(source: Source) -> Iterator[Finding]:
                     pass
 
 
+def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Finding, ...]:
+    key = cache.key("testing-dependencies", source) if cache is not None else ""
+    if cache is not None and (saved := cache.read(key, FINDINGS)) is not None:
+        return saved
+    result = tuple(testing_dependencies(source))
+    if cache is not None:
+        cache.write(key, result, FINDINGS)
+    return result
+
+
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     sources = python_sources(root, names)
     configuration = _configuration(root)
@@ -382,7 +393,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     imported_by = {module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded}
     graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
     findings = [finding for observed in observations.values() for finding in observed.declarations]
-    findings.extend(finding for source in all_source for finding in testing_dependencies(source))
+    findings.extend(finding for source in all_source for finding in cached_testing_dependencies(source, cache))
     pending: deque[tuple[str, ...]] = deque((module,) for module in sorted(graph) if module == "miryoku" or module.startswith("miryoku."))
     visited: set[str] = set()
     while pending:
