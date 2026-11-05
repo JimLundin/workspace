@@ -186,10 +186,6 @@ def context_path(identity: str, catalog: Catalog, document: CanvasDocument) -> t
     return topology(catalog, document).paths.get(identity, ())
 
 
-def context_items(container: CanvasContainer, catalog: Catalog, document: CanvasDocument) -> tuple[CanvasContent, ...]:
-    return topology(catalog, document).memberships.get(container.id, ())
-
-
 def indexed_memberships(
     known: tuple[CanvasContainer, ...], pieces: tuple[CanvasContent, ...], parents: frozendict[str, str | None]
 ) -> frozendict[str, tuple[CanvasContent, ...]]:

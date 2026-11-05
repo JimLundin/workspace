@@ -175,10 +175,6 @@ def task_activity(tasks: tuple[automation.task.Task, ...], runs: tuple[CanvasRun
     return result
 
 
-def connected_work(update: CanvasActivity, catalog: Catalog) -> tuple[str, ...]:
-    return tuple(work.id for work in catalog.works if work.id in update.work_ids)
-
-
 def settle_tasks(
     activity: tuple[CanvasActivity, ...], tasks: tuple[automation.task.Task, ...], rejected: frozenset[TaskRequest]
 ) -> tuple[CanvasActivity, ...]:

@@ -53,7 +53,6 @@ class Downloaded:
 type Transport = Callable[[str, dict[str, Json]], dict[str, Json]]
 _RESOURCE = TypeAdapter(ResourceResponse)
 _CHUNK = TypeAdapter(Chunk)
-DOWNLOADED = TypeAdapter(Downloaded)
 MAX_DOCUMENT = 32 * 1024 * 1024
 
 

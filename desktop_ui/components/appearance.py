@@ -21,7 +21,6 @@ from winapi.shapes import Stop
 GLASS_ACCENT: Final = "#4b8fe8"  # a soft blue, lighter and less saturated than system blue
 ATTENTION: Final = "#f08a00"  # a question waits
 RED: Final = "#ff453a"  # recording, low battery, errors
-GREEN: Final = "#30d158"  # switches, success
 MICROPHONE: Final = "#ff9f0a"  # the microphone is live, as Apple's privacy indicator
 
 

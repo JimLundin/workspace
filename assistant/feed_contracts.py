@@ -179,7 +179,6 @@ class SolutionContext:
 REVIEW_OUTPUT = TypeAdapter(ReviewOutput)
 SCREENING = TypeAdapter(Screening)
 REVIEW_INPUT = TypeAdapter(ReviewInput)
-SOURCE_EVIDENCE = TypeAdapter(SourceEvidence)
 FEED_REPLY = TypeAdapter(FeedReply)
 BOARD_EDIT = TypeAdapter(BoardEdit)
 FEED_COMMAND = TypeAdapter(FeedCommand)

@@ -86,11 +86,6 @@ class LayoutSpace:
     pinned: frozenset[str]
 
 
-def group_block(group: ContextGroup, measurements: Measurements) -> Block:
-    saved: frozendict[str, Placement] = frozendict()
-    return arranged_group(group, LayoutSpace(measurements, saved, frozenset()))
-
-
 def arranged_group(group: ContextGroup, space: LayoutSpace) -> Block:
     measurements = space.measurements
     own = group.content

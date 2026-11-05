@@ -172,10 +172,6 @@ def system_color(index: int) -> str:
     return f"#{value & 255:02x}{value >> 8 & 255:02x}{value >> 16 & 255:02x}"
 
 
-def colorref(color: str) -> int:
-    return int.from_bytes(bytes.fromhex(color.removeprefix("#")), "little")
-
-
 def background_frost(bounds: Rect) -> Frost:
     """Sample four surrounding pixels, off the animation path; retain no image.
 

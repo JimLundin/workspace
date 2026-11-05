@@ -8,10 +8,7 @@ from typing import Final, NewType
 
 from winapi._core import ULONG_PTR, fn, kernel32, last_error, user32
 
-WM_NULL: Final = 0x0000
-WM_DESTROY: Final = 0x0002
 WM_CLOSE: Final = 0x0010
-WM_COMMAND: Final = 0x0111
 WM_TIMER: Final = 0x0113
 WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 0x0100, 0x0101, 0x0104, 0x0105
 WM_LBUTTONUP, WM_RBUTTONUP = 0x0202, 0x0205

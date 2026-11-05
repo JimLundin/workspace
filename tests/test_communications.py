@@ -39,9 +39,6 @@ def test_message_identity_is_scoped_to_chat_and_reactions_do_not_realert() -> No
     assert len(updated.messages) == 2
     assert not updated.unseen(updated.messages[0])
     assert updated.messages[0].observed_at == 20
-    assert updated.unseen_chats == 1
-    edited = observed(updated, (replace(repeated, text="The revised draft is ready."),), 40)
-    assert edited.unseen_chats == 2
 
 
 def test_bounded_history_prunes_acknowledgements_with_their_messages() -> None:

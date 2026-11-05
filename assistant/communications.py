@@ -166,10 +166,6 @@ class Feed:
             mark.key == message.key and mark.fingerprint == fingerprint(message.text) for mark in (*self.acknowledged, *self.handled)
         )
 
-    @property
-    def unseen_chats(self) -> int:
-        return len({message.conversation for message in self.messages if self.unseen(message)})
-
 
 def message_order(message: Message) -> tuple[float, str]:
     return message.created_at, message.identity

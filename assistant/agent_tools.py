@@ -225,5 +225,4 @@ def schema(properties: Mapping[str, Json], required: Sequence[str]) -> dict[str,
 
 
 TEXT: Final[Json] = {"type": "string"}
-NUMBER: Final[Json] = {"type": "integer"}
 BOOL: Final[Json] = {"type": "boolean"}

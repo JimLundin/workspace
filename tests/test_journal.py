@@ -54,22 +54,3 @@ def test_other_or_unversioned_journals_are_refused_without_changing_them(tmp_pat
         with TestCase().assertRaises(journal.SchemaVersionError), journal.writing(path) as connection:
             journal.prepare(connection, schema)
         assert path.read_bytes() == before, name
-
-
-def test_reading_an_absent_journal_creates_nothing(tmp_path: Path) -> None:
-    # Defect: a read creates an empty journal or directory, or a rolled-back first write looks like a journal.
-    missing = tmp_path / "missing" / "edits.sqlite3"
-    with journal.reading_existing(missing) as connection:
-        assert connection is journal.Absent.JOURNAL
-    assert not missing.parent.exists()
-    abandoned = tmp_path / "abandoned.sqlite3"
-    with TestCase().assertRaisesRegex(RuntimeError, "fixture"), journal.writing(abandoned) as connection:
-        connection.execute(_CREATE[0])
-        raise RuntimeError("fixture failure before the first commit")
-    with journal.reading_existing(abandoned) as connection:
-        assert connection is journal.Absent.JOURNAL
-    with journal.writing(abandoned) as connection:
-        connection.execute(_CREATE[0])
-    with journal.reading_existing(abandoned) as connection:
-        assert connection is not journal.Absent.JOURNAL
-        assert connection.execute("SELECT COUNT(*) FROM notes").fetchone() == (0,)

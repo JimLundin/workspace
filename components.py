@@ -12,7 +12,6 @@ reader compares the writer with the process it observed instead of a file time.
 import contextlib
 import ctypes
 import os
-from collections.abc import Iterable
 from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,11 +65,6 @@ CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry f
 
 BAR_WINDOW: Final = "Workspace floating bar"
 """The assistant's visible surface."""
-
-
-def shutdown_budget(names: Iterable[Component]) -> float:
-    """The keeper stops children one at a time, so their budgets add up."""
-    return sum(CATALOGUE[name].shutdown_s for name in names)
 
 
 @dataclass(frozen=True, slots=True)
