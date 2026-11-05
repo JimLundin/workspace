@@ -36,7 +36,7 @@ WM_KEY_STATE: Final = _WM_APP + 7
 """Layout -> assistant: physical scancode in wparam, down/up in lparam (1/0).
 Scancode 0 clears the held keys, before a state replay or when the layout stops."""
 WM_CHORD: Final = _WM_APP + 8
-"""Layout -> assistant: wparam is 1 while the firmware keyboard holds Ctrl+Alt+Shift, else 0."""
+"""Layout -> assistant: wparam is 1 while either keyboard holds its Apps key, else 0."""
 WM_WINDOWS_KEY_TAP: Final = _WM_APP + 9
 """Layout -> assistant: the Windows key was tapped alone; show or hide the taskbar."""
 
@@ -54,10 +54,6 @@ class Tool(Enum):
 
     DICTATE = 1
     """Hold and speak: the words are typed as said."""
-    DICTATE_CLEAN = 2
-    """Hold and speak: typed tidied up (no filler words, proper punctuation)."""
-    DICTATE_COMMAND = 3
-    """Hold and describe a command: the PowerShell command is typed, not run."""
     AGENT_VOICE = 30
     """Hold and say a task for the agent."""
     AGENT_TYPED = 31

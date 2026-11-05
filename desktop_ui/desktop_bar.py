@@ -192,7 +192,7 @@ class DesktopBar:
         self.recording = RecordingState()
         self.layout_enabled = True
         self.current_layer: str | None = None
-        self.chord_since: float | None = None  # When either keyboard began holding Ctrl+Alt+Shift.
+        self.chord_since: float | None = None  # When either keyboard began holding its Apps key.
         self.hints: KeyHintOverlay | None = None
         self.inbox = self.menu_target = 0
         self.notices = Notices()

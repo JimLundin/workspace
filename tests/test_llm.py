@@ -1,9 +1,7 @@
 """The AI endpoint: settings, transcription and one-shot questions.
 Against a local fake endpoint; runs anywhere."""
 
-import json
-
-from assistant.llm import Failure, Missing, Settings, ask, settings_from, transcribe, wav
+from assistant.llm import Failure, Missing, Settings, settings_from, transcribe, wav
 from tests.fake_endpoint import Reply, fake_endpoint
 from winapi.pcm import RATE
 
@@ -115,26 +113,3 @@ def test_failures_for_an_unreachable_endpoint() -> None:
     result = transcribe(settings("http://127.0.0.1:9/v1"), wav(b"", RATE), timeout_s=2)
     assert isinstance(result, Failure)
     assert result.message.startswith("can't reach 127.0.0.1:9: ")
-
-
-# ---- questions -------------------------------------------------------------------------
-
-
-def test_ask_sends_the_instructions_to_the_fast_model_and_returns_the_answer() -> None:
-    # Defect: dictation cleanup uses the agent model or loses the instructions.
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [Reply(b'{"choices": [{"message": {"role": "assistant", "content": "Hej!"}}]}')]
-        assert ask(settings(endpoint.url), "Be brief.", "Say hi") == "Hej!"
-        assert endpoint.last.path == "/v1/chat/completions"
-        expected: object = {
-            "model": "chat-model",
-            "messages": [{"role": "system", "content": "Be brief."}, {"role": "user", "content": "Say hi"}],
-        }
-        assert json.loads(endpoint.last.body) == expected
-
-
-def test_ask_without_an_answer_is_a_failure() -> None:
-    # Defect: a reply without choices raises or types nothing silently.
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [Reply(b'{"choices": []}')]
-        assert ask(settings(endpoint.url), "Be brief.", "Say hi") == Failure('unexpected reply: {"choices": []}')

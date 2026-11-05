@@ -1,6 +1,6 @@
 """What the assistant types, made safe and tidy."""
 
-from assistant.text import one_line_command, typed_text, unwrap
+from assistant.text import typed_text
 from winapi.shapes import require_input_count, utf16_units
 
 
@@ -15,22 +15,6 @@ def test_typed_text_collapses_whitespace_and_drops_control_characters() -> None:
 
 def test_typed_text_of_nothing_is_nothing() -> None:
     assert typed_text(" \n ") == ""
-
-
-def test_one_line_command_strips_what_models_wrap_commands_in() -> None:
-    assert one_line_command("```powershell\nGet-ChildItem -Recurse\n```") == "Get-ChildItem -Recurse"
-    assert one_line_command("`git status`") == "git status"
-    assert one_line_command("PS> Get-Date") == "Get-Date"
-
-
-def test_one_line_command_joins_lines_so_nothing_runs_early() -> None:
-    assert one_line_command("Get-Process |\n  Sort-Object CPU") == "Get-Process | Sort-Object CPU"
-
-
-def test_unwrap_removes_fences_and_quotes_around_a_rewrite() -> None:
-    assert unwrap("```\nHello,\nworld\n```") == "Hello,\nworld"
-    assert unwrap('"Hello there."') == "Hello there."
-    assert unwrap('Keep "inner" quotes') == 'Keep "inner" quotes'
 
 
 def test_utf16_units() -> None:

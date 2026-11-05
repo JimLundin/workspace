@@ -34,10 +34,10 @@ and go.
 
 ## Navigation
 
-`desktop_ui/navigation.py` turns each chord, pager click or scroll into one
+`desktop_ui/navigation.py` turns each chord, pager click or toolbar click into one
 effect that `application_observer.py` carries out. App chords go to the app's
 desktop and cycle its windows. Focus chords move to the neighbouring placed
-window and cross monitors. Desktop chords don't wrap. Each navigation is
+window and cross monitors. Desktop chords go straight to their desktop; nothing cycles desktops. Each navigation is
 also written to the [navigation log](#navigation-log).
 
 ## Dark when away
@@ -50,7 +50,8 @@ controls menu.
 
 ## Key hints
 
-While either keyboard holds Ctrl+Alt+Shift, Workspace draws the chord letters on
+While either keyboard holds its Apps key (the laptop's Delete thumb, or the
+Charybdis's F24 thumb), Workspace draws the letters on
 the desktop itself, so the chords can be learned without the mouse:
 
 - **A keycap badge** sits inside the top-left corner of each placed window on the
@@ -60,8 +61,8 @@ the desktop itself, so the chords can be learned without the mouse:
   arrow: **← N**, **↓ E**, **↑ I** or **→ O**.
 - **The focused window** adds Zoom (**M**) and Minimize (**V**) as quiet letters.
 - **The chord panel** appears near the bottom of the primary screen when the chord
-  stays held for 600 ms without a letter. It lists every chord in four groups:
-  Apps, Desktops, Focus and Window.
+  stays held for 600 ms without a letter. It lists every chord in five groups:
+  Apps, Desktops, Focus, Window, and Voice and agent.
 
 Releasing the modifiers hides everything. Minimized windows and windows on other
 desktops get no badge; the pager's names list the apps on other desktops.

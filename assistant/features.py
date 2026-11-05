@@ -13,10 +13,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal, Protocol, assert_never
 
-from assistant import prompts
 from assistant.hotkeys import Route, needs_settings, route
-from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, ask, long_enough, transcribe, wav
-from assistant.text import one_line_command, typed_text
+from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, transcribe, wav
+from assistant.text import typed_text
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
 from desktop_ui.navigation import AppKey, Order, Source, keyed
@@ -333,18 +332,6 @@ class Assistant:
         match tool:
             case Tool.DICTATE:
                 submit_voice_text(typed_text(transcript), self.desktop.type_text, details)
-            case Tool.DICTATE_CLEAN:
-                details["phase"] = "cleaning"
-                if isinstance(cleaned := ask(self.settings, prompts.CLEAN_DICTATION, transcript), Failure):
-                    return cleaned
-                self.remember_transcript(cleaned)
-                submit_voice_text(typed_text(cleaned), self.desktop.type_text, details)
-            case Tool.DICTATE_COMMAND:
-                details["phase"] = "formatting"
-                if isinstance(command := ask(self.settings, prompts.COMMAND, transcript), Failure):
-                    return command
-                self.remember_transcript(one_line_command(command))
-                submit_voice_text(one_line_command(command), self.desktop.type_text, details)
             case Tool.AGENT_VOICE:
                 submit_voice_text(transcript, self.controls.run_agent, details)
             case _:

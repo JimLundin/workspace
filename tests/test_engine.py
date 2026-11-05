@@ -6,14 +6,11 @@ from dataclasses import replace
 
 from miryoku.engine import DEFAULT_CONFIGURATION, MAX_BUFFERED, Configuration, Engine, Indicator, Signal, Verdict
 from miryoku.layout import (
-    AGENT,
-    DICTATE_TOGGLE,
     ESCAPE,
     FUNCTION_KEYS,
     QUICK_TAP_MS,
     QUIT_HOLD_MS,
     STREAK_MS,
-    TALK,
     Chord,
     Key,
     Layer,
@@ -227,6 +224,7 @@ def test_release_all_lets_go() -> None:
 
 
 def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() -> None:
+    # Defect: one rejected release stops the cleanup before a held voice request ends.
     class RejectedRelease(FakeHost):
         def send(self, key: Key | Mod, *, down: bool) -> None:
             super().send(key, down=down)
@@ -235,14 +233,13 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
 
     host = RejectedRelease()
     engine = Engine()
-    engine.pressed[0:3] = [Key.A, Key.B, Mod.SHIFT]
+    engine.pressed[0:4] = [Key.A, Key.B, Mod.SHIFT, Tool.DICTATE]
     engine.mods.counts[Mod.SHIFT] = 1
-    engine.voice_held[TALK] = Tool.DICTATE
     engine.locked = Layer.NAV
     with unittest.TestCase().assertRaises(OSError):
         engine.release_all(host)
     assert host.log == ["-a", "-b", "-SFT", "?dictate-"]
-    assert not engine.mods.counts and not engine.voice_held
+    assert not engine.mods.counts
     assert engine.layer() is None
     assert all(action is None for action in engine.pressed)
 
@@ -335,11 +332,10 @@ def test_tray_toggle_releases_input_and_clears_the_locked_layer() -> None:
     t.u("c")
     t.d("r")  # Shift
     t.d("o")  # left arrow
-    t.key(TALK, down=True, now=10)
     t.take()
 
     t.e.toggle(t.h)
-    assert t.take() == "-SFT -left ?dictate- !OFF"
+    assert t.take() == "-SFT -left !OFF"
     assert t.h.indicated[-1] == "-"
     assert t.h.used_features[-1] == "switch_off"
     assert t.key(sc("q"), down=True, now=20) is Verdict.PASS
@@ -749,70 +745,50 @@ def test_held_undo_repeats_like_any_key() -> None:
     assert t.take() == "+CTL +z -CTL +CTL +z -CTL -z"
 
 
-# ---- push-to-talk ----------------------------------------------------------------------
+# ---- the Apps layer --------------------------------------------------------------------
 
 
-def test_voice_buttons_request_their_tool_once_per_press_with_any_modifier() -> None:
-    for scancode, tool in ((TALK, "dictate"), (DICTATE_TOGGLE, "dictate_toggle"), (AGENT, "agent_voice")):
-        for mods in ((), (Mod.CTRL,), (Mod.SHIFT,), (Mod.GUI,), (Mod.CTRL, Mod.SHIFT)):
-            t = Harness()
-            t.e.mods.counts.update(dict.fromkeys(mods, 1))
-            assert t.key(scancode, down=True, now=0) is Verdict.SWALLOW
-            assert t.take() == f"?{tool}+"
-            assert t.key(scancode, down=True, now=30) is Verdict.SWALLOW
-            assert t.take() == ""
-            assert t.key(scancode, down=False, now=900) is Verdict.SWALLOW
-            assert t.key(scancode, down=False, now=901) is Verdict.SWALLOW
-            assert t.take() == f"?{tool}-"
+def apps_held(t: Harness) -> None:
+    t.d(".")  # Delete thumb: Apps while held
+    t.timeout_last()
 
 
-def test_voice_keys_are_plain_when_disabled() -> None:
-    t = Harness()
-    t.e.enabled = False
-    for key in (TALK, DICTATE_TOGGLE, AGENT):
-        assert t.key(key, down=True, now=20) is Verdict.PASS
-        assert t.key(key, down=False, now=30) is Verdict.PASS
+def test_apps_layer_voice_holds_last_until_their_key_is_released() -> None:
+    # Defects: a hold ends with its first repeat, or letting go of the thumb
+    # first cuts the dictation short.
+    for physical, tool in (("l", "dictate"), ("k", "agent_voice")):  # Colemak H and K
+        t = Harness()
+        apps_held(t)
+        t.d(physical)
+        t.d(physical)  # auto-repeat
+        t.u(".")
+        assert t.take() == f"?{tool}+"
+        t.u(physical)
+        assert t.take() == f"?{tool}-"
 
 
-def test_switching_off_and_quitting_release_every_voice_request() -> None:
+def test_switching_off_and_quitting_release_a_held_voice_request() -> None:
+    # Defect: dictation keeps listening after the layout is switched off or quits.
     for quitting in (False, True):
         t = Harness()
-        for key in (TALK, DICTATE_TOGGLE, AGENT):
-            t.key(key, down=True, now=0)
+        apps_held(t)
+        t.d("l")
         t.take()
         t.key(ESC, down=True, now=10)
         verdict = t.key(ESC, down=False, now=10 + (QUIT_HOLD_MS if quitting else 10))
         assert verdict is (Verdict.QUIT if quitting else Verdict.SWALLOW)
-        assert t.take() == "?dictate- ?dictate_toggle- ?agent_voice-" + ("" if quitting else " !OFF")
+        assert t.take() == "?dictate-" + ("" if quitting else " !OFF")
         t.e.release_all(t.h)
         assert t.take() == ""
 
 
-def test_voice_preserves_a_pending_modifier_or_layer_without_sending_it_to_the_app() -> None:
-    for physical in ("e", "m"):
-        t = Harness()
-        t.d(physical)
-        pending = t.e.pending
-        t.key(TALK, down=True, now=1)
-        assert t.take() == "?dictate+"
-        assert t.e.pending is pending
-        t.key(TALK, down=False, now=10)
-        assert t.take() == "?dictate-"
-        t.u(physical)
-        assert t.take() == ("+s -s" if physical == "e" else "+0xd -0xd")
-
-
-def test_dedicated_voice_buttons_work_on_every_layer() -> None:
-    layers: list[Layer | None] = [None, *list(Layer)]
-    for layer in layers:
-        for key, tool in ((TALK, "dictate"), (DICTATE_TOGGLE, "dictate_toggle"), (AGENT, "agent_voice")):
-            t = Harness()
-            t.e.locked = layer
-            t.key(key, down=True, now=0)
-            assert t.take() == f"?{tool}+"
-            t.e.locked = None
-            t.key(key, down=False, now=300)
-            assert t.take() == f"?{tool}-"
+def test_the_spacebar_b_and_n_are_blocked_now_that_voice_lives_on_the_apps_layer() -> None:
+    # Defect: a retired voice key still talks to the assistant or types its letter.
+    t = Harness()
+    for scancode in (SPACEBAR, Scancode(0x30), Scancode(0x31)):
+        assert t.key(scancode, down=True, now=0) is Verdict.SWALLOW
+        assert t.key(scancode, down=False, now=10) is Verdict.SWALLOW
+    assert t.take() == ""
 
 
 def test_f6_remains_a_native_laptop_function() -> None:
@@ -823,68 +799,28 @@ def test_f6_remains_a_native_laptop_function() -> None:
     assert t.take() == ""
 
 
-# ---- firmware chords -------------------------------------------------------------------
+# ---- requests -------------------------------------------------------------------------
 
 
-def test_left_home_row_chord_and_a_right_letter_make_the_firmware_request() -> None:
-    # Defects: the letter is typed (an AltGr character on a Swedish host), the
-    # request isn't paired, Alt's lone release opens a menu, or a modifier sticks.
+def test_an_apps_layer_key_makes_its_request_and_shows_the_chord_hints() -> None:
+    # Defects: the key is typed, the request isn't paired, or the pager's
+    # hints don't follow the held layer.
+    t = Harness()
+    apps_held(t)
+    t.tap("8")  # J
+    t.tap("w")  # R: the second app
+    t.u(".")
+    assert t.take() == "?desktop_1+ ?desktop_1- ?app:notepad+ ?app:notepad-"
+    assert t.h.indicated == ["apps chord", "-"]
+
+
+def test_home_row_ctrl_alt_shift_no_longer_makes_a_request() -> None:
+    # Defect: the retired three-finger chord still swallows the letter it holds.
     t = Harness()
     for mod in ("w", "e", "r"):  # R S T: Alt, Ctrl, Shift
         t.d(mod)
-    t.tap("8")  # J
-    for mod in ("r", "e", "w"):
-        t.u(mod)
-    assert t.take() == "+ALT +CTL +SFT +0xe8 -0xe8 ?desktop_1+ ?desktop_1- -SFT -CTL -ALT"
-    assert not t.e.mods.counts
-    assert t.h.indicated == ["chord", "-"], "the pager's chord hints follow the held modifiers"
-
-
-def test_right_home_row_chord_reaches_apps_from_a_left_home_row_letter() -> None:
-    # Defect: a tapped home row mod letter skips the chord, typing r with Ctrl+Alt+Shift.
-    t = Harness()
-    for mod in ("o", "p", "["):  # N E I: Shift, Ctrl, Alt
-        t.d(mod)
-    t.tap("w")  # R
-    for mod in ("[", "p", "o"):
-        t.u(mod)
-    assert t.take() == "+SFT +CTL +ALT +0xe8 -0xe8 ?app:notepad+ ?app:notepad- -ALT -CTL -SFT"
-
-
-def test_chords_need_exactly_ctrl_alt_shift_and_a_chord_letter() -> None:
-    # Defects: a letter outside the chord table is swallowed, or Win+Ctrl+Alt+Shift
-    # (the Office key) is taken for a chord.
-    t = Harness()
-    for mod in ("o", "p", "["):
-        t.d(mod)
-    t.tap("caps")  # Z
-    assert t.take() == "+SFT +CTL +ALT +z -z"
-    t = Harness()
-    for mod in ("q", "w", "e", "r"):  # A R S T: Win, Alt, Ctrl, Shift
-        t.d(mod)
     t.tap("8")
-    assert t.take() == "+0x5b +ALT +CTL +SFT +j -j"
-
-
-# ---- tools layer ---------------------------------------------------------------------
-
-
-def test_tools_layer_key_requests_its_tool() -> None:
-    t = Harness()
-    t.d("v")  # Tab thumb: Tools while held
-    t.tap("l")  # Agent, typed (right hand, bottom row)
-    t.u("v")
-    assert t.take() == "?agent_typed+ ?agent_typed-"
-
-
-def test_hold_to_talk_tools_keep_going_while_held() -> None:
-    t = Harness()
-    t.d("v")
-    t.timeout_last()  # Tools held
-    t.d("i")  # Dictate (tidied): first key of the right home row
-    t.u("v")  # letting go of the thumb first doesn't cut it short
-    t.u("i")
-    assert t.take() == "?dictate_clean+ ?dictate_clean-"
+    assert t.take() == "+ALT +CTL +SFT +j -j"
 
 
 def test_tab_still_taps() -> None:

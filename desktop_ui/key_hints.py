@@ -1,4 +1,4 @@
-"""What the screen shows while either keyboard holds Ctrl+Alt+Shift: the chord letters.
+"""What the screen shows while either keyboard holds its Apps key: the request letters.
 
 Each placed window on the current desktop carries a badge with its app's letter
 and, beside the focused window, the focus letter that reaches it. The focused
@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Final
 
 import protocol
+from assistant.hotkeys import Route, route
 from desktop_ui.keymap import describe
 from desktop_ui.navigation import AppKey, Direction, Focus, JumpDesktop, Source, SpatialFocus, World, effect, identity, keyed, launcher
 from miryoku.firmware import CHORDS
@@ -62,6 +63,7 @@ class Section(Enum):
     DESKTOPS = "Desktops"
     FOCUS = "Focus"
     WINDOW = "Window"
+    VOICE = "Voice and agent"
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +93,8 @@ def section(request: Request) -> Section:
     match request:
         case protocol.App():
             return Section.APPS
+        case Tool() if route(request) not in (Route.NAVIGATE, Route.ARRANGE, Route.SWITCHER):
+            return Section.VOICE
         case Tool():
             match keyed(request):
                 case SpatialFocus():

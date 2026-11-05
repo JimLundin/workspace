@@ -108,10 +108,10 @@ def test_overlay_stays_visible_on_the_base_and_held_layers() -> None:
     overlay = overlay.set_layout(on=True)
     assert bool(overlay.visible)
     assert overlay.title == "BASE"
-    overlay = overlay.indicate(Layer.TOOLS, locked=False, caps_word=False)
+    overlay = overlay.indicate(Layer.APPS, locked=False, caps_word=False)
     assert bool(overlay.visible)
-    assert overlay.layer is Layer.TOOLS
-    assert overlay.title == "TOOLS"
+    assert overlay.layer is Layer.APPS
+    assert overlay.title == "APPS"
     overlay = overlay.indicate(None, locked=False, caps_word=False)
     assert bool(overlay.visible)
     assert overlay.title == "BASE"

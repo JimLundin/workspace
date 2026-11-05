@@ -9,7 +9,6 @@ from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
 from config import SNIPPETS
-from miryoku.firmware import CHORD_KEYS
 from miryoku.layout import (
     CELLS,
     ESCAPE,
@@ -18,7 +17,6 @@ from miryoku.layout import (
     SHIFT_ONLY,
     STREAK_MS,
     TABLE,
-    VOICE_KEYS,
     Action,
     Chord,
     Command,
@@ -86,8 +84,8 @@ class Decision(Enum):
     HOLD = auto()
 
 
-MAX_LAYERS = 5
-"""Layers held at once: the layout has five layer keys."""
+MAX_LAYERS = 4
+"""Layers held at once: the layout has four layer keys."""
 MAX_BUFFERED = 18
 """Key events that can wait on one undecided tap-hold key. One finger holds that
 key; each of the other nine can add at most one press, plus the release of a key
@@ -138,7 +136,7 @@ class Indicator:
     locked: bool = field(kw_only=True)
     caps_word: bool = field(kw_only=True)
     chord: bool = field(kw_only=True)
-    """Ctrl+Alt+Shift are held, so a letter makes its firmware chord's request."""
+    """The Apps layer is held, so a key makes its request, as a firmware chord would."""
 
 
 QUIET: Final = Indicator(None, locked=False, caps_word=False, chord=False)
@@ -256,9 +254,8 @@ class Engine:
     capitalised until something that isn't part of a word: a space, punctuation,
     Enter, an arrow... Digits, `_`, Backspace and Delete keep it going.
 
-    Spacebar holds dictation; B toggles dictation; N holds agent speech.
-    A second toggle press stops speech, as does disabling the layout.
-    Hold-to-talk tools on the Tools layer retain their press/release behavior.
+    Requests: every Workspace request is on the Apps layer. Hold-to-talk tools
+    send their press and release; disabling the layout releases them.
 
     Snippets: the last characters typed are remembered; once they end in a
     snippet's trigger, the trigger is erased and the snippet typed instead.
@@ -285,8 +282,6 @@ class Engine:
     caps_word: bool = field(default=False, kw_only=True)
     locked: Layer | None = None
     mods: Modifiers = field(default_factory=Modifiers)
-    voice_held: dict[Scancode, Tool] = field(default_factory=dict[Scancode, Tool])
-    """Dedicated voice keys currently held, independent of the layout's layers."""
     typed: str = ""
     """The last characters typed, for snippets. Anything that moves the cursor, or a
     shortcut, clears it."""
@@ -309,7 +304,8 @@ class Engine:
         Every key event refreshes, so the measured keyboard path compares the
         fields and builds a frozen record only for a change.
         """
-        layer, locked, chord, shown = self.layer(), self.locked is not None, self.chording(), self.shown
+        layer, locked, shown = self.layer(), self.locked is not None, self.shown
+        chord = layer is Layer.APPS
         if layer is not shown.layer or locked is not shown.locked or self.caps_word is not shown.caps_word or chord is not shown.chord:
             self.shown = Indicator(layer, locked=locked, caps_word=self.caps_word, chord=chord)
             host.indicate(self.shown)
@@ -341,16 +337,6 @@ class Engine:
             return Verdict.SWALLOW
         if not self.enabled:
             return Verdict.PASS
-        # Voice buttons act immediately and never decide a pending tap-hold key.
-        if scancode in VOICE_KEYS:
-            if down and scancode not in self.voice_held:
-                tool = VOICE_KEYS[scancode]
-                self.voice_held[scancode] = tool
-                host.request(tool, down=True)
-            elif not down and scancode in self.voice_held:
-                tool = self.voice_held.pop(scancode)
-                host.request(tool, down=False)
-            return Verdict.SWALLOW
         match slot(scancode):
             case Unmapped.FREE:
                 self.typed = ""
@@ -366,19 +352,6 @@ class Engine:
 
     def quick_tap(self, cell: int, now: int) -> bool:
         return self.last_tap is not None and self.last_tap.cell == cell and elapsed(now, self.last_tap.at) < self.configuration.quick_tap_ms
-
-    def chording(self) -> bool:
-        """Exactly Ctrl+Alt+Shift: Win never takes part, because Ctrl+Alt+Shift+Win is the Office key."""
-        counts = self.mods.counts
-        return len(counts) == 3 and Mod.GUI not in counts
-
-    def chorded(self, a: Action) -> Action:
-        """A letter tapped while chording asks for its firmware chord's request, as on the firmware keyboard."""
-        match a:
-            case Key() if self.chording() and (request := CHORD_KEYS.get(a.vk)) is not None:
-                return request
-            case _:
-                return a
 
     def layer(self) -> Layer | None:
         """The layer keys are read from: the top held layer, else a locked one, else
@@ -413,7 +386,6 @@ class Engine:
                         return
                     case other:
                         a = other
-                a = self.chorded(a)
                 if layer is not None and a is not Command.NOTHING:
                     host.used(f"{layer.name.lower()}:{describe(a)}")
                 self.pressed[cell] = a
@@ -491,9 +463,8 @@ class Engine:
                 self.pressed[p.cell] = p.hold
                 self.press(host, p.hold, p.pressed_at)
             case Decision.TAP:
-                tap = self.chorded(p.tap)
-                self.press(host, tap, p.pressed_at)
-                self.release(host, tap)
+                self.press(host, p.tap, p.pressed_at)
+                self.release(host, p.tap)
                 self.last_tap = LastTap(p.cell, now)
             case _:
                 assert_never(decision)
@@ -506,7 +477,6 @@ class Engine:
         pending, self.pending = self.pending, None
         self.buffer = []
         held_down, self.pressed = self.pressed, no_keys()
-        held_voice, self.voice_held = self.voice_held, {}
         failures = 0
         if pending is not None:
             try:
@@ -529,11 +499,6 @@ class Engine:
         except Exception:
             failures += 1
         self.typed = ""
-        for tool in held_voice.values():
-            try:
-                host.request(tool, down=False)
-            except Exception:
-                failures += 1
         if failures:
             raise OSError(f"Failed to complete {failures} keyboard cleanup operations.")
 

@@ -16,8 +16,8 @@ from config import APPS
 from diagnostics import FailureInfo, failure_info
 from miryoku import hook_watch
 from miryoku.engine import QUIET, Engine, Indicator, Signal, Verdict
-from miryoku.firmware import MODIFIER_KEYS, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, Modifiers, connected, modifiers, shortcut
-from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, VOICE_KEYS, Key, Mod, Scancode, Unmapped, native_control
+from miryoku.firmware import APPS_KEY, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
+from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, Key, Mod, Scancode, Unmapped, native_control
 from miryoku.windows_key import WindowsKeyTap
 from protocol import (
     LAYOUT_MAGIC,
@@ -204,6 +204,7 @@ class Keyboard:
     """The engine, plus what the hook callback needs around it."""
 
     __slots__ = (
+        "apps_held",
         "busy",
         "chord_held",
         "engine",
@@ -237,6 +238,8 @@ class Keyboard:
         self.native_releases: set[int] = set()
         self.shortcuts: tuple[CapturedKey, ...] = ()
         """Immutable ownership of firmware shortcut presses, including ups after unplug."""
+        self.apps_held = False
+        """The firmware keyboard holds its dedicated Apps thumb."""
         self.chord_held = False
         """The assistant was last told the firmware keyboard holds the chord modifiers."""
         self.busy = False
@@ -294,6 +297,7 @@ class Keyboard:
                 self.busy = False
         else:
             previous, self.firmware = self.firmware, None
+            self.apps_held = False
             try:
                 self.observe_chord()
                 self.release_shortcuts()
@@ -387,7 +391,7 @@ class Keyboard:
 
     def show_key(self, scancode: Scancode, *, down: bool) -> None:
         """Send each physical transition once; repeats and unpictured keys add nothing."""
-        if scancode != ESCAPE and scancode not in VOICE_KEYS and SLOTS.get(scancode, Unmapped.FREE) is Unmapped.FREE:
+        if scancode != ESCAPE and SLOTS.get(scancode, Unmapped.FREE) is Unmapped.FREE:
             return
         if (scancode in self.pressed) == down:
             return
@@ -457,6 +461,7 @@ class Keyboard:
             self.busy = False
         self.shortcuts = ()
         self.native_releases.clear()
+        self.apps_held = False
         self.engine.escape_down_at = None
         with contextlib.suppress(Exception):
             self.observe_chord()
@@ -471,18 +476,21 @@ class Keyboard:
             self.native_releases.add(identity)
         else:
             self.native_releases.discard(identity)
-        if identity in MODIFIER_KEYS:
-            self.observe_chord()
 
     def observe_chord(self) -> None:
-        """Tell the assistant when the firmware keyboard starts or stops holding Ctrl+Alt+Shift."""
-        held = self.firmware is not None and modifiers(self.native_releases) is Modifiers.CHORD
+        """Tell the assistant when the firmware keyboard starts or stops holding its Apps thumb."""
+        held = self.firmware is not None and self.apps_held
         if held != self.chord_held:
             self.chord_held = held
             self.host.tell_assistant(WM_CHORD, int(held), 0)
 
     def firmware_shortcut(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         """Own only explicit shortcut presses and their paired physical releases."""
+        if self.firmware is not None and key.vk == APPS_KEY:
+            # The Apps thumb is Workspace's own key: never let F24 reach an application.
+            self.apps_held = down
+            self.observe_chord()
+            return True
         identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
         for held in self.shortcuts:
             if held.identity == identity:
@@ -496,20 +504,15 @@ class Keyboard:
                         case _:
                             assert_never(held)
                 return True
-        # A native key already held stays native even if modifiers arrive
-        # during its repeat. Only a fresh configured shortcut starts capture.
+        # A native key already held stays native even if the Apps thumb arrives
+        # during its repeat. Only a fresh configured key starts capture.
         if (
             self.firmware is not None
             and down
             and identity not in self.native_releases
-            and (chosen := shortcut(key.vk, self.native_releases)) is not None
+            and (chosen := shortcut(key.vk, apps_held=self.apps_held)) is not None
         ):
             self.shortcuts = (*self.shortcuts, HeldShortcut(identity, chosen))
-            if modifiers(self.native_releases) is Modifiers.CHORD:
-                # Swallowing the letter leaves applications seeing Alt pressed alone;
-                # tapping an unassigned key keeps its release from opening a menu.
-                self.host.send(Key.MENU_MASK, down=True)
-                self.host.send(Key.MENU_MASK, down=False)
             self.host.request(chosen, down=True)
             return True
         return False
@@ -528,7 +531,7 @@ class Keyboard:
             return True
         if self.firmware is not None:
             # Firmware owns ordinary keys and the layout toggle. Only the explicit
-            # voice and Ctrl+Alt+Shift shortcuts above reach Workspace's requests.
+            # Apps thumb shortcuts above reach Workspace's requests.
             # Remember native downs so their releases still pass after unplugging.
             if not key.flags & inputs.LLKHF_INJECTED and key.extra != MAGIC:
                 self.firmware_key(key, down=down)

@@ -17,7 +17,6 @@ from miryoku.layout import (
     REDO,
     TABLE,
     UNDO,
-    VOICE_KEYS,
     Action,
     Chord,
     Command,
@@ -58,15 +57,12 @@ class Shortcut:
     hold: str | None
 
 
-CHORD_HOLD: Final = "⌃⌥⇧"
-"""Ctrl+Alt+Shift, held for a chord letter, in the README's notation."""
+CHORD_HOLD: Final = "Apps"
+"""The Apps key, held for a request's letter: the laptop's Delete thumb or the firmware keyboard's Apps thumb."""
 
 
 def shortcut(tool: Tool) -> Shortcut | None:
-    """Prefer a dedicated voice key, then the first binding in Layer order, then the tool's chord."""
-    for scancode, voice in VOICE_KEYS.items():
-        if voice is tool:
-            return Shortcut(PHYSICAL_NAMES[scancode], None)
+    """The first binding in Layer order, else the tool's firmware chord."""
     physical = PHYSICAL.cells()
     for layer in Layer:
         held = _holding(layer)
@@ -124,7 +120,7 @@ _KEY_NAMES: Final = {
 _CHORD_NAMES: Final = {UNDO: "Undo", REDO: "Redo", COPY: "Copy", PASTE: "Paste", CUT: "Cut"}
 _MOD_NAMES: Final = {Mod.GUI: "Win", Mod.ALT: "Alt", Mod.CTRL: "Ctrl", Mod.SHIFT: "Shift"}
 TOOL_NAMES: Final = {
-    Tool.DICTATE: "Talk", Tool.DICTATE_CLEAN: "Talk tidy", Tool.DICTATE_COMMAND: "Talk cmd",
+    Tool.DICTATE: "Talk",
     Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
     Tool.ZOOM: "Zoom", Tool.MINIMIZE: "Min",
     Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",
@@ -197,8 +193,6 @@ def keymap(layer: Layer | None) -> list[list[Cap]]:
         for scancode, name in row:
             if scancode == ESCAPE:
                 caps.append(Cap(name, "On/off", "hold: quit", Kind.SPECIAL))
-            elif (tool := VOICE_KEYS.get(scancode)) is not None:
-                caps.append(Cap(name, TOOL_NAMES[tool], "hold" if route(tool) is Route.HOLD else "toggle", Kind.TOOL))
             else:
                 match slot(scancode):
                     case Unmapped():
@@ -220,3 +214,7 @@ def indicator_text(layer: Layer | None, *, locked: bool, caps_word: bool) -> str
     if caps_word:
         parts.append("CAPS WORD")
     return " · ".join(parts) or None
+
+
+AGENT_HOLD: Final = shortcut_hint(shortcut(Tool.AGENT_VOICE))
+"""How to hold agent speech on the laptop, such as "Hold . + K"."""

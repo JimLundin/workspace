@@ -54,57 +54,73 @@ or **Keyboard map** in the bar menu, draws every layer.
 | Key | Does |
 |---|---|
 | **§** | Tap: layout on or off. Hold 2 s: quit the layout |
-| **Spacebar** | Hold to dictate. The text is typed at the cursor on release |
-| **B** | Dictation on or off |
-| **N** | Hold to speak to the agent. Release to send |
-| thumbs **X C V** | Esc, Space or **Nav**, Tab or **Tools** |
+| thumbs **X C V** | Esc, Space or **Nav**, Tab |
 | thumbs **M , .** | Enter or **Sym**, Backspace or **Num**, Delete or **Apps** |
 
-**Tools** layer (hold **V**): **I** dictates tidied text, **O** dictates a
-command, **K** speaks to the agent, **L** opens the agent session, **Ö** stops
-the agent, **M** dictates, and **T** opens the inbox. Hold **I**, **O**, **K**
-and **M** while you speak.
+The **Apps** layer (hold **.**) holds every Workspace key; nothing else in the
+layout talks to Workspace. Desktops are reached directly by number, never
+cycled.
 
-**Apps** layer (hold **.**): **C** copies the latest transcript, **V** starts
-or stops a meeting recording, **M** toggles agent speech, and **'** toggles
-dictation.
+| Hold **.** and press | Does |
+|---|---|
+| **2 3 4 5 6**, **Q W E R T** | The ten apps in `APPS` |
+| **8 9 0 +** | Desktops 1 to 4 |
+| **´** | Stop the agent |
+| **I** | Zoom |
+| **O P Å ¨** | Focus ← ↓ ↑ → |
+| **A S D F** | Pause placement, switch windows, re-place, minimize |
+| **K** | Hold to speak to the agent; release to send |
+| **L** | Hold to dictate; the text is typed at the cursor on release |
+| **Ö** | Type a task for the agent |
+| **Ä** | Copy the latest transcript |
+| **'** | Dictation on or off |
+| thumbs **X C V** | The inbox; start or stop a meeting recording; agent speech on or off |
 
 While the Charybdis Nano keyboard (USB `A8F8:1832`) is connected, the layout
-pauses and keeps English (US). On it, **Ctrl+Shift+D** holds dictation and
-**Ctrl+Shift+G** holds agent speech.
+pauses and keeps English (US). Workspace adds one key to its keymap rather than
+replacing anything: put **F24** (`KC_F24`) on a thumb key of the Charybdis. Held,
+it is the Charybdis's Apps key: the next key is read by the letter it sends, as
+on the laptop's Apps layer at that place (listed below), and swallowed. F24
+itself never reaches an application. A hold-to-talk key lasts while it is held.
 
-**Chords.** Hold Ctrl+Alt+Shift and tap a letter. On the laptop, hold the
-home-row mods **R S T** or **I E N** with one hand and tap the letter with the
-other. The letters are the same on both keyboards. While you hold the chord,
-the bar shows each target's letter. App chords focus the app, cycle its
-windows, or start it. The app letters follow `APPS` in `config.py`. Held for 600 ms without a
-letter, a panel lists every chord.
+While either keyboard holds its Apps key, the bar shows each target's letter.
+App keys focus the app, cycle its windows, or start it. Held for 600 ms without
+another key, a panel lists every one.
 
-| chord | does |
+| Apps + | does |
 |---|---|
-| ⌃⌥⇧ **N** | Focus ← |
-| ⌃⌥⇧ **E** | Focus ↓ |
-| ⌃⌥⇧ **I** | Focus ↑ |
-| ⌃⌥⇧ **O** | Focus → |
-| ⌃⌥⇧ **J** | Desk 1 |
-| ⌃⌥⇧ **L** | Desk 2 |
-| ⌃⌥⇧ **U** | Desk 3 |
-| ⌃⌥⇧ **Y** | Desk 4 |
-| ⌃⌥⇧ **M** | Zoom |
-| ⌃⌥⇧ **Q** | Terminal |
-| ⌃⌥⇧ **W** | Browser |
-| ⌃⌥⇧ **F** | Outlook |
-| ⌃⌥⇧ **P** | Teams |
-| ⌃⌥⇧ **B** | Files |
-| ⌃⌥⇧ **A** | Code |
-| ⌃⌥⇧ **R** | Notepad |
-| ⌃⌥⇧ **S** | Excel |
-| ⌃⌥⇧ **T** | Word |
-| ⌃⌥⇧ **G** | PowerPoint |
-| ⌃⌥⇧ **X** | Pause place |
-| ⌃⌥⇧ **C** | Windows |
-| ⌃⌥⇧ **D** | Re-place |
-| ⌃⌥⇧ **V** | Min |
+| Apps **Q** | Terminal |
+| Apps **W** | Browser |
+| Apps **F** | Outlook |
+| Apps **P** | Teams |
+| Apps **B** | Files |
+| Apps **J** | Desk 1 |
+| Apps **L** | Desk 2 |
+| Apps **U** | Desk 3 |
+| Apps **Y** | Desk 4 |
+| Apps **'** | Stop |
+| Apps **A** | Code |
+| Apps **R** | Notepad |
+| Apps **S** | Excel |
+| Apps **T** | Word |
+| Apps **G** | PowerPoint |
+| Apps **M** | Zoom |
+| Apps **N** | Focus ← |
+| Apps **E** | Focus ↓ |
+| Apps **I** | Focus ↑ |
+| Apps **O** | Focus → |
+| Apps **X** | Pause place |
+| Apps **C** | Windows |
+| Apps **D** | Re-place |
+| Apps **V** | Min |
+| Apps **K** | Agent talk |
+| Apps **H** | Talk |
+| Apps **,** | Agent |
+| Apps **.** | Copy speech |
+| Apps **/** | Dictate toggle |
+| Apps **Esc** | Inbox |
+| Apps **Space** | Record |
+| Apps **Tab** | Agent toggle |
 
 **Snippets.** Type a trigger and Workspace replaces it: `,,date`, `,,time`,
 `,,now`, `,,week`, `,,shrug`, `,,thx`, `,,mvh` and `,,br`. Add your own in
@@ -136,11 +152,11 @@ and creates virtual desktops as needed. See
 
 ## The agent
 
-Hold **N** and speak to the agent. **Hold V + L** opens the agent session. The agent works on the
+Hold **. + K** and speak to the agent. **Hold . + Ö** opens the agent session. The agent works on the
 desktop, in files, in PowerShell, and in its own headless Edge profile at
 `%LOCALAPPDATA%\workspace\browser-profile`, where it uses Outlook, Teams and AIP
 Kanban. It runs without confirmation prompts and stops after 80 steps. It asks
-questions in the bar, and you answer by holding **N**. It collects work,
+questions in the bar, and you answer by holding **. + K**. It collects work,
 sources and notes on the canvas. Tasks are saved, so a restart resumes them.
 
 Ask the agent to change Workspace, such as "add a snippet for my email

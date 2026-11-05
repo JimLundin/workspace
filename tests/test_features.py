@@ -380,25 +380,6 @@ def test_queued_voice_diagnostics_belong_to_their_own_recording() -> None:
             assert details["submitted_characters"] == len(transcripts[index]) + 1
 
 
-def test_dictate_clean_types_the_tidied_text() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [said("um so like the the meeting"), answered("So, the meeting.")]
-        rig = Rig(endpoint)
-        rig.hold(Tool.DICTATE_CLEAN)
-        assert rig.take()[-1] == "type 'So, the meeting. '"
-        messages = cast("list[dict[str, object]]", rig.sent()["messages"])
-        assert [m["role"] for m in messages] == ["system", "user"]
-        assert messages[1]["content"] == "um so like the the meeting"
-
-
-def test_dictate_command_types_one_line_and_never_enter() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [said("list big files"), answered("```powershell\nGet-ChildItem |\n Sort-Object Length\n```")]
-        rig = Rig(endpoint)
-        rig.hold(Tool.DICTATE_COMMAND)
-        assert rig.take()[-1] == "type 'Get-ChildItem | Sort-Object Length'"
-
-
 def test_a_tap_of_a_talk_key_sends_nothing() -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint)
@@ -413,8 +394,8 @@ def test_a_second_talk_key_while_listening_is_ignored() -> None:
         endpoint.replies = [said("one")]
         rig = Rig(endpoint)
         rig.assistant.handle(Tool.DICTATE, down=True)
-        rig.assistant.handle(Tool.DICTATE_CLEAN, down=True)
-        rig.assistant.handle(Tool.DICTATE_CLEAN, down=False)
+        rig.assistant.handle(Tool.AGENT_VOICE, down=True)
+        rig.assistant.handle(Tool.AGENT_VOICE, down=False)
         rig.assistant.handle(Tool.DICTATE, down=False)
         assert rig.take() == ["listen", "stop listening", "clipboard one", "type 'one '"]
 

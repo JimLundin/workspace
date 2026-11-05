@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final, NewType
 
+from config import APPS
 from protocol import App, Tool
 
 # ---- Settings ------------------------------------------------------------------
@@ -31,14 +32,6 @@ Scancode = NewType("Scancode", int)
 
 ESCAPE: Final = Scancode(0x29)
 """The escape key (the key left of 1, § on a Nordic keyboard)."""
-TALK: Final = Scancode(0x39)
-"""The physical Spacebar holds dictation. C remains the Space/Nav thumb."""
-AGENT: Final = Scancode(0x31)
-"""Physical N holds agent speech and sends on release."""
-DICTATE_TOGGLE: Final = Scancode(0x30)
-"""Physical B toggles dictation."""
-VOICE_KEYS: Final = {TALK: Tool.DICTATE, DICTATE_TOGGLE: Tool.DICTATE_TOGGLE, AGENT: Tool.AGENT_VOICE}
-"""Dedicated voice buttons work on every layer, without a tap-hold delay."""
 
 
 # ---- Vocabulary ----------------------------------------------------------------
@@ -162,8 +155,8 @@ class Layer(Enum):
     NAV = auto()
     NUM = auto()
     SYM = auto()
-    TOOLS = auto()
     APPS = auto()
+    """Every Workspace request: apps, desktops, focus, windows and voice."""
 
 
 type Hold = Mod | Layer
@@ -331,8 +324,8 @@ PHYSICAL: Final[Board[Scancode]] = Board(
 )
 
 UNUSED: Final = frozenset(
-    # Keys between and below the hands (1 7 Y U G H J Z - <): blocked.
-    sc(code) for code in (0x02, 0x08, 0x15, 0x16, 0x22, 0x23, 0x24, 0x2C, 0x31, 0x35, 0x56)
+    # Keys between and below the hands (1 7 Y U G H J Z B N - <) and the Spacebar: blocked.
+    sc(code) for code in (0x02, 0x08, 0x15, 0x16, 0x22, 0x23, 0x24, 0x2C, 0x30, 0x31, 0x35, 0x39, 0x56)
 )
 
 FUNCTION_KEYS: Final = frozenset(Scancode(code) for code in range(0x3B, 0x45)) | frozenset({Scancode(0x57), Scancode(0x58)})
@@ -343,7 +336,7 @@ BASE: Final[Board[Action]] = Board(
     top=      Row((Q,          W,          F,          P,              B  ), (J,              L,                  U,          Y,          QUOTE     )),
     home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(LETTER_I, ALT), ht(LETTER_O, GUI))),
     bottom=   Row((Z,          X,          C,          D,              V  ), (K,              H,                  COMMA,      PERIOD,     SLASH     )),
-    thumbs=Thumbs((                        ESC,        ht(SPACE, NAV), ht(TAB, Layer.TOOLS)), (ht(ENTER, SYM), ht(BACKSPACE, NUM), ht(DELETE, Layer.APPS))),
+    thumbs=Thumbs((                        ESC,        ht(SPACE, NAV), TAB           ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), ht(DELETE, Layer.APPS))),
 )
 
 NAV_LAYER: Final[Board[Action]] = Board(
@@ -370,20 +363,19 @@ SYM_LAYER: Final[Board[Action]] = Board(
     thumbs=Thumbs((                       sh(N9), sh(N0), sh(MINUS)    ), (XX, XX,  XX )),             # ( ) _
 )
 
-TOOLS_LAYER: Final[Board[Action]] = Board(
-    # Hold the Tab thumb. Right hand: assistant tools; left T: inbox.
-    top=      Row((LOCK, XX,  XX,  XX,  XX), (XX,                 XX,                   XX,        XX, XX)),
-    home=     Row((GUI,  ALT, CTL, SFT, Tool.OPEN_INBOX), (Tool.DICTATE_CLEAN, Tool.DICTATE_COMMAND, XX,        XX, XX)),
-    bottom=   Row((XX,   XX,  XX,  XX,  XX), (Tool.AGENT_VOICE,   Tool.AGENT_TYPED,     Tool.STOP, XX, XX)),
-    thumbs=Thumbs((           XX,  XX,  XX), (Tool.DICTATE,       XX,                   XX       )),
-)
+# The apps from config, ten slots in key order; slots past the end do nothing.
+_APP: Final[tuple[Action, ...]] = (*APPS[:10], *[XX] * (10 - len(APPS[:10])))
 
 APPS_LAYER: Final[Board[Action]] = Board(
-    # Hold the Delete thumb. Speech toggles; navigation and apps are the Ctrl+Alt+Shift chords (`miryoku.firmware.CHORDS`).
-    top=      Row((XX, XX, XX, XX, XX), (XX, XX,  XX,  XX,  LOCK)),
-    home=     Row((XX, XX, XX, XX, XX), (XX, SFT, CTL, ALT, GUI )),
-    bottom=   Row((XX, XX, XX, XX, XX), (XX, XX,  XX,  XX,  Tool.DICTATE_TOGGLE)),
-    thumbs=Thumbs((    XX, Tool.COPY_TRANSCRIPT, Tool.MEETING_TOGGLE), (Tool.AGENT_VOICE_TOGGLE, XX, XX)),
+    # Hold the Delete thumb. The only Workspace layer: apps on the left; desktops, focus and voice on the right.
+    # The firmware keyboard reaches each request with its Apps thumb and the base key at its place (`miryoku.firmware.CHORDS`).
+    top=      Row((_APP[0],         _APP[1],               _APP[2],              _APP[3],         _APP[4]      ),
+                  (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.STOP    )),
+    home=     Row((_APP[5],         _APP[6],               _APP[7],              _APP[8],         _APP[9]      ),
+                  (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
+    bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  Tool.MINIMIZE),
+                  (Tool.AGENT_VOICE, Tool.DICTATE,         Tool.AGENT_TYPED,     Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
+    thumbs=Thumbs((Tool.OPEN_INBOX, Tool.MEETING_TOGGLE,   Tool.AGENT_VOICE_TOGGLE), (XX, XX, XX)),
 )
 # fmt: on
 
@@ -407,7 +399,6 @@ TABLE: Final[dict[Layer | None, tuple[Action, ...]]] = {
     Layer.NAV: _flatten(NAV_LAYER),
     Layer.NUM: _flatten(NUM_LAYER),
     Layer.SYM: _flatten(SYM_LAYER),
-    Layer.TOOLS: _flatten(TOOLS_LAYER),
     Layer.APPS: _flatten(APPS_LAYER),
 }
 """Every layer flattened, by layer (None: the base layer) then cell."""

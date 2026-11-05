@@ -1,16 +1,16 @@
-"""The AI endpoint: settings, the SDK clients, transcription and one-shot questions,
+"""The AI endpoint: settings, the SDK clients and transcription,
 against any OpenAI-style API. Pydantic validates the replies we read.
-`transcribe` and `ask` return their result or a `Failure`; neither raises for
+`transcribe` returns its result or a `Failure`; it doesn't raise for
 network or server problems."""
 
 import io
 import wave
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Annotated, Final, TypedDict, assert_never
+from typing import Final, TypedDict, assert_never
 from urllib.parse import urlsplit
 
-from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import ConfigDict, TypeAdapter, ValidationError
 lazy from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI, omit
 
 from automation.json_value import Json
@@ -134,18 +134,6 @@ class _Transcription(TypedDict):
     text: str
 
 
-class _Message(TypedDict):
-    content: str
-
-
-class _Choice(TypedDict):
-    message: _Message
-
-
-class _Completion(TypedDict):
-    choices: Annotated[list[_Choice], Field(min_length=1)]
-
-
 class _ErrorDetail(TypedDict):
     message: str
 
@@ -153,7 +141,6 @@ class _ErrorDetail(TypedDict):
 # The SDK builds reply objects without validating them (a proxy's HTML page arrives as
 # a `str`), so the calls read the raw body and validate only the fields used here.
 _TRANSCRIPTION = TypeAdapter(_Transcription)
-_COMPLETION = TypeAdapter(_Completion)
 _ERROR_DETAIL = TypeAdapter(_ErrorDetail)
 
 
@@ -202,21 +189,5 @@ def transcribe(settings: Settings, audio: bytes, *, timeout_s: float = 60, conte
         return _failure(settings, error)
     try:
         return _TRANSCRIPTION.validate_json(reply)["text"]
-    except ValidationError:
-        return _unexpected(reply)
-
-
-def ask(settings: Settings, instructions: str, content: str) -> str | Failure:
-    """One question to the fast model, one answer."""
-    try:
-        with _client(settings, 120) as client:
-            reply = client.chat.completions.with_raw_response.create(
-                model=settings.fast_model,
-                messages=[{"role": "system", "content": instructions}, {"role": "user", "content": content}],
-            ).content
-    except (APIStatusError, APIConnectionError) as error:
-        return _failure(settings, error)
-    try:
-        return _COMPLETION.validate_json(reply)["choices"][0]["message"]["content"]
     except ValidationError:
         return _unexpected(reply)

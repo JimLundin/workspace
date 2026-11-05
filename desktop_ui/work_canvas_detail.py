@@ -32,9 +32,8 @@ from automation.personal_work import (
 from automation.task import TextAnswer
 from desktop_ui.components.controls import button, label
 from desktop_ui.components.widgets import Editor, column, replace_text, row
-from desktop_ui.keymap import PHYSICAL_NAMES
+from desktop_ui.keymap import AGENT_HOLD
 from desktop_ui.work_window import WorkWindow
-from miryoku.layout import AGENT
 
 
 def when(at: float | None) -> str:
@@ -387,7 +386,7 @@ class QuestionDetail:
         self.question.setText(content.text)
         match content.reply:
             case Attention.WAITING:
-                self.status.setText("Hold " + PHYSICAL_NAMES[AGENT] + " to reply · release to send")
+                self.status.setText(AGENT_HOLD + " to reply · release to send")
                 self.response.setText("Previous reply\n" + self.last_reply if self.last_reply is not None else "")
             case TextAnswer(text=text):
                 self.last_reply = text

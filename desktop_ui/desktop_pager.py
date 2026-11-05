@@ -3,7 +3,7 @@
 The pager shows one number per desktop with the current one marked; a click goes
 straight to that desktop. Desktops are reached directly, never cycled. Its names
 list the applications placed on each desktop. While either keyboard holds
-Ctrl+Alt+Shift, each desktop carries its chord letter, read from the chord table.
+its Apps key, each desktop carries its letter, read from the chord table.
 """
 
 from collections.abc import Sequence
@@ -20,7 +20,7 @@ JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4)
 
 @dataclass(frozen=True, slots=True)
 class Hints:
-    """The chord letter reaching each desktop; empty unless a keyboard holds Ctrl+Alt+Shift."""
+    """The chord letter reaching each desktop; empty unless a keyboard holds its Apps key."""
 
     desktops: tuple[str | None, ...]
 
@@ -55,7 +55,7 @@ def label(app: App) -> str:
 def pager(placed: Sequence[Sequence[App]], current: int, *, chord: bool) -> PagerView:
     """The pager for these desktops, each with the applications placed on it.
 
-    The hints show while Ctrl+Alt+Shift are held, so the letter alone completes the chord.
+    The hints show while an Apps key is held, so the letter alone completes the request.
     """
 
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:

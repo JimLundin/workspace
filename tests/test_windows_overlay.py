@@ -15,13 +15,14 @@ lazy from PySide6.QtCore import Qt
 from desktop_ui.keymap_views import KeymapCanvas, KeymapOverlay
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
-from miryoku.layout import AGENT, TALK, Layer, Scancode
+from miryoku.layout import Layer, Scancode
 from winapi.shapes import Rect
 
 prepare()
 
 WORK = Rect(0, 0, 1920, 1040)
 Q, M = Scancode(0x10), Scancode(0x32)
+AGENT, TALK = Scancode(0x31), Scancode(0x39)  # N and the Spacebar: blocked keys still light up
 
 
 class HiddenDesktop:

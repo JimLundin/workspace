@@ -21,11 +21,10 @@ def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first()
     # Defects: using BASE outputs as keycaps, selecting another layer's thumb,
     # advertising the Tools-layer dictation copy instead of its dedicated key, or
     # dropping the hint of a tool only a chord reaches.
-    assert shortcut(Tool.OPEN_INBOX) == Shortcut("T", "V")
-    assert shortcut(Tool.COPY_TRANSCRIPT) == Shortcut("C", ".")
-    assert shortcut(Tool.DICTATE) == Shortcut("Space", None)
-    assert shortcut(Tool.WINDOW_SWITCHER) == Shortcut("C", "⌃⌥⇧")
-    assert shortcut_hint(shortcut(Tool.WINDOW_SWITCHER), compact=True) == "⌃⌥⇧ C"
+    assert shortcut(Tool.OPEN_INBOX) == Shortcut("X", ".")
+    assert shortcut(Tool.DICTATE) == Shortcut("L", ".")
+    assert shortcut(Tool.AGENT_VOICE) == Shortcut("K", ".")
+    assert shortcut_hint(shortcut(Tool.WINDOW_SWITCHER), compact=True) == ". S"
 
 
 def test_shortcut_hints_share_keycap_notation_and_omit_absent_bindings() -> None:
@@ -47,19 +46,8 @@ def test_base_layer() -> None:
     assert base["."] == ("Del", "Apps", Kind.KEY)
     assert base["-"] == ("", "", Kind.BLANK)
     assert base["§"] == ("On/off", "hold: quit", Kind.SPECIAL)
-    assert base["B"] == ("Dictate toggle", "toggle", Kind.TOOL)
-    assert base["Space"] == ("Talk", "hold", Kind.TOOL)
-    assert base["N"] == ("Agent talk", "hold", Kind.TOOL)
+    assert base["B"] == base["N"] == base["Space"] == ("", "", Kind.BLANK)
     assert base["Y"] == ("", "", Kind.BLANK)
-
-
-def test_voice_buttons_stay_visible_on_every_layer() -> None:
-    layers: list[Layer | None] = [None, *list(Layer)]
-    for layer in layers:
-        keys = caps(layer)
-        assert keys["Space"] == ("Talk", "hold", Kind.TOOL)
-        assert keys["N"] == ("Agent talk", "hold", Kind.TOOL)
-        assert keys["B"] == ("Dictate toggle", "toggle", Kind.TOOL)
 
 
 def test_layers_show_their_keys_and_the_thumb_holding_them() -> None:
@@ -74,15 +62,15 @@ def test_layers_show_their_keys_and_the_thumb_holding_them() -> None:
     assert caps(Layer.NUM)[","][2] is Kind.HELD
 
 
-def test_tools_and_apps_layers() -> None:
-    tools = caps(Layer.TOOLS)
-    assert tools["L"] == ("Agent", "", Kind.TOOL)
-    assert tools["T"] == ("Inbox", "", Kind.TOOL)
-    assert tools["I"] == ("Talk tidy", "hold", Kind.TOOL)
-    assert tools["V"][2] is Kind.HELD
-    assert tools["M"] == ("Talk", "hold", Kind.TOOL)
+def test_the_apps_layer_holds_every_workspace_request() -> None:
+    # Defects: a voice hold loses its hold marking, or a request moves off the
+    # place its firmware chord letter names.
     apps = caps(Layer.APPS)
-    assert apps["C"] == ("Copy speech", "", Kind.TOOL)
+    assert apps["K"] == ("Agent talk", "hold", Kind.TOOL)
+    assert apps["L"] == ("Talk", "hold", Kind.TOOL)
+    assert apps["2"] == ("Terminal", "", Kind.APP)
+    assert apps["8"] == ("Desk 1", "", Kind.TOOL)
+    assert apps["X"] == ("Inbox", "", Kind.TOOL)
     assert apps["."][2] is Kind.HELD
 
 

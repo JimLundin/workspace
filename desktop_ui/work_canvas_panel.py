@@ -82,7 +82,7 @@ from desktop_ui.components.controls import button, label
 from desktop_ui.components.meaning import Tint
 from desktop_ui.components.voice_legend import VoiceLegend
 from desktop_ui.components.widgets import column
-from desktop_ui.keymap import PHYSICAL_NAMES
+from desktop_ui.keymap import AGENT_HOLD
 from desktop_ui.qt_ui import cancel, later
 from desktop_ui.work_canvas_connections import connections
 from desktop_ui.work_canvas_gestures import (
@@ -109,7 +109,6 @@ from desktop_ui.work_canvas_gestures import (
 from desktop_ui.work_canvas_layout import Box, Measurements, Size, layout
 from desktop_ui.work_canvas_view import CanvasCard, CanvasGroup, CanvasViewport
 from desktop_ui.work_window import WorkWindow
-from miryoku.layout import AGENT
 lazy from desktop_ui.work_canvas_detail import CardDetail, NoteDetail, QuestionDetail, SourceDetail, UpdateDetail, WorkDetail
 
 
@@ -219,7 +218,7 @@ class CanvasPanel:
         self.questions.hide()
 
     def create_voice_controls(self) -> None:
-        self.voice_hint: VoiceLegend = VoiceLegend(PHYSICAL_NAMES[AGENT], self.toolbar.surface.look.lettering.ink)
+        self.voice_hint: VoiceLegend = VoiceLegend(AGENT_HOLD, self.toolbar.surface.look.lettering.ink)
         self.toolbar_layout.addWidget(self.voice_hint)
         self.clear_context: QtWidgets.QToolButton = self.toolbar.button("close", "Ask about the whole canvas", self.clear_selection)
         self.clear_context.setIconSize(QtCore.QSize(12, 12))
@@ -234,9 +233,7 @@ class CanvasPanel:
     def update_voice_context(self) -> None:
         current = topology(self.view.catalog, self.document).by_id.get(self.selected) if self.selected is not None else None
         context = container_title(current) if current is not None else "whole canvas"
-        self.voice_hint.setToolTip(
-            "Ask agent · " + context + "\nHold " + PHYSICAL_NAMES[AGENT] + " with Workspace's layout enabled; release to send."
-        )
+        self.voice_hint.setToolTip("Ask agent · " + context + "\n" + AGENT_HOLD + " with Workspace's layout enabled; release to send.")
         self.has_context = current is not None
         self.position_chrome()
 

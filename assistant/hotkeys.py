@@ -21,7 +21,7 @@ class Route(Enum):
 
 def route(tool: Tool) -> Route:
     match tool:
-        case Tool.DICTATE | Tool.DICTATE_CLEAN | Tool.DICTATE_COMMAND | Tool.AGENT_VOICE:
+        case Tool.DICTATE | Tool.AGENT_VOICE:
             return Route.HOLD
         case Tool.DICTATE_TOGGLE | Tool.AGENT_VOICE_TOGGLE:
             return Route.TOGGLE

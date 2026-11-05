@@ -1,34 +1,55 @@
 """Recognize the connected firmware keyboard and retain the user's laptop mode."""
 
-from collections.abc import Collection, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import Final
 
-from config import APPS
-from protocol import Request, Tool
+from miryoku.layout import BASE, CELLS, TABLE, Key, Layer, TapHold, character
+from protocol import App, Request, Tool
 
 # Charybdis Nano (3x5) Splinky: match its USB identity, independent of port.
 FIRMWARE_KEYBOARD: Final = ("VID_A8F8", "PID_1832")
 
-_CHORD_LETTERS: Final[tuple[tuple[Request, str], ...]] = (
-    # Right-hand letters, tapped while the left hand holds R S T, follow Miryoku's NAV positions.
-    (Tool.FOCUS_LEFT, "N"), (Tool.FOCUS_DOWN, "E"), (Tool.FOCUS_UP, "I"), (Tool.FOCUS_RIGHT, "O"),
-    # The top row J L U Y counts desktops 1 to 4 from the inner index finger.
-    (Tool.DESKTOP_1, "J"), (Tool.DESKTOP_2, "L"), (Tool.DESKTOP_3, "U"), (Tool.DESKTOP_4, "Y"),
-    (Tool.ZOOM, "M"),
-    # Left-hand letters, tapped while the right hand holds N E I: config's apps along the top and home rows.
-    *zip(APPS[:10], "QWFPBARSTG", strict=False),
-    (Tool.PLACEMENT_PAUSE, "X"), (Tool.WINDOW_SWITCHER, "C"), (Tool.PLACE_NOW, "D"), (Tool.MINIMIZE, "V"),
-)  # fmt: skip
-CHORDS: Final[frozendict[Request, str]] = frozendict(_CHORD_LETTERS)
-"""Ctrl+Alt+Shift + the letter asks Workspace for the request, from the firmware keyboard or the layout's home row mods."""
 
-CHORD_KEYS: Final = frozendict({ord(letter): request for request, letter in CHORDS.items()})
-"""Each chord's request by its letter's virtual key, which both keyboards share."""
-_VOICE_KEYS: Final[frozendict[int, Request]] = frozendict({0x44: Tool.DICTATE, 0x47: Tool.AGENT_VOICE})
-if len(CHORD_KEYS) != len(_CHORD_LETTERS) or not all("A" <= letter <= "Z" for letter in CHORDS.values()):
-    raise ImportError("every firmware chord needs its own request and letter")
+def _base_key(cell: int) -> Key | None:
+    match BASE.cells()[cell]:
+        case Key() as key:
+            return key
+        case TapHold(tap=Key() as key):
+            return key
+        case _:
+            return None
+
+
+def _chord_keys() -> frozendict[Key, Request]:
+    """Each Apps layer request by the base key at its place: one map for both keyboards."""
+    keys: dict[Key, Request] = {}
+    for cell in range(CELLS):
+        match TABLE[Layer.APPS][cell]:
+            case Tool() | App() as request if (key := _base_key(cell)) is not None:
+                if key in keys:
+                    raise ImportError(f"two Apps layer requests share the chord key {key.name}")
+                keys[key] = request
+            case Tool() | App():
+                raise ImportError("an Apps layer request sits where the base layer has no key to chord")
+            case _:
+                pass
+    return frozendict(keys)
+
+
+def key_name(key: Key) -> str:
+    """The chord key as it is written on the hints and in the README: a capital letter, or its name."""
+    c = character(key, shifted=False)
+    return "Space" if key is Key.SPACE else c.upper() if c else key.name.title()
+
+
+_KEYS: Final = _chord_keys()
+CHORDS: Final[frozendict[Request, str]] = frozendict({request: key_name(key) for key, request in _KEYS.items()})
+"""Each request's key under the Apps hold: the laptop's Apps layer (hold the Delete thumb),
+or the firmware keyboard's dedicated Apps thumb (`APPS_KEY`), with the key its keymap sends there."""
+
+CHORD_KEYS: Final = frozendict({key.vk: request for key, request in _KEYS.items()})
+"""Each request by its key's virtual key, which both keyboards share."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,44 +75,16 @@ class ConsumedKey:
 type CapturedKey = HeldShortcut | ConsumedKey
 
 
-MODIFIER_KEYS: Final = frozenset({0x1D, 0x11D, 0x38, 0x138, 0x2A, 0x36, 0x136, 0x15B, 0x15C})
-"""Native identities of the Ctrl, Alt, Shift and Win keys that `modifiers` reads."""
+APPS_KEY: Final = 0x87
+"""F24, the virtual key the firmware keyboard's dedicated Apps thumb sends. Nothing else uses it."""
 
 
-class Modifiers(Enum):
-    """The held native modifiers that select one of Workspace's firmware shortcuts."""
+def shortcut(vk: int, *, apps_held: bool) -> Request | None:
+    """The request a fresh firmware key press makes while the Apps thumb is held; other keys keep their meaning.
 
-    VOICE = auto()
-    """Ctrl+Shift: D holds dictation, G holds agent speech."""
-    CHORD = auto()
-    """Ctrl+Alt+Shift: a letter from `CHORDS`."""
-
-
-def modifiers(held: Collection[int]) -> Modifiers | None:
-    """Native identities include the extended bit, so either side's modifiers work.
-
-    Win never takes part: Ctrl+Alt+Shift+Win is the Office key.
+    Keys are matched by virtual key, so the host layout can't move them.
     """
-    if not (0x1D in held or 0x11D in held) or 0x15B in held or 0x15C in held:
-        return None
-    # The observed Charybdis right Shift includes Windows' extended-key flag.
-    if not (0x2A in held or 0x36 in held or 0x136 in held):
-        return None
-    return Modifiers.CHORD if 0x38 in held or 0x138 in held else Modifiers.VOICE
-
-
-def shortcut(vk: int, held: Collection[int]) -> Request | None:
-    """The request a fresh firmware key press makes; other keys keep their application meaning.
-
-    Letters are matched by virtual key, so the host layout can't move them.
-    """
-    match modifiers(held):
-        case Modifiers.VOICE:
-            return _VOICE_KEYS.get(vk)
-        case Modifiers.CHORD:
-            return CHORD_KEYS.get(vk)
-        case None:
-            return None
+    return CHORD_KEYS.get(vk) if apps_held else None
 
 
 def connected(names: Iterable[str]) -> bool:
