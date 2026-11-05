@@ -29,8 +29,7 @@ typeshedPath = "typings/.workspace-typeshed"
 pythonVersion = "3.15"
 pythonPlatform = "Windows"
 typeCheckingMode = "strict"
-# Pyright's defaults plus the typeshed override sources, which describe the stdlib, not Workspace.
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "typings/typeshed-overrides"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
 
 [tool.ruff]
 target-version = "py315"
@@ -38,7 +37,7 @@ line-length = 150
 extend-include = ["*.pyw"]
 # Preserve upstream typeshed declarations; lint consumed local stubs separately.
 # Agent worktrees under .claude are separate checkouts with their own checks.
-extend-exclude = ["typings/.workspace-typeshed", "typings/typeshed-overrides", ".claude"]
+extend-exclude = ["typings/.workspace-typeshed", ".claude"]
 
 [tool.ruff.format]
 line-ending = "lf"

@@ -1,0 +1,211 @@
+diff --git a/stdlib/_ctypes.pyi b/stdlib/_ctypes.pyi
+index d800ac5..5b69232 100644
+--- a/stdlib/_ctypes.pyi
++++ b/stdlib/_ctypes.pyi
+@@ -10,7 +10,7 @@ from typing import Any, ClassVar, Final, Generic, Literal, SupportsIndex, TypeAl
+ from typing_extensions import Self
+ 
+ _T = TypeVar("_T")
+-_CT = TypeVar("_CT", bound=_CData)
++_CT = TypeVar("_CT", bound=_CData, default=_CData)
+ 
+ FUNCFLAG_CDECL: Final = 0x1
+ FUNCFLAG_PYTHONAPI: Final = 0x4
+@@ -79,10 +79,8 @@ class _CData:
+     if sys.version_info >= (3, 14):
+         __pointer_type__: type
+ 
+-# this is a union of all the subclasses of _CData, which is useful because of
+-# the methods that are present on each of those subclasses which are not present
+-# on _CData itself.
+-_CDataType: TypeAlias = _SimpleCData[Any] | _Pointer[Any] | CFuncPtr | Union | Structure | Array[Any]
++# ctypes accepts any subclass of its native data base in ABI declarations.
++type _CDataType = _CData
+ 
+ # This class is not exposed. It calls itself _ctypes.PyCSimpleType.
+ @type_check_only
+@@ -151,13 +149,15 @@ if sys.version_info < (3, 14):
+ # This class is not exposed. It calls itself _ctypes.CArgObject.
+ @final
+ @type_check_only
+-class _CArgObject: ...
++class _CArgObject(Generic[_CT]):
++    @property
++    def _obj(self) -> _CT: ...
+ 
+ if sys.version_info >= (3, 14):
+-    def byref(obj: _CData | _CDataType, offset: int = 0, /) -> _CArgObject: ...
++    def byref(obj: _CT, offset: int = 0, /) -> _CArgObject[_CT]: ...
+ 
+ else:
+-    def byref(obj: _CData | _CDataType, offset: int = 0) -> _CArgObject: ...
++    def byref(obj: _CT, offset: int = 0) -> _CArgObject[_CT]: ...
+ 
+ _ECT: TypeAlias = Callable[[_CData | _CDataType | None, CFuncPtr, tuple[_CData | _CDataType, ...]], _CDataType]
+ _PF: TypeAlias = tuple[int] | tuple[int, str | None] | tuple[int, str | None, Any]
+@@ -262,9 +262,9 @@ class Union(_CData, metaclass=_UnionType):
+     if sys.version_info >= (3, 13):
+         _align_: ClassVar[int]
+ 
+-    def __init__(self, *args: Any, **kw: Any) -> None: ...
+-    def __getattr__(self, name: str) -> Any: ...
+-    def __setattr__(self, name: str, value: Any) -> None: ...
++    def __init__(self, *args: object, **kw: object) -> None: ...
++    def __getattr__(self, name: str) -> object: ...
++    def __setattr__(self, name: str, value: object) -> None: ...
+ 
+ # This class is not exposed. It calls itself _ctypes.PyCStructType.
+ @type_check_only
+@@ -294,9 +294,9 @@ class Structure(_CData, metaclass=_PyCStructType):
+         # _layout_ can be defined by the user, but is not always present.
+         _layout_: ClassVar[Literal["ms", "gcc-sysv"]]
+ 
+-    def __init__(self, *args: Any, **kw: Any) -> None: ...
+-    def __getattr__(self, name: str) -> Any: ...
+-    def __setattr__(self, name: str, value: Any) -> None: ...
++    def __init__(self, *args: object, **kw: object) -> None: ...
++    def __getattr__(self, name: str) -> object: ...
++    def __setattr__(self, name: str, value: object) -> None: ...
+ 
+ # This class is not exposed. It calls itself _ctypes.PyCArrayType.
+ @type_check_only
+diff --git a/stdlib/builtins.pyi b/stdlib/builtins.pyi
+index 6abf9f3..c12906a 100644
+--- a/stdlib/builtins.pyi
++++ b/stdlib/builtins.pyi
+@@ -1389,7 +1389,6 @@ if sys.version_info >= (3, 15):
+             cls: type[frozendict[str, _VT]], iterable: Iterable[tuple[str, _VT]], /, **kwargs: _VT
+         ) -> frozendict[str, _VT]: ...
+ 
+-        def __init__(self) -> None: ...
+         def copy(self) -> frozendict[_KT, _VT]: ...
+ 
+         @overload
+diff --git a/stdlib/ctypes/__init__.pyi b/stdlib/ctypes/__init__.pyi
+index 7eee1b7..76bd5fa 100644
+--- a/stdlib/ctypes/__init__.pyi
++++ b/stdlib/ctypes/__init__.pyi
+@@ -26,7 +26,7 @@ from _ctypes import (
+ from _typeshed import StrPath, SupportsBool, SupportsLen
+ from ctypes._endian import BigEndianStructure as BigEndianStructure, LittleEndianStructure as LittleEndianStructure
+ from types import GenericAlias
+-from typing import Any, ClassVar, Final, Generic, Literal, TypeAlias, TypeVar, overload, type_check_only
++from typing import Any, ClassVar, Final, Generic, Literal, Protocol, TypeAlias, TypeVar, overload, type_check_only
+ from typing_extensions import Self, deprecated
+ 
+ if sys.platform == "win32":
+@@ -42,6 +42,9 @@ _CT = TypeVar("_CT", bound=_CData)
+ _T = TypeVar("_T", default=Any)
+ _DLLT = TypeVar("_DLLT", bound=CDLL)
+ 
++class _Scalar(Protocol[_T]):
++    value: _T
++
+ if sys.version_info >= (3, 14):
+     @overload
+     @deprecated("ctypes.POINTER with string")
+@@ -124,10 +128,11 @@ pythonapi: PyDLL
+ # ctypes.WINFUNCTYPE.<locals>.WinFunctionType
+ # ctypes.PYFUNCTYPE.<locals>.CFunctionType
+ @type_check_only
+-class _CFunctionType(_CFuncPtr):
++class _CFunctionType(_CFuncPtr, Generic[_T]):
+     _argtypes_: ClassVar[list[type[_CData | _CDataType]]]
+     _restype_: ClassVar[type[_CData | _CDataType] | None]
+     _flags_: ClassVar[int]
++    def __call__(self, *args: object) -> _T: ...
+ 
+ # Alias for either function pointer type
+ _FuncPointer: TypeAlias = _CDLLFuncPointer | _CFunctionType  # noqa: Y047  # not used here
+@@ -140,12 +145,27 @@ def CFUNCTYPE(
+ ) -> type[_CFunctionType]: ...
+ 
+ if sys.platform == "win32":
++    @overload
++    def WINFUNCTYPE(
++        restype: type[_Scalar[_T]],
++        *argtypes: type[object],
++        use_errno: bool = False,
++        use_last_error: bool = False,
++    ) -> type[_CFunctionType[_T]]: ...
++    @overload
++    def WINFUNCTYPE(
++        restype: None,
++        *argtypes: type[object],
++        use_errno: bool = False,
++        use_last_error: bool = False,
++    ) -> type[_CFunctionType[None]]: ...
++    @overload
+     def WINFUNCTYPE(
+-        restype: type[_CData | _CDataType] | None,
+-        *argtypes: type[_CData | _CDataType],
++        restype: type[_CData],
++        *argtypes: type[_CData],
+         use_errno: bool = False,
+         use_last_error: bool = False,
+-    ) -> type[_CFunctionType]: ...
++    ) -> type[_CFunctionType[object]]: ...
+ 
+ def PYFUNCTYPE(restype: type[_CData | _CDataType] | None, *argtypes: type[_CData | _CDataType]) -> type[_CFunctionType]: ...
+ 
+@@ -160,7 +180,7 @@ _CVoidConstPLike: TypeAlias = _CVoidPLike | bytes
+ 
+ _CastT = TypeVar("_CastT", bound=_CanCastTo)
+ 
+-def cast(obj: _CData | _CDataType | _CArgObject | int, typ: type[_CastT]) -> _CastT: ...
++def cast(obj: _CData | _CArgObject | int, typ: type[_CastT]) -> _CastT: ...
+ def create_string_buffer(init: int | bytes, size: int | None = None) -> Array[c_char]: ...
+ 
+ c_buffer = create_string_buffer
+diff --git a/stdlib/subprocess.pyi b/stdlib/subprocess.pyi
+index c191f0e..0790069 100644
+--- a/stdlib/subprocess.pyi
++++ b/stdlib/subprocess.pyi
+@@ -1030,9 +1030,9 @@ class CalledProcessError(SubprocessError):
+ 
+ class Popen(Generic[AnyStr]):
+     args: _CMD
+-    stdin: IO[Any] | None
+-    stdout: IO[Any] | None
+-    stderr: IO[Any] | None
++    stdin: IO[AnyStr] | None
++    stdout: IO[AnyStr] | None
++    stderr: IO[AnyStr] | None
+     pid: int
+     returncode: int | MaybeNone
+     universal_newlines: bool
+diff --git a/stdlib/urllib/request.pyi b/stdlib/urllib/request.pyi
+index 0ec2605..e0b08f0 100644
+--- a/stdlib/urllib/request.pyi
++++ b/stdlib/urllib/request.pyi
+@@ -55,7 +55,7 @@ _T = TypeVar("_T")
+ # See
+ # - https://github.com/python/typeshed/pull/15042
+ # - https://github.com/python/typing/issues/566
+-_UrlopenRet: TypeAlias = Any
++type _UrlopenRet = object
+ 
+ _DataType: TypeAlias = ReadableBuffer | SupportsRead[bytes] | Iterable[bytes] | None
+ 
+diff --git a/stdlib/winreg.pyi b/stdlib/winreg.pyi
+index 8a88611..d5be955 100644
+--- a/stdlib/winreg.pyi
++++ b/stdlib/winreg.pyi
+@@ -17,7 +17,7 @@ if sys.platform == "win32":
+ 
+     def DeleteValue(key: _KeyType, value: str, /) -> None: ...
+     def EnumKey(key: _KeyType, index: int, /) -> str: ...
+-    def EnumValue(key: _KeyType, index: int, /) -> tuple[str, Any, int]: ...
++    def EnumValue(key: _KeyType, index: int, /) -> tuple[str, object, int]: ...
+     def ExpandEnvironmentStrings(string: str, /) -> str: ...
+     def FlushKey(key: _KeyType, /) -> None: ...
+     def LoadKey(key: _KeyType, sub_key: str, file_name: str, /) -> None: ...
+@@ -25,7 +25,7 @@ if sys.platform == "win32":
+     def OpenKeyEx(key: _KeyType, sub_key: str | None, reserved: int = 0, access: int = 131097) -> HKEYType: ...
+     def QueryInfoKey(key: _KeyType, /) -> tuple[int, int, int]: ...
+     def QueryValue(key: _KeyType, sub_key: str | None, /) -> str: ...
+-    def QueryValueEx(key: _KeyType, name: str, /) -> tuple[Any, int]: ...
++    def QueryValueEx(key: _KeyType, name: str, /) -> tuple[object, int]: ...
+     def SaveKey(key: _KeyType, file_name: str, /) -> None: ...
+     def SetValue(key: _KeyType, sub_key: str | None, type: int, value: str, /) -> None: ...
+ 

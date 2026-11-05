@@ -23,10 +23,30 @@ Extend a stub only when consuming another API. Check its signature against the
 pinned dependency's source and exercise our integration; stubs must not assert
 that external data already satisfies a domain schema.
 
-The [standard-library overrides](typeshed-overrides/README.md) correct Pyright's
-bundled typeshed for the native `frozendict` constructor, subprocess stream types,
-ctypes payloads, and registry and URL observations. `scripts/typecheck.py`
-builds the patched typeshed before each Pyright run; runtime uses the builtins directly.
+`typeshed.patch` corrects Pyright's bundled standard-library typeshed.
+`scripts/typecheck.py` copies that typeshed into the gitignored
+`.workspace-typeshed/`, applies the patch with `git apply` and points Pyright's
+`typeshedPath` at it. A hunk whose upstream context moved stops the build, so a
+Pyright upgrade cannot silently revert an upstream fix. Replacing `builtins` as
+an ordinary module under `stubPath` breaks intrinsic type identity, which is
+why the patch goes through `typeshedPath`. The corrections:
+
+- `builtins.pyi` drops the incorrect zero-argument `frozendict.__init__`; the
+  typed `__new__` overloads already validate constructor arguments, so
+  Workspace calls `frozendict(...)` directly.
+- `subprocess.pyi` keeps the selected `Popen[bytes]` or `Popen[str]` parameter
+  on the stdin/stdout/stderr streams instead of `IO[Any]`.
+- `_ctypes.pyi` and `ctypes/__init__.pyi` preserve the payload of `byref` and
+  scalar `WINFUNCTYPE` results; native structure construction accepts external
+  values as `object`.
+- `winreg.pyi` and `urllib/request.pyi` expose queried values and URL responses
+  as `object`, so they are validated instead of inferred as `Any`.
+
+After a Pyright upgrade that rejects the patch, regenerate it: copy the new
+upstream files to `a/`, the corrected ones to `b/`, and run
+`git diff --no-index --no-prefix a b`. Drop a hunk once upstream carries the
+correction. The upstream typeshed is Apache-2.0 licensed; the build copies its
+`LICENSE`.
 
 The jsonschema stub exposes only `validate`, which raises for an instance the
 schema rejects. A meeting test uses it to check the tool schema offered to the
@@ -57,4 +77,4 @@ Workspace validates nullable pointers and unknown external values before use.
 
 Project-owned stubs use native `type` declarations and contain no checker or
 lint suppression comments. Native dependency spellings are documented in Ruff's
-naming configuration. Typeshed overrides retain their upstream declarations.
+naming configuration.

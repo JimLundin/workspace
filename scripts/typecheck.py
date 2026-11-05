@@ -1,13 +1,13 @@
-"""Run pyright against its bundled standard-library typeshed plus Workspace's overrides.
+"""Run pyright against its bundled standard-library typeshed with Workspace's corrections.
 
     python -m scripts.typecheck [pyright arguments]
 
-`typings/typeshed-overrides/` holds the few corrected stub files; their README
+`typings/typeshed.patch` holds the few stub corrections; `typings/README.md`
 says why each exists. Before pyright runs, the gitignored
 `typings/.workspace-typeshed/` is rebuilt from the installed pyright whenever
-the pyright version or an override changes. An override replaces a whole file,
-so it is applied only while pyright ships the exact upstream file it was made
-from; otherwise the build stops instead of silently reverting upstream fixes.
+the pyright version or the patch changes. `git apply` refuses a hunk whose
+upstream context moved, so a pyright upgrade stops the build instead of
+silently reverting an upstream fix.
 """
 
 import hashlib
@@ -22,19 +22,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-OVERRIDES = Path("typings") / "typeshed-overrides"
+PATCH = Path("typings") / "typeshed.patch"
 TYPESHED = Path("typings") / ".workspace-typeshed"
-# SHA-256 of each upstream file an override replaces, with CRLF read as LF.
-UPSTREAM = frozendict(
-    {
-        "stdlib/builtins.pyi": "3f13f3d2d990428af595f1f04d8525965bd71429539da3d6bff7eae110c21abb",
-        "stdlib/subprocess.pyi": "de9971246f300dd198cf454c115d337d96ae74ef01c5a405e2a591e2fc865c9b",
-        "stdlib/winreg.pyi": "ae7b1b386a5e35ef13ec359072568695f1649b21d54d935b3fc49c9058442640",
-        "stdlib/_ctypes.pyi": "75c5f5a1cc8b307516cf77ebd8ff3fe909be8ca55972f5ef725e3d8bbce00567",
-        "stdlib/ctypes/__init__.pyi": "616cce0f635ac52b186f65c056ca37145f007acdc9de2491526aa4c2eb9cb48a",
-        "stdlib/urllib/request.pyi": "1b442c1bd2d89055e7f9c270bf186e9ffb6d5bb5f706456ab862de0b7d6b26ed",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,15 +42,8 @@ def installed() -> Bundled:
     return Bundled(folder, importlib.metadata.version("pyright"))
 
 
-def _digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
-
-
 def _stamp(root: Path, bundled: Bundled) -> str:
-    digest = hashlib.sha256(bundled.version.encode())
-    for name in sorted(UPSTREAM):
-        digest.update(name.encode() + b"\0" + (root / OVERRIDES / name).read_bytes())
-    return digest.hexdigest()
+    return hashlib.sha256(bundled.version.encode() + b"\0" + (root / PATCH).read_bytes()).hexdigest()
 
 
 def ensure(root: Path, bundled: Bundled) -> Path:
@@ -71,19 +53,24 @@ def ensure(root: Path, bundled: Bundled) -> Path:
     marker = target / "stamp.txt"
     if marker.is_file() and marker.read_text(encoding="utf-8") == stamp:
         return target
-    changed = tuple(name for name, expected in UPSTREAM.items() if _digest(bundled.folder / name) != expected)
-    if changed:
-        raise RuntimeError(
-            f"pyright {bundled.version} ships different upstream stubs for {', '.join(changed)}. "
-            f"Re-derive those files in {OVERRIDES.as_posix()} from the new upstream and update UPSTREAM in scripts/typecheck.py."
-        )
     # Built beside the target and swapped in, so a concurrent check never reads a half-copied tree.
     building = target.with_name(f"{target.name}-{uuid.uuid4().hex}")
     shutil.copytree(bundled.folder / "stdlib", building / "stdlib")
     shutil.copyfile(bundled.folder / "LICENSE", building / "LICENSE")
     (building / "stubs").mkdir()
-    for name in UPSTREAM:
-        shutil.copyfile(root / OVERRIDES / name, building / name)
+    # Run from the checkout root: inside a repository, git apply skips paths outside its index.
+    applied = subprocess.run(
+        ("git", "apply", f"--directory={building.relative_to(root).as_posix()}", PATCH.as_posix()),
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if applied.returncode:
+        shutil.rmtree(building, ignore_errors=True)
+        raise RuntimeError(
+            f"{PATCH.as_posix()} does not apply to pyright {bundled.version}'s typeshed; re-derive it from the new upstream.\n{applied.stderr}"
+        )
     (building / "stamp.txt").write_text(stamp, encoding="utf-8")
     # Windows briefly denies renaming a folder whose new files a scanner still holds open.
     for _ in range(50):

@@ -22,7 +22,7 @@ keep keyboard grids and tables readable.
 
 `Dev.cmd typecheck` runs `python -m scripts.typecheck`, which builds the
 gitignored `typings/.workspace-typeshed` from the installed Pyright and
-`typings/typeshed-overrides/`, then runs Pyright. Pyright is the only type checker.
+`typings/typeshed.patch`, then runs Pyright. Pyright is the only type checker.
 
 For feedback on save, install the development watcher once:
 
