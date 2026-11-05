@@ -194,9 +194,10 @@ def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_p
                 # lay out 10,000 lines. The earlier value retains multiline/UTF-8.
                 action(editor, "set_value", '"' * 12001),
                 action(editor, "read"),
+                Inspect(handle, limit=100, depth=10, offset=0),
             ],
         )
-        assert [ok for ok, _text in results] == [True] * 8 + [False] * 3 + [True] * 4, results
+        assert [ok for ok, _text in results] == [True] * 8 + [False] * 3 + [True] * 5, results
         assert decoded(results[1][1])["text"] == value
         selected = decoded(results[5][1])["control"]
         assert isinstance(selected, dict) and selected["value"] is True
@@ -213,9 +214,9 @@ def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_p
         assert len(long_read) <= 18000 and bounded["truncated"] is True
         text = bounded["text"]
         assert isinstance(text, str) and 0 < len(text) < 12000 and text == '"' * len(text)
-        # A third process must see the effects of actions made with the first
+        # A fresh tree read must see the effects of actions made with the first
         # process's control IDs; no AutomationElement instances are shared.
-        after = inspect(handle)
+        after = decoded(results[15][1])
         assert control(after, "status")["name"] == "Pressed 1"
         assert control(after, "checkbox")["value"] == "On"
         slider_value = control(after, "slider")["value"]

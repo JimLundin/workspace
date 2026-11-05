@@ -4,9 +4,8 @@ import shutil
 import threading
 import time
 import unittest
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
 
 from assistant.browser import Browser
 from assistant.browser_host import ConnectRequest, Host, HostedConnection, Server
@@ -24,7 +23,7 @@ def installed() -> None:
         raise unittest.SkipTest("Microsoft Edge is not installed")
 
 
-def dispose(browser: Browser, remove: Callable[[Path], None] = shutil.rmtree) -> None:
+def dispose(browser: Browser) -> None:
     """Release the disposable profile owned by a browser fixture."""
     browser.close()
     # Windows can briefly retain a dictionary mapping after browser exit.
@@ -34,7 +33,7 @@ def dispose(browser: Browser, remove: Callable[[Path], None] = shutil.rmtree) ->
         if delay:
             time.sleep(delay)
         try:
-            remove(browser.profile)
+            shutil.rmtree(browser.profile)
         except FileNotFoundError:
             return
         except PermissionError:

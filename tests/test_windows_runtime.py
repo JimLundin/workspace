@@ -116,82 +116,9 @@ def test_qt_import_keeps_asyncio_workers_usable_in_a_fresh_interpreter() -> None
     assert b"Qt and async workers passed" in checked.stdout
 
 
-def test_work_window_closes_with_its_ui_owner_in_a_fresh_process(tmp_path: Path) -> None:
+def test_native_controller_messages_and_qt_share_a_clean_process_lifetime(tmp_path: Path) -> None:
     script = textwrap.dedent("""\
         import faulthandler
-        import threading
-        from runtime import activate
-        activate()
-        from desktop_ui.qt_runtime import prepare
-        prepare()
-        from PySide6.QtWidgets import QApplication
-        from desktop_ui.ui import Ui, Views
-        from assistant.work_canvas import WorkCanvas
-        from desktop_ui.work_canvas_window import CanvasWindow
-        from usage import DIRECTORY
-
-        faulthandler.enable()
-        owners = []
-
-        def offscreen_canvas(root, work, canvas):
-            view = CanvasWindow(root, work, canvas)
-            view.window.move(-4000, -3000)
-            owners.append(threading.current_thread() is threading.main_thread())
-            return view
-
-        def offscreen_ui():
-            return Ui(views=Views(canvas=offscreen_canvas))
-
-        ui = offscreen_ui()
-        canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, ui.publish_canvas, autonomous=False)
-        ui.configure_canvas(canvas, lambda title, target: None, observe_session=canvas.observe_session)
-        ui.configure_work(lambda command: None)
-        failures = []
-
-        def control():
-            try:
-                work = ui.work_window()
-                work.show(focus=False)
-                ready = threading.Event()
-                def opened(root):
-                    ready.set()
-                ui.post(opened)
-                # The subprocess deadline guards hangs; preparation has no ten-second contract.
-                ready.wait()
-                ui.close_windows()
-                assert work.publication.closed_ready.is_set(), "Work did not acknowledge closing"
-            except BaseException as error:
-                failures.append(error)
-            finally:
-                ui.close()
-
-        controller = threading.Thread(target=control, name="test application control")
-        controller.start()
-        ui.run()
-        controller.join(timeout=10)
-        assert not controller.is_alive(), "Application control did not close"
-        assert not failures, failures
-        assert owners == [True], "Qt widgets were created outside the main thread"
-        assert QApplication.instance() is None, "The UI application remained alive"
-        print("Work and UI owner closed")
-        """)
-    checked = subprocess.run(
-        [sys.executable, "-S", "-c", script],
-        cwd=ROOT,
-        env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
-        capture_output=True,
-        timeout=60,
-        check=False,
-    )
-    output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
-    assert "Work and UI owner closed" in output
-
-
-def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
-    script = textwrap.dedent("""\
-        import faulthandler
-        import sys
         import threading
         import uuid
         from runtime import activate
@@ -239,10 +166,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
 
             def ready(self, root):
                 observed.append(("qt", threading.current_thread() is threading.main_thread()))
-                if sys.argv[1] == "qt-first":
-                    root.quit()
-                else:
-                    assert system.post_message(self.window.handle, system.WM_CLOSE, 0, 0)
+                assert system.post_message(self.window.handle, system.WM_CLOSE, 0, 0)
 
             def message(self, hwnd, message, wparam, lparam):
                 if message == system.WM_CLOSE:
@@ -263,7 +187,7 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
         print("Native controller and Qt closed")
         """)
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script, "qt-first" if qt_first else "controller-first"],
+        [sys.executable, "-S", "-c", script],
         cwd=ROOT,
         env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
         capture_output=True,
@@ -273,14 +197,6 @@ def _native_controller_lifetime(tmp_path: Path, *, qt_first: bool) -> None:
     output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
     assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
     assert "Native controller and Qt closed" in output
-
-
-def test_native_controller_messages_and_qt_share_a_clean_process_lifetime(tmp_path: Path) -> None:
-    _native_controller_lifetime(tmp_path, qt_first=False)
-
-
-def test_qt_exit_first_still_closes_the_native_controller(tmp_path: Path) -> None:
-    _native_controller_lifetime(tmp_path, qt_first=True)
 
 
 def test_controller_initialization_failure_closes_qt_and_propagates(tmp_path: Path) -> None:

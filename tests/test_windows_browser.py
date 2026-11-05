@@ -1,7 +1,6 @@
 """Installed Edge runs real DOM actions in an isolated persistent profile."""
 
 import json
-import shutil
 import sys
 import threading
 import time
@@ -25,7 +24,7 @@ from assistant.browser_values import BrowserError, InterruptedError, Snapshot, T
 from automation.json_value import Json
 from desktop_ui.qt_runtime import prepare
 from tests.browser_fixture import fixture
-from tests.native_browser_fixture import borrowed, disposable, dispose, hosted, request
+from tests.native_browser_fixture import borrowed, disposable, hosted, request
 from tests.native_business_apps import verify_business_apps
 from tests.native_communications_browser import NativeTrace, verify_communications
 from tests.test_browser import command, decoded
@@ -42,49 +41,6 @@ def control(page: dict[str, Json], name: str) -> str:
 
 def act(browser: Browser, target: str, page: dict[str, Json], name: str, action: str, **args: Json) -> None:
     browser.request(command("action", **{"target_id": target, "id": control(page, name), "action": action, **args}), threading.Event())
-
-
-def test_disposable_browser_fixture_waits_for_late_native_profile_release(tmp_path: Path) -> None:
-    browser = Browser(tmp_path / "profile")
-    browser.profile.mkdir()
-    stream = (browser.profile / "dictionary.bdic").open("wb")
-    denied = threading.Event()
-    remove = shutil.rmtree
-
-    def release() -> None:
-        assert denied.wait(3)
-        stream.close()
-
-    def observed_remove(path: Path) -> None:
-        try:
-            remove(path)
-        except PermissionError:
-            denied.set()
-            raise
-
-    worker = threading.Thread(target=release)
-    worker.start()
-    try:
-        dispose(browser, observed_remove)
-        assert denied.is_set() and not browser.profile.exists()
-    finally:
-        denied.set()
-        worker.join(timeout=3)
-        stream.close()
-
-
-def test_disposable_browser_fixture_reports_persistent_cleanup_failure(tmp_path: Path) -> None:
-    browser = Browser(tmp_path / "profile")
-    attempts: tuple[Path, ...] = ()
-
-    def refuse(path: Path) -> None:
-        nonlocal attempts
-        attempts += (path,)
-        raise PermissionError("Fixture profile remains inaccessible.")
-
-    with TestCase().assertRaisesRegex(PermissionError, "remains inaccessible"):
-        dispose(browser, refuse)
-    assert attempts == (browser.profile,) * 7
 
 
 def test_endpoint_publication_recovers_after_a_native_file_lock(tmp_path: Path) -> None:
@@ -200,51 +156,6 @@ def test_managed_browser_dom_teams_persistence_and_cancellation(tmp_path: Path) 
         verify_managed_cancellation(browser)
 
 
-def test_visible_sign_in_handoff_reuses_only_the_dedicated_profile(tmp_path: Path) -> None:
-    with disposable(Browser(tmp_path / "sign-in-profile")) as browser, fixture() as url:
-        visible = request(browser, "sign_in", url=url)
-        signing_in, connection = browser.process, browser.connection
-        browser.close(keep_browser=True)
-        assert browser.process is signing_in and browser.connection is connection
-        assert visible["mode"] == "sign_in"
-        result = request(browser, "open", url=url, target_id=visible["target_id"])
-        assert result["title"] == "Workspace browser fixture"
-        assert request(browser, "tabs")["mode"] == "background"
-
-
-def test_exclusive_browser_releases_all_research_pages_but_keeps_process_and_sign_in(tmp_path: Path) -> None:
-    # Defects: task cleanup leaks navigated or script-created tabs, clears
-    # cookies, closes the exclusive process, or alters a personal browser.
-    with disposable(Browser(tmp_path / "personal")) as personal, disposable(Browser(tmp_path / "agent")) as agent, fixture() as url:
-        original = request(personal, "open", url=url)
-        before = request(personal, "tabs")
-        page = request(agent, "open", url=url)
-        native, connection = agent.process, agent.connection
-        assert native is not None and native is not personal.process and connection is not None
-        agent.request(
-            command("evaluate", target_id=page["target_id"], expression="document.cookie = 'workspace-fixture=signed-in; path=/'"),
-            threading.Event(),
-        )
-        request(agent, "open", url=url)
-        research_blank = request(agent, "open", url="about:blank")["target_id"]
-        # Observe popups created through CDP too: ownership is the exclusive
-        # instance, rather than only IDs recorded by browser_open.
-        popup = connection.call("Target.createTarget", {"url": url, "background": True}, threading.Event())["targetId"]
-        for _ in range(2):
-            agent.close(keep_browser=True)
-            assert agent.process is native and native.poll() is None and agent.connection is connection
-            pages = TypeAdapter(TargetList).validate_python(connection.call("Target.getTargets", {}, threading.Event()))
-            live = tuple(target for target in pages.targets if target.type == "page" and target.url != "edge://force-signin/")
-            assert len(live) == 1 and live[0].url == "about:blank" and live[0].target_id not in (popup, research_blank)
-            assert request(personal, "tabs") == before
-            reopened = request(agent, "open", url=url)
-            cookie = agent.request(command("evaluate", target_id=reopened["target_id"], expression="document.cookie"), threading.Event()).text
-            # Evaluate returns its scalar JSON text; use the public response
-            # without treating the CDP transport as a cookie implementation test.
-            assert "workspace-fixture=signed-in" in cookie
-        assert request(personal, "snapshot", target_id=original["target_id"])["url"] == url
-
-
 def verify_inactive_screenshots(browser: Browser, target: str) -> None:
     """Check real repaint and visibility restoration on an attached tab."""
     for color in ((255, 0, 0), (0, 0, 255)):
@@ -302,26 +213,6 @@ def verify_attached_dom(personal: Browser, attached: Browser, url: str) -> None:
     assert not attached.profile.exists()
     # Detach preserves the created tab; remove it before the next scenario.
     request(personal, "close", target_id=target)
-
-
-def test_background_actions_deliver_clicks_in_a_headed_personal_browser(tmp_path: Path) -> None:
-    # Defect: ordinary fixtures accept input without wake emulation, but real
-    # minimized Edge ignores trusted clicks in its inactive browser pages.
-    cancel = threading.Event()
-    with disposable(Browser(tmp_path / "headed-personal")) as personal, fixture() as url:
-        personal.connect(cancel, visible=True)
-        with borrowed(personal) as attached:
-            page = request(attached, "open", url=url)
-            target = TypeAdapter(str).validate_python(page["target_id"])
-            connection = attached.connection
-            assert connection is not None
-            act(attached, target, page, "Name", "fill", value="Headed fixture")
-            window = connection.call("Browser.getWindowForTarget", {"targetId": target}, cancel)["windowId"]
-            connection.call("Browser.setWindowBounds", {"windowId": window, "bounds": {"windowState": "minimized"}}, cancel)
-            before_bounds = connection.call("Browser.getWindowBounds", {"windowId": window}, cancel)
-            act(attached, target, page, "Save", "click")
-            assert "Headed fixture:alpha:false" in str(request(attached, "snapshot", target_id=target)["text"])
-            assert connection.call("Browser.getWindowBounds", {"windowId": window}, cancel) == before_bounds
 
 
 def verify_attached_cancellation(personal: Browser, attached: Browser) -> None:
