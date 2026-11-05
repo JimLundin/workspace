@@ -192,12 +192,13 @@ def test_tray_updates_respect_field_flags_and_version_changes_preserve_registrat
 
 
 def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None:
-    # Defect: buttons lose their app identity, or excess icons disappear
-    # instead of remaining scrollable.
+    # Defect: buttons lose their app identity, Canvas leaves the pinned capsule or
+    # opens on a right click, or excess icons disappear instead of remaining scrollable.
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
-    sections = ShellSections(parent)
+    opened: list[str] = []
+    sections = ShellSections(parent, lambda: opened.append("canvas"))
     invoked: list[tuple[Item, Click]] = []
     apps = tuple(Application(str(index), (Window(index + 1, "Window", "app.exe", minimized=False),)) for index in range(12))
     sections.applications((Shelf(EMPTY_SHELF.pinned, apps), 1), lambda item, click: invoked.append((item, click)))
@@ -207,9 +208,13 @@ def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None
     try:
         QTest.mouseClick(sections.apps.buttons[0], QtCore.Qt.MouseButton.LeftButton)
         QTest.mouseClick(sections.apps.buttons[1], QtCore.Qt.MouseButton.RightButton)
-        QTest.mouseClick(sections.pinned.buttons[1], QtCore.Qt.MouseButton.LeftButton)
+        QTest.mouseClick(sections.pinned.buttons[2], QtCore.Qt.MouseButton.LeftButton)
+        QTest.mouseClick(sections.pinned.buttons[0], QtCore.Qt.MouseButton.RightButton)
+        QTest.mouseClick(sections.pinned.buttons[0], QtCore.Qt.MouseButton.LeftButton)
         assert invoked == [(apps[0], Click.LEFT), (apps[1], Click.RIGHT), (EMPTY_SHELF.pinned[1], Click.LEFT)]
-        assert sections.pinned.buttons[1].accessibleName() == "Teams · Open Teams on the web"
+        assert opened == ["canvas"]
+        # Canvas, Outlook and Teams share one capsule, in that order.
+        assert [button.accessibleName().split(" · ")[0] for button in sections.pinned.buttons] == ["Canvas", "Outlook", "Teams"]
         assert sections.pinned.geometry().right() < sections.apps.geometry().left()
         assert sections.apps.overflow.horizontalScrollBar().maximum() > 0
         sections.apps.overflow.horizontalScrollBar().setValue(sections.apps.overflow.horizontalScrollBar().maximum())
@@ -232,7 +237,7 @@ def test_shell_sections_leave_glass_transparent_and_use_the_shared_solid_surface
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(600, 50)
-    sections = ShellSections(parent)
+    sections = ShellSections(parent, lambda: None)
     item = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
     sections.applications((Shelf(EMPTY_SHELF.pinned, (item,)), 0), lambda item, click: None)
     sections.place(250, 600)
@@ -271,7 +276,7 @@ def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_work
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(1200, 50)
-    sections = ShellSections(parent)
+    sections = ShellSections(parent, lambda: None)
     chosen = look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE)
     editor = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),), image=Pixels(40, bytes((80, 160, 240, 255)) * 1600))
     sections.applications((Shelf(EMPTY_SHELF.pinned, (editor,)), 0), lambda item, click: None)
@@ -314,7 +319,7 @@ def test_a_pager_of_one_desktop_leaves_no_targets_behind() -> None:
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
-    sections = ShellSections(parent)
+    sections = ShellSections(parent, lambda: None)
     sections.desktops(pager(((),), 0, chord=False), lambda _: None)
     sections.desktops(pager(((), (), ()), 0, chord=False), lambda _: None)
     sections.place(12, 600)

@@ -1,11 +1,20 @@
 # The island bar
 
 The bar is a row of glass capsules 8 px below the top of the primary screen.
-Its centre holds only live activity and is empty at rest. Left of it are the
-Canvas button, the Outlook and Teams web-app slots, the desktop pager and the
-running apps. The fixed right cluster holds the keyboard state when relevant,
-then volume, Wi-Fi, and the clock with the battery. Activity never moves the
-fixed controls.
+Its centre holds only live activity and is empty at rest. Left of it, one
+capsule holds Canvas, then the Outlook and Teams web-app slots; the desktop
+pager and the running apps follow in their own capsules. One fixed capsule on
+the right holds the keyboard state when relevant (the layout switched off, or
+a temporary layer held), then volume, Wi-Fi, and the clock with the battery.
+Activity never moves the fixed controls.
+
+The right capsule is anchored to the screen's right edge, so the keyboard
+state widens it leftwards and the controls after it keep their places once it
+settles. Nothing is reserved for the keyboard state at rest; while the capsule
+springs to its new width, its content cross-fades centred in it, so the other
+controls slide briefly. Canvas lives in the shell's pinned capsule, which
+yields to activity: the island bounds where it ends, as it does for the pager
+and running apps, and like them it has no edge strip to the top of the screen.
 
 ## What the bar shows
 
@@ -60,5 +69,6 @@ cells, Enter chooses, and Escape closes.
 `island_moment`, `island_agent`, `island_model`, `island_menu`,
 `island_layout`, `island_motion` and `plain_text` in `desktop_ui/` are pure
 decisions. `DesktopBar` owns observations and timers, `island_surface` owns the
-Qt window and its native glass, and `request_panel` draws the expanded request
-and inbox. `scripts/benchmark_island.py` measures frame cost.
+Qt window and its native glass, `shell_surface` draws Canvas with the pinned
+slots, the pager and the running apps, and `request_panel` draws the expanded
+request and inbox. `scripts/benchmark_island.py` measures frame cost.

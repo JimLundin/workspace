@@ -10,8 +10,9 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
   transcription (pulsing dots), and a meeting recording (a red dot and timer).
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
-- Canvas anchors at the far left before apps; temporary keyboard and the combined
-  volume/Wi-Fi/clock/power capsule anchor right. The system tray is in the controls menu.
+- Canvas leads the pinned web apps at the far left (the shell sections own that capsule).
+  One fixed capsule anchors right: the keyboard state when relevant, then
+  volume, Wi-Fi, clock and power. The system tray is in the controls menu.
 - That capsule expands into the controls menu; a question or the bell's list expands the centre island.
 - Under the pointer, agent work reveals its recent steps below its phase, at the same width.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
@@ -31,13 +32,11 @@ from winapi.machine_status import Battery, PowerUnavailable
 class Key(Enum):
     """Stable capsule identities; the layout owns each zone's ordering."""
 
-    LAYER = auto()
     AGENT = auto()
     JOB = auto()
     ISLAND = auto()
     RECORDING = auto()
     INBOX = auto()
-    CANVAS = auto()
     STATUS = auto()
 
 
@@ -45,8 +44,7 @@ class Zone(Enum):
     LEAD = auto()
     ISLAND = auto()
     TRAIL = auto()
-    LEFT = auto()  # Canvas precedes the application strip at the screen's left edge.
-    RIGHT = auto()  # Fixed keyboard and readings, independent of activity.
+    RIGHT = auto()  # The fixed keyboard state and readings, independent of activity.
 
 
 class Expansion(Enum):
@@ -198,7 +196,7 @@ def capture(recording: RecordingState) -> Capture | None:
 
 
 def keyboard(*, enabled: bool, layer: str | None) -> str | None:
-    """Only a temporary layer, or the layout switched off, earns a capsule."""
+    """Only a temporary layer, or the layout switched off, earns a place in the fixed cluster."""
     return "Colemak" if not enabled else layer
 
 
@@ -270,15 +268,12 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
     """The capsules to show, in left-to-right order, with their contents and press actions.
 
     The right-hand readings expand into the controls menu, where ongoing activities
-    become live rows, so they leave the bar; Canvas, the layer and the inbox stay.
+    become live rows, so they leave the bar; the keyboard state and the inbox stay.
     A question expands the centre island instead.
     """
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
     asking = agent is not None and agent.waiting
     detached = (observed.dictating or asking or observed.notice is not None) and expanded is None
-    layer: tuple[CapsuleView, ...] = ()
-    if observed.keyboard is not None:
-        layer = (CapsuleView(Key.LAYER, Zone.RIGHT, ((Glyph("keyboard"),),), f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),)
     lead: tuple[CapsuleView, ...] = ()
     # Dictation and a notice detach the agent; a waiting question already is the island, unless you're dictating.
     if detached and agent is not None and (observed.dictating or not agent.waiting):
@@ -293,14 +288,18 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
-    # The readings stay the top row while their capsule expands into the menu.
+    # The readings stay the top row while their capsule expands into the menu. The
+    # keyboard state leads them: the capsule is right-anchored, so it grows leftwards
+    # and the readings after it keep their places.
+    layer: tuple[Slot, ...] = ()
+    if observed.keyboard is not None:
+        layer = ((Control("keyboard", f"{observed.keyboard} · Open key map", Action.OPEN_KEYMAP),),)
     readings: tuple[Slot, ...] = (
+        *layer,
         (Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
         facts(observed.ambient),
     )
     persistent = (
-        CapsuleView(Key.CANVAS, Zone.LEFT, ((Glyph("canvas"),),), "Canvas · Open your work canvas", Action.OPEN_CANVAS),
-        *layer,
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
         if expanded is Expansion.MENU
         else CapsuleView(

@@ -80,7 +80,7 @@ def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None)
     )
 
 
-FIXED = [Key.CANVAS, Key.STATUS]
+FIXED = [Key.STATUS]
 
 
 def shown(bar: DesktopBar) -> list[Key]:
@@ -133,8 +133,12 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
     try:
         bar.timer.stop()
         bar.layout(enabled=False)
-        order = (Key.CANVAS, Key.LAYER, Key.STATUS)
-        before = tuple(bar.window.capsules[key].geometry() for key in order)
+        pinned = bar.window.shell_sections.pinned
+
+        def geometries() -> tuple[QtCore.QRect, ...]:
+            return (pinned.geometry(), bar.window.capsules[Key.STATUS].geometry())
+
+        before = geometries()
         assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
         assert before[0].left() == 12
         assert bar.window.shell_sections.apps.x() >= before[0].right() + 6
@@ -144,8 +148,8 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
                 bar.render()
                 capsule = bar.window.capsules[Key.STATUS]
                 assert capsule.view is not None
-                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
-                assert capsule.controls == ()
+                assert capsule.view.slots[1] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
+                assert [button.control.icon for button in capsule.controls] == ["keyboard"]
                 assert capsule.isVisibleTo(bar.window)
                 for name, label in (
                     (bar.system.speaker_icon, bar.system.speaker_description),
@@ -153,7 +157,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
                 ):
                     assert label in capsule.accessibleName() and label in capsule.toolTip()
                     assert symbol(name) != REGULAR["doc"]
-                assert tuple(bar.window.capsules[key].geometry() for key in order) == before
+                assert geometries() == before
         for power in (
             Battery(9, powered=False, charging=False),
             Battery(100, powered=True, charging=False),
@@ -163,7 +167,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
         ):
             bar.ambient = Ambient("11:11", power)
             bar.render()
-            assert tuple(bar.window.capsules[key].geometry() for key in order) == before
+            assert geometries() == before
             status = bar.window.capsules[Key.STATUS]
             assert bar.ambient.battery_text in status.accessibleName()
             assert status.view is not None
@@ -185,15 +189,19 @@ def test_status_icons_open_the_controls_menu_like_the_rest_of_the_capsule() -> N
         closed(app, bar)
 
 
-def test_the_leftmost_canvas_capsule_keeps_its_label_and_opens_the_canvas() -> None:
-    # Defects: Canvas navigation disappears, loses its label, or its press runs another function.
+def test_canvas_leads_the_leftmost_capsule_keeps_its_label_and_opens_the_canvas() -> None:
+    # Defects: Canvas navigation disappears until the shell reports applications,
+    # loses its label, or its press runs another function.
     app = application()
     invoked: list[str] = []
     bar = DesktopBar(recorded(invoked), native_shell=False)
     try:
         assert shown(bar) == FIXED
-        assert bar.window.capsules[Key.CANVAS].accessibleName() == "Canvas · Open your work canvas"
-        press(bar, Key.CANVAS)
+        pinned = bar.window.shell_sections.pinned
+        assert pinned.isVisibleTo(bar.window) and pinned.x() == 12
+        canvas = pinned.buttons[0]
+        assert canvas.accessibleName() == "Canvas · Open your work canvas"
+        QTest.mouseClick(canvas, QtCore.Qt.MouseButton.LeftButton)
         assert invoked == ["canvas"]
     finally:
         closed(app, bar)
@@ -233,8 +241,9 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         bar.agent_changed(Agent("Which sheet?", waiting=True))
         press(bar, Key.ISLAND)
         bar.layout(enabled=False)
-        assert "Colemak" in bar.window.capsules[Key.LAYER].accessibleName()
-        press(bar, Key.LAYER)
+        (keys,) = bar.window.capsules[Key.STATUS].controls
+        assert keys.control.icon == "keyboard" and "Colemak" in keys.accessibleName()
+        keys.click()
         bar.inbox_changed(120)
         assert "120 clarifications" in bar.window.capsules[Key.INBOX].accessibleName()
         press(bar, Key.INBOX)
@@ -267,7 +276,7 @@ def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
         # Edges snap to device pixels, so a logical edge can sit a pixel off at fractional scales.
         assert abs(island.left() + island.width() / 2 - area.width() / 2) <= 1
         assert island.top() == 0 and island.height() == TOP + 34
-        canvas = bar.window.capsules[Key.CANVAS].geometry()
+        canvas = bar.window.shell_sections.pinned.geometry()
         assert abs(inbox.left() - (island.left() + island.width()) - 6) <= 1
         assert canvas.left() == 12 and canvas.right() < island.left()
         stop = stop_button(bar, Key.ISLAND).geometry()

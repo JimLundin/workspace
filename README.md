@@ -118,8 +118,9 @@ open Start, and tap it again to hide it.
 The floating bar sits at the top of the main screen. Its centre shows only live
 activity: dictation, transcription, agent work with **Stop**, a meeting
 recording, a question waiting for you, or a short notice of the agent's news.
-On the left are the **Canvas** button, the Outlook and Teams web apps, the
-desktop pager and the running apps. On the right are the keyboard state,
+On the left, one capsule holds the **Canvas** button and the Outlook and Teams
+web apps, followed by the desktop pager and the running apps. One capsule on the
+right holds the keyboard state (when the layout is off or a layer is held),
 volume, Wi-Fi, the clock and the battery. Click the clock or battery to open the
 controls menu. The bell lists pending questions and recent notices. See
 [the island bar](docs/toolbar-design.md) for the full policy.

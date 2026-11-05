@@ -245,12 +245,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
 
     right: tuple[Framed, ...] = ()
     edge = max(0.0, metrics.width - 12)
-    left_fixed = tuple(boxed(capsule, 12) for capsule in zone(Zone.LEFT) if shown(capsule) <= max(0.0, metrics.width - 24))
-    minimum = max((each.box.x + each.box.width + metrics.gap for each in left_fixed), default=0.0)
-    for key in (Key.STATUS, Key.LAYER):
-        capsule = next((c for c in zone(Zone.RIGHT) if c.key is key), None)
-        if capsule is None:
-            continue
+    for capsule in reversed(zone(Zone.RIGHT)):
         width = shown(capsule)
         if width > edge:
             continue  # Omit an unfit capsule rather than overlap another hit target.
@@ -268,7 +263,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
                 box = Box(edge, metrics.top, width, capsule.height)
                 dynamic += (Framed(capsule.key, box, Box(edge, 0, width, metrics.top), present(capsule.presence)),)
                 edge += width + metrics.gap
-        return (*left_fixed, *dynamic, *right)
+        return (*dynamic, *right)
     island = islands[0]
     left = (metrics.width - shown(island)) / 2
     centre = boxed(island, left)
@@ -289,14 +284,14 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
     dynamic = (*lead, centre, *trail)
     start = min(each.box.x for each in dynamic)
     end = max(each.box.x + each.box.width for each in dynamic)
-    shift = max(minimum - start, min(0.0, boundary - end))
+    shift = max(-start, min(0.0, boundary - end))
 
     def bounded(each: Framed) -> Framed:
-        x = max(minimum, each.box.x + shift)
+        x = max(0.0, each.box.x + shift)
         width = max(0.0, min(each.box.width, boundary - x))
         return Framed(each.key, Box(x, each.box.y, width, each.box.height), Box(x, 0, width, metrics.top), each.presence)
 
-    return (*left_fixed, *(bounded(each) for each in dynamic if each.box.x + shift < boundary), *right)
+    return (*(bounded(each) for each in dynamic if each.box.x + shift < boundary), *right)
 
 
 def snap(framed: Sequence[Framed], scale: float) -> tuple[Framed, ...]:

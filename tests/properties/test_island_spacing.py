@@ -10,7 +10,7 @@ from desktop_ui.island_model import Action, CapsuleView, Key, Zone
 from desktop_ui.island_motion import IslandMotion, Shown, advance, placed, retarget, settled
 from tests.properties.generation import cases, property_test
 
-ZONES = {Key.LAYER: Zone.LEAD, Key.AGENT: Zone.LEAD, Key.ISLAND: Zone.ISLAND, Key.RECORDING: Zone.TRAIL, Key.INBOX: Zone.TRAIL}
+ZONES = {Key.AGENT: Zone.LEAD, Key.JOB: Zone.LEAD, Key.ISLAND: Zone.ISLAND, Key.RECORDING: Zone.TRAIL, Key.INBOX: Zone.TRAIL}
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +20,7 @@ class Journey:
 
 
 def arrangement(draw: strategies.DrawFn) -> tuple[Shown, ...]:
-    optional = (Key.LAYER, Key.AGENT, Key.RECORDING, Key.INBOX)
+    optional = (Key.AGENT, Key.JOB, Key.RECORDING, Key.INBOX)
     included = draw(strategies.lists(strategies.booleans(), min_size=len(optional), max_size=len(optional)))
     keys = (Key.ISLAND, *(key for key, chosen in zip(optional, included, strict=True) if chosen))
     return tuple(

@@ -820,7 +820,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: tuple[Presented, tuple[int, int, int, int], float] | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
-        self.shell_sections = ShellSections(self)
+        self.shell_sections = ShellSections(self, lambda: owner.press(Action.OPEN_CANVAS))
         # The bar's latest tray snapshot and Qt copies of its images, for the menu's tray cells.
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()
@@ -930,11 +930,7 @@ class BarWindow(QtWidgets.QWidget):
         for key, capsule in self.capsules.items():
             if key not in keys:
                 capsule.hide()
-        self.shell_sections.place(
-            math.floor(min((each.framed.box.x for each in presented.drawn if each.view.key is not Key.CANVAS), default=area.width() / 2)),
-            area.width(),
-            start=next((round(each.framed.box.x + each.framed.box.width) + 6 for each in presented.drawn if each.view.key is Key.CANVAS), 12),
-        )
+        self.shell_sections.place(math.floor(min((each.framed.box.x for each in presented.drawn), default=area.width() / 2)), area.width())
         for section in self.shell_sections.sections():
             section.apply_look(presented.shell_look)
         self.glass = presented.glass

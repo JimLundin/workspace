@@ -1,7 +1,7 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
 from desktop_ui.island_layout import LINE, LINES_BOTTOM, LINES_TOP, Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap, wrap
-from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Spinner, Text, Zone
+from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Part, Spinner, Text, Zone
 
 
 def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:
@@ -14,13 +14,13 @@ def test_neighbours_sit_one_gap_apart_and_grow_outward_in_order() -> None:
     placed = [
         Placed(Key.INBOX, Zone.TRAIL, 34, 34),
         Placed(Key.ISLAND, Zone.ISLAND, 112, 34),
-        Placed(Key.LAYER, Zone.LEAD, 70, 34),
+        Placed(Key.JOB, Zone.LEAD, 70, 34),
         Placed(Key.RECORDING, Zone.TRAIL, 86, 34),
         Placed(Key.AGENT, Zone.LEAD, 34, 34),
     ]
     assert [(f.key, f.box.x, f.box.width) for f in frame(placed, Metrics(1000))] == [
-        (Key.LAYER, 328, 70),
-        (Key.AGENT, 404, 34),
+        (Key.AGENT, 328, 34),
+        (Key.JOB, 368, 70),
         (Key.ISLAND, 444, 112),
         (Key.RECORDING, 562, 86),
         (Key.INBOX, 654, 34),
@@ -47,25 +47,33 @@ def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
     assert all(abs(edge * 1.25 - round(edge * 1.25)) < 1e-9 for edge in edges)
 
 
-def test_fixed_right_order_survives_activity_changes() -> None:
-    # Defect: activity shifts fixed controls or overlaps the cluster.
-    fixed = (
-        Placed(Key.CANVAS, Zone.LEFT, 36, 34),
-        Placed(Key.LAYER, Zone.RIGHT, 36, 34),
-        Placed(Key.STATUS, Zone.RIGHT, 180, 34),
-    )
+def test_the_fixed_right_cluster_survives_activity_changes() -> None:
+    # Defect: activity shifts the fixed cluster or overlaps it.
+    fixed = (Placed(Key.STATUS, Zone.RIGHT, 216, 34),)
     for screen in (480, 1000):
         baseline = frame(fixed, Metrics(screen))
-        assert tuple(each.key for each in baseline) == (Key.CANVAS, Key.LAYER, Key.STATUS)
+        assert tuple(each.key for each in baseline) == (Key.STATUS,)
         assert baseline[-1].box.x + baseline[-1].box.width == screen - 12
         framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), Metrics(screen))
         assert tuple(each for each in framed if each.key is not Key.ISLAND) == baseline
-        assert baseline[0].box.x == 12
         assert all(0 <= each.box.x <= each.box.x + each.box.width <= screen for each in framed)
         activity = next((each for each in framed if each.key is Key.ISLAND), None)
         if activity is not None:
-            assert activity.box.x >= baseline[0].box.x + baseline[0].box.width + 6
-            assert activity.box.x + activity.box.width <= baseline[1].box.x - 6
+            assert activity.box.x + activity.box.width <= baseline[0].box.x - 6
+
+
+def test_the_keyboard_state_entering_the_fixed_cluster_leaves_the_other_controls_in_place() -> None:
+    # Defect: the keyboard state joining the right cluster's capsule moves volume,
+    # Wi-Fi, the clock or the battery, so a press lands on the wrong control.
+    readings = ((Glyph("speaker"), Glyph("wifi")), (Text("10:22", reserve="00:00"), Glyph("battery"), Text("73%", reserve="100%")))
+    keyboard = (Control("keyboard", "NAV · Open key map", Action.OPEN_KEYMAP),)
+
+    def placed(slots: tuple[tuple[Part, ...], ...]) -> list[tuple[Part, float]]:
+        content = arrange(slots, width_of)
+        (status,) = frame([Placed(Key.STATUS, Zone.RIGHT, content.width, 34)], Metrics(1000))
+        return [(spot.part, status.box.x + spot.x) for spot in content.spots]
+
+    assert placed((keyboard, *readings))[1:] == placed(readings)
 
 
 def width_of(text: Text) -> float:
