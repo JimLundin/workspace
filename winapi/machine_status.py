@@ -1,4 +1,4 @@
-"""Plain observations of the machine's speakers, Wi-Fi and power. No ctypes: importable anywhere."""
+"""Plain observations of the machine's speakers, Wi-Fi, power, processor and memory. No ctypes: importable anywhere."""
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -42,3 +42,23 @@ class Battery:
 
 
 type Power = Battery | PowerUnavailable
+
+
+@dataclass(frozen=True, slots=True)
+class CpuTimes:
+    """Cumulative processor time across all cores, in 100 ns units. Kernel time includes idle time."""
+
+    idle: int
+    kernel: int
+    user: int
+
+
+def cpu_load(before: CpuTimes | None, after: CpuTimes | None) -> int | None:
+    """The busy share of processor time between two samples, as a whole percent; None without a valid interval."""
+    if before is None or after is None:
+        return None
+    idle = after.idle - before.idle
+    total = (after.kernel - before.kernel) + (after.user - before.user)
+    if total <= 0 or not 0 <= idle <= total:
+        return None
+    return round(100 * (total - idle) / total)

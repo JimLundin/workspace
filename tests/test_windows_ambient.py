@@ -1,13 +1,14 @@
-"""Windows power observations distinguish charging, desktops and unknown readings."""
+"""Windows power, Wi-Fi, speaker, processor and memory observations, including unknown readings."""
 
 import sys
+import time
 import unittest
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows power status")
 
-from winapi import ambient, system_status
-from winapi.machine_status import Battery, PowerUnavailable, Wifi
+from winapi import ambient, resources, system_status
+from winapi.machine_status import Battery, PowerUnavailable, Wifi, cpu_load
 
 
 def test_native_power_validates_missing_and_unknown_batteries() -> None:
@@ -48,3 +49,20 @@ def test_speaker_level_round_trips_through_the_default_endpoint_without_changing
         except ValueError:
             continue
         raise AssertionError(f"An out-of-range speaker level was written: {invalid}")
+
+
+def test_processor_and_memory_bindings_read_real_values() -> None:
+    # Defects: a wrong MEMORYSTATUSEX size makes Windows reject every memory read,
+    # or the FILETIME halves are combined so later samples run backwards.
+    memory = resources.memory_load()
+    assert memory is not None and 0 < memory <= 100
+    first = resources.cpu_times()
+    assert first is not None and first.kernel >= first.idle > 0
+    later = first
+    for _ in range(50):  # Windows advances these counters at its clock tick, about 16 ms.
+        time.sleep(0.02)
+        later = resources.cpu_times()
+        if later is not None and later.kernel + later.user > first.kernel + first.user:
+            break
+    load = cpu_load(first, later)
+    assert load is not None and 0 <= load <= 100

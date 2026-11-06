@@ -11,7 +11,8 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
 - Canvas leads the pinned web apps at the far left (the shell sections own that capsule).
-  One fixed capsule anchors right: the keyboard while it types plainly, volume, Wi-Fi, clock and power. The system tray is in the controls menu.
+  One fixed capsule anchors right: CPU and memory use, the keyboard while it types plainly,
+  volume, Wi-Fi, clock and power. The system tray is in the controls menu.
 - That capsule expands into the controls menu; a question or the bell's list expands the centre island.
 - Under the pointer, agent work reveals its recent steps below its phase, at the same width.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
@@ -233,6 +234,15 @@ def facts(ambient: Ambient) -> Slot:
     return (Text(ambient.clock, reserve="00:00"), power, battery)
 
 
+def usage(name: str, percent: int | None) -> Text:
+    """One resource reading, reserving its widest form so a changing value never shifts the cluster."""
+    return Text(f"{name} {'—' if percent is None else f'{percent}%'}", reserve=f"{name} 100%")
+
+
+def resources(system: SystemStatus) -> Slot:
+    return (usage("CPU", system.cpu), usage("RAM", system.memory))
+
+
 def describe(ambient: Ambient) -> str:
     match ambient.power:
         case Battery(powered=True):
@@ -284,8 +294,10 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
     # The readings stay the top row while their capsule expands into the menu.
     # A plain keyboard shows as one more reading, beside the speaker and Wi-Fi.
+    # Processor and memory lead, so the device glyphs part their percentages from the battery's.
     keyboard = (Glyph("keyboard"),) if observed.plain_keyboard else ()
     readings: tuple[Slot, ...] = (
+        resources(observed.system),
         (*keyboard, Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
         facts(observed.ambient),
     )
@@ -296,7 +308,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
             Key.STATUS,
             Zone.RIGHT,
             readings,
-            observed.system.description + ". " + describe(observed.ambient) + " · Open Workspace controls",
+            ". ".join((observed.system.resource_description, observed.system.description, describe(observed.ambient))) + " · Open Workspace controls",
             Action.OPEN_MENU,
         ),
     )
