@@ -28,6 +28,7 @@ TRAY: Final = TraySpec(
         TrayAction(Menu.LOGS, "Open logs folder"),
         Separator(),
         TrayAction(Menu.RESTART_ASSISTANT, "Restart assistant"),
+        TrayAction(Menu.RESTART_DESKTOP, "Restart desktop"),
         TrayAction(Menu.QUIT, "Quit Workspace"),
     )
 )

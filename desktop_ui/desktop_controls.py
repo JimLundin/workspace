@@ -36,6 +36,7 @@ class Menu(Enum):
     WORK = 14
     TASKBAR = 15
     RESTART_ASSISTANT = 18
+    RESTART_DESKTOP = 19
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -117,7 +118,12 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
             return MenuItem(item.action.value, f"{item.label}\t{shortcut_hint(shortcut(Tool.AGENT_TYPED))}")
         case Menu.STOP_AGENT:
             return MenuItem(item.action.value, f"{item.label}\t{shortcut_hint(shortcut(Tool.STOP))}", enabled=state.agent_running)
-        case Menu.KEYMAP | Menu.WORK | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.UNDO | Menu.USAGE | Menu.LOGS | Menu.RESTART_ASSISTANT | Menu.QUIT:
+        case (
+            (Menu.KEYMAP | Menu.WORK | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.UNDO | Menu.USAGE | Menu.LOGS)
+            | Menu.RESTART_ASSISTANT
+            | Menu.RESTART_DESKTOP
+            | Menu.QUIT
+        ):
             return MenuItem(item.action.value, item.label + hint)
         case _:
             assert_never(item.action)

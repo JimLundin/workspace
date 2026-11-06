@@ -342,6 +342,9 @@ class DesktopApp:
                 keeper_control.ask(requests(), keeper_control.Restart("layout"))
             case desktop_controls.Menu.RESTART_ASSISTANT.value:
                 keeper_control.ask(requests(), keeper_control.Restart("assistant"))
+            case desktop_controls.Menu.RESTART_DESKTOP.value:
+                # The keeper closes this program and starts it again; the assistant keeps working meanwhile.
+                keeper_control.ask(requests(), keeper_control.Restart("desktop"))
             case desktop_controls.Menu.OVERLAY.value:
                 self.toggle_overlay()
             case desktop_controls.Menu.KEYMAP.value:
