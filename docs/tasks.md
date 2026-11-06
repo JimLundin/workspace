@@ -63,8 +63,13 @@ problem is a single type whose enum `kind` decides which values are valid:
   constructible but always rejected, and each application's URL rules hide in
   `__post_init__`. Split it into `TeamsSource`, `OutlookSource`, `KanbanSource`,
   `DocumentSource` and `WebPageSource` beside the existing `MeetingSource`.
-  About 33 sites match on `SourceKind`. The personal work catalog stores these,
-  so old rows are dropped (AGENTS.md: legacy data is not a requirement).
+  About 33 sites match on `SourceKind`, but only two build a `WorkSource`
+  (`personal_work_sources.observed_source` and `PersonalStore`'s document
+  intake). Keep the stored JSON identical: give each new type
+  `kind: Literal[SourceKind.X]` and the same field names, so existing catalog rows
+  validate into the right type. The catalog is one blob that
+  `CATALOG.validate_json` rejects whole, so a changed shape would hide all of
+  the user's saved work.
 - `assistant.feed_sources` (`kind: SourceKind`, twice);
 - `assistant.feed_contracts` (`kind: SolutionKind`);
 - `assistant.feed_history` (`kind: DecisionKind`);
