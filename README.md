@@ -1,13 +1,18 @@
 # Workspace
 
 Workspace is a personal work environment for a Windows laptop. It runs on the
-installed Python 3.15 and needs no admin rights. It runs four processes:
+installed Python 3.15 and needs no admin rights. It runs five processes:
 
 - **The layout** (`miryoku/`) remaps the laptop's ISO keyboard to Colemak Mod-DH
   in the Miryoku style, with home row mods, layers, caps word and snippets.
-- **The assistant** (`assistant/`) owns dictation, window placement, the
-  floating bar, the tray icon, the work canvas and the agent. Durable agent work
-  runs on the assistant's own threads (`automation/`).
+- **The desktop** (`desktop/`, `desktop_ui/`) owns everything you see: the
+  floating bar, the tray icon, the work canvas, the overlay and window placement.
+  App and window keys go straight to it.
+- **The assistant** (`assistant/`) owns dictation, meetings, the inbox feeds,
+  the canvas document and the agent; durable agent work runs on its own threads
+  (`automation/`). It has no window of its own: the desktop shows its work over
+  a loopback link. Either runs without the other, so a change to one restarts
+  only that one, and an agent task keeps running while the desktop restarts.
 - **The AI connection** (`gateway/`) is a local pass-through to your endpoint
   that dictation, meetings and the agent share. It holds the key and keeps
   running when a change to the rest of Workspace is installed.

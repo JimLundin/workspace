@@ -14,7 +14,19 @@ for the agent. Tests pass concrete adapters for these.
 | Keeper | `workspace.pyw`, `keeper.py` | Starts and restarts the components, checks and installs changes, trials and undo |
 | AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway`, `components` and `runtime`, so other deploys leave it running |
 | Layout | `miryoku.pyw`, `miryoku/` | The keyboard hook and remapping. Standard library and `winapi/` only |
-| Assistant | `assistant/__main__.py` | Everything else, on one Qt event loop plus worker threads |
+| Assistant | `assistant/__main__.py`, `assistant/`, `automation/` | Dictation, meetings, feeds, the canvas document and the agent, on a native message loop plus worker threads. No Qt and no UI |
+| Desktop | `desktop/__main__.py`, `desktop_ui/` | The bar, tray, work canvas views, overlay and window placement, on Qt's event loop. Reaches the assistant only through `desktop_ui.assistant_port` |
+
+The desktop and the assistant never import each other, even indirectly (the
+architecture review's `process-isolation` rule). They share only `contracts/`
+(frozen values) and talk over `link/`: a loopback socket with a per-boot token,
+carrying `contracts.desktop_link` messages. The assistant publishes states
+(replayed to a desktop that connects later) and events; the desktop sends
+commands. The layout posts each request to its owner (`protocol.owner`): app,
+window, inbox and switcher keys to the desktop, the rest to the assistant;
+what the desktop shows (layer, chord, pressed keys) to the desktop; the
+layout's state to both. A clean exit of the desktop (Quit in its tray) quits
+Workspace; the assistant exits only when the keeper closes it.
 
 The keeper and its helpers are protected: the agent can't change them, and a
 deploy that changes one relaunches the keeper. A changed data file restarts the
@@ -27,10 +39,10 @@ nothing, because their program reloads them.
 | --- | --- |
 | `keeper.py` | Supervision, the install pipeline, trials, undo, and `Versions` (a Git repository of installed versions) |
 | `keeper_control.py` | Typed keeper requests (`Install`, `Undo`, `Restart`) and their results |
-| `components.py` | The component catalogue: the layout and the assistant, their windows and readiness markers |
+| `components.py` | The component catalogue: the gateway, layout, assistant and desktop, their windows, readiness markers and endpoint files |
 | `restart_plan.py` | Which components a change restarts, from both versions' import graphs |
 | `selfcheck.py` | The compile, import and test gate every install passes |
-| `protocol.py` | Window messages between the layout and the assistant, and the `Tool` and `App` requests |
+| `protocol.py` | Window messages from the layout to the desktop and the assistant, the `Tool` and `App` requests, and each request's owner (`Side`, `owner`) |
 | `config.py` | User settings: apps, snippets, agent step limit, dark-screen delay |
 | `usage.py`, `diagnostics.py` | The usage log and its failure details |
 | `runtime.py` | Activates the bundled `.runtime` dependencies |
