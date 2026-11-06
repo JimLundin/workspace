@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import assert_never
 
 import protocol
-from assistant.browser_session import edge_path
 from contracts.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, owner, zoom_after
 from desktop_ui.navigation_log import NAVIGATION_LOG, START, Arrival, Entry, Moment, Tracker, append, arrived, navigated, noticed, seen, settled
@@ -44,6 +43,7 @@ from desktop_ui.window_layout import (
 )
 from winapi import app_user_model, screen, windows
 from winapi.icon_pixels import window_pixels
+from winapi.processes import edge_path
 from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
 from winapi.win_events import CaptureStart, Foreground, SwitchEnd, SwitchStart, WinEvent, WinEvents

@@ -1,9 +1,11 @@
 """Keep an owned browser process tree tied to Workspace's lifetime."""
 
 import ctypes
+import os
 import subprocess
 import time
 from ctypes import wintypes
+from pathlib import Path
 
 from winapi._core import fn, kernel32, last_error
 
@@ -269,3 +271,9 @@ class ProcessJob:
             finally:
                 _CloseHandle(self.handle)
                 self.handle = 0
+
+
+def edge_path() -> Path | None:
+    """Microsoft Edge's executable, wherever this machine installed it; None when it isn't."""
+    roots = (os.environ.get("PROGRAMFILES(X86)"), os.environ.get("PROGRAMFILES"), os.environ.get("LOCALAPPDATA"))
+    return next((path for root in roots if root and (path := Path(root) / "Microsoft/Edge/Application/msedge.exe").is_file()), None)

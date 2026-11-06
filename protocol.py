@@ -111,6 +111,42 @@ class App:
 
 type Request = Tool | App
 
+
+class Side(Enum):
+    """Which program a request belongs to; the layout sends each to its owner's window."""
+
+    DESKTOP = 1
+    """Window placement, app keys and Workspace's own views."""
+    ASSISTANT = 2
+    """Dictation, the agent and meetings."""
+
+
+DESKTOP_TOOLS: Final = frozenset(
+    {
+        Tool.ZOOM,
+        Tool.FOCUS_LEFT,
+        Tool.FOCUS_DOWN,
+        Tool.FOCUS_UP,
+        Tool.FOCUS_RIGHT,
+        Tool.PLACEMENT_PAUSE,
+        Tool.PLACE_NOW,
+        Tool.DESKTOP_1,
+        Tool.DESKTOP_2,
+        Tool.DESKTOP_3,
+        Tool.DESKTOP_4,
+        Tool.DESKTOP_5,
+        Tool.OPEN_INBOX,
+        Tool.WINDOW_SWITCHER,
+    }
+)
+"""The tools the desktop owns; every other tool is the assistant's."""
+
+
+def owner(request: Request) -> Side:
+    """App keys and window keys are the desktop's; the rest need the assistant."""
+    return Side.DESKTOP if isinstance(request, App) or request in DESKTOP_TOOLS else Side.ASSISTANT
+
+
 _APP_BASE: Final = 1000
 
 

@@ -29,7 +29,7 @@ from assistant.browser_values import (
 from contracts.json_value import Json
 lazy from assistant.browser_host import connect_shared
 lazy from usage import DIRECTORY
-lazy from winapi.processes import ProcessJob
+lazy from winapi.processes import ProcessJob, edge_path
 
 MAX_RESPONSE = 16_000_000
 
@@ -105,12 +105,6 @@ def read_endpoint(root: Path) -> str:
         # Edge can replace or briefly lock this file while publishing its port.
         # Startup already retries BrowserError under its deadline and Stop check.
         raise BrowserError("The browser debugging endpoint is not readable yet.") from error
-
-
-def edge_path() -> Path | None:
-    roots = (os.environ.get("PROGRAMFILES(X86)"), os.environ.get("PROGRAMFILES"), os.environ.get("LOCALAPPDATA"))
-    candidates = [Path(root) / "Microsoft/Edge/Application/msedge.exe" for root in roots if root]
-    return next((path for path in candidates if path.is_file()), None)
 
 
 class Channel(Protocol):

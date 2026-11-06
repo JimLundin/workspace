@@ -9,6 +9,7 @@ from desktop_ui.navigation import (
     JumpDesktop,
     Launch,
     Navigated,
+    Placing,
     Source,
     SpatialFocus,
     Switch,
@@ -17,11 +18,12 @@ from desktop_ui.navigation import (
     ZoomIn,
     ZoomOut,
     decide,
+    keyed,
     zoom_after,
 )
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import CODE, EDGE, NOWHERE, TERMINAL, Group, Screens, place, screens
-from protocol import App, Installed, PinnedWeb
+from protocol import DESKTOP_TOOLS, App, Installed, PinnedWeb, Side, Tool, owner
 from tests.test_window_layout import ABOVE, FOUR_K, LAPTOP, SIDE
 from winapi.screen import Monitor
 
@@ -115,3 +117,25 @@ def test_app_keys_cycle_the_apps_windows_or_launch_it() -> None:
     effect, record = decide(AppKey(outlook, Source.KEY), empty)
     assert effect == Launch(PinnedApp.OUTLOOK) and record.launched and record.to_app is PinnedApp.OUTLOOK
     assert decide(AppKey(TERMINAL_KEY, Source.KEY), empty)[0] == Launch(Installed("windowsterminal.exe", "wt.exe"))
+
+
+def test_navigation_keys_give_their_orders() -> None:
+    # Defects: a desktop key jumps to the wrong desktop, a focus key goes the wrong
+    # way, or a placement key gives no order, so the desktop drops the key.
+    assert [keyed(tool) for tool in (Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.DICTATE)] == [
+        JumpDesktop(1, Source.KEY),
+        SpatialFocus(Direction.UP, Source.KEY),
+        Zoom(Source.KEY),
+        Placing.TOGGLE_PAUSE,
+        None,
+    ]
+
+
+def test_every_tool_has_one_owner_and_the_desktops_keys_need_no_assistant() -> None:
+    # Defect: a key the desktop handles alone is sent to the assistant (so it fails
+    # while the assistant restarts), or an assistant tool is swallowed by the desktop.
+    desktop = {tool for tool in Tool if owner(tool) is Side.DESKTOP}
+    assert desktop == DESKTOP_TOOLS
+    assert owner(App("terminal", Installed("windowsterminal.exe", "wt.exe"))) is Side.DESKTOP
+    assert all(keyed(tool) is not None for tool in desktop - {Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER})
+    assert all(keyed(tool) is None for tool in set(Tool) - desktop)
