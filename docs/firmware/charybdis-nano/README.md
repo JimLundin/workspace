@@ -30,7 +30,7 @@ python3 -m venv ~/build/qmk-venv
 ~/build/qmk-venv/bin/pip install -r ~/build/miryoku_qmk/requirements.txt qmk
 ```
 
-Then `bash firmware/charybdis-nano/build.sh` writes
+Then `bash docs/firmware/charybdis-nano/build.sh` writes
 `out/bastardkb_charybdis_3x5_v2_splinky_3_workspace.uf2` and the `splinky_2`
 one. No admin rights are needed.
 
