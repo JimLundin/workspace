@@ -6,6 +6,7 @@ import zlib
 
 from assistant.llm import long_enough, wav
 from assistant.png import encode_png
+from desktop_ui.colour import Rgb
 from desktop_ui.icons import dot
 from winapi.pcm import RATE
 
@@ -55,7 +56,7 @@ def test_png_rows_each_get_a_filter_byte() -> None:
 
 def test_dot_icon_is_a_coloured_circle_on_transparent() -> None:
     size = 32
-    pixels = dot(size, (200, 40, 40))
+    pixels = dot(size, Rgb(200, 40, 40))
     assert len(pixels) == size * size * 4
 
     def at(x: int, y: int) -> tuple[int, int, int, int]:
