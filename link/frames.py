@@ -14,15 +14,16 @@ def send(connection: socket.socket, payload: bytes) -> None:
 
 
 def _exactly(connection: socket.socket, size: int) -> bytes | None:
-    chunks: list[bytes] = []
-    remaining = size
-    while remaining:
-        chunk = connection.recv(min(remaining, 1 << 20))
-        if not chunk:
+    """`size` bytes, read straight into one buffer; None if the peer closes first."""
+    buffer = bytearray(size)
+    view = memoryview(buffer)
+    filled = 0
+    while filled < size:
+        count = connection.recv_into(view[filled:], min(size - filled, 1 << 20))
+        if not count:
             return None
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
+        filled += count
+    return bytes(buffer)
 
 
 def receive(connection: socket.socket) -> bytes | None:

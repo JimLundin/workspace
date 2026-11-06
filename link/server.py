@@ -44,7 +44,8 @@ class Server:
         self._receive = receive
         self._listener = socket.create_server(("127.0.0.1", port))
         self._lock = threading.Lock()
-        self._retained: dict[str, bytes] = {}
+        self._retained: frozendict[str, bytes] = frozendict()
+        """The latest frame of each key, replaced whole under the lock, so a replay reads a fixed set."""
         self._current: _Connection | None = None
         self._closed = False
         self._thread = threading.Thread(target=self._accept, name="link server", daemon=True)
@@ -69,7 +70,7 @@ class Server:
         """Any thread: queue a frame for the client; a keyed frame is also kept for the next."""
         with self._lock:
             if key is not None:
-                self._retained[key] = payload
+                self._retained = frozendict({**self._retained, key: payload})
             current = self._current
         if current is not None:
             current.outbox.put(payload, key)
