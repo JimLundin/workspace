@@ -45,12 +45,12 @@ Left:
 
 ## 2. Check that each side survives the other's restart, live
 
-The tray now has **Restart desktop**. Still to watch on the real install, outside
-the keeper's 10-minute trial after an install:
-
-- restart the assistant while the desktop runs, and see the bar show
-  "reconnecting" then replay the canvas;
-- restart the desktop while an agent task runs, and see the task continue.
+Verified on 2026-11-06 through the keeper's `Restart`: restarting the
+assistant left the desktop's process running and its link reconnected to the
+new assistant, and restarting the desktop left the assistant running and the
+new desktop connected. Still to watch by eye: the bar showing "reconnecting"
+then replaying the canvas, and an agent task continuing through a desktop
+restart.
 
 ## 3. Replace enum `kind` fields with one type per kind
 
