@@ -384,7 +384,7 @@ class AssistantApp:
             work.prepare()
             self.ui.desktop(
                 show_work=self.show_work,
-                stop=lambda: self.choose_tool(Tool.STOP, 0),
+                stop=lambda: self.choose_tool(Tool.STOP),
                 overlay=self.toggle_overlay,
                 menu=self.request_menu,
                 on_problem=self.problem,
@@ -441,9 +441,9 @@ class AssistantApp:
         timings.mark("microphone cleanup")
         system.post_quit()
 
-    def choose_tool(self, tool: Tool, target: int) -> None:
+    def choose_tool(self, tool: Tool) -> None:
         """Marshal menu choices from Qt to the assistant's control-thread owner."""
-        system.post_message(self.window.handle, control_policy.WM_TOOL_CHOSEN, tool.value, target)
+        system.post_message(self.window.handle, control_policy.WM_TOOL_CHOSEN, tool.value, 0)
 
     def open_inbox(self) -> None:
         self.ui.open_inbox()
@@ -665,8 +665,8 @@ class AssistantApp:
                         self.ui.show_pressed_keys(self.overlay.pressed, reset=action.reset)
                     case control_policy.FeatureRequest(request=request, down=down):
                         self.assistant.handle(request, down=down)
-                    case control_policy.ChosenTool(tool=tool, target=target):
-                        self.assistant.handle(tool, down=True, target=target)
+                    case control_policy.ChosenTool(tool=tool):
+                        self.assistant.handle(tool, down=True)
                     case None:
                         pass
                     case _:

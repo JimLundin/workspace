@@ -122,7 +122,7 @@ _MOD_NAMES: Final = {Mod.GUI: "Win", Mod.ALT: "Alt", Mod.CTRL: "Ctrl", Mod.SHIFT
 TOOL_NAMES: Final = {
     Tool.DICTATE: "Talk",
     Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
-    Tool.ZOOM: "Zoom", Tool.MINIMIZE: "Min",
+    Tool.ZOOM: "Zoom",
     Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",
     Tool.DESKTOP_1: "Desk 1", Tool.DESKTOP_2: "Desk 2", Tool.DESKTOP_3: "Desk 3", Tool.DESKTOP_4: "Desk 4",
     Tool.PLACEMENT_PAUSE: "Pause place", Tool.PLACE_NOW: "Re-place",

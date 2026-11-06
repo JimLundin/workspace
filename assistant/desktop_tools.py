@@ -37,7 +37,7 @@ MAX_FILES: Final = 200
 
 
 type UiAction = Literal["read", "invoke", "set_value", "set_range", "select", "toggle", "expand", "collapse", "scroll_into_view", "scroll", "focus"]
-type WindowAction = Literal["move", "snap_left", "snap_right", "minimize", "maximize", "restore", "close"]
+type WindowAction = Literal["move", "snap_left", "snap_right", "maximize", "restore", "close"]
 type Text = Annotated[str, Field(strict=True)]
 type Integer = Annotated[int, Field(strict=True)]
 type Flag = Annotated[bool, Field(strict=True)]
@@ -259,7 +259,7 @@ class Desktop:
             Tool(
                 argument_spec(
                     "manage_window",
-                    "Move/resize, snap, minimize, maximize, restore or request a window to close. "
+                    "Move/resize, snap, maximize, restore or request a window to close. "
                     "Move requires x, y, width and height in physical screen pixels. Inspect any unsaved-work dialog after close.",
                     _WINDOW,
                 ),

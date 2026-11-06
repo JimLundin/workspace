@@ -76,9 +76,6 @@ class FakeDesktop:
         self.orders.append(order)
         self.log.append("navigate")
 
-    def arrange(self, tool: Tool, *, target: int | None) -> None:
-        self.log.append(f"arrange {tool.name.lower()} {target}")
-
 
 class FakeControls:
     """Publish control effects to the fixture's action recorder."""
@@ -465,21 +462,6 @@ def test_app_and_navigation_keys_hand_their_orders_to_the_window_owner() -> None
         assert rig.ok("app:terminal")
 
 
-def test_menu_window_tool_keeps_its_target_and_records_timed_usage() -> None:
-    # Defects: worker dispatch drops the menu's captured window, bypasses usage,
-    # or fails to return the desktop indicator to idle after arranging it.
-    with fake_endpoint() as endpoint:
-        jobs: list[Callable[[], None]] = []
-        rig = Rig(endpoint, submit=jobs.append)
-        rig.assistant.handle(Tool.MINIMIZE, down=True, target=42)
-        assert len(jobs) == 1 and not rig.take() and not rig.used
-        jobs[0]()
-        assert rig.desktop.log[-1] == "state READY"
-        assert rig.take() == ["arrange minimize 42"]
-        assert tuple(feature for feature, _ in rig.used) == ("minimize",) and rig.ok("minimize")
-        assert rig.desktop.jobs == [None]
-
-
 def test_desktop_controls_run_on_press_without_worker_submission() -> None:
     # Detect UI actions firing on release, entering the worker, or resetting recording state through timed().
     with fake_endpoint() as endpoint:
@@ -501,11 +483,10 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
         rig.hold(Tool.DICTATE)
         rig.press(Tool.AGENT_TYPED)
         rig.press(TERMINAL)
-        rig.press(Tool.MINIMIZE)
         rig.press(Tool.OPEN_INBOX)
         rig.press(Tool.MEETING_TOGGLE)
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
-        assert rig.take() == [problem, problem, "navigate", "arrange minimize None"]
+        assert rig.take() == [problem, problem, "navigate"]
         assert rig.agent == ["INBOX", "MEETING"]
         assert endpoint.received == []
 

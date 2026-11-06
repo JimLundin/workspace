@@ -163,17 +163,16 @@ class FeatureRequest:
 
 @dataclass(frozen=True, slots=True)
 class ChosenTool:
-    """A Tool picked from a Workspace menu: press only, on the window that had the keyboard."""
+    """A Tool picked from a Workspace menu: press only."""
 
     tool: Tool
-    target: int | None
 
 
 type ControlAction = PhysicalKey | FeatureRequest | ChosenTool
 
 
 def control_event(event: WindowInput, apps: Sequence[App]) -> ControlAction | None:
-    """Preserve key edges and the captured target of press-only menu choices."""
+    """Preserve key edges and press-only menu choices."""
     match event:
         case WindowInput(message=protocol.WM_KEY_STATE, wparam=scancode, lparam=down):
             return PhysicalKey(Scancode(scancode), down=bool(down))
@@ -184,11 +183,11 @@ def control_event(event: WindowInput, apps: Sequence[App]) -> ControlAction | No
                     return None
                 case _:
                     return FeatureRequest(request, down=bool(down))
-        case WindowInput(message=message, wparam=code, lparam=target) if message == WM_TOOL_CHOSEN:
+        case WindowInput(message=message, wparam=code) if message == WM_TOOL_CHOSEN:
             try:
                 tool = Tool(code)
             except ValueError:
                 return None
-            return ChosenTool(tool, target or None)
+            return ChosenTool(tool)
         case _:
             return None

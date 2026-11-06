@@ -67,7 +67,7 @@ cycled.
 | **´** | Stop the agent |
 | **I** | Zoom |
 | **O P Å ¨** | Focus ← ↓ ↑ → |
-| **A S D F** | Pause placement, switch windows, re-place, minimize |
+| **A S D** | Pause placement, switch windows, re-place |
 | **K** | Hold to speak to the agent; release to send |
 | **L** | Hold to dictate; the text is typed at the cursor on release |
 | **Ö** | Type a task for the agent |
@@ -110,7 +110,6 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **X** | Pause place |
 | Apps **C** | Windows |
 | Apps **D** | Re-place |
-| Apps **V** | Min |
 | Apps **K** | Agent talk |
 | Apps **H** | Talk |
 | Apps **,** | Agent |

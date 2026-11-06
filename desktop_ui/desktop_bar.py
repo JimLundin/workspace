@@ -86,7 +86,7 @@ class BarActions:
     problem: Callable[[str], None]
     inbox: Callable[[], None] = field(kw_only=True)
     open_item: Callable[[str], None] = field(kw_only=True)  # The canvas, at one of its items.
-    tool: Callable[[Tool, int], None] = lambda tool, hwnd: None
+    tool: Callable[[Tool], None] = lambda tool: None
     notices: Callable[[system_notices.Observed], None] = lambda _: None
     requests: RequestActions | None = field(default=None, kw_only=True)
 
@@ -519,7 +519,7 @@ class DesktopBar:
     def run(self, choice: island_menu.Choice) -> None:
         match choice:
             case ToolChoice(tool=tool):
-                self.actions.tool(tool, self.menu_target)
+                self.actions.tool(tool)
             case Command.CANVAS:
                 self.actions.work()
             case Command.RECORD:

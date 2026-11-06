@@ -53,7 +53,7 @@ def release(handles: frozenset[int]) -> None:
 
 def resize(handle: int, target: Target, *, slot: bool) -> None:
     """Draw the window exactly over its target; a window already there is not touched."""
-    if windows.is_maximized(handle):
+    if windows.is_maximized(handle) or windows.is_minimized(handle):
         windows.show(handle, windows.SW_SHOWNOACTIVATE)
     outer = windows.outer_rect(handle)
     visible = windows.visible_rect(handle)

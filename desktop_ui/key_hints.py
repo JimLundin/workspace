@@ -2,7 +2,7 @@
 
 Each placed window on the current desktop carries a badge with its app's letter
 and, beside the focused window, the focus letter that reaches it. The focused
-window adds Zoom and Minimize. Badges ask the navigation decision itself where
+window adds Zoom. Badges ask the navigation decision itself where
 each letter leads, so a hint can't name a window the chord wouldn't reach.
 """
 
@@ -75,7 +75,7 @@ def placed(world: World, request: Request, letter: str) -> Iterator[tuple[int, K
             handles = world.windows.get(identity(launcher(target)), ())
             following = reached(world, request)
             yield from ((handle, AppCap(letter, next=len(handles) > 1 and handle == following)) for handle in handles)
-        case Tool.ZOOM | Tool.MINIMIZE:
+        case Tool.ZOOM:
             yield world.foreground, ActionCap(letter)
         case Tool():
             match keyed(request), reached(world, request):

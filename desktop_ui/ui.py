@@ -626,7 +626,7 @@ class Ui:
         menu: Callable[[], None],
         on_problem: Callable[[str], None],
         audio_level: Callable[[], float | None] | None = None,
-        tool: Callable[[Tool, int], None] | None = None,
+        tool: Callable[[Tool], None] | None = None,
     ) -> None:
         """Create only Workspace's floating native controls."""
 
@@ -645,7 +645,7 @@ class Ui:
                     overlay,
                     menu,
                     on_problem,
-                    tool or (lambda _tool, _hwnd: None),
+                    tool or (lambda _tool: None),
                     self.system_notices,
                     inbox=self.open_inbox,
                     open_item=self.open_canvas_at,

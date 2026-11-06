@@ -65,7 +65,7 @@ def rest(bar: DesktopBar) -> None:
     bar.agent_changed(None)
 
 
-def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None) -> BarActions:
+def recorded(invoked: list[str], *, tools: list[Tool] | None = None) -> BarActions:
     return BarActions(
         lambda: invoked.append("canvas"),
         lambda: invoked.append("stop"),
@@ -74,7 +74,7 @@ def recorded(invoked: list[str], *, tools: list[tuple[Tool, int]] | None = None)
         lambda: invoked.append("overlay"),
         lambda: invoked.append("controls"),
         lambda message: invoked.append("problem: " + message),
-        (lambda tool, hwnd: tools.append((tool, hwnd))) if tools is not None else (lambda tool, hwnd: None),
+        tools.append if tools is not None else (lambda tool: None),
         inbox=lambda: invoked.append("inbox"),
         open_item=lambda identity: invoked.append("open " + identity),
     )
@@ -690,11 +690,11 @@ def test_pager_offers_each_desktop_directly() -> None:
         closed(app, bar)
 
 
-def test_tool_choice_acts_on_the_window_captured_before_the_menu_opened() -> None:
-    # Defect: a window tool acts on whatever window is in front after the menu
-    # took the keyboard, or the keyboard isn't handed back to that window.
+def test_tool_choice_hands_the_keyboard_back_to_the_window_it_came_from() -> None:
+    # Defect: the menu keeps the keyboard, or hands it to whatever window is in
+    # front after the menu took it, instead of the window the user was in.
     app = application()
-    invoked: list[tuple[Tool, int]] = []
+    invoked: list[Tool] = []
     foreground, focused = [42], list[int]()
     observations = BarObservations(foreground=lambda: foreground[0], focus=lambda hwnd: remember(focused, hwnd))
     bar = DesktopBar(recorded([], tools=invoked), native_shell=False, observations=observations)
@@ -702,7 +702,7 @@ def test_tool_choice_acts_on_the_window_captured_before_the_menu_opened() -> Non
         bar.open_menu()
         foreground[0] = 999
         QTest.mouseClick(menu_row(bar, "Switch windows"), QtCore.Qt.MouseButton.LeftButton)
-        assert invoked == [(Tool.WINDOW_SWITCHER, 42)] and focused == [42] and bar.opened is None
+        assert invoked == [Tool.WINDOW_SWITCHER] and focused == [42] and bar.opened is None
     finally:
         closed(app, bar)
 

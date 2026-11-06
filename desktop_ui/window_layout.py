@@ -177,8 +177,11 @@ def declared_desktops(setup: Setup) -> int:
 
 
 def managed(window: Window, *, resizable: bool, own: bool) -> bool:
-    """Workspace places resizable windows of other programs that aren't minimized; dialogs and fixed-size windows keep their own places."""
-    return resizable and not own and not window.minimized and bool(window.exe)
+    """Workspace places resizable windows of other programs, minimized or not; dialogs and fixed-size windows keep their own places.
+
+    Every app has a place in every setup, so a minimized window is only a window out of place.
+    """
+    return resizable and not own and bool(window.exe)
 
 
 @dataclass(frozen=True, slots=True)

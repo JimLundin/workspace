@@ -12,7 +12,6 @@ class Route(Enum):
     STOP = auto()
     AGENT_SESSION = auto()
     TRANSCRIPT = auto()
-    ARRANGE = auto()
     NAVIGATE = auto()
     SWITCHER = auto()
     INBOX = auto()
@@ -31,8 +30,6 @@ def route(tool: Tool) -> Route:
             return Route.AGENT_SESSION
         case Tool.COPY_TRANSCRIPT:
             return Route.TRANSCRIPT
-        case Tool.MINIMIZE:
-            return Route.ARRANGE
         case (
             Tool.ZOOM
             | Tool.FOCUS_LEFT
@@ -62,7 +59,7 @@ def needs_settings(kind: Route) -> bool:
     match kind:
         case Route.HOLD | Route.TOGGLE | Route.AGENT_SESSION:
             return True
-        case Route.STOP | Route.TRANSCRIPT | Route.ARRANGE | Route.NAVIGATE | Route.SWITCHER | Route.INBOX | Route.MEETING:
+        case Route.STOP | Route.TRANSCRIPT | Route.NAVIGATE | Route.SWITCHER | Route.INBOX | Route.MEETING:
             return False
         case _:
             assert_never(kind)

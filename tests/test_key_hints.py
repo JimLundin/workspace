@@ -36,9 +36,9 @@ def badges(world: World) -> dict[int, tuple[Keycap, ...]]:
 
 def test_badges_carry_each_apps_letter_and_mark_the_window_its_next_press_reaches() -> None:
     # Defects: the wrong app's letter, a cycle mark on the focused window instead
-    # of the next one, a mark on an app's only window, or Zoom and Minimize off focus.
+    # of the next one, a mark on an app's only window, or Zoom off focus.
     shown = badges(WORLD)
-    assert shown[1] == (AppCap("Q", next=False), ActionCap("M"), ActionCap("V"))
+    assert shown[1] == (AppCap("Q", next=False), ActionCap("M"))
     assert shown[5] == (AppCap("Q", next=True), DirectionCap("E", Direction.DOWN))
     assert shown[2] == (AppCap("W", next=False), DirectionCap("O", Direction.RIGHT))
     assert shown[3] == (AppCap("A", next=True),)

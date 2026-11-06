@@ -48,9 +48,6 @@ class Desktop(Protocol):
     def navigate(self, order: Order) -> None:
         """Hand a navigation or placement order to the desktop's window owner."""
 
-    def arrange(self, tool: Tool, *, target: int | None) -> None:
-        """Arrange the captured window, or the foreground window when target is None."""
-
 
 Recorder = Callable[[str, Mapping[str, Detail]], None]
 """Writes one use of a feature to the usage log."""
@@ -145,8 +142,8 @@ class Assistant:
     def listening(self) -> Tool | None:
         return self.capture.tool if self.capture is not None else None
 
-    def handle(self, request: Request, *, down: bool, target: int | None = None) -> None:
-        """Dispatch a key edge or menu press; only window arrangement uses target."""
+    def handle(self, request: Request, *, down: bool) -> None:
+        """Dispatch a key edge or menu press."""
         match request:
             case App():
                 if down:
@@ -177,8 +174,6 @@ class Assistant:
                     self.controls.stop_agent()
             case Route.TRANSCRIPT:
                 self.submit(self.copy_transcript)
-            case Route.ARRANGE:
-                self.submit(lambda: self.timed(request.name.lower(), lambda: self.arrange(request, target=target)))
             case Route.NAVIGATE:
                 self.timed(request.name.lower(), lambda: self.order(keyed(request)))
             case Route.AGENT_SESSION:
@@ -356,13 +351,6 @@ class Assistant:
             self.desktop.set_clipboard(self.latest_transcription)
         except OSError as error:
             self.desktop.problem(str(error))
-
-    def arrange(self, tool: Tool, *, target: int | None) -> Failure | None:
-        try:
-            self.desktop.arrange(tool, target=target)
-        except OSError as error:
-            return Failure(str(error))
-        return None
 
     def agent_session(self) -> None:
         self.controls.show_agent()

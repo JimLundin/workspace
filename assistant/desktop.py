@@ -2,12 +2,12 @@
 
 from collections.abc import Callable
 
-from winapi import audio, clipboard, inputs, windows
+from winapi import audio, clipboard, inputs
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.island_model import Job
 lazy from desktop_ui.navigation import Order
 lazy from desktop_ui.ui import Ui
-lazy from protocol import MAGIC, Tool
+lazy from protocol import MAGIC
 
 
 class WinDesktop:
@@ -74,13 +74,3 @@ class WinDesktop:
 
     def navigate(self, order: Order) -> None:
         self.ui.navigate(order)
-
-    def arrange(self, tool: Tool, *, target: int | None = None) -> None:
-        hwnd = windows.foreground() if target is None else target
-        if not hwnd:
-            return
-        match tool:
-            case Tool.MINIMIZE:
-                windows.show(hwnd, windows.SW_MINIMIZE)
-            case _:
-                raise AssertionError(f"{tool} doesn't arrange windows")

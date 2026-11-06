@@ -22,12 +22,16 @@ and go.
 
 ## Rules
 
-- Workspace manages resizable, non-minimized top-level windows of other
-  programs. Dialogs and fixed-size windows keep their places.
+- Workspace manages resizable top-level windows of other programs. Dialogs and
+  fixed-size windows keep their places.
+- Nothing is ever minimized: every app has a place in every setup, on its own
+  desktop if need be. A minimized window is restored into its place, on
+  whichever desktop it belongs, so a change of monitors sorts every window.
+  There is no minimize key.
 - Several windows of one app share its region equally.
 - Each poll moves windows that are out of place and leaves the rest alone. A
-  dragged window snaps back when the button is released. A maximized window is
-  restored and placed.
+  dragged window snaps back when the button is released. A maximized or minimized
+  window is restored and placed.
 - **⌃⌥⇧ X** pauses or resumes placement, and **⌃⌥⇧ D** places every window now.
 - Zoom (**⌃⌥⇧ M**) fills the monitor with the focused window until you press it
   again or focus another window.
@@ -59,10 +63,10 @@ the desktop itself, so the chords can be learned without the mouse:
   app has several windows, the window the next press reaches takes the accent.
 - **Focus letters** appear on the windows next to the focused one, with their
   arrow: **← N**, **↓ E**, **↑ I** or **→ O**.
-- **The focused window** adds Zoom (**M**) and Minimize (**V**) as quiet letters.
+- **The focused window** adds Zoom (**M**) as a quiet letter.
 
-Releasing the modifiers hides everything. Minimized windows and windows on other
-desktops get no badge; the pager's names list the apps on other desktops.
+Releasing the Apps key hides everything. Windows on other desktops get no
+badge; the pager's names list the apps on other desktops.
 
 `desktop_ui/key_hints.py` decides the hints as a pure function of the
 application observer's navigation world and the window in front. Each letter's

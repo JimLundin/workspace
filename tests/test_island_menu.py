@@ -161,7 +161,7 @@ def test_tool_cells_derive_hints_and_short_captions() -> None:
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:
     # Defects: a window tool acts on the menu instead of the user's window, or a Workspace
     # view that just opened loses the keyboard to the previous window.
-    assert restores_focus(ToolChoice(Tool.MINIMIZE)) and restores_focus(Command.TASKBAR)
+    assert restores_focus(ToolChoice(Tool.COPY_TRANSCRIPT)) and restores_focus(Command.TASKBAR)
     assert not restores_focus(Command.CANVAS) and not restores_focus(Command.KEYMAP) and not restores_focus(TrayChoice(0))
 
 

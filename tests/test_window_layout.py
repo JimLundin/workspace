@@ -148,10 +148,12 @@ def test_pinned_web_apps_are_not_placed_as_ordinary_edge() -> None:
     assert groups(observed, frozenset({1, 2})) == (Group(PinnedApp.TEAMS, (2,)), Group(EDGE, (1,)))
 
 
-def test_only_resizable_restored_windows_of_other_programs_are_managed() -> None:
+def test_resizable_windows_of_other_programs_are_managed_even_when_minimized() -> None:
+    # Defect: a minimized window keeps its stale desktop after the monitors
+    # change, so the user has to find and restore it by hand.
     window = Window(1, "Editor", "code.exe", minimized=False)
     assert managed(window, resizable=True, own=False)
     assert not managed(window, resizable=False, own=False)
     assert not managed(window, resizable=True, own=True)
-    assert not managed(Window(1, "Editor", "code.exe", minimized=True), resizable=True, own=False)
+    assert managed(Window(1, "Editor", "code.exe", minimized=True), resizable=True, own=False)
     assert not managed(Window(1, "Elevated", "", minimized=False), resizable=True, own=False)

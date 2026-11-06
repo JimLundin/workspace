@@ -978,14 +978,13 @@ def test_control_event_preserves_voice_release_and_rejects_unknown_requests() ->
     assert control_event(WindowInput(WM_REQUEST, 999, 1), APPS) is None
 
 
-def test_menu_tool_message_preserves_the_captured_window_and_rejects_other_requests() -> None:
-    # Defects: decoding drops the captured HWND, treats 0 as a real window,
-    # accepts a non-Tool wire request, or handles another private message as a choice.
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.MINIMIZE.value, 42), APPS) == ChosenTool(Tool.MINIMIZE, 42)
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.MINIMIZE.value, 0), APPS) == ChosenTool(Tool.MINIMIZE, None)
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, 999, 42), APPS) is None
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, 1000, 42), APPS) is None
-    assert control_event(WindowInput(0x8056, Tool.MINIMIZE.value, 42), APPS) is None
+def test_menu_tool_message_decodes_its_tool_and_rejects_other_requests() -> None:
+    # Defects: decoding drops the chosen tool, accepts a non-Tool wire request,
+    # or handles another private message as a choice.
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.WINDOW_SWITCHER.value, 0), APPS) == ChosenTool(Tool.WINDOW_SWITCHER)
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, 999, 0), APPS) is None
+    assert control_event(WindowInput(WM_TOOL_CHOSEN, 1000, 0), APPS) is None
+    assert control_event(WindowInput(0x8056, Tool.WINDOW_SWITCHER.value, 0), APPS) is None
 
 
 def test_keeper_native_messages_preserve_pointer_sized_payloads() -> None:

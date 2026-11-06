@@ -234,8 +234,8 @@ class WinMachine:
             if not system.post_message(handle, system.WM_CLOSE, 0, 0):
                 raise OSError("Windows rejected the close request.")
             return "Close requested. Inspect the window for any unsaved-work dialog."
-        if action in ("minimize", "maximize", "restore"):
-            windows.show(handle, {"minimize": windows.SW_MINIMIZE, "maximize": windows.SW_MAXIMIZE, "restore": windows.SW_RESTORE}[action])
+        if action in ("maximize", "restore"):
+            windows.show(handle, {"maximize": windows.SW_MAXIMIZE, "restore": windows.SW_RESTORE}[action])
         else:
             if windows.is_maximized(handle) or windows.is_minimized(handle):
                 windows.show(handle, windows.SW_RESTORE)

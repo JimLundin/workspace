@@ -68,7 +68,6 @@ class Tool(Enum):
     OPEN_INBOX = 38
     ZOOM = 42
     """Fill the focused window's monitor until pressed again or focus leaves it."""
-    MINIMIZE = 43
     FOCUS_LEFT = 50
     """Focus the nearest placed window in that direction, across monitors."""
     FOCUS_DOWN = 51
