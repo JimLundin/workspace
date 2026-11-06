@@ -3,7 +3,7 @@
 import unittest
 
 from desktop_ui.ambient import Ambient, SystemStatus
-from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
+from winapi.machine_status import Battery, CpuTimes, PowerUnavailable, Speakers, Wifi, cpu_load
 
 
 def test_idle_facts_have_time_and_real_battery_or_explicit_unavailability() -> None:
@@ -44,3 +44,18 @@ def test_status_icons_and_labels_distinguish_every_observed_state() -> None:
     ):
         status = SystemStatus(wifi=wifi_state)
         assert (status.wifi_icon, status.wifi_description) == (icon, label)
+
+
+def test_processor_load_is_the_busy_share_of_time_between_two_samples() -> None:
+    # Defects: kernel time is counted as busy although it includes idle time, the
+    # load comes from cumulative totals instead of the interval, or a first
+    # sample, a stalled counter or a counter that went backwards reads as 0%.
+    before = CpuTimes(idle=1_000, kernel=5_000, user=3_000)
+    assert cpu_load(before, CpuTimes(idle=1_600, kernel=5_800, user=3_200)) == 40
+    assert cpu_load(before, CpuTimes(idle=2_000, kernel=6_000, user=3_000)) == 0
+    assert cpu_load(before, CpuTimes(idle=1_000, kernel=5_500, user=3_500)) == 100
+    assert cpu_load(None, before) is None
+    assert cpu_load(before, None) is None
+    assert cpu_load(before, before) is None
+    assert cpu_load(before, CpuTimes(idle=500, kernel=4_000, user=3_000)) is None
+    assert cpu_load(before, CpuTimes(idle=2_000, kernel=5_500, user=3_000)) is None
