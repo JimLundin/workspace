@@ -3,20 +3,44 @@
 The same worker applies speaker-level requests. Windows' audio interfaces need a
 multithreaded COM apartment, which Qt's thread cannot join. Requests coalesce, so
 a drag applies its latest level rather than every intermediate one.
+The same worker reads processor and memory use, every two seconds.
 """
 
 import queue
 import threading
+import time
 from collections.abc import Callable
 from contextlib import suppress
+from dataclasses import replace
+from typing import Final
 
 from desktop_ui.ambient import SystemStatus
-lazy from winapi import system_status
+from winapi.machine_status import CpuTimes, cpu_load
+lazy from winapi import resources, system_status
+
+RESOURCES: Final = 2.0  # Seconds between processor and memory readings; faster readings only flicker.
 
 
-def observed_status() -> SystemStatus:
-    audio = system_status.audio()
-    return SystemStatus(audio.speakers, system_status.wifi(), audio.volume)
+class Observation:
+    """Each observation reads the speakers and Wi-Fi; processor load needs the previous sample to measure against."""
+
+    __slots__ = ("clock", "last", "sampled", "times")
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self.clock = clock
+        self.last = SystemStatus()
+        self.times: CpuTimes | None = None
+        self.sampled = 0.0
+
+    def observe(self) -> SystemStatus:
+        audio = system_status.audio()
+        now = self.clock()
+        # Until a first load is known, the next tick measures one; then every interval.
+        if self.last.cpu is None or now - self.sampled >= RESOURCES:
+            times = resources.cpu_times()
+            self.last = replace(self.last, cpu=cpu_load(self.times, times), memory=resources.memory_load())
+            self.times, self.sampled = times, now
+        return replace(self.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume)
 
 
 def apply_volume(level: float) -> bool:
@@ -26,8 +50,8 @@ def apply_volume(level: float) -> bool:
 class StatusObserver:
     __slots__ = ("apply", "cancelled", "observe", "requests", "results", "wake", "worker")
 
-    def __init__(self, observe: Callable[[], SystemStatus] = observed_status, apply: Callable[[float], bool] = apply_volume) -> None:
-        self.observe = observe
+    def __init__(self, observe: Callable[[], SystemStatus] | None = None, apply: Callable[[float], bool] = apply_volume) -> None:
+        self.observe = observe if observe is not None else Observation().observe
         self.apply = apply
         self.cancelled = threading.Event()
         self.wake = threading.Event()

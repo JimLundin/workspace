@@ -45,6 +45,7 @@ def test_idle_has_only_device_status_and_clock_power_on_right() -> None:
     assert tuple(each.key for each in views) == (Key.STATUS,)
     assert tuple(each.zone for each in views) == (Zone.RIGHT,)
     assert views[-1].slots == (
+        (Text("CPU —", reserve="CPU 100%"), Text("RAM —", reserve="RAM 100%")),
         (
             Glyph("speaker-unknown"),
             Glyph("wifi-unknown"),
@@ -57,9 +58,23 @@ def test_a_plain_keyboard_is_a_reading_beside_the_speaker_and_wifi() -> None:
     # Defects: the keyboard shows while the layout remaps, or it becomes a
     # control in its own slot, spaced apart from the speaker and Wi-Fi.
     plain = view(replace(RESTING, plain_keyboard=True), Key.STATUS)
-    assert plain.slots[0] == (Glyph("keyboard"), Glyph("speaker-unknown"), Glyph("wifi-unknown"))
+    assert plain.slots[1] == (Glyph("keyboard"), Glyph("speaker-unknown"), Glyph("wifi-unknown"))
     assert len(plain.slots) == len(view(RESTING, Key.STATUS).slots)
-    assert Glyph("keyboard") not in view(RESTING, Key.STATUS).slots[0]
+    assert Glyph("keyboard") not in view(RESTING, Key.STATUS).slots[1]
+
+
+def test_processor_and_memory_are_plain_readings_that_reserve_their_widest_value() -> None:
+    # Defects: a reading becomes a control, a value from 9% to 100% resizes the
+    # fixed capsule because its reserve follows the value, CPU and memory swap,
+    # an unread value shows as 0% (a healthy-looking lie), or the capsule's
+    # accessible name omits the readings.
+    for cpu, memory, shown in ((23, 61, ("CPU 23%", "RAM 61%")), (100, 9, ("CPU 100%", "RAM 9%")), (None, None, ("CPU —", "RAM —"))):
+        status = view(replace(RESTING, system=SystemStatus(cpu=cpu, memory=memory)), Key.STATUS)
+        assert status.slots[0] == (Text(shown[0], reserve="CPU 100%"), Text(shown[1], reserve="RAM 100%"))
+        assert not any(isinstance(part, Control) for slot in status.slots for part in slot)
+    label = view(replace(RESTING, system=SystemStatus(cpu=23, memory=61)), Key.STATUS).label
+    assert label.startswith("CPU 23%, memory 61%. ")
+    assert view(RESTING, Key.STATUS).label.startswith("CPU unavailable, memory unavailable. ")
 
 
 def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:

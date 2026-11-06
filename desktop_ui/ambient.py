@@ -11,6 +11,8 @@ class SystemStatus:
     speakers: Speakers = Speakers.UNKNOWN
     wifi: Wifi = Wifi.UNKNOWN
     volume: float | None = None  # The speakers' master level, from 0 to 1.
+    cpu: int | None = None  # Busy processor time since the previous sample, in percent.
+    memory: int | None = None  # Physical memory in use, in percent.
 
     @property
     def speaker_icon(self) -> str:
@@ -67,6 +69,12 @@ class SystemStatus:
     @property
     def description(self) -> str:
         return self.speaker_description + ". " + self.wifi_description
+
+    @property
+    def resource_description(self) -> str:
+        cpu = "CPU unavailable" if self.cpu is None else f"CPU {self.cpu}%"
+        memory = "memory unavailable" if self.memory is None else f"memory {self.memory}%"
+        return cpu + ", " + memory
 
 
 @dataclass(frozen=True, slots=True)

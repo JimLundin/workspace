@@ -134,9 +134,9 @@ activity: dictation, transcription, agent work with **Stop**, a meeting
 recording, a question waiting for you, or a short notice of the agent's news.
 On the left, one capsule holds the **Canvas** button and the Outlook and Teams
 web apps, followed by the desktop pager and the running apps. One capsule on the
-right holds a keyboard icon while the keyboard types plainly (layout off or the
-Charybdis connected), volume, Wi-Fi, the clock and the battery. Click the clock or
-battery to open the controls menu. The bell lists pending questions and recent
+right holds CPU and memory use, a keyboard icon while the keyboard types plainly
+(layout off or the Charybdis connected), volume, Wi-Fi, the clock and the
+battery. Click the clock or battery to open the controls menu. The bell lists pending questions and recent
 notices. See [the island bar](docs/toolbar-design.md) for the full policy.
 
 The tray dot is green when the layout is on, grey when it is off, red while

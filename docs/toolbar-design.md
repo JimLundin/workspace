@@ -4,9 +4,17 @@ The bar is a row of glass capsules 8 px below the top of the primary screen.
 Its centre holds only live activity and is empty at rest. Left of it, one
 capsule holds Canvas, then the Outlook and Teams web-app slots; the desktop
 pager and the running apps follow in their own capsules. One fixed capsule on
-the right holds a keyboard icon while the keyboard types plainly (the layout is
-off, or the Charybdis is connected), volume, Wi-Fi, and the clock with the battery. Activity never
-moves the fixed controls.
+the right holds processor and memory use, a keyboard icon while the keyboard
+types plainly (the layout is off, or the Charybdis is connected), volume,
+Wi-Fi, and the clock with the battery. Activity never moves the fixed controls.
+
+The resource readings are plain text, "CPU 23%" and "RAM 61%", in their own
+slot at the capsule's left, so the speaker and Wi-Fi glyphs part them from the
+battery's percentage. Each reserves "100%" so a changing value never moves the
+cluster, and an unread value shows "—" rather than 0%. The status worker reads
+them every 2 s; CPU is the busy share of processor time since the previous
+reading. Disk, network and GPU are left out: on this laptop they are idle or
+bursty, so a number there is mostly noise.
 
 The right capsule is anchored to the screen's right edge. Canvas lives in the
 shell's pinned capsule, which yields to activity: the island bounds where it
