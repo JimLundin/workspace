@@ -33,7 +33,7 @@ from assistant.workspace import Workspace
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore
 from automation.execution import WorkExecution
-from automation.task import (
+from contracts.task import (
     Claim,
     FeedHandoff,
     RequestKind,

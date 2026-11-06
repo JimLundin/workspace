@@ -6,11 +6,13 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
 
-import automation.task
-from assistant.agent_session import Session
-from assistant.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
+import contracts.task
 from assistant.work_canvas import WorkCanvas
-from assistant.work_canvas_commands import (
+from contracts.agent_session import Session
+from contracts.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
+from contracts.personal_work import Catalog, DismissedWork, WorkState
+from contracts.task import Blocked, Completed, TextAnswer, Waiting
+from contracts.work_canvas_commands import (
     ArrangeCanvas,
     CanvasRefused,
     CanvasUpdated,
@@ -21,13 +23,11 @@ from assistant.work_canvas_commands import (
     UpdateCanvas,
     revision,
 )
-from assistant.work_canvas_context import CanvasScope, context_path
-from assistant.work_canvas_contracts import Announcement, CanvasPublication, Investigating, NotQueued, Queued, ResumeTask
-from assistant.work_canvas_edits import ArrangeView, NestBubble, PlaceBubbles, RenameGroup, SaveNote, UserEdit
-from assistant.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
-from assistant.work_snapshot import WorkSnapshot
-from automation.personal_work import Catalog, DismissedWork, WorkState
-from automation.task import Blocked, Completed, TextAnswer, Waiting
+from contracts.work_canvas_context import CanvasScope, context_path
+from contracts.work_canvas_contracts import Announcement, CanvasPublication, Investigating, NotQueued, Queued, ResumeTask
+from contracts.work_canvas_edits import ArrangeView, NestBubble, PlaceBubbles, RenameGroup, SaveNote, UserEdit
+from contracts.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
+from contracts.work_snapshot import WorkSnapshot
 from tests.agent_requests import asked
 from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, publish_nothing, seeded
 from tests.test_work_window import work_task
@@ -150,8 +150,8 @@ def test_answers_reach_only_visible_waiting_questions_and_record_one_reply(tmp_p
     active, dismissed = data.works
     canvas = local_canvas(tmp_path)
     canvas.observe_catalog(replace(data, works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),)))
-    current = work_task(Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
-    hidden = work_task(Waiting(automation.task.Question("hidden", "Hidden question", "")), identity="hidden-task")
+    current = work_task(Waiting(contracts.task.Question("current", "Current question", "")), identity="current-task")
+    hidden = work_task(Waiting(contracts.task.Question("hidden", "Hidden question", "")), identity="hidden-task")
     finding = CanvasUpdate("result:finding", "Finding", "Version two is approved.", 5, (active.id,))
     seeded(canvas, CanvasDocument(runs=(CanvasRun(current.id, active.id), CanvasRun(hidden.id, dismissed.id)), activity=(finding,)))
     canvas.observe_session(Session(identity="session", messages=(asked("chat", "Which supplier?", "", 10),)))
@@ -187,8 +187,8 @@ def test_each_change_publishes_current_attention_and_bridge_moves_settle_hidden_
     publications: list[CanvasPublication] = []
     canvas = local_canvas(tmp_path, publications.append)
     canvas.observe_catalog(replace(data, works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),)))
-    current = work_task(Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
-    hidden = work_task(Waiting(automation.task.Question("hidden", "Hidden question", "")), identity="hidden-task")
+    current = work_task(Waiting(contracts.task.Question("current", "Current question", "")), identity="current-task")
+    hidden = work_task(Waiting(contracts.task.Question("hidden", "Hidden question", "")), identity="hidden-task")
     seeded(
         canvas,
         CanvasDocument(

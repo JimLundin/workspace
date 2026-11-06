@@ -31,7 +31,7 @@ from assistant.browser_values import (
     decoded,
     navigation_context_error,
 )
-from automation.json_value import Json
+from contracts.json_value import Json
 lazy from runtime import activate
 lazy from winapi.protection import protect, unprotect
 

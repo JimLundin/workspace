@@ -2,7 +2,7 @@
 
 from typing import assert_never
 
-from assistant.feed_origin import App
+from contracts.feed_origin import App
 from desktop_ui.components.bubble import Letter, Symbol, glyph
 
 

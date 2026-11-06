@@ -16,11 +16,12 @@ from assistant.feed_work import FeedWork
 from assistant.llm import Settings
 from automation.actions import Resources
 from automation.activity import Activity, ContextSnapshot
-from automation.context import ContextStore, Preference, ProjectNote
+from automation.context import ContextStore
 from automation.execution import WorkExecution
-from automation.json_value import Json
 from automation.store import TaskStore
-from automation.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
+from contracts.context import Preference, ProjectNote
+from contracts.json_value import Json
+from contracts.task import Completed, FeedHandoff, Profile, Question, RequestSource, TextAnswer, Waiting
 from tests.fake_endpoint import fake_endpoint
 from tests.feed_fixture import TriageFixture, feed_bridge
 from tests.feed_source_fixture import captured, screening_reply

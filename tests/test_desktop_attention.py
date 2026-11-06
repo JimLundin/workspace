@@ -2,10 +2,10 @@
 
 from dataclasses import replace
 
-from assistant.canvas_activity import Attention, CanvasQuestion, SessionRequest, TaskRequest
-from assistant.work_canvas_contracts import Announcement
-from assistant.work_commands import AnswerTask
-from automation.task import TextAnswer
+from contracts.canvas_activity import Attention, CanvasQuestion, SessionRequest, TaskRequest
+from contracts.task import TextAnswer
+from contracts.work_canvas_contracts import Announcement
+from contracts.work_commands import AnswerTask
 from desktop_ui.desktop_attention import (
     AnswerQuestion,
     CanvasFocus,

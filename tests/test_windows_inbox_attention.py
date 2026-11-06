@@ -13,14 +13,14 @@ lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtTest import QTest
 
 import desktop_ui.island_moment
-from assistant.canvas_activity import SessionRequest
 from assistant.communications import WindowsNotice
-from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import PendingFeed
 from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.state_store import SavedState
-from assistant.work_canvas_contracts import CanvasEdits
-from automation.task import TextAnswer
+from contracts.canvas_activity import SessionRequest
+from contracts.feed_origin import FeedRequest
+from contracts.task import TextAnswer
+from contracts.work_canvas_contracts import CanvasEdits
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.island_model import Agent, Job, Key
 from desktop_ui.island_motion import settled

@@ -7,7 +7,7 @@ lazy from agents import Agent, ModelSettings, OpenAIResponsesModel, RunConfig, R
 lazy from openai.types.shared import Reasoning
 
 from assistant.llm import Settings, async_client
-from automation.personal_work import CORRELATION_INPUT, WORK_PLAN, CorrelationInput, WorkPlan
+from contracts.personal_work import CORRELATION_INPUT, WORK_PLAN, CorrelationInput, WorkPlan
 
 INSTRUCTIONS = """Maintain the user's ongoing personal work by connecting observed Teams conversations, Outlook conversations
 Kanban tickets, native meeting events and documents. Return a WorkPlan.

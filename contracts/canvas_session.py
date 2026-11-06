@@ -3,34 +3,34 @@
 from dataclasses import replace
 from typing import assert_never
 
-import assistant.agent_session
-import automation.presentation
-import automation.task
-from assistant.canvas_activity import Attention, CanvasActivity, CanvasQuestion, CanvasReply, CanvasUpdate, SessionRequest, question_body
-from assistant.feed_origin import Initiation
+import contracts.agent_session
+import contracts.presentation
+import contracts.task
+from contracts.canvas_activity import Attention, CanvasActivity, CanvasQuestion, CanvasReply, CanvasUpdate, SessionRequest, question_body
+from contracts.feed_origin import Initiation
 
 
-def canvas_reply(reply: assistant.agent_session.RequestReply) -> CanvasReply:
+def canvas_reply(reply: contracts.agent_session.RequestReply) -> CanvasReply:
     match reply:
-        case assistant.agent_session.Pending():
+        case contracts.agent_session.Pending():
             return Attention.WAITING
-        case assistant.agent_session.Cancelled():
+        case contracts.agent_session.Cancelled():
             return Attention.CLOSED
-        case automation.task.TextAnswer():
+        case contracts.task.TextAnswer():
             return reply
         case _:
             assert_never(reply)
 
 
-def session_activity(session: assistant.agent_session.Snapshot) -> tuple[CanvasActivity, ...]:
+def session_activity(session: contracts.agent_session.Snapshot) -> tuple[CanvasActivity, ...]:
     result: tuple[CanvasActivity, ...] = ()
     work_ids: tuple[str, ...] = ()
     for message in session.messages:
         match message:
-            case assistant.agent_session.ChatMessage(speaker="You", source=source):
+            case contracts.agent_session.ChatMessage(speaker="You", source=source):
                 work_ids = (source.identity,) if source is not None else ()
-            case assistant.agent_session.AgentRequest(
-                request=automation.task.Question(id=identity, text=title), detail=detail, created_at=at, reply=reply
+            case contracts.agent_session.AgentRequest(
+                request=contracts.task.Question(id=identity, text=title), detail=detail, created_at=at, reply=reply
             ):
                 result = (
                     *result,
@@ -49,22 +49,22 @@ def session_activity(session: assistant.agent_session.Snapshot) -> tuple[CanvasA
     return (*result, *session_replies(session))
 
 
-def session_replies(session: assistant.agent_session.Snapshot) -> tuple[CanvasUpdate, ...]:
+def session_replies(session: contracts.agent_session.Snapshot) -> tuple[CanvasUpdate, ...]:
     """Each finished conversation turn's final reply, which the canvas keeps readable in full.
 
     A turn finishes when the next request begins or the session goes idle. Quiet
     automatic investigations and canvas announcements are not replies.
     """
-    request: assistant.agent_session.ChatMessage | None = None
+    request: contracts.agent_session.ChatMessage | None = None
     replies: tuple[CanvasUpdate, ...] = ()
     for message in session.messages:
         match message:
-            case assistant.agent_session.ChatMessage(speaker="You", source=source):
+            case contracts.agent_session.ChatMessage(speaker="You", source=source):
                 request = None if source is not None and source.initiation is Initiation.AUTOMATIC else message
             case (
-                assistant.agent_session.ChatMessage(speaker="Workspace" | "Error", source=None, text=text, created_at=at)
-                | automation.presentation.Answer(
-                    text=text, created_at=at, state=automation.presentation.StreamState.COMPLETE | automation.presentation.StreamState.INTERRUPTED
+                contracts.agent_session.ChatMessage(speaker="Workspace" | "Error", source=None, text=text, created_at=at)
+                | contracts.presentation.Answer(
+                    text=text, created_at=at, state=contracts.presentation.StreamState.COMPLETE | contracts.presentation.StreamState.INTERRUPTED
                 )
             ) if request is not None and text.strip():
                 work_ids = (request.source.identity,) if request.source is not None else ()
@@ -76,11 +76,11 @@ def session_replies(session: assistant.agent_session.Snapshot) -> tuple[CanvasUp
     return tuple(reply for reply in replies if reply.id != running)
 
 
-def reply_id(session: assistant.agent_session.Snapshot, request: assistant.agent_session.ChatMessage) -> str:
+def reply_id(session: contracts.agent_session.Snapshot, request: contracts.agent_session.ChatMessage) -> str:
     return f"reply:{session.identity}:{request.created_at}"
 
 
-def settle_session(activity: tuple[CanvasActivity, ...], session: assistant.agent_session.Snapshot) -> tuple[CanvasActivity, ...]:
+def settle_session(activity: tuple[CanvasActivity, ...], session: contracts.agent_session.Snapshot) -> tuple[CanvasActivity, ...]:
     live = frozenset(item.request for item in session_activity(session) if isinstance(item, CanvasQuestion))
     return tuple(
         replace(item, reply=Attention.CLOSED)

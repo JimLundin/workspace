@@ -5,7 +5,7 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.work_canvas_model import CanvasRelation
+from contracts.work_canvas_model import CanvasRelation
 from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens
 from desktop_ui.components.canvas_look import Role, face
 from desktop_ui.components.text import color

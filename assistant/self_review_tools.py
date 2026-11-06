@@ -9,11 +9,12 @@ from pydantic import Field, TypeAdapter
 
 from assistant.agent_tools import NO_ARGUMENTS, Args, ArgumentError, Display, NoArguments, Output, Session, Tool, argument_spec, fixed, typed_run
 from automation.actions import Change, Evidence, Observation
-from automation.context import ContextStore, Preference
+from automation.context import ContextStore
 from automation.execution import WorkExecution
 from automation.self_review import TaskRecord, agent_lesson, describe_history, describe_history_page, lesson, worked_on
 from automation.store import TaskStore
-from automation.task import ActionUncertain, ActionVerified, Task
+from contracts.context import Preference
+from contracts.task import ActionUncertain, ActionVerified, Task
 
 INSTRUCTIONS: Final = (
     "You improve from your own work. Saved lessons from earlier reviews appear with the saved preferences; follow them. "

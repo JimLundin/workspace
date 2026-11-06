@@ -9,13 +9,11 @@ from pathlib import Path
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
-from assistant.meeting_presentation import meeting_text
 from assistant.meeting_store import MeetingStore
-from assistant.work_canvas_context import context_path
-from assistant.work_canvas_model import CanvasDocument, CanvasNote
-from automation.meetings import MeetingConversation
-from automation.personal_work import (
+from contracts.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
+from contracts.meeting_presentation import meeting_text
+from contracts.meetings import MeetingConversation
+from contracts.personal_work import (
     Catalog,
     DismissWork,
     MeetingSource,
@@ -29,7 +27,9 @@ from automation.personal_work import (
     WorkState,
     WorkThread,
 )
-from automation.task import TextAnswer
+from contracts.task import TextAnswer
+from contracts.work_canvas_context import context_path
+from contracts.work_canvas_model import CanvasDocument, CanvasNote
 from desktop_ui.components.controls import button, label
 from desktop_ui.components.widgets import Editor, column, replace_text, row
 from desktop_ui.keymap import AGENT_HOLD

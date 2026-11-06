@@ -1,6 +1,6 @@
 """Window placement and screenshot coordinates."""
 
-from assistant.geometry import fit, half
+from contracts.geometry import fit, half
 from winapi.shapes import Rect
 
 WORK = Rect(0, 0, 1920, 1040)  # a 1080p monitor, minus the taskbar

@@ -3,8 +3,8 @@
 from datetime import datetime
 from typing import assert_never
 
-from assistant.recording_state import duration, source_name
-from automation.meetings import Ended, InProgress, Meeting, MeetingConversation, TranscriptState, UnknownEnd
+from contracts.meetings import Ended, InProgress, Meeting, MeetingConversation, TranscriptState, UnknownEnd
+from contracts.recording_state import duration, source_name
 
 
 def time_range(meeting: Meeting) -> str:

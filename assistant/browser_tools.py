@@ -29,7 +29,7 @@ from assistant.browser_values import BrowserError, BrowserStatus, ClosePage, Clo
 from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Change, Evidence, Observation, target
 from automation.execution import Readback, Targets
-from automation.json_value import Json
+from contracts.json_value import Json
 
 
 @dataclass(frozen=True, slots=True)

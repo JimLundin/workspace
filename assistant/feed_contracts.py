@@ -7,8 +7,8 @@ from typing import Annotated, Literal, Protocol
 from pydantic import AfterValidator, Field, StringConstraints, TypeAdapter
 
 from assistant.feed_history import Decision, Identity
-from assistant.feed_origin import Origin
-from automation.json_value import Json
+from contracts.feed_origin import Origin
+from contracts.json_value import Json
 
 type Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
 type Detail = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]

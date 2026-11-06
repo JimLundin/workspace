@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic import ConfigDict, TypeAdapter
 
 from automation import journal
-from automation.task import (
+from contracts.task import (
     Action,
     ActionNotApplied,
     ActionOutcome,

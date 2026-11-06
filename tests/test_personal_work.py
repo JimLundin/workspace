@@ -30,11 +30,10 @@ from assistant.web_apps import (
     TeamsQuery,
 )
 from assistant.work_bridge import WorkOwners
-from assistant.work_canvas_model import caption
 from automation.actions import Resources
 from automation.execution import WorkExecution
-from automation.json_value import Json
-from automation.personal_work import (
+from contracts.json_value import Json
+from contracts.personal_work import (
     PERSONAL_RESPONSE,
     WORK_PLAN,
     AddDocument,
@@ -59,8 +58,9 @@ from automation.personal_work import (
     WorkState,
     WorkThread,
 )
-from automation.task import ActionNotApplied, ActionVerified
-from automation.work_documents import LocalDocument, WebDocument
+from contracts.task import ActionNotApplied, ActionVerified
+from contracts.work_canvas_model import caption
+from contracts.work_documents import LocalDocument, WebDocument
 from tests.fake_endpoint import Reply, fake_endpoint
 from tests.feed_fixture import feed_unavailable, no_canvas, owner_request
 from tests.personal_work_fixture import WIRE, CapturedBrowser, CapturedSources, source

@@ -11,12 +11,12 @@ from assistant.personal_work_store import PersonalStore
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE
 from assistant.work_canvas import pending
-from assistant.work_canvas_commands import MoveBubble, UpdateCanvas, edited, revision
-from assistant.work_canvas_context import context_path
-from assistant.work_canvas_model import CanvasDocument, caption
-from automation.meetings import Ended, InProgress, MeetingConversation, TranscriptState, UnknownEnd
-from automation.personal_work import Association, ListSources, MeetingSource, ReadMeeting, SaveWork, WorkDefinition
 from automation.store import TaskStore
+from contracts.meetings import Ended, InProgress, MeetingConversation, TranscriptState, UnknownEnd
+from contracts.personal_work import Association, ListSources, MeetingSource, ReadMeeting, SaveWork, WorkDefinition
+from contracts.work_canvas_commands import MoveBubble, UpdateCanvas, edited, revision
+from contracts.work_canvas_context import context_path
+from contracts.work_canvas_model import CanvasDocument, caption
 from tests.feed_fixture import feed_unavailable
 from tests.personal_work_fixture import CapturedSources
 from tests.test_llm import settings

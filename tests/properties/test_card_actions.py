@@ -2,7 +2,7 @@
 
 from hypothesis import strategies
 
-from assistant.card_actions import OpenCanvas, encode, parse
+from contracts.card_actions import OpenCanvas, encode, parse
 from tests.properties.generation import cases, property_test
 
 

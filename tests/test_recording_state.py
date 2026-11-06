@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from assistant.recording_state import (
+from contracts.recording_state import (
     Batch,
     Exhausted,
     Phase,

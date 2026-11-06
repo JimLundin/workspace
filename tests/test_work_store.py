@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import TestCase
 
 from automation.store import TaskStore
-from automation.task import (
+from contracts.task import (
     ActionNotApplied,
     ActionReturned,
     ActionSpec,

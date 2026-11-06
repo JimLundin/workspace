@@ -5,9 +5,10 @@ from contextlib import closing
 from pathlib import Path
 from unittest import TestCase
 
-from automation.context import ContextStore, Preference, ProjectNote, select_context
+from automation.context import ContextStore, select_context
 from automation.store import TaskStore
-from automation.task import RequestSource
+from contracts.context import Preference, ProjectNote
+from contracts.task import RequestSource
 
 
 def test_reopened_context_selects_relevant_projects_and_keeps_preferences(tmp_path: Path) -> None:

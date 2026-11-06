@@ -12,11 +12,11 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
-from assistant.feed_origin import App, Origin
-from assistant.work_canvas_context import ContextGroup, descendants
-from assistant.work_canvas_model import CanvasContent, caption, summary, title
-from automation.personal_work import SourceKind, WorkSource, WorkThread
+from contracts.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
+from contracts.feed_origin import App, Origin
+from contracts.personal_work import SourceKind, WorkSource, WorkThread
+from contracts.work_canvas_context import ContextGroup, descendants
+from contracts.work_canvas_model import CanvasContent, caption, summary, title
 from desktop_ui.components.appearance import Shade, Tokens
 from desktop_ui.components.canvas_bubble import CanvasBubble, CanvasEvents
 from desktop_ui.components.canvas_controls import CanvasControl, ControlAction

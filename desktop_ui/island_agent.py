@@ -6,10 +6,10 @@ finding it announces. The bar owns no agent state of its own; every session
 snapshot replaces the reading.
 """
 
-from assistant import action_text
-from assistant.agent_session import ChatMessage, Snapshot
-from assistant.canvas_session import session_replies
-from automation.presentation import Answer, ToolActivity, ToolStatus
+from contracts import action_text
+from contracts.agent_session import ChatMessage, Snapshot
+from contracts.canvas_session import session_replies
+from contracts.presentation import Answer, ToolActivity, ToolStatus
 from desktop_ui.agent_progress import Entry, Response, phases
 from desktop_ui.island_model import Agent
 from desktop_ui.island_moment import Notice

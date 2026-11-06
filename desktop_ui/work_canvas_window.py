@@ -5,9 +5,9 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.work_canvas_contracts import CanvasEdits
-from assistant.work_canvas_model import CanvasDocument
-from assistant.work_snapshot import WorkSnapshot
+from contracts.work_canvas_contracts import CanvasEdits
+from contracts.work_canvas_model import CanvasDocument
+from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.components.appearance import scheme, tokens
 from desktop_ui.components.canvas_chrome import CanvasFrame
 from desktop_ui.components.canvas_look import Role, face

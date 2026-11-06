@@ -4,8 +4,8 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import assert_never
 
-from assistant.work_canvas_edits import NestBubble, PlaceBubbles
-from assistant.work_canvas_model import Placement
+from contracts.work_canvas_edits import NestBubble, PlaceBubbles
+from contracts.work_canvas_model import Placement
 from desktop_ui.work_canvas_layout import Box
 
 

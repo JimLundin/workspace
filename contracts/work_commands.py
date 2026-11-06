@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from automation.personal_work import (
+from contracts.personal_work import (
     AddDocument,
     AddWebPage,
     DismissWork,
@@ -12,7 +12,7 @@ from automation.personal_work import (
     SaveWork,
     UnlinkWork,
 )
-from automation.task import Control, TextAnswer
+from contracts.task import Control, TextAnswer
 
 
 @dataclass(frozen=True, slots=True)

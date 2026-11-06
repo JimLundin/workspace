@@ -16,8 +16,8 @@ import itertools
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
 
-from assistant.meeting_detection import AutomaticStatus
-from assistant.recording_state import RecordingState
+from contracts.meeting_detection import AutomaticStatus
+from contracts.recording_state import RecordingState
 from desktop_ui import shell_surface
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar

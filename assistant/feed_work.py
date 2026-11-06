@@ -8,9 +8,10 @@ from typing import assert_never
 from assistant.feed_history import Decision
 from assistant.feed_triage import Board
 from automation.activity import ContextSnapshot
-from automation.context import ContextSelection, ContextStore, ProjectNote, select_context
+from automation.context import ContextSelection, ContextStore, select_context
 from automation.store import TaskStore
-from automation.task import (
+from contracts.context import ProjectNote
+from contracts.task import (
     Blocked,
     Completed,
     Failed,

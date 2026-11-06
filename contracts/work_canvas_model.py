@@ -5,7 +5,7 @@ from typing import Annotated, assert_never
 
 from pydantic import Field, StringConstraints, TypeAdapter
 
-from assistant.canvas_activity import (
+from contracts.canvas_activity import (
     ROOT_CONTEXT,
     CanvasAction,
     CanvasActivity,
@@ -15,8 +15,8 @@ from assistant.canvas_activity import (
     CanvasUpdate,
     merge_activity,
 )
-from assistant.meeting_presentation import time_range
-from automation.personal_work import Catalog, Detail, Identity, MeetingSource, Source, SourceKind, Title, WorkSource, source_context
+from contracts.meeting_presentation import time_range
+from contracts.personal_work import Catalog, Detail, Identity, MeetingSource, Source, SourceKind, Title, WorkSource, source_context
 
 type Coordinate = Annotated[float, Field(ge=-100000, le=100000, allow_inf_nan=False)]
 

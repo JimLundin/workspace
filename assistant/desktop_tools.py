@@ -27,8 +27,8 @@ from assistant.uia import Act, Inspect
 from automation.actions import Change, Classification, Evidence, Observation, Operation, target
 from automation.activity import ContextSnapshot
 from automation.execution import ProofRule, Readback, Targets
-from automation.json_value import Json
-from automation.task import ActionReturned, ActionUncertain, FileDigest
+from contracts.json_value import Json
+from contracts.task import ActionReturned, ActionUncertain, FileDigest
 from winapi.shapes import Rect
 
 MAX_CHARS: Final = 20_000

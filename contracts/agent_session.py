@@ -7,13 +7,12 @@ Replaying the same events against a session always gives the same result.
 from dataclasses import dataclass, field, replace
 from typing import Literal, assert_never
 
-from assistant import action_text
-from assistant.attention import AttentionSnapshot, context_of
-from assistant.canvas_activity import CanvasRequest
-from assistant.card_actions import OpenCanvas, encode
-from assistant.feed_origin import FeedRequest
-from assistant.recording_state import RecordingState
-from automation.presentation import (
+from contracts import action_text
+from contracts.attention import AttentionSnapshot, context_of
+from contracts.canvas_activity import CanvasRequest
+from contracts.card_actions import OpenCanvas, encode
+from contracts.feed_origin import FeedRequest
+from contracts.presentation import (
     Answer,
     Done,
     Failed,
@@ -28,7 +27,8 @@ from automation.presentation import (
     ToolActivity,
     ToolStatus,
 )
-from automation.task import Question, TextAnswer
+from contracts.recording_state import RecordingState
+from contracts.task import Question, TextAnswer
 
 type Result = Literal["Ready", "Stopped", "Needs attention"]
 

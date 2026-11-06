@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import assert_never
 
-from assistant.canvas_activity import CanvasQuestion, CanvasRequest, SessionRequest, TaskRequest
-from assistant.work_canvas_contracts import Announcement
-from assistant.work_commands import AnswerTask
-from automation.task import TextAnswer
+from contracts.canvas_activity import CanvasQuestion, CanvasRequest, SessionRequest, TaskRequest
+from contracts.task import TextAnswer
+from contracts.work_canvas_contracts import Announcement
+from contracts.work_commands import AnswerTask
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

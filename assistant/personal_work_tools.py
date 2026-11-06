@@ -10,8 +10,8 @@ from assistant.business_tools import spec
 from assistant.llm import ToolSpec
 from assistant.work_bridge_contracts import BridgeCommand
 from automation.actions import Change, Classification, Observation, target
-from automation.json_value import Json
-from automation.personal_work import (
+from contracts.json_value import Json
+from contracts.personal_work import (
     PERSONAL_REQUEST,
     PERSONAL_RESPONSE,
     AddDocument,
@@ -29,7 +29,7 @@ from automation.personal_work import (
     WorkSaved,
     WorkSource,
 )
-from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
+from contracts.task import ActionNotApplied, ActionUncertain, ActionVerified
 
 INSTRUCTIONS = """My work is the user's persistent representation of ongoing work, connecting Outlook conversations, Teams
 conversations, Kanban tickets, native meetings and documents. Native meeting sources contain an event identity, capture

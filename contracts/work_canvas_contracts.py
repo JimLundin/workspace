@@ -5,11 +5,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
-from assistant.attention import AttentionSnapshot
-from assistant.canvas_activity import CanvasQuestion, CanvasRequest, CanvasRun
-from assistant.work_canvas_edits import UserEdit
-from assistant.work_canvas_model import CanvasDocument
-from automation.task import TextAnswer
+from contracts.attention import AttentionSnapshot
+from contracts.canvas_activity import CanvasQuestion, CanvasRequest, CanvasRun
+from contracts.task import TextAnswer
+from contracts.work_canvas_edits import UserEdit
+from contracts.work_canvas_model import CanvasDocument
 
 
 @dataclass(frozen=True, slots=True)

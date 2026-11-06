@@ -1,8 +1,8 @@
 """Timeline projections of durable agent questions, and timeline text, for conversation and UI fixtures."""
 
-from assistant.agent_session import AgentRequest, Message, activity_text
-from automation.presentation import ToolActivity
-from automation.task import Question
+from contracts.agent_session import AgentRequest, Message, activity_text
+from contracts.presentation import ToolActivity
+from contracts.task import Question
 
 
 def asked(identity: str, text: str, detail: str, at: float) -> AgentRequest:

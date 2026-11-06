@@ -11,7 +11,7 @@ from typing import Protocol
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_sources import Observations
 from assistant.personal_work_store import PersonalStore
-from automation.personal_work import (
+from contracts.personal_work import (
     CORRELATION_INPUT,
     PERSONAL_REQUEST,
     PERSONAL_RESPONSE,

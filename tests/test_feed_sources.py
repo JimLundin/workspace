@@ -13,7 +13,6 @@ from assistant.communications import (
     Update,
     WindowsNotice,
 )
-from assistant.feed_origin import App
 from assistant.feed_sources import (
     Attention,
     ChatTicketSource,
@@ -34,6 +33,7 @@ from assistant.feed_sources import (
     triage_evidence,
 )
 from assistant.notification_sources import Notices, NotificationFilter
+from contracts.feed_origin import App
 from tests.communications_fixture import communication_feed
 from winapi.system_notices import NoticeKey
 

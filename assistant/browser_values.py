@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from automation.json_value import Json
+from contracts.json_value import Json
 
 
 class BrowserError(OSError):

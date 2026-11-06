@@ -23,11 +23,11 @@ from automation.activity import ContextSnapshot
 from automation.context import ContextStore, select_context
 from automation.controller import ControllerSnapshot, Fault, Idle, Runner, Stopping, WorkController, Working
 from automation.execution import Log
-from automation.presentation import LiveMessage, PresentationEvent, Problem, Progress, Said
 from automation.profile_lease import ProfileLease
 from automation.store import TaskStore
-from automation.task import Claim, Outcome, RunRef, Task, owns
 from automation.work_folder import BROWSER_PROFILE
+from contracts.presentation import LiveMessage, PresentationEvent, Problem, Progress, Said
+from contracts.task import Claim, Outcome, RunRef, Task, owns
 lazy from assistant.agent_execution import AgentExecution
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product

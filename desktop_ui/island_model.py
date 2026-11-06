@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
 
-from assistant.recording_state import RecordingState
+from contracts.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
 from desktop_ui.island_moment import Notice

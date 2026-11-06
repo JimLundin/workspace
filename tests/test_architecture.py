@@ -18,6 +18,32 @@ def write_tree(root: Path, files: dict[str, str]) -> None:
     (root / "pyproject.toml").write_text("[tool.workspace.architecture]\n", encoding="utf-8")
 
 
+def test_contracts_reach_no_effect_owner_service_or_qt(tmp_path: Path) -> None:
+    # Defect: a shared contract imports an assistant service, a native binding or
+    # Qt, so the desktop (or the assistant) loads the other side's effects with it.
+    write_tree(
+        tmp_path,
+        {
+            "contracts/__init__.py": "",
+            "contracts/values.py": (
+                "import json\nfrom pydantic import TypeAdapter\nfrom contracts import other\nfrom winapi.shapes import Rect\nimport protocol\n"
+            ),
+            "contracts/other.py": "",
+            "contracts/leaky.py": "from assistant.store import Store\nlazy import PySide6\nfrom winapi.windows import focus\n",
+            "assistant/__init__.py": "",
+            "assistant/store.py": "class Store: pass\n",
+            "winapi/__init__.py": "",
+            "winapi/shapes.py": "class Rect: pass\n",
+            "winapi/windows.py": "def focus(): pass\n",
+            "protocol.py": "",
+        },
+    )
+    found = [failure for failure in review(tmp_path).failures if failure.rule == "contract-isolation"]
+    assert {failure.module for failure in found} == {"contracts.leaky"}
+    reached = {failure.detail.split(" → ")[-1] for failure in found}
+    assert {"assistant.store", "PySide6", "winapi.windows"} <= reached
+
+
 def exception(root: Path, *, reason: str = "Read the optional native error code.") -> None:
     with (root / "pyproject.toml").open("a", encoding="utf-8") as output:
         output.write(

@@ -6,8 +6,8 @@ from typing import Literal
 
 from assistant.communications import SourceDate, SourceDateStatus
 from assistant.feed_contracts import SCREENING, ScreenedSource, Screening
-from assistant.feed_origin import App, Origin
 from assistant.feed_sources import Candidate, Excerpt, SourceKind
+from contracts.feed_origin import App, Origin
 from tests.fake_endpoint import Reply
 lazy from tests.test_agent import says
 

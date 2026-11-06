@@ -7,8 +7,8 @@ from unittest import SkipTest, TestCase
 
 from assistant.browser_documents import Download, download
 from assistant.browser_values import BrowserError
-from automation.json_value import Json
-from automation.work_documents import LocalDocument
+from contracts.json_value import Json
+from contracts.work_documents import LocalDocument
 
 if sys.platform != "win32":
     raise SkipTest("Windows document paths")

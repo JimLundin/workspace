@@ -9,8 +9,8 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
 from itertools import chain
 
-from assistant.work_canvas_context import CanvasScene, ContextGroup, descendants
-from assistant.work_canvas_model import CanvasViewState, Placement
+from contracts.work_canvas_context import CanvasScene, ContextGroup, descendants
+from contracts.work_canvas_model import CanvasViewState, Placement
 
 
 @dataclass(frozen=True, slots=True)

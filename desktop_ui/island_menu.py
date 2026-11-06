@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
 
-from assistant.meeting_detection import AutomaticStatus
+from contracts.meeting_detection import AutomaticStatus
 from desktop_ui.keymap import shortcut, shortcut_hint
 from protocol import Tool
 

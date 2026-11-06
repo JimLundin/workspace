@@ -4,12 +4,10 @@ from dataclasses import dataclass, replace
 from itertools import islice
 from typing import Protocol, assert_never
 
-from assistant.work_commands import AnswerTask, ControlTask, Submit, WorkCommand
-from assistant.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapshot
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore
 from automation.store import TaskStore
-from automation.task import (
+from contracts.task import (
     Control,
     Profile,
     Question,
@@ -18,6 +16,8 @@ from automation.task import (
     Waiting,
     text,
 )
+from contracts.work_commands import AnswerTask, ControlTask, Submit, WorkCommand
+from contracts.work_snapshot import ReplyProblem, SubmissionProblem, WorkSnapshot
 
 
 class Worker(Protocol):

@@ -29,7 +29,7 @@ from assistant.communications_browser import ActivityObservation, ChatUnavailabl
 from assistant.communications_service import Communications
 from assistant.communications_state import COMMUNICATIONS_STATE
 from assistant.state_store import SavedState
-from automation.json_value import Json
+from contracts.json_value import Json
 from tests.teams_fixture import Browser
 
 _WIRE = TypeAdapter(dict[str, Json])

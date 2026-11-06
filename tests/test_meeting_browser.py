@@ -6,7 +6,7 @@ from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest, Evaluate
 from assistant.browser_values import BrowserStatus, PageList, PageRow
 from assistant.meeting_browser import OBSERVE, STATUS, TeamsCalls
-from assistant.meeting_detection import Call, Calls, ObservationFailure
+from contracts.meeting_detection import Call, Calls, ObservationFailure
 
 
 class PublishedPages:

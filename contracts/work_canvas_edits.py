@@ -9,9 +9,10 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import assert_never
 
-from assistant.work_canvas_commands import PutRelation, RemoveRelation, UpdateCanvas, edited, revision
-from assistant.work_canvas_context import CanvasScope, context_path, project
-from assistant.work_canvas_model import (
+from contracts.personal_work import Catalog
+from contracts.work_canvas_commands import PutRelation, RemoveRelation, UpdateCanvas, edited, revision
+from contracts.work_canvas_context import CanvasScope, context_path, project
+from contracts.work_canvas_model import (
     CanvasCollection,
     CanvasDocument,
     CanvasNote,
@@ -25,7 +26,6 @@ from assistant.work_canvas_model import (
     toggle_expansion,
     view_state,
 )
-from automation.personal_work import Catalog
 
 
 @dataclass(frozen=True, slots=True)

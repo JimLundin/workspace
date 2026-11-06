@@ -16,7 +16,7 @@ from typing import Protocol
 
 from automation.execution import Log
 from automation.store import MAX_PAGE, TaskStore
-from automation.task import Blocked, Claim, Outcome, RunRef, Task, Waiting, identifier, integer, owns
+from contracts.task import Blocked, Claim, Outcome, RunRef, Task, Waiting, identifier, integer, owns
 
 
 class Idle(Enum):

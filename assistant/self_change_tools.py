@@ -29,9 +29,9 @@ from assistant.agent_tools import (
 from assistant.publishing import DEFAULT_REMOTE, Installed, Landing, PublishError, land_installed, publish_source
 from assistant.workspace import CheckCompleted, CheckInterrupted, CheckResult, SourceError, Workspace
 from automation.actions import Change, Classification, Observation, Operation, target
-from automation.json_value import Json
 from automation.store import TaskStore
-from automation.task import ActionUncertain, ActionVerified, Blocked, Claim, Until, Waiting
+from contracts.json_value import Json
+from contracts.task import ActionUncertain, ActionVerified, Blocked, Claim, Until, Waiting
 from keeper import CHECK_S, START_S, Versions, copy_source, source_digest
 from keeper_control import InstallRefused, InstallStarted, install_result
 

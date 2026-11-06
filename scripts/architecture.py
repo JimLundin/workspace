@@ -10,6 +10,7 @@ policy reports leave this owner.
 
 import ast
 import os
+import sys
 import tomllib
 from collections import deque
 from collections.abc import Iterable, Iterator, Mapping
@@ -178,6 +179,27 @@ def ui_isolation(graph: Mapping[str, frozenset[str]], entries: Iterable[str]) ->
         for route in _routes(graph, entry):
             if any(_within(route[-1], package) for package in ("desktop_ui", "PySide6", "PyQt6")):
                 yield Finding("ui-isolation", entry, "", "", 0, " → ".join(route))
+
+
+CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm"})
+"""Beyond the standard library, pydantic and each other, all a contract may import:
+the wire protocol and the two plain-Python winapi value modules."""
+
+
+def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:
+    """Contracts are values both sides import, so none may reach an effect owner, Qt or a service."""
+    for module in sorted(name for name in imported_by if _within(name, "contracts")):
+        for target in sorted(imported_by[module]):
+            top = target.split(".")[0]
+            # The graph also names imported attributes (`protocol.Tool`), so allowed modules match as prefixes.
+            if (
+                top in sys.stdlib_module_names
+                or top in ("pydantic", "contracts")
+                or target == "winapi"
+                or any(_within(target, allowed) for allowed in CONTRACT_IMPORTS - {"winapi"})
+            ):
+                continue
+            yield Finding("contract-isolation", module, "", "", 0, f"{module} → {target}")
 
 
 def presentation_isolation(graph: Mapping[str, frozenset[str]], owners: Iterable[str]) -> Iterator[Finding]:
@@ -408,6 +430,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
     findings.extend(ui_isolation(imported_by, configuration.headless))
+    findings.extend(contract_isolation(imported_by))
     findings.extend(presentation_isolation(graph, configuration.ui_private))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]

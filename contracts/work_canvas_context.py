@@ -10,8 +10,9 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain, groupby
 
-from assistant.canvas_activity import CanvasAction, CanvasActivity, CanvasQuestion, CanvasUpdate
-from assistant.work_canvas_model import (
+from contracts.canvas_activity import CanvasAction, CanvasActivity, CanvasQuestion, CanvasUpdate
+from contracts.personal_work import Catalog, WorkThread, source_context
+from contracts.work_canvas_model import (
     CanvasCollection,
     CanvasContent,
     CanvasDocument,
@@ -22,7 +23,6 @@ from assistant.work_canvas_model import (
     title,
     view_state,
 )
-from automation.personal_work import Catalog, WorkThread, source_context
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,11 +9,12 @@ from assistant.agent_execution import AgentExecution
 from assistant.llm import Settings
 from assistant.task_profiles import GeneralEffects, Profiles, unseen
 from assistant.workspace import Workspace
-from automation.context import ContextStore, Preference
+from automation.context import ContextStore
 from automation.execution import Log
 from automation.self_review import ReviewingRunner, TaskRecord, describe_history, describe_history_page
 from automation.store import TaskStore
-from automation.task import (
+from contracts.context import Preference
+from contracts.task import (
     Action,
     ActionOutcome,
     ActionPending,

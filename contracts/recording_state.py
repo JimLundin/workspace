@@ -6,7 +6,7 @@ from enum import Enum, auto
 from math import isfinite
 from typing import Literal, assert_never
 
-from automation.capture import AudioSource
+from contracts.capture import AudioSource
 from winapi.pcm import RATE, Dropout, LateAudio, Problem, Skipped, Stall
 
 type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]

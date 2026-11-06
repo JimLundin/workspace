@@ -6,7 +6,9 @@ from dataclasses import replace
 from pathlib import Path
 
 from assistant.automatic_meetings import AutomaticAttention, AutomaticMeetings
-from assistant.meeting_detection import (
+from assistant.state_store import SavedState
+from contracts.capture import AudioSource
+from contracts.meeting_detection import (
     PREFERENCE,
     AutomaticPreference,
     AutomaticStatus,
@@ -15,9 +17,7 @@ from assistant.meeting_detection import (
     Observation,
     ObservationFailure,
 )
-from assistant.recording_state import RecordingState
-from assistant.state_store import SavedState
-from automation.capture import AudioSource
+from contracts.recording_state import RecordingState
 
 CALL = Calls((Call("private-call", "Workspace private meeting"),))
 

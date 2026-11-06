@@ -20,9 +20,10 @@ from assistant.feed_triage_service import classify
 from assistant.feed_work import FeedWork
 from assistant.llm import Settings, settings_from
 from automation.activity import ContextSnapshot
-from automation.context import ContextStore, ProjectNote
-from automation.json_value import Json
+from automation.context import ContextStore
 from automation.store import TaskStore
+from contracts.context import ProjectNote
+from contracts.json_value import Json
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.feed_fixture import TriageFixture
 from tests.feed_source_fixture import captured, screening_reply

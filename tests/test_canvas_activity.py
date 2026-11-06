@@ -5,10 +5,12 @@ from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
-import assistant.agent_session
-import automation.task
-from assistant.agent_session import ChatMessage, Session
-from assistant.canvas_activity import (
+import contracts.agent_session
+import contracts.task
+from assistant.work_canvas import WorkCanvas
+from automation.actions import Change, Operation
+from contracts.agent_session import ChatMessage, Session
+from contracts.canvas_activity import (
     ActionState,
     Attention,
     CanvasAction,
@@ -19,15 +21,13 @@ from assistant.canvas_activity import (
     TaskRequest,
     important_changes,
 )
-from assistant.feed_origin import FeedRequest, Initiation
-from assistant.work_canvas import WorkCanvas
-from assistant.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
-from assistant.work_snapshot import ReplyProblem, WorkSnapshot
-from automation.actions import Change, Operation
-from automation.json_value import Json
-from automation.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
-from automation.presentation import Answer, StreamState
-from automation.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, TextAnswer, Waiting
+from contracts.feed_origin import FeedRequest, Initiation
+from contracts.json_value import Json
+from contracts.personal_work import Catalog, SourceKind, WorkDefinition, WorkState, WorkThread
+from contracts.presentation import Answer, StreamState
+from contracts.task import ActionReturned, ActionSpec, ActionUncertain, ActionVerified, Completed, NoVerification, RequestSource, TextAnswer, Waiting
+from contracts.work_canvas_model import DOCUMENT, CanvasCollection, CanvasDocument, CanvasNote, Placement, observe_activity
+from contracts.work_snapshot import ReplyProblem, WorkSnapshot
 from desktop_ui.agent_progress import phases
 from desktop_ui.request_panel import Request, request
 from tests.agent_requests import asked
@@ -56,7 +56,7 @@ def observed_session(canvas: WorkCanvas, session: Session) -> CanvasDocument:
 def test_saved_questions_keep_their_route_state_and_thread_after_session_mirroring(tmp_path: Path) -> None:
     # Defect: storage flattens a clarification into an update, a conversation
     # mirror replaces its durable task route, or a stale mirror erases context.
-    task = work_task(Waiting(automation.task.Question("request-1", "Which supplier?", "Choose a deployment supplier.")))
+    task = work_task(Waiting(contracts.task.Question("request-1", "Which supplier?", "Choose a deployment supplier.")))
     store = local_canvas(tmp_path)
     seeded(store, CanvasDocument(runs=(CanvasRun(task.id, "work:atlas"),)))
     store.observe_work(WorkSnapshot(tasks=(task,)))
@@ -71,7 +71,7 @@ def test_saved_questions_keep_their_route_state_and_thread_after_session_mirrori
     assert isinstance(mirrored, CanvasQuestion) and mirrored.request == question.request
     accepted = replace(question, reply=TextAnswer("Use Contoso"))
     seeded(store, observe_activity(document, (accepted,)))
-    cancelled = replace(session, messages=(replace(mirror, reply=assistant.agent_session.Cancelled()),))
+    cancelled = replace(session, messages=(replace(mirror, reply=contracts.agent_session.Cancelled()),))
     document = observed_session(store, cancelled)
     assert document.activity == (accepted,)
     # A failure receipt reopens only the exact live request, retaining the draft
@@ -94,7 +94,7 @@ def test_new_session_closes_old_questions_without_closing_live_durable_questions
     # a task question merely because it is no longer in the visible conversation.
     store = local_canvas(tmp_path)
     store.observe_session(Session(identity="old", messages=(asked("old-request", "Which workbook?", "", 10),)))
-    task = work_task(Waiting(automation.task.Question("task-request", "Which supplier?", "")))
+    task = work_task(Waiting(contracts.task.Question("task-request", "Which supplier?", "")))
     store.observe_work(WorkSnapshot(tasks=(task,)))
     document = observed_session(store, Session(identity="new"))
     old, durable = document.activity

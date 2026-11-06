@@ -7,13 +7,13 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import TestCase
 
-from assistant import agent_session
 from assistant.communications import SourceDate
-from assistant.feed_origin import FeedRequest
 from assistant.feed_sources import Excerpt
 from assistant.notification_agent import NotificationAgent
-from assistant.work_snapshot import WorkSnapshot
-from automation.task import Blocked, Completed, FeedHandoff, Question, RequestKind, RequestSource, TaskStatus, TextAnswer, Waiting
+from contracts import agent_session
+from contracts.feed_origin import FeedRequest
+from contracts.task import Blocked, Completed, FeedHandoff, Question, RequestKind, RequestSource, TaskStatus, TextAnswer, Waiting
+from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.island_agent import notices
 from tests.feed_source_fixture import captured
 from tests.test_external_input import has_pending_input

@@ -51,24 +51,40 @@ removes the hook and reinstalls it. Measure latency with
 | --- | --- |
 | `app.py`, `desktop.py`, `machine.py` | Composition: the tray, views, microphone, meetings and the `Desktop` and `Machine` adapters |
 | `llm.py` | `Settings` from the environment, the SDK clients, transcription and one-shot questions |
-| `features.py`, `hotkeys.py`, `control_policy.py` | What each key and tray menu entry does |
+| `features.py`, `control_policy.py` | What each key and tray menu entry does |
 | `sdk.py`, `agent.py`, `agent_execution.py`, `task_profiles.py` | The Agents SDK boundary, the agent loop, and each task profile's tools and context |
 | `agent_tools.py`, `*_tools.py` | Tool families: desktop, browser, business (Teams, Outlook, Kanban), canvas, meetings, tasks, self-change, self-review |
 | `browser*.py`, `web_apps.py` | The agent's own Edge over CDP, and typed web-app operations |
 | `feed_*.py`, `notification_*.py`, `communications*.py` | Teams and Windows notification sources, screening and triage |
 | `personal_work_*.py` | Work threads collected from Outlook, Teams and Kanban |
-| `work_canvas*.py`, `canvas_*.py`, `attention.py` | The canvas document (`canvas.sqlite3`), its edits and what needs attention |
+| `work_canvas.py`, `canvas_*.py` | The canvas document's owner (`canvas.sqlite3`) |
 | `meetings.py`, `meeting_*.py`, `automatic_meetings.py` | Meeting recording, its journal and transcript, and Teams auto-record |
 | `workspace.py`, `publishing.py` | The agent's source copy, and landing or publishing its changes with Git |
 
 ## `automation/`
 
-`task.py` holds the task, run, checkpoint and action values. `store.py` and
-`journal.py` own `work.sqlite3`. `controller.py`, `actions.py` and
+`store.py` and `journal.py` own `work.sqlite3`; `context.py` stores and
+selects saved context. `controller.py`, `actions.py` and
 `execution.py` run one task and record each consequential action before it
 happens. `worker.py` runs work on the assistant's threads and holds the work
 folder's lease. `self_review.py` decides when the agent reviews its own runs.
 See [the durable-work decision](adr/0001-durable-work.md).
+
+## `contracts/`
+
+The values the desktop and the assistant share, so either side imports them
+without the other's effects. Contracts import only the standard library,
+pydantic, `protocol`, `winapi.shapes`, `winapi.pcm` and each other; the
+architecture review's `contract-isolation` rule enforces it.
+
+| Modules | Role |
+| --- | --- |
+| `task.py`, `presentation.py`, `json_value.py`, `action_text.py` | The task, run, checkpoint and action values, and how they read |
+| `personal_work.py`, `work_documents.py`, `context.py`, `work_commands.py`, `work_snapshot.py` | Work threads, their documents, saved context, commands and the published work snapshot |
+| `work_canvas_model.py`, `work_canvas_context.py`, `work_canvas_commands.py`, `work_canvas_edits.py`, `work_canvas_contracts.py`, `canvas_activity.py`, `canvas_session.py`, `attention.py` | The canvas document, its projection, edits and what needs attention |
+| `agent_session.py`, `card_actions.py`, `feed_origin.py` | The agent session's snapshots and the actions its cards offer |
+| `recording_state.py`, `meeting_detection.py`, `meeting_presentation.py`, `meetings.py`, `capture.py` | Meeting recording values and how they read |
+| `geometry.py`, `hotkeys.py` | Rectangle arithmetic, and every tool key's behaviour |
 
 ## `desktop_ui/`
 

@@ -18,7 +18,6 @@ from typing import Final, Protocol
 
 from pydantic import ConfigDict, TypeAdapter
 
-from assistant import action_text
 from assistant.agent_history import History
 from assistant.agent_tools import Args, ArgumentError, Display, Machine, Output, Tool, Verify
 from assistant.llm import Settings, ToolCall
@@ -27,10 +26,11 @@ from assistant.workspace import SourceError
 from automation.actions import ActionError, Change, Observation, Operation, UncertainEffectError
 from automation.activity import ContextSnapshot
 from automation.execution import Log, Proof, Report, ReportStatus, Targets, WorkExecution
-from automation.json_value import Json
-from automation.presentation import Failed, Succeeded, ToolActivity, ToolStatus
-from automation.task import FileDigest, NoVerification
 from config import AGENT_MAX_STEPS
+from contracts import action_text
+from contracts.json_value import Json
+from contracts.presentation import Failed, Succeeded, ToolActivity, ToolStatus
+from contracts.task import FileDigest, NoVerification
 lazy from assistant import sdk
 
 KEPT_SCREENSHOTS: Final = 2

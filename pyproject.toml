@@ -238,7 +238,7 @@ ban-relative-imports = "all"
 py-modules = ["components", "config", "diagnostics", "keeper", "keeper_control", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
 
 [tool.setuptools.packages.find]
-include = ["assistant*", "desktop_ui*", "automation*", "gateway*", "miryoku*", "winapi*"]
+include = ["assistant*", "contracts*", "desktop_ui*", "automation*", "gateway*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
 assistant = ["*.ps1", "*.yaml"]
@@ -248,9 +248,9 @@ desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 headless = [
     "assistant.work_agent",
     "assistant.work_canvas",
-    "assistant.agent_session",
-    "assistant.attention",
-    "assistant.work_canvas_edits",
+    "contracts.agent_session",
+    "contracts.attention",
+    "contracts.work_canvas_edits",
 ]
 ui_private = ["assistant.work_agent", "assistant.work_canvas"]
 

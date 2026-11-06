@@ -16,9 +16,9 @@ from assistant.llm import Settings
 from assistant.task_profiles import General
 from automation.actions import ActionCancelledError, Actions, Change, LostRunError, Operation, Resources, UncertainEffectError
 from automation.execution import Reconciliation, Reported, WorkExecution
-from automation.json_value import Json
 from automation.store import TaskStore
-from automation.task import (
+from contracts.json_value import Json
+from contracts.task import (
     Action,
     ActionNotApplied,
     ActionPending,

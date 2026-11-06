@@ -18,7 +18,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from assistant.browser_documents import Download, Downloaded
 from assistant.browser_requests import BrowserRequest, Evaluate
 from assistant.browser_values import BrowserError
-from automation.work_documents import LocalDocument
+from contracts.work_documents import LocalDocument
 lazy from assistant.browser import BrowserResult
 
 KANBAN_ORIGIN = "https://dev-team-kanban.fcg.palantirfoundry.com"

@@ -10,9 +10,9 @@ from typing import Annotated, Literal, assert_never
 
 from pydantic import Field
 
-import automation.task
-from assistant.feed_origin import App, Origin
-from automation.personal_work import Catalog, Identity, Title
+import contracts.task
+from contracts.feed_origin import App, Origin
+from contracts.personal_work import Catalog, Identity, Title
 
 type Body = Annotated[str, Field(max_length=32000)]
 type Timestamp = Annotated[float, Field(ge=0, allow_inf_nan=False)]
@@ -47,7 +47,7 @@ class Attention(Enum):
     CLOSED = "closed"
 
 
-type CanvasReply = Attention | automation.task.TextAnswer
+type CanvasReply = Attention | contracts.task.TextAnswer
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +62,7 @@ class CanvasInstruction:
     kind: Literal["instruction"] = "instruction"
 
     def __post_init__(self) -> None:
-        automation.task.text(self.text, "canvas instruction", maximum=32000)
+        contracts.task.text(self.text, "canvas instruction", maximum=32000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,12 +148,12 @@ class CanvasQuestion:
 type CanvasActivity = Annotated[CanvasUpdate | CanvasQuestion | CanvasAction, Field(discriminator="kind")]
 
 
-def task_activity(tasks: tuple[automation.task.Task, ...], runs: tuple[CanvasRun, ...]) -> tuple[CanvasActivity, ...]:
+def task_activity(tasks: tuple[contracts.task.Task, ...], runs: tuple[CanvasRun, ...]) -> tuple[CanvasActivity, ...]:
     result: tuple[CanvasActivity, ...] = ()
     for task in tasks:
         work_ids = tuple(run.work_id for run in runs if run.task_id == task.id and run.work_id != ROOT_CONTEXT)
         match task.state:
-            case automation.task.Waiting(automation.task.Question(id=identity, text=title, detail=detail)):
+            case contracts.task.Waiting(contracts.task.Question(id=identity, text=title, detail=detail)):
                 result = (
                     *result,
                     CanvasQuestion(
@@ -166,7 +166,7 @@ def task_activity(tasks: tuple[automation.task.Task, ...], runs: tuple[CanvasRun
                         work_ids,
                     ),
                 )
-            case automation.task.Completed(result=text) if work_ids and any(
+            case contracts.task.Completed(result=text) if work_ids and any(
                 run.task_id == task.id and isinstance(run.intent, CanvasResearch) for run in runs
             ):
                 result = (*result, CanvasUpdate("result:" + task.id, task.title[:240], text[:32000], task.updated_at, work_ids))
@@ -176,7 +176,7 @@ def task_activity(tasks: tuple[automation.task.Task, ...], runs: tuple[CanvasRun
 
 
 def settle_tasks(
-    activity: tuple[CanvasActivity, ...], tasks: tuple[automation.task.Task, ...], rejected: frozenset[TaskRequest]
+    activity: tuple[CanvasActivity, ...], tasks: tuple[contracts.task.Task, ...], rejected: frozenset[TaskRequest]
 ) -> tuple[CanvasActivity, ...]:
     live = frozenset(item.request for item in task_activity(tasks, ()) if isinstance(item, CanvasQuestion))
 
@@ -202,7 +202,7 @@ def merge_activity(previous: CanvasActivity, current: CanvasActivity) -> CanvasA
             request = old.request if isinstance(old.request, TaskRequest) else new.request
             reply: CanvasReply
             match old.request, new.request, old.reply, new.reply:
-                case _, _, automation.task.TextAnswer(), _:
+                case _, _, contracts.task.TextAnswer(), _:
                     reply = old.reply
                 case TaskRequest(), SessionRequest(), _, Attention.CLOSED:
                     reply = old.reply

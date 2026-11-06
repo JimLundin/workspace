@@ -11,8 +11,8 @@ from assistant.browser_requests import BrowserRequest
 from assistant.browser_values import BrowserError, BrowserStatus, PageList, PageRow
 from assistant.personal_work_sources import Observations, Tab, observed_source
 from assistant.web_apps import Located, WebAppOperation
-from automation.json_value import Json
-from automation.personal_work import SourceKind, WorkSource
+from contracts.json_value import Json
+from contracts.personal_work import SourceKind, WorkSource
 
 WIRE = TypeAdapter(dict[str, Json])
 STATUS = TypeAdapter(BrowserStatus)

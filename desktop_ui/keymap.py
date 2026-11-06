@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final
 
-from assistant.hotkeys import Route, route
+from contracts.hotkeys import Route, route
 from miryoku.firmware import CHORDS
 from miryoku.layout import (
     BASE,

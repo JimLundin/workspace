@@ -3,9 +3,9 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from assistant.work_canvas_context import CanvasScene, ContextGroup, descendants
-from assistant.work_canvas_model import CanvasRelation
-from automation.personal_work import Catalog
+from contracts.personal_work import Catalog
+from contracts.work_canvas_context import CanvasScene, ContextGroup, descendants
+from contracts.work_canvas_model import CanvasRelation
 
 
 @dataclass(frozen=True, slots=True)

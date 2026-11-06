@@ -11,8 +11,9 @@ from typing import Annotated, Literal, assert_never
 
 from pydantic import Field, TypeAdapter
 
-from assistant.work_canvas_context import topology
-from assistant.work_canvas_model import (
+from contracts.personal_work import Catalog, Identity, Title
+from contracts.work_canvas_context import topology
+from contracts.work_canvas_model import (
     DOCUMENT,
     CanvasCollection,
     CanvasDocument,
@@ -27,7 +28,6 @@ from assistant.work_canvas_model import (
     toggle_expansion,
     view_state,
 )
-from automation.personal_work import Catalog, Identity, Title
 
 
 @dataclass(frozen=True, slots=True)

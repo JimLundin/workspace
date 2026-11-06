@@ -14,49 +14,8 @@ from uuid import uuid4
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasAction, CanvasInstruction, CanvasQuestion, CanvasRun, CanvasUpdate
-from assistant.work_canvas_commands import PutRelation, RemoveRelation
-from assistant.work_canvas_context import (
-    CanvasInbox,
-    CanvasMode,
-    CanvasScene,
-    CanvasScope,
-    ContextGroup,
-    container_title,
-    containers,
-    context_path,
-    descendants,
-    project,
-    scene_contents,
-    topology,
-    visible_groups,
-)
-from assistant.work_canvas_contracts import CanvasEdits, Investigating, NotQueued, Queued, ResumeTask
-from assistant.work_canvas_edits import (
-    AddGroup,
-    ArrangeView,
-    Change,
-    NestBubble,
-    PlaceBubbles,
-    PutInside,
-    ReleasePositions,
-    RenameGroup,
-    Reveal,
-    SaveNote,
-    SetExpansion,
-    UserEdit,
-)
-from assistant.work_canvas_model import (
-    CanvasCollection,
-    CanvasContent,
-    CanvasDocument,
-    CanvasNote,
-    CanvasRelation,
-    Placement,
-    view_state,
-)
-from assistant.work_commands import ControlTask
-from automation.personal_work import (
+from contracts.canvas_activity import ROOT_CONTEXT, Attention, CanvasAction, CanvasInstruction, CanvasQuestion, CanvasRun, CanvasUpdate
+from contracts.personal_work import (
     AddDocument,
     AddWebPage,
     Association,
@@ -72,8 +31,49 @@ from automation.personal_work import (
     WorkThread,
     source_id,
 )
-from automation.task import Control
-from automation.work_documents import LocalDocument, WebDocument, document_identity
+from contracts.task import Control
+from contracts.work_canvas_commands import PutRelation, RemoveRelation
+from contracts.work_canvas_context import (
+    CanvasInbox,
+    CanvasMode,
+    CanvasScene,
+    CanvasScope,
+    ContextGroup,
+    container_title,
+    containers,
+    context_path,
+    descendants,
+    project,
+    scene_contents,
+    topology,
+    visible_groups,
+)
+from contracts.work_canvas_contracts import CanvasEdits, Investigating, NotQueued, Queued, ResumeTask
+from contracts.work_canvas_edits import (
+    AddGroup,
+    ArrangeView,
+    Change,
+    NestBubble,
+    PlaceBubbles,
+    PutInside,
+    ReleasePositions,
+    RenameGroup,
+    Reveal,
+    SaveNote,
+    SetExpansion,
+    UserEdit,
+)
+from contracts.work_canvas_model import (
+    CanvasCollection,
+    CanvasContent,
+    CanvasDocument,
+    CanvasNote,
+    CanvasRelation,
+    Placement,
+    view_state,
+)
+from contracts.work_commands import ControlTask
+from contracts.work_documents import LocalDocument, WebDocument, document_identity
 from desktop_ui import ui_spec
 from desktop_ui.canvas_toolbar import (
     Act,

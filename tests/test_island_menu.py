@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from assistant.meeting_detection import AutomaticStatus
+from contracts.meeting_detection import AutomaticStatus
 from desktop_ui.island_layout import tiles
 from desktop_ui.island_menu import (
     COLUMNS,

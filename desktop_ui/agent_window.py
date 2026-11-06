@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Protocol
 
-from assistant.agent_session import (
+from contracts.agent_session import (
     AgentRequest,
     Begin,
     Cancelled,
@@ -29,12 +29,12 @@ from assistant.agent_session import (
     StopRequested,
     transition,
 )
-from assistant.attention import AttentionSnapshot
-from assistant.canvas_activity import CanvasRequest
-from assistant.feed_origin import FeedRequest
-from assistant.recording_state import RecordingAction, RecordingState
-from automation.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
-from automation.task import TextAnswer
+from contracts.attention import AttentionSnapshot
+from contracts.canvas_activity import CanvasRequest
+from contracts.feed_origin import FeedRequest
+from contracts.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
+from contracts.recording_state import RecordingAction, RecordingState
+from contracts.task import TextAnswer
 from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
 
 

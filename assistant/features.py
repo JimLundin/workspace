@@ -13,9 +13,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal, Protocol, assert_never
 
-from assistant.hotkeys import Route, needs_settings, route
 from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, transcribe, wav
 from assistant.text import typed_text
+from contracts.hotkeys import Route, needs_settings, route
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
 from desktop_ui.navigation import AppKey, Order, Source, keyed

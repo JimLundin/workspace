@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 
 from assistant.communications import SourceDateStatus
 from assistant.feed_sources import Candidate
-from automation.task import FeedHandoff, Profile
+from contracts.task import FeedHandoff, Profile
 
 _NOTIFICATION = TypeAdapter(Candidate)
 _QUEUE_WAIT = "Notification work awaits queue access; retrying automatically."

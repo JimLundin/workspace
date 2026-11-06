@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from assistant.agent_session import (
+from contracts.agent_session import (
     AgentRequest,
     Begin,
     Cancelled,
@@ -15,9 +15,9 @@ from assistant.agent_session import (
     StopRequested,
     transition,
 )
-from assistant.recording_state import RecordingState
-from automation.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity, ToolStatus
-from automation.task import TextAnswer
+from contracts.presentation import Answer, Done, Failed, Finished, Progress, ReasoningSummary, Said, StreamState, Succeeded, ToolActivity, ToolStatus
+from contracts.recording_state import RecordingState
+from contracts.task import TextAnswer
 from tests.agent_requests import asked, body
 
 

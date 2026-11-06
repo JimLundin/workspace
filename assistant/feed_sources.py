@@ -31,8 +31,8 @@ from assistant.communications import (
     update_fingerprint,
     update_order,
 )
-from assistant.feed_origin import App, Origin, application
 from assistant.notification_sources import Notices
+from contracts.feed_origin import App, Origin, application
 
 _CHAT_KEY = TypeAdapter(tuple[str, str])
 _TEAMS = Origin(App.TEAMS, App.TEAMS.value)

@@ -25,7 +25,7 @@ from assistant.communications import (
 from assistant.communications_browser import TeamsWeb, activity_observation
 from assistant.feed_sources import PendingFeed, needs_attention
 from assistant.web_apps import ActivityItem, ActivityPage
-from automation.json_value import Json
+from contracts.json_value import Json
 from tests.teams_fixture import Browser
 
 

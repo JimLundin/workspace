@@ -29,7 +29,7 @@ from assistant.web_apps import (
     TeamsQuery,
     WebAppOperation,
 )
-from automation.personal_work import SourceKind, WorkSource, source_id, source_revision
+from contracts.personal_work import SourceKind, WorkSource, source_id, source_revision
 
 
 class BrowserPort(Protocol):

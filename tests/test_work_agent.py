@@ -5,19 +5,17 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from assistant.agent_session import ChatMessage
-from assistant.canvas_activity import CanvasRun, TaskRequest
 from assistant.conversation_output import ConversationOutput
 from assistant.work_agent import WorkAgent
 from assistant.work_canvas import WorkCanvas, run_prompt
-from assistant.work_commands import AnswerTask, ControlTask
-from assistant.work_snapshot import WorkSnapshot
 from automation.activity import Activity, ContextSnapshot
 from automation.context import ContextStore
-from automation.personal_work import Catalog, SourceKind
-from automation.presentation import Answer, Said, StreamState, Succeeded, ToolActivity
 from automation.store import TaskStore
-from automation.task import (
+from contracts.agent_session import ChatMessage
+from contracts.canvas_activity import CanvasRun, TaskRequest
+from contracts.personal_work import Catalog, SourceKind
+from contracts.presentation import Answer, Said, StreamState, Succeeded, ToolActivity
+from contracts.task import (
     Blocked,
     Completed,
     Control,
@@ -31,6 +29,8 @@ from automation.task import (
     TextAnswer,
     Waiting,
 )
+from contracts.work_commands import AnswerTask, ControlTask
+from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.agent_progress import Busy, Settled, Working, phases
 from desktop_ui.island_agent import notices
 from tests.personal_work_fixture import source

@@ -1,6 +1,6 @@
 """The bar's plain reading of agent Markdown."""
 
-from assistant.agent_session import notice_text
+from contracts.agent_session import notice_text
 from desktop_ui.plain_text import Plain, plain
 
 

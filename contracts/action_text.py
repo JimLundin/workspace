@@ -5,7 +5,7 @@ from typing import assert_never
 
 from pydantic import TypeAdapter
 
-from automation.json_value import Json
+from contracts.json_value import Json
 
 _JSON = TypeAdapter(Json)
 

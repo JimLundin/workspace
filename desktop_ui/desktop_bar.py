@@ -24,9 +24,9 @@ from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
 lazy import usage
 lazy import winapi.ambient
-lazy from assistant.meeting_detection import AutomaticStatus
-lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from config import APPS, DARK_WHEN_IDLE_MINUTES
+lazy from contracts.meeting_detection import AutomaticStatus
+lazy from contracts.recording_state import RecordingAction, RecordingState
 lazy from desktop_ui import island_menu, island_moment, ui_spec
 lazy from desktop_ui.agent_progress import Phase, coalesced, hint, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus

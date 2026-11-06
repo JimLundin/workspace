@@ -61,8 +61,8 @@ from assistant.llm import Settings
 from assistant.notification_agent import NotificationAgent
 from assistant.personal_work_service import PersonalWork
 from assistant.work_bridge_contracts import FeedResponse
-from automation.context import ContextRecord
-from automation.task import FeedHandoff, Phase, Profile, Task, phase
+from contracts.context import ContextRecord
+from contracts.task import FeedHandoff, Phase, Profile, Task, phase
 lazy from assistant.feed_research import Research
 
 SCREEN_INSTRUCTIONS = """Quickly triage these notification excerpts against the user's saved preferences and current work.

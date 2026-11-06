@@ -10,8 +10,8 @@ from pydantic import ConfigDict, TypeAdapter
 from assistant.agent_tools import NO_ARGUMENTS, Args, Display, Output, Session, Tool, argument_spec, fixed, typed_run
 from assistant.llm import ToolSpec
 from automation.actions import Change, Evidence, Observation
-from automation.capture import AudioSource
-from automation.task import text
+from contracts.capture import AudioSource
+from contracts.task import text
 
 
 @dataclass(frozen=True, slots=True)

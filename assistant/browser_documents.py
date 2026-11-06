@@ -11,8 +11,8 @@ from typing import Annotated
 from pydantic import Field, TypeAdapter
 
 from assistant.browser_values import BrowserError
-from automation.json_value import Json
-from automation.work_documents import LocalDocument
+from contracts.json_value import Json
+from contracts.work_documents import LocalDocument
 
 
 @dataclass(frozen=True, slots=True)

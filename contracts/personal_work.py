@@ -14,8 +14,8 @@ from urllib.parse import urlsplit
 
 from pydantic import Field, StringConstraints, TypeAdapter
 
-from automation.meetings import Meeting, MeetingConversation
-from automation.work_documents import DocumentReference, WebDocument, checked_url
+from contracts.meetings import Meeting, MeetingConversation
+from contracts.work_documents import DocumentReference, WebDocument, checked_url
 
 type Identity = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 type Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]

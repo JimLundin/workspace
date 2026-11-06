@@ -12,7 +12,7 @@ from enum import Enum, auto
 from functools import lru_cache
 from typing import Final, assert_never
 
-from assistant.feed_origin import App
+from contracts.feed_origin import App
 from desktop_ui.components import typeface
 from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance

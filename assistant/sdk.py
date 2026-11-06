@@ -40,8 +40,8 @@ from assistant.agent import KEPT_SCREENSHOTS
 from assistant.agent_history import History
 from assistant.llm import ToolCall, ToolSpec, async_client
 from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
-from automation.json_value import Json
-from automation.presentation import Answer, LiveMessage, ReasoningSummary, StreamState
+from contracts.json_value import Json
+from contracts.presentation import Answer, LiveMessage, ReasoningSummary, StreamState
 lazy from assistant.agent import Agent
 
 set_tracing_disabled(True)

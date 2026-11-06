@@ -5,12 +5,12 @@ from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import assert_never
 
-from assistant.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Message, Pending, Snapshot, notice_text, pending
-from assistant.attention import AttentionSnapshot, context_of
-from assistant.canvas_activity import Attention, CanvasRequest
-from assistant.feed_origin import FeedRequest, Initiation
-from automation.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
-from automation.task import Question, TextAnswer
+from contracts.agent_session import AgentRequest, Cancelled, ChatMessage, MeetingMessage, Message, Pending, Snapshot, notice_text, pending
+from contracts.attention import AttentionSnapshot, context_of
+from contracts.canvas_activity import Attention, CanvasRequest
+from contracts.feed_origin import FeedRequest, Initiation
+from contracts.presentation import Answer, Failed, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
+from contracts.task import Question, TextAnswer
 
 
 class Busy(Enum):

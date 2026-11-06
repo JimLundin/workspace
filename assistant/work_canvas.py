@@ -15,9 +15,10 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter
 
-from assistant.agent_session import Snapshot
-from assistant.attention import observed_attention
-from assistant.canvas_activity import (
+from automation import journal
+from contracts.agent_session import Snapshot
+from contracts.attention import observed_attention
+from contracts.canvas_activity import (
     ROOT_CONTEXT,
     Attention,
     CanvasActivity,
@@ -32,8 +33,11 @@ from assistant.canvas_activity import (
     settle_tasks,
     task_activity,
 )
-from assistant.canvas_session import session_activity, settle_session
-from assistant.work_canvas_commands import (
+from contracts.canvas_session import session_activity, settle_session
+from contracts.meetings import TranscriptState
+from contracts.personal_work import Catalog, MeetingSource, Source, SourceOrigin, WorkState, WorkThread, source_revision
+from contracts.task import Blocked, Task, TextAnswer, Waiting, phase
+from contracts.work_canvas_commands import (
     CanvasCommand,
     CanvasRefused,
     CanvasResponse,
@@ -44,9 +48,9 @@ from assistant.work_canvas_commands import (
     revision,
     snapshot,
 )
-from assistant.work_canvas_contracts import Announcement, CanvasPublication, Continuation, Investigating, NotQueued, Queued, ResumeTask
-from assistant.work_canvas_edits import UserEdit, user_edited
-from assistant.work_canvas_model import (
+from contracts.work_canvas_contracts import Announcement, CanvasPublication, Continuation, Investigating, NotQueued, Queued, ResumeTask
+from contracts.work_canvas_edits import UserEdit, user_edited
+from contracts.work_canvas_model import (
     DOCUMENT,
     CanvasDocument,
     CanvasNote,
@@ -55,11 +59,7 @@ from assistant.work_canvas_model import (
     observe_activity,
     result_document,
 )
-from assistant.work_snapshot import WorkSnapshot
-from automation import journal
-from automation.meetings import TranscriptState
-from automation.personal_work import Catalog, MeetingSource, Source, SourceOrigin, WorkState, WorkThread, source_revision
-from automation.task import Blocked, Task, TextAnswer, Waiting, phase
+from contracts.work_snapshot import WorkSnapshot
 
 _EVIDENCE = TypeAdapter(tuple[tuple[str, str], ...])
 _FINISHED = ("completed", "failed", "cancelled")

@@ -17,7 +17,7 @@ from assistant.work_bridge_contracts import BridgeCommand
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.store import TaskStore
-from automation.task import ActionNotApplied, ActionVerified, FeedHandoff, Profile, RequestSource
+from contracts.task import ActionNotApplied, ActionVerified, FeedHandoff, Profile, RequestSource
 from tests.fake_endpoint import fake_endpoint
 from tests.feed_fixture import TriageFixture, feed_bridge
 from tests.feed_source_fixture import captured, screening_reply

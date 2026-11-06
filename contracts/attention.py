@@ -6,9 +6,9 @@ They are presentation policy, not a general graph or scheduling abstraction.
 
 from dataclasses import dataclass
 
-from assistant.canvas_activity import Attention, CanvasQuestion, CanvasRequest, CanvasUpdate
-from assistant.work_canvas_model import CanvasDocument, hidden_ids
-from automation.personal_work import Catalog
+from contracts.canvas_activity import Attention, CanvasQuestion, CanvasRequest, CanvasUpdate
+from contracts.personal_work import Catalog
+from contracts.work_canvas_model import CanvasDocument, hidden_ids
 
 
 @dataclass(frozen=True, slots=True)

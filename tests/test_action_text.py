@@ -1,8 +1,8 @@
 """Action payloads read as labels and lists in both notifications and history."""
 
-from assistant.action_text import readable
-from assistant.agent_session import activity_text
-from automation.presentation import Failed, Succeeded, ToolActivity, ToolStatus
+from contracts.action_text import readable
+from contracts.agent_session import activity_text
+from contracts.presentation import Failed, Succeeded, ToolActivity, ToolStatus
 
 
 def test_action_arguments_and_results_are_readable_through_the_conversation_views() -> None:

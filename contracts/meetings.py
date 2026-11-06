@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, TypeAdapter
 
-from automation.capture import AudioSource
+from contracts.capture import AudioSource
 
 type Timestamp = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 type Seconds = Annotated[float, Field(ge=0, allow_inf_nan=False)]

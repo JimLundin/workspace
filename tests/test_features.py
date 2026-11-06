@@ -7,7 +7,7 @@ lazy from dataclasses import replace
 
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
-from automation.json_value import Json
+from contracts.json_value import Json
 from desktop_ui.icons import State
 from desktop_ui.island_model import Job
 from desktop_ui.navigation import AppKey, Direction, JumpDesktop, Order, Placing, Source, SpatialFocus, Zoom

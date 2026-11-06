@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 lazy from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI, omit
 
-from automation.json_value import Json
+from contracts.json_value import Json
 from gateway.endpoint import read
 from winapi.pcm import RATE
 

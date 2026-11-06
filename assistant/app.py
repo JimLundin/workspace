@@ -28,7 +28,6 @@ lazy from assistant import control_policy
 lazy from assistant.automatic_meetings import AutomaticAttention, AutomaticMeetings
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
-lazy from assistant.canvas_activity import CanvasInstruction, CanvasRun
 lazy from assistant.communications_browser import TeamsWeb
 lazy from assistant.communications_service import Communications
 lazy from assistant.communications_state import COMMUNICATIONS_STATE
@@ -42,7 +41,6 @@ lazy from assistant.feed_work import FeedWork
 lazy from assistant.lifecycle import Timings
 lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.meeting_browser import TeamsCalls
-lazy from assistant.meeting_detection import PREFERENCE, AutomaticStatus
 lazy from assistant.meeting_store import MeetingArchive, MeetingStore
 lazy from assistant.meeting_tools import MeetingCommand, StartMeeting
 lazy from assistant.meetings import Meetings
@@ -52,16 +50,18 @@ lazy from assistant.personal_work_service import PersonalWork
 lazy from assistant.personal_work_sources import BrowserSources
 lazy from assistant.personal_work_store import PersonalStore
 lazy from assistant.personal_work_tools import source_request
-lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
 lazy from assistant.work_canvas import WorkCanvas, run_prompt
-lazy from assistant.work_commands import ControlTask, WorkViewCommand
-lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.context import ContextStore
-lazy from automation.personal_work import (
+lazy from automation.store import TaskStore
+lazy from automation.work_folder import BROWSER_PROFILE, WORK
+lazy from automation.worker import OwnerCalls, Worker, native_runner, warm_sdk
+lazy from contracts.canvas_activity import CanvasInstruction, CanvasRun
+lazy from contracts.meeting_detection import PREFERENCE, AutomaticStatus
+lazy from contracts.personal_work import (
     AddDocument,
     AddWebPage,
     DismissWork,
@@ -75,10 +75,10 @@ lazy from automation.personal_work import (
     UnlinkWork,
     WorkThread,
 )
-lazy from automation.store import TaskStore
-lazy from automation.task import Control, RequestKind
-lazy from automation.work_folder import BROWSER_PROFILE, WORK
-lazy from automation.worker import OwnerCalls, Worker, native_runner, warm_sdk
+lazy from contracts.recording_state import RecordingAction, RecordingState
+lazy from contracts.task import Control, RequestKind
+lazy from contracts.work_commands import ControlTask, WorkViewCommand
+lazy from contracts.work_snapshot import WorkSnapshot
 lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap import indicator_text
 lazy from desktop_ui.navigation import Source, SwitcherPick

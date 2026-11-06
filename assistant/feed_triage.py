@@ -31,8 +31,8 @@ from assistant.feed_contracts import (
     StoredSolution,
 )
 from assistant.feed_history import Decision, restored_history
-from assistant.feed_origin import Origin
 from assistant.feed_sources import Candidate, chat_message
+from contracts.feed_origin import Origin
 
 # Triage owns these assessments; every other disposition is explicit user handling.
 AUTOMATIC: Final = frozenset({Disposition.ACTION, Disposition.QUIET})

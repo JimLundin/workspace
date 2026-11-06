@@ -4,7 +4,7 @@ from assistant.agent_tools import Output
 from assistant.feed_agent_tools import feed_outcome
 from assistant.feed_contracts import FeedRejected, QueuedHandoff
 from assistant.work_bridge_contracts import BRIDGE_RESPONSE
-from automation.task import ActionNotApplied, ActionVerified
+from contracts.task import ActionNotApplied, ActionVerified
 
 
 def test_feed_refusal_records_exact_safe_diagnostic() -> None:

@@ -21,11 +21,11 @@ lazy from assistant import commands, uia
 lazy from assistant.browser import Browser, BrowserResult
 lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.browser_session import Separate
-lazy from assistant.geometry import Shot, fit, half
 lazy from assistant.meeting_tools import MeetingOperation
 lazy from assistant.png import encode_png
 lazy from assistant.uia import UiRequest
 lazy from assistant.web_apps import Located, WebAppOperation
+lazy from contracts.geometry import Shot, fit, half
 lazy from winapi import clipboard, screen, system, windows
 
 

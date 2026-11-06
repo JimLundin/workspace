@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from assistant.recording_state import RecordingState
+from contracts.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components.meaning import Tint, Tone
 from desktop_ui.island_model import (

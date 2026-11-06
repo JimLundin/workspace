@@ -7,11 +7,11 @@ task admission, exact reply validation, cancellation and journal observation.
 from collections.abc import Callable
 from typing import Protocol
 
-from assistant.agent_session import AgentRequest
-from assistant.feed_origin import FeedRequest
-from assistant.recording_state import RecordingState
-from automation.presentation import LiveMessage
-from automation.task import TextAnswer
+from contracts.agent_session import AgentRequest
+from contracts.feed_origin import FeedRequest
+from contracts.presentation import LiveMessage
+from contracts.recording_state import RecordingState
+from contracts.task import TextAnswer
 
 
 class ConversationOutput(Protocol):

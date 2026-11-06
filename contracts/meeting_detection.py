@@ -6,7 +6,7 @@ from typing import Annotated
 
 from pydantic import Field, TypeAdapter
 
-from assistant.recording_state import RecordingState
+from contracts.recording_state import RecordingState
 
 
 class AutomaticStatus(Enum):

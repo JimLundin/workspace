@@ -2,14 +2,14 @@
 
 from dataclasses import replace
 
-from assistant.agent_session import AgentRequest, Begin, CanvasAttention, CanvasNotice, Resolution, Session, transition
-from assistant.attention import observed_attention
-from assistant.canvas_activity import Attention, CanvasQuestion, CanvasUpdate, TaskRequest
-from assistant.feed_origin import FeedRequest, Initiation
-from assistant.work_canvas_model import CanvasCollection, CanvasDocument
-from automation.personal_work import Association, Catalog, WorkDefinition, WorkThread
-from automation.presentation import Answer, Finished, ReasoningSummary, StreamState, Succeeded, ToolActivity
-from automation.task import TextAnswer
+from contracts.agent_session import AgentRequest, Begin, CanvasAttention, CanvasNotice, Resolution, Session, transition
+from contracts.attention import observed_attention
+from contracts.canvas_activity import Attention, CanvasQuestion, CanvasUpdate, TaskRequest
+from contracts.feed_origin import FeedRequest, Initiation
+from contracts.personal_work import Association, Catalog, WorkDefinition, WorkThread
+from contracts.presentation import Answer, Finished, ReasoningSummary, StreamState, Succeeded, ToolActivity
+from contracts.task import TextAnswer
+from contracts.work_canvas_model import CanvasCollection, CanvasDocument
 from desktop_ui.agent_progress import Entry, Response, phases, stable_phases
 from desktop_ui.island_agent import activity, notices
 from desktop_ui.island_model import Agent

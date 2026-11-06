@@ -1,6 +1,6 @@
 """A card link acts only when it is exactly one card action; anything else does nothing."""
 
-from assistant.card_actions import OpenCanvas, encode, parse
+from contracts.card_actions import OpenCanvas, encode, parse
 
 
 def test_partial_or_altered_links_are_refused_instead_of_acting_on_defaults() -> None:

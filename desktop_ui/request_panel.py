@@ -12,9 +12,9 @@ from typing import assert_never
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 
-from assistant.agent_session import AgentRequest, pending
-from assistant.canvas_activity import CanvasRequest
-from assistant.card_actions import OpenCanvas
+from contracts.agent_session import AgentRequest, pending
+from contracts.canvas_activity import CanvasRequest
+from contracts.card_actions import OpenCanvas
 from desktop_ui.agent_progress import Entry, Phase, hint
 from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components.appearance import Look, Shade

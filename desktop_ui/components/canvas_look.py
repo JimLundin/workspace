@@ -14,7 +14,7 @@ from typing import Final, assert_never
 lazy from PySide6 import QtCore, QtGui
 lazy from PySide6.QtCore import Qt
 
-from assistant.feed_origin import Origin
+from contracts.feed_origin import Origin
 from desktop_ui.components import text
 from desktop_ui.components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, Tokens
 from desktop_ui.components.bubble import paint_badge, rim_gradient

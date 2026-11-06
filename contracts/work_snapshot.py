@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass, field
 
-from automation.context import ContextRecord
-from automation.personal_work import PersonalView
-from automation.task import Action, Task, identifier, text
+from contracts.context import ContextRecord
+from contracts.personal_work import PersonalView
+from contracts.task import Action, Task, identifier, text
 
 
 @dataclass(frozen=True, slots=True)

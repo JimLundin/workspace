@@ -6,7 +6,9 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
-from assistant.meeting_detection import (
+from assistant.state_store import SavedState
+from contracts.capture import AudioSource
+from contracts.meeting_detection import (
     AutomaticPreference,
     AutomaticStatus,
     Available,
@@ -27,9 +29,7 @@ from assistant.meeting_detection import (
     monitor_attention,
     suppressed,
 )
-from assistant.recording_state import RecordingState
-from assistant.state_store import SavedState
-from automation.capture import AudioSource
+from contracts.recording_state import RecordingState
 
 
 class CallObserver(Protocol):

@@ -8,11 +8,12 @@ from itertools import islice
 from pathlib import Path
 from unittest import TestCase
 
-from assistant.canvas_activity import Attention, CanvasInstruction, CanvasIntake, CanvasQuestion, CanvasResearch, CanvasRun, CanvasUpdate, TaskRequest
 from assistant.work_canvas import WorkCanvas, run_prompt
-from assistant.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents, visible_groups
-from assistant.work_canvas_contracts import CanvasPublication
-from assistant.work_canvas_model import (
+from contracts.canvas_activity import Attention, CanvasInstruction, CanvasIntake, CanvasQuestion, CanvasResearch, CanvasRun, CanvasUpdate, TaskRequest
+from contracts.personal_work import Association, Catalog, DismissedWork, SourceKind, WorkDefinition, WorkSource, WorkThread, source_id
+from contracts.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents, visible_groups
+from contracts.work_canvas_contracts import CanvasPublication
+from contracts.work_canvas_model import (
     DOCUMENT,
     CanvasCollection,
     CanvasDocument,
@@ -29,7 +30,6 @@ from assistant.work_canvas_model import (
     toggle_expansion,
     view_state,
 )
-from automation.personal_work import Association, Catalog, DismissedWork, SourceKind, WorkDefinition, WorkSource, WorkThread, source_id
 from desktop_ui.work_canvas_connections import CanvasConnection, RelationConnection, connections
 from desktop_ui.work_canvas_layout import Arrangement, Box, Measurements, Size, layout
 from tests.personal_work_fixture import source

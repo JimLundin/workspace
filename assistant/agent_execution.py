@@ -13,7 +13,7 @@ from assistant.task_profiles import Profiles
 from automation.actions import ActionError, Resources
 from automation.execution import Incomplete, Log, WorkExecution
 from automation.store import TaskStore
-from automation.task import Blocked, Claim, Outcome, Waiting
+from contracts.task import Blocked, Claim, Outcome, Waiting
 from diagnostics import failure_info
 from usage import Detail
 

@@ -5,9 +5,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
 
-from assistant.work_commands import AnswerTask, Submit, WorkViewCommand
-from assistant.work_snapshot import WorkSnapshot
-from automation.task import (
+from contracts.task import (
     Question,
     RequestSource,
     State,
@@ -16,6 +14,8 @@ from automation.task import (
     TextAnswer,
     Waiting,
 )
+from contracts.work_commands import AnswerTask, Submit, WorkViewCommand
+from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.work_window import WorkOpening, WorkView, WorkWindow
 
 

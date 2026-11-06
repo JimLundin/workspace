@@ -44,7 +44,7 @@ from assistant.web_apps import (
     TeamsQuery,
     WebApps,
 )
-from automation.work_documents import LocalDocument
+from contracts.work_documents import LocalDocument
 from tests import native_communications_browser
 from tests.browser_fixture import Attachment, fixture
 from tests.native_browser_fixture import request

@@ -14,12 +14,12 @@ from typing import Final, Protocol
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
-from assistant.geometry import Shot
 from assistant.llm import ToolSpec, tool_spec
 from automation.actions import Classification, Operation
 from automation.execution import Proof, Readback, Targets
-from automation.json_value import Json
-from automation.task import ActionNotApplied, ActionReturned, ActionUncertain, ActionVerified, FileDigest, NoVerification
+from contracts.geometry import Shot
+from contracts.json_value import Json
+from contracts.task import ActionNotApplied, ActionReturned, ActionUncertain, ActionVerified, FileDigest, NoVerification
 from winapi.shapes import Rect
 lazy from assistant.browser_requests import BrowserRequest
 lazy from assistant.meeting_tools import MeetingOperation

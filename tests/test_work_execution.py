@@ -19,7 +19,7 @@ from assistant.workspace import CheckInterrupted, Workspace
 from automation.actions import Change, Operation, Resources, target
 from automation.execution import Reported, WorkExecution
 from automation.store import TaskStore
-from automation.task import (
+from contracts.task import (
     ActionReturned,
     ActionUncertain,
     ActionVerified,

@@ -2,7 +2,6 @@
 
 import re
 from dataclasses import dataclass, field
-from math import isfinite
 from pathlib import Path
 from typing import Literal, assert_never
 
@@ -10,11 +9,10 @@ from pydantic import TypeAdapter
 
 from automation import journal
 from automation.store import TaskStore
-from automation.task import integer
+from contracts.context import MAX_CONTENT, MAX_SOURCE, ContextRecord, Preference, ProjectNote, bounded_text, timestamp
+from contracts.task import integer
 
 MAX_RECORDS = 200
-MAX_CONTENT = 4000
-MAX_SOURCE = 1000
 _CONNECTIVES = frozenset(
     (
         "a",
@@ -59,55 +57,6 @@ _CONNECTIVES = frozenset(
         "vi",
     ),
 )
-
-
-def _text(value: object, name: str, limit: int) -> str:
-    if not isinstance(value, str) or not value.strip() or "\0" in value or len(value) > limit:
-        raise ValueError(f"{name} must contain 1-{limit} characters and no null characters.")
-    return value
-
-
-def _time(value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value) or value < 0:
-        raise ValueError("Context timestamps must be finite, nonnegative UTC seconds.")
-    return float(value)
-
-
-@dataclass(frozen=True, slots=True)
-class Preference:
-    id: str
-    name: str
-    value: str
-    source: str
-    updated_at: float
-
-    def __post_init__(self) -> None:
-        _text(self.id, "Context identity", 128)
-        _text(self.name, "Preference name", 160)
-        _text(self.value, "Preference value", MAX_CONTENT)
-        _text(self.source, "Preference source", MAX_SOURCE)
-        _time(self.updated_at)
-
-
-@dataclass(frozen=True, slots=True)
-class ProjectNote:
-    id: str
-    project: str
-    text: str
-    source: str
-    observed_at: float
-    valid_until: float
-
-    def __post_init__(self) -> None:
-        _text(self.id, "Context identity", 128)
-        _text(self.project, "Project name", 160)
-        _text(self.text, "Project note", MAX_CONTENT)
-        _text(self.source, "Project source", MAX_SOURCE)
-        if _time(self.valid_until) <= _time(self.observed_at):
-            raise ValueError("A project note must expire after its observation.")
-
-
-type ContextRecord = Preference | ProjectNote
 
 
 def _updated(record: ContextRecord) -> float:
@@ -201,7 +150,7 @@ def select_context(
     max_chars: int = 12_000,
 ) -> ContextSelection:
     """Choose relevant fresh facts; expose stale sources without their old text."""
-    _time(now)
+    timestamp(now)
     integer(limit, "context record limit", minimum=1, maximum=MAX_RECORDS)
     integer(max_chars, "context text budget", minimum=512, maximum=100_000)
     if len(records) > MAX_RECORDS or len(query) > 20_000:
@@ -252,16 +201,16 @@ def select_context(
 def _decode(row: tuple[object, ...]) -> ContextRecord:
     if len(row) != 7:
         raise ValueError("The saved context record is incomplete.")
-    identity = _text(row[0], "Context identity", 128)
-    label = _text(row[2], "Context label", 160)
-    content = _text(row[3], "Context content", MAX_CONTENT)
-    source = _text(row[4], "Context source", MAX_SOURCE)
-    observed = _time(row[5])
+    identity = bounded_text(row[0], "Context identity", 128)
+    label = bounded_text(row[2], "Context label", 160)
+    content = bounded_text(row[3], "Context content", MAX_CONTENT)
+    source = bounded_text(row[4], "Context source", MAX_SOURCE)
+    observed = timestamp(row[5])
     match row[1]:
         case "preference" if row[6] is None:
             return Preference(identity, label, content, source, observed)
         case "project":
-            return ProjectNote(identity, label, content, source, observed, _time(row[6]))
+            return ProjectNote(identity, label, content, source, observed, timestamp(row[6]))
         case _:
             raise ValueError("The saved context has an unknown kind or invalid expiry.")
 
@@ -309,7 +258,7 @@ class ContextStore:
             )
 
     def get(self, identity: str) -> ContextRecord | None:
-        _text(identity, "Context identity", 128)
+        bounded_text(identity, "Context identity", 128)
         with journal.reading(self.path) as connection:
             row = connection.execute(
                 "SELECT id,kind,label,content,source,observed,expires FROM project_context WHERE id=?",
@@ -319,7 +268,7 @@ class ContextStore:
 
     def list(self, project: str | None = None) -> tuple[ContextRecord, ...]:
         if project is not None:
-            _text(project, "Project name", 160)
+            bounded_text(project, "Project name", 160)
         with journal.reading(self.path) as connection:
             rows = connection.execute(
                 "SELECT id,kind,label,content,source,observed,expires FROM project_context ORDER BY observed DESC,id LIMIT ?",
@@ -333,6 +282,6 @@ class ContextStore:
         )
 
     def remove(self, identity: str) -> bool:
-        _text(identity, "Context identity", 128)
+        bounded_text(identity, "Context identity", 128)
         with journal.writing(self.path) as connection:
             return connection.execute("DELETE FROM project_context WHERE id=?", (identity,)).rowcount > 0

@@ -13,11 +13,11 @@ from datetime import date, datetime, time, timedelta
 from enum import Enum
 from typing import Final, assert_never
 
-from automation.context import ContextRecord, Preference
 from automation.controller import Runner
 from automation.execution import Log
 from automation.store import TaskStore
-from automation.task import (
+from contracts.context import ContextRecord, Preference
+from contracts.task import (
     Action,
     ActionNotApplied,
     ActionPending,

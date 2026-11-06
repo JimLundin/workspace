@@ -11,16 +11,16 @@ from assistant.meeting_tools import MeetingCommand, MeetingOperation
 from assistant.work_agent import WorkAgent
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import BridgeCommand, BridgeResponse, FeedResponse
-from assistant.work_snapshot import WorkSnapshot
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore
 from automation.execution import Log
-from automation.presentation import PresentationEvent, Progress
 from automation.profile_lease import ProfileLease
 from automation.store import TaskStore
-from automation.task import Claim, Completed, Control, Interrupted, Outcome, RequestSource, Running, RunRef
 from automation.work_folder import WorkFolder
 from automation.worker import CallOwner, OwnerCalls, Worker
+from contracts.presentation import PresentationEvent, Progress
+from contracts.task import Claim, Completed, Control, Interrupted, Outcome, RequestSource, Running, RunRef
+from contracts.work_snapshot import WorkSnapshot
 from tests.feed_fixture import no_canvas, no_personal_work
 from tests.test_agent_window import RecordingWindow
 from tests.test_feed_triage_service import MemoryStore

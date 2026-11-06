@@ -10,7 +10,7 @@ import unittest
 import uuid
 from pathlib import Path
 
-from automation.json_value import Json
+from contracts.json_value import Json
 from tests.json_fixture import json_object, json_value
 
 if sys.platform != "win32":

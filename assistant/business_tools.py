@@ -60,8 +60,8 @@ from assistant.web_apps import (
     decoded,
 )
 from automation.actions import Change, Observation, target
-from automation.json_value import Json
-from automation.task import ActionNotApplied, ActionUncertain, ActionVerified
+from contracts.json_value import Json
+from contracts.task import ActionNotApplied, ActionUncertain, ActionVerified
 
 _SCHEMA = TypeAdapter(dict[str, Json])
 

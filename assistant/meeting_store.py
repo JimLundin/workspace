@@ -15,10 +15,10 @@ from typing import Final
 
 from pydantic import TypeAdapter
 
-from assistant.recording_state import Batch, StoredState, duration, source_name
 from automation import journal
-from automation.capture import AudioSource
-from automation.meetings import CONVERSATION, MEETING, Ended, InProgress, Meeting, MeetingConversation, TranscriptEntry, TranscriptState, UnknownEnd
+from contracts.capture import AudioSource
+from contracts.meetings import CONVERSATION, MEETING, Ended, InProgress, Meeting, MeetingConversation, TranscriptEntry, TranscriptState, UnknownEnd
+from contracts.recording_state import Batch, StoredState, duration, source_name
 from winapi.pcm import RATE, quiet_tail
 
 MAX_PENDING_BYTES: Final = 256 * 1024 * 1024

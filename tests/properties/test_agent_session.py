@@ -4,8 +4,8 @@ from dataclasses import dataclass, field, replace
 
 from hypothesis import strategies
 
-from assistant.agent_session import Cancelled, Resolution, Session, transition
-from automation.task import TextAnswer
+from contracts.agent_session import Cancelled, Resolution, Session, transition
+from contracts.task import TextAnswer
 from tests.agent_requests import asked
 from tests.properties.generation import cases, property_test
 

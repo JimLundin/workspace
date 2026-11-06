@@ -6,9 +6,9 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
-from assistant.work_commands import AnswerTask, WorkViewCommand
-from assistant.work_snapshot import WorkSnapshot
-from automation.task import requested
+from contracts.task import requested
+from contracts.work_commands import AnswerTask, WorkViewCommand
+from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
 
 

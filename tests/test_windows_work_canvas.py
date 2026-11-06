@@ -17,32 +17,17 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-import automation.task
-from assistant.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
-from assistant.feed_origin import App
+import contracts.task
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_store import PersonalStore
 from assistant.work_bridge import WorkOwners
 from assistant.work_canvas import WorkCanvas, run_prompt
-from assistant.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
-from assistant.work_canvas_context import CanvasMode
-from assistant.work_canvas_contracts import CanvasPublication
-from assistant.work_canvas_edits import SaveNote
-from assistant.work_canvas_model import (
-    CanvasCollection,
-    CanvasDocument,
-    CanvasNote,
-    CanvasRelation,
-    Placement,
-    save_collection,
-    save_note,
-    view_state,
-)
-from assistant.work_commands import AnswerTask, WorkViewCommand
-from assistant.work_snapshot import ReplyProblem, WorkSnapshot
 from automation.actions import Resources
 from automation.execution import WorkExecution
-from automation.personal_work import (
+from automation.store import TaskStore
+from contracts.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
+from contracts.feed_origin import App
+from contracts.personal_work import (
     AddDocument,
     Association,
     Catalog,
@@ -62,9 +47,24 @@ from automation.personal_work import (
     WorkThread,
     source_id,
 )
-from automation.store import TaskStore
-from automation.task import ActionNotApplied, ActionVerified, TextAnswer
-from automation.work_documents import WebDocument
+from contracts.task import ActionNotApplied, ActionVerified, TextAnswer
+from contracts.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
+from contracts.work_canvas_context import CanvasMode
+from contracts.work_canvas_contracts import CanvasPublication
+from contracts.work_canvas_edits import SaveNote
+from contracts.work_canvas_model import (
+    CanvasCollection,
+    CanvasDocument,
+    CanvasNote,
+    CanvasRelation,
+    Placement,
+    save_collection,
+    save_note,
+    view_state,
+)
+from contracts.work_commands import AnswerTask, WorkViewCommand
+from contracts.work_documents import WebDocument
+from contracts.work_snapshot import ReplyProblem, WorkSnapshot
 from desktop_ui.components.canvas_look import surface_fill
 from desktop_ui.components.voice_legend import VoiceLegend
 from desktop_ui.icons import State
@@ -312,7 +312,7 @@ def test_attention_redirect_reveals_its_question_in_a_collapsed_work_context(tmp
     )
     store = local_canvas(tmp_path)
     seeded(store, CanvasDocument(activity=(question,), collapsed=frozenset((work.id,))))
-    task = work_task(automation.task.Waiting(automation.task.Question("attention", "Which owner?", "Choose the right owner.")), identity="task")
+    task = work_task(contracts.task.Waiting(contracts.task.Question("attention", "Which owner?", "Choose the right owner.")), identity="task")
     with native_canvas(store) as native:
         native.publish(WorkSnapshot(tasks=(task,), personal=PersonalView(Catalog(works=(work,)))))
         canvas = native.view.panel
@@ -707,7 +707,7 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         attempts.append(run)
         if len(attempts) == 1:
             raise OSError("Queue unavailable")
-        tasks.submit(run.task_id, "Canvas instruction", run_prompt(run, run.work_id), automation.task.RequestSource("canvas"), at=20)
+        tasks.submit(run.task_id, "Canvas instruction", run_prompt(run, run.work_id), contracts.task.RequestSource("canvas"), at=20)
 
     store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, ui.publish_canvas, autonomous=False)
     ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
@@ -1073,7 +1073,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     ui.configure_work(commands.append)
     work = ui.work_window()
     work.show(focus=False)
-    task = work_task(automation.task.Waiting(automation.task.Question("request", "Which owner?", "Confirm the handoff.")))
+    task = work_task(contracts.task.Waiting(contracts.task.Question("request", "Which owner?", "Confirm the handoff.")))
     personal = PersonalStore(tmp_path / "work.sqlite3")
     saved = personal.handle(SaveWork(WorkDefinition("Atlas", "Deploy Atlas")), 20)
     assert isinstance(saved, WorkSaved)
@@ -1094,7 +1094,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         assert not fallback and "could not be sent" in canvas.status.text()
         ui.voice_agent("Use Contoso", fallback.append)
         ui.pump()
-        assert commands[-1] == AnswerTask(task.id, "request", automation.task.TextAnswer("Use Contoso"))
+        assert commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Contoso"))
         rejected = replace(
             snapshot, reply_problems=(ReplyProblem(task_id=task.id, request_id="request", receipt_id="receipt", reason="Disk unavailable"),)
         )
@@ -1104,7 +1104,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         assert "Use Contoso" in question.response.text() and question.status.text() == "Hold X + K to reply · release to send"
         ui.voice_agent("Use Fabrikam instead", fallback.append)
         ui.pump()
-        assert commands[-1] == AnswerTask(task.id, "request", automation.task.TextAnswer("Use Fabrikam instead")) and not fallback
+        assert commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Fabrikam instead")) and not fallback
         canvas.inspect(saved.work.id)
         work_detail = canvas.detail(saved.work.id)
         assert isinstance(work_detail, WorkDetail)
@@ -1140,8 +1140,8 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
     dismissed = WorkThread("work:dismissed", 0, WorkDefinition("Not mine", "Other responsibility"), (), 10, 10)
     active = replace(dismissed, id="work:active", definition=WorkDefinition("Mine", "My responsibility"))
     data = Catalog(works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),))
-    old = work_task(automation.task.Waiting(automation.task.Question("old", "Old question", "")), identity="old-task")
-    current = work_task(automation.task.Waiting(automation.task.Question("current", "Current question", "")), identity="current-task")
+    old = work_task(contracts.task.Waiting(contracts.task.Question("old", "Old question", "")), identity="old-task")
+    current = work_task(contracts.task.Waiting(contracts.task.Question("current", "Current question", "")), identity="current-task")
     research = work_task(identity="research-task")
     seeded(
         store,
@@ -1182,7 +1182,7 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         ui.pump()
         assert ui.canvas_view.panel.selected == "question:current"
         ui.canvas_view.hide()
-        completed = replace(snapshot, tasks=(old, current, replace(research, state=automation.task.Completed("Handoff confirmed", ()))))
+        completed = replace(snapshot, tasks=(old, current, replace(research, state=contracts.task.Completed("Handoff confirmed", ()))))
         work.publish(completed)
         store.observe_work(completed)
         ui.pump()

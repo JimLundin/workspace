@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from assistant.card_actions import parse
+from contracts.card_actions import parse
 
 _LINK: Final = re.compile(r"\[([^\]]*)\]\(([^)\s]*)\)")
 _HEADING: Final = re.compile(r"^#{1,6}\s+", re.MULTILINE)

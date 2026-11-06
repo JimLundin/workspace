@@ -11,7 +11,7 @@ from typing import Final, assert_never
 lazy from PySide6.QtCore import QPointF, QRectF, Qt
 lazy from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 
-from assistant.feed_origin import App
+from contracts.feed_origin import App
 from desktop_ui.components import typeface
 from desktop_ui.components.appearance import Rim, Shade, brand, rim_stops
 from desktop_ui.components.text import color, face

@@ -15,24 +15,24 @@ lazy import shiboken6
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 
 import winapi.shapes
-from assistant.canvas_activity import CanvasRequest
-from assistant.feed_origin import FeedRequest
-from automation.task import TextAnswer
+from contracts.canvas_activity import CanvasRequest
+from contracts.feed_origin import FeedRequest
+from contracts.task import TextAnswer
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Rect
 lazy import assistant.communications
 lazy import desktop_ui.desktop_attention
 lazy import winapi.system_notices
-lazy from assistant.agent_session import ChatMessage, Session, Snapshot, notice_text
-lazy from assistant.attention import selected_question
-lazy from assistant.card_actions import OpenCanvas
 lazy from assistant.feed_sources import FeedUpdate, NoticesObserved, PendingFeed, TeamsObserved, observe
-lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.notification_sources import NotificationSources, NotificationState
-lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from assistant.state_store import SavedState
-lazy from assistant.work_canvas_contracts import CanvasEdits, CanvasPublication
-lazy from assistant.work_commands import WorkViewCommand
+lazy from contracts.agent_session import ChatMessage, Session, Snapshot, notice_text
+lazy from contracts.attention import selected_question
+lazy from contracts.card_actions import OpenCanvas
+lazy from contracts.meeting_detection import AutomaticStatus
+lazy from contracts.recording_state import RecordingAction, RecordingState
+lazy from contracts.work_canvas_contracts import CanvasEdits, CanvasPublication
+lazy from contracts.work_commands import WorkViewCommand
 lazy from desktop_ui import island_agent, island_model
 lazy from desktop_ui.agent_progress import Phase, canvas_phases, hint, phases
 lazy from desktop_ui.agent_window import AgentWindow

@@ -16,9 +16,9 @@ from assistant.feed_triage_service import Store, Triage
 from assistant.feed_work import FeedWork
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand, FeedResponse
-from assistant.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
-from automation.personal_work import PersonalRequest, PersonalResponse, WorkRefused
-from automation.task import Profile
+from contracts.personal_work import PersonalRequest, PersonalResponse, WorkRefused
+from contracts.task import Profile
+from contracts.work_canvas_commands import CanvasCommand, CanvasRefused, CanvasResponse
 
 
 def feed_unavailable(_: FeedCommand) -> FeedResponse:

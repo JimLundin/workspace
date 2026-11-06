@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from assistant.browser import Browser
 from assistant.browser_host import ConnectRequest, Host, HostedConnection, Server
 from assistant.browser_session import Attached, BrowserSession, NativeSessions, Product, Source, edge_path
-from automation.json_value import Json
+from contracts.json_value import Json
 from tests.test_browser import command, decoded
 
 

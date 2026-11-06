@@ -20,7 +20,7 @@ from assistant.browser import MAX_OUTPUT, Browser, task_pages
 from assistant.browser_requests import BrowserRequest, web_url
 from assistant.browser_session import MAX_RESPONSE, Attached, BrowserSession, Cdp, Managed, Product, Separate, Source, released
 from assistant.browser_values import BrowserError, InterruptedError, NavigationContextError, Page, evaluated
-from automation.json_value import Json
+from contracts.json_value import Json
 
 VIEWPORT_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",

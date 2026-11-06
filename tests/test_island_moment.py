@@ -1,6 +1,6 @@
 """The island's moment policy and a notice's lifetime, from pure observations."""
 
-from assistant.agent_session import Begin, Session, transition
+from contracts.agent_session import Begin, Session, transition
 from desktop_ui.agent_progress import phases
 from desktop_ui.island_moment import (
     LINGER,

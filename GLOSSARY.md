@@ -1,7 +1,7 @@
 # Glossary
 
 **Task**: a requested outcome with its progress and result. It outlives the
-conversation that asked for it (`automation/task.py`).
+conversation that asked for it (`contracts/task.py`).
 
 **Run**: one period of execution of a task. A task that waits, resumes or
 recovers has several runs.
@@ -28,7 +28,7 @@ self-review). It picks the conversation, context, tools and instructions
 recording's journal (`automation/journal.py`).
 
 **Work thread**: the context for an ongoing outcome or responsibility, with its
-sources, questions and actions (`automation/personal_work.py`).
+sources, questions and actions (`contracts/personal_work.py`).
 
 **Canvas bubble**: one piece of context on the canvas: a source, document,
 note, question or action. A bubble can contain others.
@@ -38,7 +38,7 @@ notification. Each kind of **feed source** defines its key and pending rule
 (`assistant/feed_sources.py`).
 
 **Card action**: what a `workspace://` link in agent text does: open the canvas
-at a target (`assistant/card_actions.py`).
+at a target (`contracts/card_actions.py`).
 
 **Moment**: what takes over the bar's island: dictation, a question or a
 **notice** (the agent's news). See [the island bar](docs/toolbar-design.md).

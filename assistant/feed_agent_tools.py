@@ -11,8 +11,8 @@ from assistant.feed_contracts import BOARD_EDIT, FEED_COMMAND, FeedCommand, Feed
 from assistant.llm import tool_spec
 from assistant.work_bridge_contracts import BRIDGE_RESPONSE, BridgeCommand
 from automation.actions import Change, Observation
-from automation.json_value import Json
-from automation.task import ActionNotApplied, ActionVerified
+from contracts.json_value import Json
+from contracts.task import ActionNotApplied, ActionVerified
 
 INSTRUCTIONS = """The local canvas is the user's work surface; bubbles primarily carry agent clarifications and canvas redirects.
 For overall work questions, read work_items_list and work_canvas_read first. For a reply to an exact legacy feed proposal,

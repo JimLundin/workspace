@@ -14,7 +14,7 @@ from unittest import TestCase
 from assistant.publishing import Installed, Landing, PublishError, git, land_installed, publish_source
 from automation.actions import Change, Operation, Resources
 from automation.execution import WorkExecution
-from automation.task import ActionVerified, NoVerification
+from contracts.task import ActionVerified, NoVerification
 from keeper import copy_source
 from tests.git_fixture import initialized
 from tests.test_work_actions import claimed

@@ -11,11 +11,9 @@ from typing import Final, cast
 
 from assistant.agent import Agent
 from assistant.agent_history import History
-from assistant.agent_session import activity_text
 from assistant.agent_tools import Output
 from assistant.browser_requests import BrowserRequest, Screenshot
 from assistant.browser_values import BrowserError
-from assistant.geometry import Shot
 from assistant.llm import Settings, ToolCall, settings_from
 from assistant.meeting_tools import MeetingOperation
 from assistant.task_profiles import General
@@ -25,10 +23,12 @@ from assistant.work_bridge_contracts import BridgeCommand
 from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import WorkExecution
-from automation.json_value import Json
-from automation.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from automation.store import TaskStore
-from automation.task import RequestSource
+from contracts.agent_session import activity_text
+from contracts.geometry import Shot
+from contracts.json_value import Json
+from contracts.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
+from contracts.task import RequestSource
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
 from tests.test_workspace import live_tree
 from winapi.shapes import Rect

@@ -19,8 +19,7 @@ from assistant.feed_contracts import (
     SaveRule,
 )
 from assistant.work_bridge_contracts import BridgeCommand, BridgeResponse, FeedResponse
-from assistant.work_canvas_commands import CanvasCommand, CanvasResponse, ReadCanvas, UpdateCanvas
-from automation.personal_work import (
+from contracts.personal_work import (
     AddDocument,
     AddWebPage,
     DismissWork,
@@ -33,6 +32,7 @@ from automation.personal_work import (
     SaveWork,
     UnlinkWork,
 )
+from contracts.work_canvas_commands import CanvasCommand, CanvasResponse, ReadCanvas, UpdateCanvas
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from contextlib import closing
 
 from automation.store import TaskStore
-from automation.task import Action, ActionVerified, RequestSource
+from contracts.task import Action, ActionVerified, RequestSource
 
 
 def seed_tasks(store: TaskStore, identities: Sequence[str], source: RequestSource, *, at: float) -> None:

@@ -11,7 +11,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest, Evaluate
 from assistant.browser_values import BrowserError, BrowserStatus, PageList
-from assistant.meeting_detection import Call, Calls, Observation, ObservationFailure
+from contracts.meeting_detection import Call, Calls, Observation, ObservationFailure
 
 HOSTS = frozenset({"teams.microsoft.com", "teams.cloud.microsoft"})
 

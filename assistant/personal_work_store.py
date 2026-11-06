@@ -6,7 +6,7 @@ from typing import assert_never
 
 from assistant.meeting_store import MeetingStore
 from automation import journal
-from automation.personal_work import (
+from contracts.personal_work import (
     CATALOG,
     AddDocument,
     AddWebPage,
@@ -40,7 +40,7 @@ from automation.personal_work import (
     source_revision,
     unlink_work,
 )
-from automation.work_documents import document_identity
+from contracts.work_documents import document_identity
 
 
 class PersonalStore:

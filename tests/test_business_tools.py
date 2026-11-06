@@ -43,8 +43,8 @@ from assistant.web_apps import (
 )
 from automation.actions import Change, Observation, Resources, target
 from automation.execution import WorkExecution
-from automation.json_value import Json
-from automation.task import ActionUncertain, ActionVerified
+from contracts.json_value import Json
+from contracts.task import ActionUncertain, ActionVerified
 from tests.test_agent import FakeMachine, ToolRig, durable
 from tests.test_work_actions import claimed
 

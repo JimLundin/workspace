@@ -14,17 +14,15 @@ from dataclasses import dataclass
 from typing import assert_never
 
 from assistant.conversation_output import ConversationOutput
-lazy import automation.presentation
-lazy from assistant import agent_session
-lazy from assistant.feed_origin import FeedRequest, Initiation
-lazy from assistant.work_commands import AnswerTask, Submit, WorkCommand
+lazy import contracts.presentation
 lazy from assistant.work_service import IdentifiedSubmission, Issued, Worker, WorkService
-lazy from assistant.work_snapshot import WorkSnapshot
 lazy from automation.activity import ContextSnapshot
 lazy from automation.context import ContextStore
-lazy from automation.presentation import PresentationEvent
 lazy from automation.store import TaskStore
-lazy from automation.task import (
+lazy from contracts import agent_session
+lazy from contracts.feed_origin import FeedRequest, Initiation
+lazy from contracts.presentation import PresentationEvent
+lazy from contracts.task import (
     Blocked,
     Completed,
     Failed,
@@ -49,6 +47,8 @@ lazy from automation.task import (
     terminal,
     text,
 )
+lazy from contracts.work_commands import AnswerTask, Submit, WorkCommand
+lazy from contracts.work_snapshot import WorkSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,7 +201,7 @@ class WorkAgent:
         self._rejected_input: tuple[str, str] | None = None
         self._watch_groups: dict[str, frozenset[str]] = {}
         self._watched: frozenset[str] = frozenset()
-        self._live: Callable[[automation.presentation.LiveMessage], None] | None = None
+        self._live: Callable[[contracts.presentation.LiveMessage], None] | None = None
         self._events: queue.SimpleQueue[tuple[RunRef, PresentationEvent]] = queue.SimpleQueue()
         self.window: ConversationOutput | None = None
 
@@ -621,23 +621,23 @@ class WorkAgent:
             if task is None or not owns(task, run) or self.window is None or self._closing.is_set():
                 return False
             match event:
-                case automation.presentation.Progress(text):
+                case contracts.presentation.Progress(text):
                     self.window.step(text)
                     return True
-                case automation.presentation.Said(text, _):
+                case contracts.presentation.Said(text, _):
                     self.window.say(text)
                     return True
-                case automation.presentation.Problem(text, _):
+                case contracts.presentation.Problem(text, _):
                     if source_is_automatic(task):
                         self.window.say(text)
                     else:
                         self.window.problem(text)
                     return True
-                case automation.presentation.Answer(text=text) | automation.presentation.ReasoningSummary(text=text):
+                case contracts.presentation.Answer(text=text) | contracts.presentation.ReasoningSummary(text=text):
                     live = self._live
                     if live is None:
                         return True
-                case automation.presentation.ToolActivity():
+                case contracts.presentation.ToolActivity():
                     if self._live is not None:
                         self._live(event)
                     return True

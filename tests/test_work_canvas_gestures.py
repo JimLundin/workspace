@@ -2,8 +2,8 @@
 
 from dataclasses import replace
 
-from assistant.work_canvas_edits import NestBubble, PlaceBubbles
-from assistant.work_canvas_model import Placement
+from contracts.work_canvas_edits import NestBubble, PlaceBubbles
+from contracts.work_canvas_model import Placement
 from desktop_ui.work_canvas_gestures import (
     BubbleDrag,
     BubbleTarget,
