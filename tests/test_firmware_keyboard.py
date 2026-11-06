@@ -28,12 +28,13 @@ def test_apps_thumb_letters_reach_navigation_voice_and_the_configured_apps() -> 
     assert shortcut(ord("H"), apps_held=True) is Tool.DICTATE
     assert shortcut(ord("K"), apps_held=True) is Tool.AGENT_VOICE
     assert shortcut(0x20, apps_held=True) is Tool.MEETING_TOGGLE  # the Space thumb's place
+    assert shortcut(ord("Z"), apps_held=True) is Tool.AGENT_VOICE_TOGGLE
 
 
 def test_without_the_apps_thumb_and_for_unassigned_keys_keys_keep_their_meaning() -> None:
-    # Defects: a key is taken without the Apps thumb held, or an unassigned
-    # letter or punctuation is swallowed.
-    for vk in (ord("Z"), 0xDB, 0x31):
+    # Defects: a key is taken without the Apps thumb held, an unassigned letter
+    # or punctuation is swallowed, or Tab gets a chord though the Charybdis holds it for Apps.
+    for vk in (0x09, 0xDB, 0x31):
         assert shortcut(vk, apps_held=True) is None
     for vk in (ord("H"), ord("J"), ord("Q")):
         assert shortcut(vk, apps_held=False) is None

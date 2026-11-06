@@ -253,7 +253,7 @@ class Keyboard:
         self.shortcuts: tuple[CapturedKey, ...] = ()
         """Immutable ownership of firmware shortcut presses, including ups after unplug."""
         self.apps_held = False
-        """The firmware keyboard holds its dedicated Apps thumb."""
+        """The firmware keyboard holds its Tab thumb, which sends Right Alt for Apps."""
         self.chord_held = False
         """The assistant was last told the firmware keyboard holds the chord modifiers."""
         self.busy = False
@@ -501,7 +501,7 @@ class Keyboard:
     def firmware_shortcut(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         """Own only explicit shortcut presses and their paired physical releases."""
         if self.firmware is not None and key.vk == APPS_KEY:
-            # The Apps thumb is Workspace's own key: never let F24 reach an application.
+            # Held Tab is Workspace's own key: never let its Right Alt reach an application.
             self.apps_held = down
             self.observe_chord()
             return True

@@ -543,7 +543,7 @@ def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
     return keyboard, driver
 
 
-APPS_KEY = inputs.KeyEvent(0x87, 0x76, 0, 10, 0)  # F24: the Charybdis's dedicated Apps thumb
+APPS_KEY = inputs.KeyEvent(0xA5, 0x38, inputs.LLKHF_EXTENDED, 10, 0)  # Right Alt: the Charybdis's held Tab thumb
 CTRL = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
 ALT = inputs.KeyEvent(0xA4, 0x38, 0, 10, 0)
 SHIFT = inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0)
@@ -556,7 +556,7 @@ def requests_of(driver: KeyboardFixture) -> list[tuple[int, int]]:
 
 
 def test_firmware_apps_thumb_voice_holds_pair_each_press_with_its_release() -> None:
-    """Detect F24 reaching applications, repeat starts, leaked keys, or a hold cut short by releasing the thumb."""
+    """Detect Right Alt reaching applications, repeat starts, leaked keys, or a hold cut short by releasing the thumb."""
     for voice_key, tool in ((DICTATE_LETTER, Tool.DICTATE), (AGENT_LETTER, Tool.AGENT_VOICE)):
         keyboard, driver = firmware_keyboard()
         assert keyboard.swallow(APPS_KEY, down=True)
@@ -622,7 +622,7 @@ def test_generated_input_neither_arms_nor_finishes_firmware_voice_shortcuts() ->
     """Detect dictation/automation output impersonating the Apps thumb or a voice key."""
     for flags, extra in ((inputs.LLKHF_INJECTED, 0), (0, MAGIC), (0, LAYOUT_MAGIC)):
         keyboard, driver = firmware_keyboard()
-        for vk, scan in ((0x87, 0x76), (0x48, 0x23)):
+        for vk, scan in ((0xA5, 0x38), (0x48, 0x23)):
             assert not keyboard.swallow(inputs.KeyEvent(vk, scan, flags, 10, extra), down=True)
         assert not keyboard.swallow(DICTATE_LETTER, down=True)
         assert not requests_of(driver)
@@ -636,7 +636,7 @@ def test_generated_input_neither_arms_nor_finishes_firmware_voice_shortcuts() ->
 
 
 def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_and_release() -> None:
-    """Detect a typed letter, an unpaired release, F24 leaking, or a request outside the Apps map."""
+    """Detect a typed letter, an unpaired release, Right Alt leaking, or a request outside the Apps map."""
     keyboard, driver = firmware_keyboard()
     assert keyboard.swallow(APPS_KEY, down=True)
     assert driver.messages == [(WM_CHORD, 1, 0)]

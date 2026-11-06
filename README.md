@@ -77,15 +77,16 @@ cycled.
 | **Ö** | Type a task for the agent |
 | **Ä** | Copy the latest transcript |
 | **'** | Dictation on or off |
-| thumbs **C V** | Start or stop a meeting recording; agent speech on or off |
+| **Caps Lock** | Agent speech on or off |
+| thumb **C** | Start or stop a meeting recording |
 | thumb **M** | The inbox |
 
 While the Charybdis Nano keyboard (USB `A8F8:1832`) is connected, the layout
-pauses and keeps English (US). Workspace adds one key to its keymap rather than
-replacing anything: put **F24** (`KC_F24`) on a thumb key of the Charybdis. Held,
-it is the Charybdis's Apps key: the next key is read by the letter it sends, as
-on the laptop's Apps layer at that place (listed below), and swallowed. F24
-itself never reaches an application. A hold-to-talk key lasts while it is held.
+pauses and keeps English (US). Its Tab thumb is the Charybdis's Apps key: set
+it in VIA to `MT(MOD_RALT, KC_TAB)`, so a tap types Tab and a hold sends Right
+Alt. While it is held, the next key is read by the letter it sends, as on the
+laptop's Apps layer at that place (listed below), and swallowed. Right Alt never
+reaches an application. A hold-to-talk key lasts while it is held.
 
 While either keyboard holds its Apps key, the bar shows each target's letter.
 App keys focus the app, cycle its windows, or start it.
@@ -112,6 +113,7 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **E** | Focus ↓ |
 | Apps **I** | Focus ↑ |
 | Apps **O** | Focus → |
+| Apps **Z** | Agent toggle |
 | Apps **X** | Pause place |
 | Apps **C** | Windows |
 | Apps **D** | Re-place |
@@ -122,7 +124,6 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **.** | Copy speech |
 | Apps **/** | Dictate toggle |
 | Apps **Space** | Record |
-| Apps **Tab** | Agent toggle |
 | Apps **Enter** | Inbox |
 
 **Snippets.** Type a trigger and Workspace replaces it: `,,date`, `,,time`,

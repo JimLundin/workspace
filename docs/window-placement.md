@@ -59,8 +59,8 @@ controls menu.
 
 ## Key hints
 
-While either keyboard holds its Apps key (the laptop's Delete thumb, or the
-Charybdis's F24 thumb), Workspace draws the letters on
+While either keyboard holds its Apps key (the laptop's X thumb, or the
+Charybdis's Tab thumb), Workspace draws the letters on
 the desktop itself, so the chords can be learned without the mouse:
 
 - **A keycap badge** sits inside the top-left corner of each placed window on the

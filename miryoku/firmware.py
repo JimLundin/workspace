@@ -46,7 +46,7 @@ def key_name(key: Key) -> str:
 _KEYS: Final = _chord_keys()
 CHORDS: Final[frozendict[Request, str]] = frozendict({request: key_name(key) for key, request in _KEYS.items()})
 """Each request's key under the Apps hold: the laptop's Apps layer (hold the Delete thumb),
-or the firmware keyboard's dedicated Apps thumb (`APPS_KEY`), with the key its keymap sends there."""
+or the Charybdis's held Tab thumb (`APPS_KEY`), with the key its keymap sends there."""
 
 CHORD_KEYS: Final = frozendict({key.vk: request for key, request in _KEYS.items()})
 """Each request by its key's virtual key, which both keyboards share."""
@@ -75,12 +75,15 @@ class ConsumedKey:
 type CapturedKey = HeldShortcut | ConsumedKey
 
 
-APPS_KEY: Final = 0x87
-"""F24, the virtual key the firmware keyboard's dedicated Apps thumb sends. Nothing else uses it."""
+APPS_KEY: Final = 0xA5
+"""Right Alt, which the Charybdis's Tab thumb holds (VIA mod-tap `MT(MOD_RALT, KC_TAB)`).
+
+Its keymap uses no other Right Alt, and with the Charybdis connected Windows runs
+English (US), where Right Alt is a plain Alt rather than AltGr."""
 
 
 def shortcut(vk: int, *, apps_held: bool) -> Request | None:
-    """The request a fresh firmware key press makes while the Apps thumb is held; other keys keep their meaning.
+    """The request a fresh firmware key press makes while the Tab thumb holds Apps; other keys keep their meaning.
 
     Keys are matched by virtual key, so the host layout can't move them.
     """

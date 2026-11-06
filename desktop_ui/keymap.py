@@ -58,7 +58,7 @@ class Shortcut:
 
 
 CHORD_HOLD: Final = "Apps"
-"""The Apps key, held for a request's letter: the laptop's Delete thumb or the firmware keyboard's Apps thumb."""
+"""The Apps key, held for a request's letter: the laptop's Esc thumb or the Charybdis's Tab thumb."""
 
 
 def shortcut(tool: Tool) -> Shortcut | None:
