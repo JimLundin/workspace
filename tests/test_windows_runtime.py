@@ -139,6 +139,22 @@ def test_specs_validate_after_qt_loads_in_a_fresh_interpreter() -> None:
     assert b"Qt then specs passed" in checked.stdout
 
 
+def released(folder: Path) -> None:
+    """Wait until the ended job's processes let go of `folder`: termination is asynchronous."""
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            shutil.rmtree(folder, ignore_errors=False)
+        except FileNotFoundError:
+            return
+        except PermissionError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.1)
+        else:
+            return
+
+
 def run_alone(tmp_path: Path, *parts: str) -> str:
     """Run one side's `run` in a fresh interpreter, with a keeper state folder the other side never wrote to."""
     state = tmp_path / "state"
@@ -159,6 +175,7 @@ def run_alone(tmp_path: Path, *parts: str) -> str:
             code = process.returncode
     finally:
         job.close()
+        released(tmp_path / "workspace" / "browser-connections")
     output = stdout.decode("utf-8", errors="replace")
     assert code == 0, f"Native exit {code & 0xFFFFFFFF:#x}: {output}"
     assert (state / "ready").exists(), output
