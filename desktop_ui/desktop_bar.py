@@ -59,6 +59,7 @@ lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, 
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
+lazy from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight, started
 lazy from desktop_ui.navigation import AppKey, CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import EventLoop, application
@@ -137,6 +138,7 @@ class DesktopBar:
         "hovered",
         "inbox",
         "job",
+        "keyboard_light",
         "last_frame",
         "layout_enabled",
         "loop",
@@ -213,6 +215,7 @@ class DesktopBar:
         self.taskbar = TaskbarControl()
         self.controls: shell.AppWindow | None = None
         self.away_screens: AwayScreens | None = None
+        self.keyboard_light: KeyboardLight | None = None
         self.worker: threading.Thread | None = None
         self.loop = EventLoop(application(), self.paint_frames)
         self.materials = appearance.FrostSampler()
@@ -265,6 +268,7 @@ class DesktopBar:
         self.status_service = StatusObserver()
         self.controls = shell.AppWindow("workspace shell controls", self.message)
         self.away_screens = AwayScreens(self.record_usage)
+        self.keyboard_light = started(ViaBacklight(), self.record_usage)
         try:
             session.subscribe(self.controls.handle)
         except OSError as error:
@@ -284,6 +288,8 @@ class DesktopBar:
     def message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
         if self.away_screens is not None:
             self.away_screens.message(message, wparam)
+        if self.keyboard_light is not None:
+            self.keyboard_light = self.keyboard_light.message(message, wparam)
         return None
 
     def record_usage(self, feature: str, details: Mapping[str, Detail]) -> None:
@@ -895,6 +901,8 @@ class DesktopBar:
         finally:
             if self.away_screens is not None:
                 self.away_screens.close()
+            if self.keyboard_light is not None:
+                self.keyboard_light = self.keyboard_light.restore()
             if self.controls is not None:
                 session.unsubscribe(self.controls.handle)
                 self.controls.destroy()
