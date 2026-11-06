@@ -149,8 +149,8 @@ class KeyboardFixture:
         pass
 
 
-APPS_THUMB, DICTATE_KEY, AGENT_KEY, TOGGLE_KEY = Scancode(0x34), Scancode(0x26), Scancode(0x25), Scancode(0x2B)
-"""Physical . holds the Apps layer; on it L holds dictation, K agent speech, and the quote key toggles dictation."""
+APPS_THUMB, DICTATE_KEY, AGENT_KEY, TOGGLE_KEY = Scancode(0x2D), Scancode(0x26), Scancode(0x25), Scancode(0x2B)
+"""Physical X holds the Apps layer; on it L holds dictation, K agent speech, and the quote key toggles dictation."""
 SPACEBAR, N_KEY, B_KEY = Scancode(0x39), Scancode(0x31), Scancode(0x30)
 """The retired voice keys, blocked now."""
 
@@ -677,15 +677,15 @@ def test_assistant_routes_physical_chords_and_resets_to_the_overlay() -> None:
     assert tuple(action.reset for action in actions if isinstance(action, PhysicalKey)) == (False, False, False, True)
 
 
-def test_apps_x_opens_inbox_once_per_press_through_keyboard_and_assistant() -> None:
+def test_apps_enter_thumb_opens_inbox_once_per_press_through_keyboard_and_assistant() -> None:
     # Detect a wrong physical binding, repeated activation, release dispatch or wrong UI action.
     with observed_keyboard() as (keyboard, messages):
         hold_apps(keyboard, at=10)
         assert keyboard.engine.layer() is Layer.APPS
-        key = inputs.KeyEvent(0, 0x2D, 0, 250, 0)  # the left outer thumb
+        key = inputs.KeyEvent(0, 0x32, 0, 250, 0)  # the right Enter thumb
         keyboard.swallow(key, down=True)
         keyboard.swallow(key, down=True)
-        keyboard.swallow(inputs.KeyEvent(0, 0x2D, 0, 280, 0), down=False)
+        keyboard.swallow(inputs.KeyEvent(0, 0x32, 0, 280, 0), down=False)
         keyboard.swallow(inputs.KeyEvent(0, APPS_THUMB, 0, 300, 0), down=False)
         requests = tuple((tool, down) for message, tool, down in messages if message == WM_REQUEST)
         assert requests == ((Tool.OPEN_INBOX.value, 1), (Tool.OPEN_INBOX.value, 0))
@@ -909,7 +909,7 @@ def test_tray_agent_advertises_the_layout_shortcut_in_readme_notation() -> None:
     # Defect: the tray diverges from the shared physical-key formatter.
     state = MenuState(layout=LayoutState.ON, overlay_enabled=True, agent_running=False, capturing=False)
     agent = next(item for item in menu_items(state) if item.id == Menu.AGENT.value)
-    assert agent.text == "Agent session\tHold . + Ö"
+    assert agent.text == "Agent session\tHold X + Ö"
 
 
 def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle() -> None:

@@ -569,7 +569,7 @@ class Ui:
                 assert_never(target)
 
     def open_inbox(self) -> None:
-        """The bell and Hold V + T list waiting questions with the agent's recent news; with neither, the canvas opens."""
+        """The bell and the inbox key list waiting questions with the agent's recent news; with neither, the canvas opens."""
 
         def reveal(_: QtWidgets.QApplication) -> None:
             with self._input_lock:

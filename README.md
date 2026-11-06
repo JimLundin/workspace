@@ -53,14 +53,14 @@ or **Keyboard map** in the bar menu, draws every layer.
 | Key | Does |
 |---|---|
 | **§** | Tap: layout on or off. Hold 2 s: quit the layout |
-| thumbs **X C V** | Esc, Space or **Nav**, Tab |
-| thumbs **M , .** | Enter or **Sym**, Backspace or **Num**, Delete or **Apps** |
+| thumbs **X C V** | Esc or **Apps**, Space or **Nav**, Tab |
+| thumbs **M , .** | Enter or **Sym**, Backspace or **Num**, Delete |
 
-The **Apps** layer (hold **.**) holds every Workspace key; nothing else in the
+The **Apps** layer (hold the **X** thumb, left outer) holds every Workspace key; nothing else in the
 layout talks to Workspace. Desktops are reached directly by number, never
 cycled.
 
-| Hold **.** and press | Does |
+| Hold **X** and press | Does |
 |---|---|
 | **2 3 4 5 6**, **Q W E R T** | The ten apps in `APPS` |
 | **8 9 0 + ´** | Desktops 1 to 5 |
@@ -73,7 +73,8 @@ cycled.
 | **Ö** | Type a task for the agent |
 | **Ä** | Copy the latest transcript |
 | **'** | Dictation on or off |
-| thumbs **X C V** | The inbox; start or stop a meeting recording; agent speech on or off |
+| thumbs **C V** | Start or stop a meeting recording; agent speech on or off |
+| thumb **M** | The inbox |
 
 While the Charybdis Nano keyboard (USB `A8F8:1832`) is connected, the layout
 pauses and keeps English (US). Workspace adds one key to its keymap rather than
@@ -116,9 +117,9 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **,** | Agent |
 | Apps **.** | Copy speech |
 | Apps **/** | Dictate toggle |
-| Apps **Esc** | Inbox |
 | Apps **Space** | Record |
 | Apps **Tab** | Agent toggle |
+| Apps **Enter** | Inbox |
 
 **Snippets.** Type a trigger and Workspace replaces it: `,,date`, `,,time`,
 `,,now`, `,,week`, `,,shrug`, `,,thx`, `,,mvh` and `,,br`. Add your own in
@@ -151,11 +152,11 @@ and creates virtual desktops as needed. See
 
 ## The agent
 
-Hold **. + K** and speak to the agent. **Hold . + Ö** opens the agent session. The agent works on the
+Hold **X + K** and speak to the agent. **Hold X + Ö** opens the agent session. The agent works on the
 desktop, in files, in PowerShell, and in its own headless Edge profile at
 `%LOCALAPPDATA%\workspace\browser-profile`, where it uses Outlook, Teams and AIP
 Kanban. It runs without confirmation prompts and stops after 80 steps. It asks
-questions in the bar, and you answer by holding **. + K**. It collects work,
+questions in the bar, and you answer by holding **X + K**. It collects work,
 sources and notes on the canvas. Tasks are saved, so a restart resumes them.
 
 Ask the agent to change Workspace, such as "add a snippet for my email

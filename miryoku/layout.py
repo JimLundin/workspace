@@ -336,7 +336,7 @@ BASE: Final[Board[Action]] = Board(
     top=      Row((Q,          W,          F,          P,              B  ), (J,              L,                  U,          Y,          QUOTE     )),
     home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(LETTER_I, ALT), ht(LETTER_O, GUI))),
     bottom=   Row((Z,          X,          C,          D,              V  ), (K,              H,                  COMMA,      PERIOD,     SLASH     )),
-    thumbs=Thumbs((                        ESC,        ht(SPACE, NAV), TAB           ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), ht(DELETE, Layer.APPS))),
+    thumbs=Thumbs((                        ht(ESC, Layer.APPS), ht(SPACE, NAV), TAB     ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), DELETE)),
 )
 
 NAV_LAYER: Final[Board[Action]] = Board(
@@ -367,7 +367,7 @@ SYM_LAYER: Final[Board[Action]] = Board(
 _APP: Final[tuple[Action, ...]] = (*APPS[:10], *[XX] * (10 - len(APPS[:10])))
 
 APPS_LAYER: Final[Board[Action]] = Board(
-    # Hold the Delete thumb. The only Workspace layer: apps on the left; desktops, focus and voice on the right.
+    # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
     # The firmware keyboard reaches each request with its Apps thumb and the base key at its place (`miryoku.firmware.CHORDS`).
     top=      Row((_APP[0],         _APP[1],               _APP[2],              _APP[3],         _APP[4]      ),
                   (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.DESKTOP_5)),
@@ -375,7 +375,7 @@ APPS_LAYER: Final[Board[Action]] = Board(
                   (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
     bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  Tool.STOP    ),
                   (Tool.AGENT_VOICE, Tool.DICTATE,         Tool.AGENT_TYPED,     Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
-    thumbs=Thumbs((Tool.OPEN_INBOX, Tool.MEETING_TOGGLE,   Tool.AGENT_VOICE_TOGGLE), (XX, XX, XX)),
+    thumbs=Thumbs((XX,              Tool.MEETING_TOGGLE,   Tool.AGENT_VOICE_TOGGLE), (Tool.OPEN_INBOX, XX, XX)),
 )
 # fmt: on
 

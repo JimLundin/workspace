@@ -129,7 +129,7 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         assert waiting(bar) is None
         bar.inbox_changed(1)
         capsule = waiting(bar)
-        assert capsule is not None and "1 clarification needs" in capsule.accessibleName() and "Hold V + T" in capsule.toolTip()
+        assert capsule is not None and "1 clarification needs" in capsule.accessibleName() and "Hold X + M" in capsule.toolTip()
         QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, TOP + 17))
         assert invoked == ("inbox",) and bar.opened is None
         starts: tuple[Callable[[], None], ...] = (

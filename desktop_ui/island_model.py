@@ -26,6 +26,7 @@ from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
 from desktop_ui.island_moment import Notice
+from desktop_ui.keymap import INBOX_HOLD
 from winapi.machine_status import Battery, PowerUnavailable
 
 
@@ -260,7 +261,7 @@ def inbox_text(count: int) -> str:
 def inbox_label(questions: int, unread: int) -> str:
     asking = f"{questions} {'clarification needs' if questions == 1 else 'clarifications need'} your input" if questions else ""
     news = f"{unread} new from the agent" if unread else ""
-    return " · ".join(part for part in (asking, news, "Open inbox · Hold V + T") if part)
+    return " · ".join(part for part in (asking, news, "Open inbox · " + INBOX_HOLD) if part)
 
 
 def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:

@@ -749,7 +749,7 @@ def test_held_undo_repeats_like_any_key() -> None:
 
 
 def apps_held(t: Harness) -> None:
-    t.d(".")  # Delete thumb: Apps while held
+    t.d("x")  # Esc thumb (left outer): Apps while held
     t.timeout_last()
 
 
@@ -761,7 +761,7 @@ def test_apps_layer_voice_holds_last_until_their_key_is_released() -> None:
         apps_held(t)
         t.d(physical)
         t.d(physical)  # auto-repeat
-        t.u(".")
+        t.u("x")
         assert t.take() == f"?{tool}+"
         t.u(physical)
         assert t.take() == f"?{tool}-"
@@ -809,7 +809,7 @@ def test_an_apps_layer_key_makes_its_request_and_shows_the_chord_hints() -> None
     apps_held(t)
     t.tap("8")  # J
     t.tap("w")  # R: the second app
-    t.u(".")
+    t.u("x")
     assert t.take() == "?desktop_1+ ?desktop_1- ?app:notepad+ ?app:notepad-"
     assert t.h.indicated == ["apps chord", "-"]
 

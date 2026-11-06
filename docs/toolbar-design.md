@@ -61,7 +61,7 @@ desktops.
 | The bell list is open | Questions and the five latest notices | |
 
 Pressing "Needs you" expands the island to show the question. Answer it by
-holding **. + K**. The bell and **Hold . + X** open the inbox list. Pressing a
+holding **X + K**. The bell and **Hold X + M** open the inbox list. Pressing a
 notice opens the canvas at its item. Notices never take keyboard focus.
 
 ## The controls menu

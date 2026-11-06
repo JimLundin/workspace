@@ -21,10 +21,10 @@ def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first()
     # Defects: using BASE outputs as keycaps, selecting another layer's thumb,
     # advertising the Tools-layer dictation copy instead of its dedicated key, or
     # dropping the hint of a tool only a chord reaches.
-    assert shortcut(Tool.OPEN_INBOX) == Shortcut("X", ".")
-    assert shortcut(Tool.DICTATE) == Shortcut("L", ".")
-    assert shortcut(Tool.AGENT_VOICE) == Shortcut("K", ".")
-    assert shortcut_hint(shortcut(Tool.WINDOW_SWITCHER), compact=True) == ". S"
+    assert shortcut(Tool.OPEN_INBOX) == Shortcut("M", "X")
+    assert shortcut(Tool.DICTATE) == Shortcut("L", "X")
+    assert shortcut(Tool.AGENT_VOICE) == Shortcut("K", "X")
+    assert shortcut_hint(shortcut(Tool.WINDOW_SWITCHER), compact=True) == "X S"
 
 
 def test_shortcut_hints_share_keycap_notation_and_omit_absent_bindings() -> None:
@@ -43,7 +43,8 @@ def test_base_layer() -> None:
     assert base["C"] == ("Space", "Nav", Kind.KEY)
     assert base["M"] == ("Enter", "Sym", Kind.KEY)
     assert base[","] == ("Bksp", "Num", Kind.KEY)
-    assert base["."] == ("Del", "Apps", Kind.KEY)
+    assert base["X"] == ("Esc", "Apps", Kind.KEY)
+    assert base["."] == ("Del", "", Kind.KEY)
     assert base["-"] == ("", "", Kind.BLANK)
     assert base["§"] == ("On/off", "hold: quit", Kind.SPECIAL)
     assert base["B"] == base["N"] == base["Space"] == ("", "", Kind.BLANK)
@@ -70,8 +71,8 @@ def test_the_apps_layer_holds_every_workspace_request() -> None:
     assert apps["L"] == ("Talk", "hold", Kind.TOOL)
     assert apps["2"] == ("Terminal", "", Kind.APP)
     assert apps["8"] == ("Desk 1", "", Kind.TOOL)
-    assert apps["X"] == ("Inbox", "", Kind.TOOL)
-    assert apps["."][2] is Kind.HELD
+    assert apps["M"] == ("Inbox", "", Kind.TOOL)
+    assert apps["X"][2] is Kind.HELD
 
 
 def test_every_tool_is_on_the_key_map_or_a_chord() -> None:

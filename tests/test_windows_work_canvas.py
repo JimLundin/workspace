@@ -1041,7 +1041,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         detail = canvas.detail(question.id)
         assert isinstance(detail, QuestionDetail)
         assert not detail.frame.findChildren(QtWidgets.QPlainTextEdit) and detail.frame.height() <= 152
-        assert detail.status.text() == "Hold . + K to reply · release to send"
+        assert detail.status.text() == "Hold X + K to reply · release to send"
         fallback: list[str] = []
         ui.voice_agent("Contoso owns the handoff.", fallback.append)
         pump_until(ui, lambda: bool(resumed))
@@ -1096,7 +1096,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         work.publish(rejected)
         store.observe_work(rejected)
         ui.pump()
-        assert "Use Contoso" in question.response.text() and question.status.text() == "Hold . + K to reply · release to send"
+        assert "Use Contoso" in question.response.text() and question.status.text() == "Hold X + K to reply · release to send"
         ui.voice_agent("Use Fabrikam instead", fallback.append)
         ui.pump()
         assert commands[-1] == AnswerTask(task.id, "request", automation.task.TextAnswer("Use Fabrikam instead")) and not fallback

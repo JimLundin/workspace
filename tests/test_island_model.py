@@ -201,5 +201,5 @@ def test_the_bell_counts_questions_and_unread_notices_and_names_each() -> None:
     # Defects: unread notices don't reach the bell, or its label misstates what waits.
     bell = view(replace(RESTING, inbox=1, unread=2), Key.INBOX)
     assert bell.slots == ((Glyph("bell"), Badge("3")),)
-    assert bell.label == "1 clarification needs your input · 2 new from the agent · Open inbox · Hold V + T"
-    assert view(replace(RESTING, unread=1), Key.INBOX).label == "1 new from the agent · Open inbox · Hold V + T"
+    assert bell.label == "1 clarification needs your input · 2 new from the agent · Open inbox · Hold X + M"
+    assert view(replace(RESTING, unread=1), Key.INBOX).label == "1 new from the agent · Open inbox · Hold X + M"

@@ -217,4 +217,6 @@ def indicator_text(layer: Layer | None, *, locked: bool, caps_word: bool) -> str
 
 
 AGENT_HOLD: Final = shortcut_hint(shortcut(Tool.AGENT_VOICE))
-"""How to hold agent speech on the laptop, such as "Hold . + K"."""
+"""How to hold agent speech on the laptop, such as "Hold X + K"."""
+INBOX_HOLD: Final = shortcut_hint(shortcut(Tool.OPEN_INBOX))
+"""How to open the inbox on the laptop, such as "Hold X + M"."""
