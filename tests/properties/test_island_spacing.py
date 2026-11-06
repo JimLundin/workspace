@@ -6,9 +6,12 @@ from itertools import pairwise
 from hypothesis import strategies
 
 from desktop_ui.island_layout import Content, Metrics, frame
-from desktop_ui.island_model import Action, CapsuleView, Key, Zone
+from desktop_ui.island_model import Action, CapsuleView, Key, Zone, order
 from desktop_ui.island_motion import IslandMotion, Shown, advance, placed, retarget, settled
+from desktop_ui.ui_spec import island
 from tests.properties.generation import cases, property_test
+
+ORDER = order(island())
 
 ZONES = {Key.AGENT: Zone.LEAD, Key.JOB: Zone.LEAD, Key.ISLAND: Zone.ISLAND, Key.RECORDING: Zone.TRAIL, Key.INBOX: Zone.TRAIL}
 
@@ -43,10 +46,10 @@ def test_capsules_never_overlap_in_flight_and_rest_exactly_one_gap_apart(journey
         motion = retarget(motion, target, animate=True)
         for step in journey.steps:
             motion = advance(motion, step)
-            boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12)))
+            boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12), ORDER))
             assert all(left.x + left.width <= right.x + 1e-9 for left, right in pairwise(boxes)), "Capsules overlapped in flight."
     while not settled(motion):
         motion = advance(motion, 0.05)
-    boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12)))
+    boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12), ORDER))
     assert [box.width for box in boxes] == [shown.content.width for shown in journey.arrangements[-1]]
     assert all(abs(right.x - (left.x + left.width) - 6) < 1e-9 for left, right in pairwise(boxes))

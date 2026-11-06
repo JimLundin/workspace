@@ -19,8 +19,10 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 """
 
 from dataclasses import dataclass, field
-from enum import Enum, auto
-from typing import Final, assert_never
+from enum import Enum, StrEnum, auto
+from typing import Annotated, Final, assert_never
+
+from pydantic import ConfigDict, Field
 
 from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
@@ -196,9 +198,102 @@ def capture(recording: RecordingState) -> Capture | None:
             assert_never(recording.phase)
 
 
-PHASE: Final = 28  # The phase's characters in the island before it elides.
-TITLE: Final = 44  # A notice title's characters before it elides.
-NOTICE_WIDTH: Final = 340
+# ---- the bar's composition as data: `desktop_ui/spec/island.toml` ----------------------
+
+
+class Reading(StrEnum):
+    """A reading the status capsule can show; what each shows stays here."""
+
+    KEYBOARD = auto()  # Only while the keyboard types plainly.
+    SPEAKER = auto()
+    WIFI = auto()
+    CLOCK = auto()
+    POWER = auto()
+    BATTERY = auto()
+    CPU = auto()
+    MEMORY = auto()
+
+
+class Activity(StrEnum):
+    """A capsule beside the island; when each shows stays here."""
+
+    AGENT = auto()
+    JOB = auto()
+    RECORDING = auto()
+    INBOX = auto()
+
+
+_SPEC = ConfigDict(extra="forbid")
+
+
+@dataclass(frozen=True, slots=True)
+class StatusSpec:
+    groups: tuple[tuple[Reading, ...], ...]
+    """Left to right; readings in a group sit a part gap apart, groups a slot gap."""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class ActivitiesSpec:
+    lead: tuple[Activity, ...]
+    """Left of the island, left to right."""
+    trail: tuple[Activity, ...]
+    """Right of the island, left to right."""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class TextSpec:
+    phase: Annotated[int, Field(ge=4, le=200)]
+    """The agent's phase, in characters, before it elides."""
+    title: Annotated[int, Field(ge=4, le=200)]
+    """A notice's title, in characters, before it elides."""
+    notice_width: Annotated[int, Field(gt=0, le=2000)]
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class IslandSpec:
+    """`island.toml`: what the status capsule shows and where activities step aside to."""
+
+    status: StatusSpec
+    activities: ActivitiesSpec
+    text: TextSpec
+    __pydantic_config__ = _SPEC
+
+
+def island_problems(spec: IslandSpec) -> tuple[str, ...]:
+    placed = [*spec.activities.lead, *spec.activities.trail]
+    readings = [reading for group in spec.status.groups for reading in group]
+    return (
+        *(f"activities: {activity} is placed {placed.count(activity)} times" for activity in Activity if placed.count(activity) != 1),
+        *(f"status: {reading} appears more than once" for reading in sorted(set(readings)) if readings.count(reading) > 1),
+        *(("status: a group is empty",) if any(not group for group in spec.status.groups) else ()),
+    )
+
+
+ACTIVITY_KEYS: Final[frozendict[Activity, Key]] = frozendict(
+    {Activity.AGENT: Key.AGENT, Activity.JOB: Key.JOB, Activity.RECORDING: Key.RECORDING, Activity.INBOX: Key.INBOX}
+)
+
+
+def order(spec: IslandSpec) -> tuple[Key, ...]:
+    """Every capsule left to right: the lead, the island, the trail, then the status capsule."""
+    lead = tuple(ACTIVITY_KEYS[each] for each in spec.activities.lead)
+    trail = tuple(ACTIVITY_KEYS[each] for each in spec.activities.trail)
+    return (*lead, Key.ISLAND, *trail, Key.STATUS)
+
+
+def zone(key: Key, spec: IslandSpec) -> Zone:
+    match key:
+        case Key.ISLAND:
+            return Zone.ISLAND
+        case Key.STATUS:
+            return Zone.RIGHT
+        case Key.AGENT | Key.JOB | Key.RECORDING | Key.INBOX:
+            return Zone.LEAD if any(ACTIVITY_KEYS[each] is key for each in spec.activities.lead) else Zone.TRAIL
+        case _:
+            assert_never(key)
 
 
 def elided(text: str, limit: int) -> str:
@@ -213,26 +308,11 @@ def job_label(job: Job) -> str:
             assert_never(job)
 
 
-def agent_slot(agent: Agent, *, compact: bool) -> Slot:
+def agent_slot(agent: Agent, limit: int, *, compact: bool) -> Slot:
     """The agent's spinner and phase; compact capsules keep the phase for their label."""
     stop = (Control("stop", "Stop agent work", Action.STOP_AGENT),) if not agent.waiting else ()
-    phase = () if compact else (Text(elided(agent.phase, PHASE)),)
+    phase = () if compact else (Text(elided(agent.phase, limit)),)
     return (Spinner("Agent: " + agent.phase), *phase, *stop)
-
-
-def facts(ambient: Ambient) -> Slot:
-    """Reserve the widest readings and one power glyph so the fixed cluster never shifts."""
-    match ambient.power:
-        case Battery(powered=True) | PowerUnavailable.NO_BATTERY:
-            power = Glyph("charger")
-        case _:
-            power = Glyph("battery")
-    match ambient.power:
-        case Battery(percent=percent, powered=False) if percent <= 20:
-            battery = Text(ambient.battery_text, meaning.Tone.LOW, reserve="100%")
-        case _:
-            battery = Text(ambient.battery_text, reserve="100%")
-    return (Text(ambient.clock, reserve="00:00"), power, battery)
 
 
 def usage(percent: int | None) -> Text:
@@ -240,9 +320,37 @@ def usage(percent: int | None) -> Text:
     return Text("—" if percent is None else f"{percent}%", reserve="100%")
 
 
-def resources(system: SystemStatus) -> Slot:
-    """The processor and memory, each its symbol then its value."""
-    return (Glyph("cpu"), usage(system.cpu), Glyph("memory"), usage(system.memory))
+def reading(each: Reading, observed: Observed) -> Slot:
+    """One reading's parts. Each reserves its widest form, and power keeps one glyph,
+    so a changing reading never shifts the fixed cluster."""
+    ambient, system = observed.ambient, observed.system
+    match each:
+        case Reading.KEYBOARD:
+            return (Glyph("keyboard"),) if observed.plain_keyboard else ()
+        case Reading.SPEAKER:
+            return (Glyph(system.speaker_icon),)
+        case Reading.WIFI:
+            return (Glyph(system.wifi_icon),)
+        case Reading.CLOCK:
+            return (Text(ambient.clock, reserve="00:00"),)
+        case Reading.POWER:
+            match ambient.power:
+                case Battery(powered=True) | PowerUnavailable.NO_BATTERY:
+                    return (Glyph("charger"),)
+                case _:
+                    return (Glyph("battery"),)
+        case Reading.BATTERY:
+            match ambient.power:
+                case Battery(percent=percent, powered=False) if percent <= 20:
+                    return (Text(ambient.battery_text, meaning.Tone.LOW, reserve="100%"),)
+                case _:
+                    return (Text(ambient.battery_text, reserve="100%"),)
+        case Reading.CPU:
+            return (Glyph("cpu"), usage(system.cpu))
+        case Reading.MEMORY:
+            return (Glyph("memory"), usage(system.memory))
+        case _:
+            assert_never(each)
 
 
 def describe(ambient: Ambient) -> str:
@@ -270,7 +378,7 @@ def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:
     return (Marker.DOT, Text(recorded.title, tone), *stop)
 
 
-def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansion | None = None) -> tuple[CapsuleView, ...]:
+def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, expanded: Expansion | None = None) -> tuple[CapsuleView, ...]:
     """The capsules to show, in left-to-right order, with their contents and press actions.
 
     The right-hand readings expand into the controls menu, where ongoing activities
@@ -284,25 +392,20 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
     # Dictation and a notice detach the agent; a waiting question already is the island, unless you're dictating.
     if detached and agent is not None and (observed.dictating or not agent.waiting):
         tint = meaning.Tint.ATTENTION if agent.waiting else meaning.Tint.NONE
-        slot = agent_slot(agent, compact=True)
+        slot = agent_slot(agent, spec.text.phase, compact=True)
         action = Action.OPEN_QUESTION if agent.waiting else Action.OPEN_MENU
-        lead += (CapsuleView(Key.AGENT, Zone.LEAD, (slot,), f"Agent · {agent.phase}", action, tint),)
+        lead += (CapsuleView(Key.AGENT, zone(Key.AGENT, spec), (slot,), f"Agent · {agent.phase}", action, tint),)
     if detached and job is not None:
-        lead += (CapsuleView(Key.JOB, Zone.LEAD, ((Marker.DOTS,),), job_label(job), Action.OPEN_MENU),)
+        lead += (CapsuleView(Key.JOB, zone(Key.JOB, spec), ((Marker.DOTS,),), job_label(job), Action.OPEN_MENU),)
     trail: tuple[CapsuleView, ...] = ()
     if detached and recorded is not None:
         tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
-        trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
-    # The readings stay the top row while their capsule expands into the menu.
-    # A plain keyboard shows as one more reading, beside the speaker and Wi-Fi.
-    # Processor and memory lead, so the device glyphs part their percentages from the battery's.
-    keyboard = (Glyph("keyboard"),) if observed.plain_keyboard else ()
-    # The machine's readings sit together: the battery's percentage, then the processor's and memory's.
-    readings: tuple[Slot, ...] = (
-        (*keyboard, Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
-        (*facts(observed.ambient), *resources(observed.system)),
-    )
+        trail += (CapsuleView(Key.RECORDING, zone(Key.RECORDING, spec), (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
+    # The readings stay the top row while their capsule expands into the menu; a
+    # group whose readings are all absent (a keyboard typing normally) takes no space.
+    groups = (tuple(part for each in group for part in reading(each, observed)) for group in spec.status.groups)
+    readings: tuple[Slot, ...] = tuple(group for group in groups if group)
     persistent = (
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
         if expanded is Expansion.MENU
@@ -317,7 +420,7 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
     count = observed.inbox + observed.unread
     if count > 0:
         label = inbox_label(observed.inbox, observed.unread)
-        trail += (CapsuleView(Key.INBOX, Zone.TRAIL, ((Glyph("bell"), Badge(inbox_text(count))),), label, Action.OPEN_INBOX),)
+        trail += (CapsuleView(Key.INBOX, zone(Key.INBOX, spec), ((Glyph("bell"), Badge(inbox_text(count))),), label, Action.OPEN_INBOX),)
     middle: tuple[CapsuleView, ...]
     match expanded:
         case Expansion.MENU:
@@ -326,13 +429,14 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
             middle = (CapsuleView(Key.ISLAND, Zone.ISLAND, (), "Workspace controls · Escape closes", Action.CLOSE_MENU),)
         case None:
             active = observed.dictating or observed.notice is not None or agent is not None or job is not None or recorded is not None
-            middle = (centre(observed, hovered=hovered),) if active else ()
+            middle = (centre(observed, spec.text, hovered=hovered),) if active else ()
         case _:
             assert_never(expanded)
-    return (*lead, *middle, *trail, *persistent)
+    ranks = order(spec)
+    return tuple(sorted((*lead, *middle, *trail, *persistent), key=lambda view: ranks.index(view.key)))
 
 
-def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
+def centre(observed: Observed, text: TextSpec, *, hovered: Key | None) -> CapsuleView:
     """Only live activity belongs here; persistent readings have fixed right anchors."""
     revealed = hovered is Key.ISLAND
     agent, job, recorded = observed.agent, observed.job, capture(observed.recording)
@@ -346,9 +450,9 @@ def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
             Key.ISLAND, Zone.ISLAND, slots, f"An agent question needs you: {agent.phase} · open it", Action.OPEN_QUESTION, meaning.Tint.ATTENTION
         )
     if observed.notice is not None:
-        return notice_view(observed.notice, revealed=revealed)
+        return notice_view(observed.notice, text, revealed=revealed)
     leading: tuple[Slot, ...] = (
-        *((agent_slot(agent, compact=False),) if agent is not None else ()),
+        *((agent_slot(agent, text.phase, compact=False),) if agent is not None else ()),
         *(((Marker.DOTS,),) if job is not None else ()),
     )
     trailing: tuple[Slot, ...] = (recording_slot(recorded, hovered=revealed),) if recorded is not None else ()
@@ -363,12 +467,12 @@ def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
     return CapsuleView(Key.ISLAND, Zone.ISLAND, (*leading, *trailing), f"{label} · Open Workspace controls", Action.OPEN_MENU, detail=steps)
 
 
-def notice_view(notice: Notice, *, revealed: bool) -> CapsuleView:
+def notice_view(notice: Notice, text: TextSpec, *, revealed: bool) -> CapsuleView:
     """The agent's news: its title and up to two lines of it; the pointer reveals Dismiss."""
     dismiss: Slot = (Control("close", "Dismiss", Action.DISMISS_NOTICE),) if revealed else ()
     symbol = Glyph("bell") if notice.question else Glyph("agent")
-    slots: tuple[Slot, ...] = ((symbol, Text(elided(notice.title, TITLE), strong=True)), dismiss)
-    detail = Detail((notice.text,), 2, NOTICE_WIDTH) if notice.text else None
+    slots: tuple[Slot, ...] = ((symbol, Text(elided(notice.title, text.title), strong=True)), dismiss)
+    detail = Detail((notice.text,), 2, text.notice_width) if notice.text else None
     tint = meaning.Tint.ATTENTION if notice.question else meaning.Tint.NONE
     label = ": ".join(part for part in (notice.title, notice.text) if part) + " · Open on canvas"
     return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, label, Action.OPEN_NOTICE, tint, detail=detail)

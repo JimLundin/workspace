@@ -52,7 +52,7 @@ lazy from desktop_ui.island_menu import (
     entries,
     restores_focus,
 )
-lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island
+lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, order
 lazy from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
@@ -694,7 +694,7 @@ class DesktopBar:
                 expanded = None
             case _:
                 assert_never(opened)
-        self.views = island(self.observed(), hovered=self.hovered, expanded=expanded)
+        self.views = island(self.observed(), self.specs.island, hovered=self.hovered, expanded=expanded)
         shown = tuple(Shown(view, self.measure(view, opened)) for view in self.views)
         self.motion = retarget(self.motion, shown, animate=self.visible and self.observations.motion())
         listening = self.dictating
@@ -716,7 +716,10 @@ class DesktopBar:
         bar = self.specs.sizes.bar
         metrics = Metrics(width, bar.top, bar.gap, bar.edge)
         framed = frozendict(
-            (each.key, each) for each in snap(frame(placed(self.motion, self.specs.sizes.capsule.height), metrics), self.window.devicePixelRatioF())
+            (each.key, each)
+            for each in snap(
+                frame(placed(self.motion, self.specs.sizes.capsule.height), metrics, order(self.specs.island)), self.window.devicePixelRatioF()
+            )
         )
         match self.preference:
             case appearance.Contrast():

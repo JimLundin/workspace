@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from assistant.recording_state import RecordingState
+from desktop_ui import ui_spec
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components.meaning import Tint, Tone
 from desktop_ui.island_model import (
@@ -28,6 +29,7 @@ from desktop_ui.island_model import (
 from desktop_ui.island_moment import Notice
 from winapi.machine_status import Battery, Speakers, Wifi
 
+SPEC = ui_spec.island()
 RESTING = Observed(None, None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), SystemStatus(), 0, dictating=False)
 WORKING = Agent("Comparing both sheets", waiting=False)
 ASKING = Agent("Which sheet should the reply cover?", waiting=True)
@@ -36,12 +38,12 @@ RECORDING = RecordingState(phase="recording", seconds=125)
 
 def view(observed: Observed, key: Key, *, expanded: Expansion | None = None, hovered: Key | None = None) -> CapsuleView:
     """Read one identity without depending on other capsules' inventory positions."""
-    return next(each for each in island(observed, expanded=expanded, hovered=hovered) if each.key is key)
+    return next(each for each in island(observed, SPEC, expanded=expanded, hovered=hovered) if each.key is key)
 
 
 def test_idle_has_only_device_status_and_clock_power_on_right() -> None:
     # Defect: idle readings reappear in the centre, or the fixed capsule gains a reading.
-    views = island(RESTING)
+    views = island(RESTING, SPEC)
     assert tuple(each.key for each in views) == (Key.STATUS,)
     assert tuple(each.zone for each in views) == (Zone.RIGHT,)
     assert views[-1].slots == (
@@ -100,7 +102,7 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                     fixed = view(observed, Key.STATUS, expanded=expanded)
                     assert fixed.slots == view(baseline, Key.STATUS).slots
                     assert expanded is Expansion.MENU or fixed == view(baseline, Key.STATUS)
-                    activity = (each for each in island(observed, expanded=expanded) if each.zone is not Zone.RIGHT)
+                    activity = (each for each in island(observed, SPEC, expanded=expanded) if each.zone is not Zone.RIGHT)
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
             status = view(baseline, Key.STATUS)
             assert status.slots[-2] == (Glyph(baseline.system.speaker_icon), Glyph(baseline.system.wifi_icon))
@@ -134,7 +136,7 @@ def test_concurrent_activity_has_distinct_indicators_and_stable_agent_stop() -> 
 
 def test_dictation_detaches_every_other_activity_without_persistent_facts() -> None:
     observed = replace(RESTING, dictating=True, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING, inbox=2)
-    dynamic = tuple(each for each in island(observed) if each.zone is not Zone.RIGHT)
+    dynamic = tuple(each for each in island(observed, SPEC) if each.zone is not Zone.RIGHT)
     assert tuple(each.key for each in dynamic) == (Key.AGENT, Key.JOB, Key.ISLAND, Key.RECORDING, Key.INBOX)
     assert dynamic[0].slots == ((Spinner("Agent: Comparing both sheets"), Control("stop", "Stop agent work", Action.STOP_AGENT)),)
     assert dynamic[1].slots == ((Marker.DOTS,),)
@@ -155,17 +157,17 @@ def test_the_status_capsule_expands_into_the_menu_and_a_question_into_the_island
     # opened it, that capsule loses its readings while open, a question expands
     # the status capsule, or activity stays in the centre while the menu lists it.
     busy = replace(RESTING, agent=WORKING, job=Job.TRANSCRIBING, recording=RECORDING, inbox=2)
-    opened = island(busy, expanded=Expansion.MENU)
+    opened = island(busy, SPEC, expanded=Expansion.MENU)
     assert tuple(each.key for each in opened) == (Key.INBOX, Key.STATUS)
     readings = view(busy, Key.STATUS).slots
     assert opened[-1] == CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
     asking = replace(busy, agent=ASKING)
-    assert tuple(each.key for each in island(asking, expanded=Expansion.REQUEST)) == (Key.ISLAND, Key.INBOX, Key.STATUS)
+    assert tuple(each.key for each in island(asking, SPEC, expanded=Expansion.REQUEST)) == (Key.ISLAND, Key.INBOX, Key.STATUS)
     assert view(asking, Key.STATUS, expanded=Expansion.REQUEST) == view(asking, Key.STATUS)
 
 
 def test_inbox_only_exists_while_pending_and_keeps_exact_count_in_label() -> None:
-    assert Key.INBOX not in tuple(each.key for each in island(RESTING))
+    assert Key.INBOX not in tuple(each.key for each in island(RESTING, SPEC))
     many = view(replace(RESTING, inbox=120), Key.INBOX)
     assert many.slots == ((Glyph("bell"), Badge("99+")),)
     assert many.label.startswith("120 clarifications need your input")
@@ -187,7 +189,7 @@ def test_a_notice_takes_the_island_with_its_reply_and_detaches_running_work() ->
     # Defects: the notice loses its text, its press doesn't open the item, work
     # vanishes instead of detaching, or a question's notice isn't tinted.
     observed = replace(RESTING, agent=WORKING, recording=RECORDING, notice=FINDING)
-    views = island(observed)
+    views = island(observed, SPEC)
     assert [each.key for each in views if each.zone in (Zone.LEAD, Zone.ISLAND, Zone.TRAIL)] == [Key.AGENT, Key.ISLAND, Key.RECORDING]
     notice = view(observed, Key.ISLAND)
     assert notice.slots == ((Glyph("agent"), Text("Budget checked", strong=True)), ())

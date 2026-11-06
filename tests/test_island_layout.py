@@ -1,10 +1,11 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
 from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap, wrap
-from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Spinner, Text, Zone
-from desktop_ui.ui_spec import sizes
+from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Spinner, Text, Zone, order
+from desktop_ui.ui_spec import island, sizes
 
 SIZES = sizes()
+ORDER = order(island())
 
 
 def metrics(width: float) -> Metrics:
@@ -13,7 +14,9 @@ def metrics(width: float) -> Metrics:
 
 def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:
     # Defect: the island drifts off centre, or the strip above it doesn't reach the screen edge.
-    assert frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34)], metrics(1000)) == (Framed(Key.ISLAND, Box(444, 8, 112, 34), Box(444, 0, 112, 8), 1.0),)
+    assert frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34)], metrics(1000), ORDER) == (
+        Framed(Key.ISLAND, Box(444, 8, 112, 34), Box(444, 0, 112, 8), 1.0),
+    )
 
 
 def test_neighbours_sit_one_gap_apart_and_grow_outward_in_order() -> None:
@@ -25,7 +28,7 @@ def test_neighbours_sit_one_gap_apart_and_grow_outward_in_order() -> None:
         Placed(Key.RECORDING, Zone.TRAIL, 86, 34),
         Placed(Key.AGENT, Zone.LEAD, 34, 34),
     ]
-    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000))] == [
+    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000), ORDER)] == [
         (Key.AGENT, 328, 34),
         (Key.JOB, 368, 70),
         (Key.ISLAND, 444, 112),
@@ -37,18 +40,18 @@ def test_neighbours_sit_one_gap_apart_and_grow_outward_in_order() -> None:
 def test_a_capsule_part_way_in_shares_a_gap_scaled_by_the_less_present_neighbour() -> None:
     # Defect: an entering capsule opens a full gap at once, or its neighbour keeps a stale gap.
     placed = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0.5), Placed(Key.INBOX, Zone.TRAIL, 34, 34)]
-    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000))] == [
+    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000), ORDER)] == [
         (Key.ISLAND, 444, 112),
         (Key.RECORDING, 559, 43),
         (Key.INBOX, 605, 34),
     ]
     absent = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0), Placed(Key.INBOX, Zone.TRAIL, 34, 34)]
-    assert [(f.key, f.box.x) for f in frame(absent, metrics(1000))] == [(Key.ISLAND, 444), (Key.INBOX, 562)]
+    assert [(f.key, f.box.x) for f in frame(absent, metrics(1000), ORDER)] == [(Key.ISLAND, 444), (Key.INBOX, 562)]
 
 
 def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
     # Defect: Qt and composition round edges differently, so content and glass disagree by a pixel.
-    framed = frame([Placed(Key.ISLAND, Zone.ISLAND, 111.3, 34)], metrics(1001))
+    framed = frame([Placed(Key.ISLAND, Zone.ISLAND, 111.3, 34)], metrics(1001), ORDER)
     (snapped,) = snap(framed, 1.25)
     edges = (snapped.box.x, snapped.box.x + snapped.box.width, snapped.box.y, snapped.box.y + snapped.box.height)
     assert all(abs(edge * 1.25 - round(edge * 1.25)) < 1e-9 for edge in edges)
@@ -58,10 +61,10 @@ def test_the_fixed_right_cluster_survives_activity_changes() -> None:
     # Defect: activity shifts the fixed cluster or overlaps it.
     fixed = (Placed(Key.STATUS, Zone.RIGHT, 216, 34),)
     for screen in (480, 1000):
-        baseline = frame(fixed, metrics(screen))
+        baseline = frame(fixed, metrics(screen), ORDER)
         assert tuple(each.key for each in baseline) == (Key.STATUS,)
         assert baseline[-1].box.x + baseline[-1].box.width == screen - 12
-        framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), metrics(screen))
+        framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), metrics(screen), ORDER)
         assert tuple(each for each in framed if each.key is not Key.ISLAND) == baseline
         assert all(0 <= each.box.x <= each.box.x + each.box.width <= screen for each in framed)
         activity = next((each for each in framed if each.key is Key.ISLAND), None)

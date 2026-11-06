@@ -4,14 +4,18 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
+from desktop_ui import ui_spec
 from desktop_ui.island_layout import Metrics, Placed, arrange, frame, tiles
 from desktop_ui.island_menu import Command, Item, Live, Menu, Toggle, entries
-from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Spinner, Text, Zone
+from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Spinner, Text, Zone, island, order
 from desktop_ui.ui_spec import SHIPPED, Sizes, SpecError, controls, sizes, starting_specs
+from tests import test_island_model
 from tests.test_island_menu import RESTING
 
 TOKENS = (SHIPPED / "tokens.toml").read_text(encoding="utf-8")
 CONTROLS = (SHIPPED / "controls.toml").read_text(encoding="utf-8")
+ISLAND = (SHIPPED / "island.toml").read_text(encoding="utf-8")
+ORDER = order(ui_spec.island())
 
 
 def folder(tmp_path: Path, name: str, text: str) -> Path:
@@ -19,6 +23,7 @@ def folder(tmp_path: Path, name: str, text: str) -> Path:
     path.mkdir(parents=True)
     (path / "tokens.toml").write_text(text, encoding="utf-8")
     (path / "controls.toml").write_text(CONTROLS, encoding="utf-8")
+    (path / "island.toml").write_text(ISLAND, encoding="utf-8")
     return path
 
 
@@ -84,7 +89,7 @@ def test_every_size_the_bar_lays_out_comes_from_the_spec(tmp_path: Path) -> None
         assert [spot.x for spot in big.spots] == [2 * spot.x for spot in small.spots]
     capsules = (Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.STATUS, Zone.RIGHT, 200, 34), Placed(Key.INBOX, Zone.TRAIL, 40, 34))
     bars = ((base, capsules, 1000.0), (large, tuple(Placed(c.key, c.zone, 2 * c.width, 2 * c.height) for c in capsules), 2000.0))
-    small_frame, big_frame = (frame(placed, Metrics(screen, s.bar.top, s.bar.gap, s.bar.edge)) for s, placed, screen in bars)
+    small_frame, big_frame = (frame(placed, Metrics(screen, s.bar.top, s.bar.gap, s.bar.edge), ORDER) for s, placed, screen in bars)
     assert [(f.box.x * 2, f.box.y * 2, f.box.width * 2) for f in small_frame] == [(f.box.x, f.box.y, f.box.width) for f in big_frame]
     menu = Menu(entries(RESTING, controls()))
     pairs = zip(tiles(menu, base.menu), tiles(menu, large.menu), strict=True)
@@ -122,3 +127,50 @@ def test_every_menu_command_is_reachable_from_the_shipped_menu() -> None:
     choices = {cell.entry.choice for cell in (*resting, *busy) if isinstance(cell.entry, Item | Toggle)}
     stops = {cell.entry.stop for cell in busy if isinstance(cell.entry, Live)}
     assert choices | stops >= set(Command)
+
+
+def edited_island(tmp_path: Path, text: str) -> ui_spec.IslandSpec:
+    path = folder(tmp_path, "island", TOKENS)
+    (path / "island.toml").write_text(text, encoding="utf-8")
+    return ui_spec.island(path)
+
+
+def island_refusal(tmp_path: Path, text: str) -> str:
+    try:
+        edited_island(tmp_path, text)
+    except SpecError as error:
+        return str(error)
+    raise AssertionError("The island spec was accepted.")
+
+
+def test_editing_the_bar_composition_moves_and_hides_its_parts(tmp_path: Path) -> None:
+    # Defect: the spec is read but the bar still places activities and readings
+    # where the code used to, so an edit to island.toml changes nothing.
+    moved = edited_island(
+        tmp_path / "moved",
+        ISLAND.replace('lead = ["agent", "job"]', 'lead = ["recording", "agent", "job"]').replace(
+            'trail = ["recording", "inbox"]', 'trail = ["inbox"]'
+        ),
+    )
+    assert order(moved)[:3] == (Key.RECORDING, Key.AGENT, Key.JOB)
+    recording = replace(
+        test_island_model.RESTING,
+        agent=test_island_model.WORKING,
+        dictating=True,
+        recording=replace(test_island_model.RESTING.recording, phase="recording", seconds=5),
+    )
+    assert next(view for view in island(recording, moved) if view.key is Key.RECORDING).zone is Zone.LEAD
+    quiet = edited_island(tmp_path / "quiet", ISLAND.replace('"cpu", "memory"]', "]").replace('["keyboard", "speaker", "wifi"],', ""))
+    status = next(view for view in island(test_island_model.RESTING, quiet) if view.key is Key.STATUS)
+    glyphs = {part.name for slot in status.slots for part in slot if isinstance(part, Glyph)}
+    assert len(status.slots) == 1 and not glyphs & {"cpu", "memory", "speaker-unknown", "wifi-unknown"}
+
+
+def test_a_bar_edit_that_loses_or_repeats_a_part_is_refused(tmp_path: Path) -> None:
+    # Defect: an activity left out of both sides never shows, one listed twice is
+    # drawn twice, or a reading repeats in the status capsule.
+    assert "inbox is placed 0 times" in island_refusal(tmp_path / "lost", ISLAND.replace('["recording", "inbox"]', '["recording"]'))
+    assert "agent is placed 2 times" in island_refusal(
+        tmp_path / "twice", ISLAND.replace('["recording", "inbox"]', '["recording", "inbox", "agent"]')
+    )
+    assert "clock appears more than once" in island_refusal(tmp_path / "clock", ISLAND.replace('"wifi"]', '"wifi", "clock"]'))

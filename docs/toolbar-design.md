@@ -76,6 +76,8 @@ cells, Enter chooses, and Escape closes.
 
 ## Code
 
+What the status capsule shows and in what order, and which side of the
+island each activity steps aside to, are in `desktop_ui/spec/island.toml`.
 Every size the bar lays out and paints is in `desktop_ui/spec/tokens.toml`,
 validated by `ui_spec`. The running bar reloads the file when it changes
 (`ui_spec_watch`) and re-lays itself out, without a restart. A file that

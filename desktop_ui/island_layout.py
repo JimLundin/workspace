@@ -209,9 +209,8 @@ def present(value: float) -> float:
     return min(1.0, max(0.0, value))
 
 
-def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
-    """Capsules in left-to-right order; absent ones (presence 0) take no space."""
-    order: tuple[Key, ...] = tuple(Key)
+def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> tuple[Framed, ...]:
+    """Capsules in `order`, left to right; absent ones (presence 0) take no space."""
 
     def shown(capsule: Placed) -> float:
         return capsule.width * present(capsule.presence)

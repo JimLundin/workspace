@@ -16,6 +16,7 @@ from typing import Annotated, Final
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
 
 from desktop_ui.island_menu import ControlsSpec, problems
+from desktop_ui.island_model import IslandSpec, island_problems
 from usage import DIRECTORY
 
 SHIPPED: Final = Path(__file__).resolve().parent / "spec"
@@ -107,10 +108,12 @@ class Specs:
 
     sizes: Sizes
     controls: ControlsSpec
+    island: IslandSpec
 
 
 _SIZES = TypeAdapter(Sizes)
 _CONTROLS = TypeAdapter(ControlsSpec)
+_ISLAND = TypeAdapter(IslandSpec)
 
 
 def _table(path: Path) -> dict[str, object]:
@@ -136,7 +139,7 @@ def load[T](path: Path, adapter: TypeAdapter[T]) -> T:
         raise _invalid(path, error) from error
 
 
-BAR_FILES: Final = ("tokens.toml", "controls.toml")
+BAR_FILES: Final = ("tokens.toml", "controls.toml", "island.toml")
 """The files the bar reads, which reload together."""
 
 
@@ -156,8 +159,16 @@ def controls(folder: Path = SHIPPED) -> ControlsSpec:
     return loaded
 
 
+def island(folder: Path = SHIPPED) -> IslandSpec:
+    path = folder / "island.toml"
+    loaded = load(path, _ISLAND)
+    if found := island_problems(loaded):
+        raise SpecError(f"{path.name}: {found[0]}")
+    return loaded
+
+
 def specs(folder: Path = SHIPPED) -> Specs:
-    return Specs(sizes(folder), controls(folder))
+    return Specs(sizes(folder), controls(folder), island(folder))
 
 
 def keep(folder: Path, names: tuple[str, ...], kept: Path = KEPT) -> None:
