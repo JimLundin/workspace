@@ -1,0 +1,79 @@
+# The controls menu (press the clock or battery), top to bottom.
+#
+# Workspace reloads this file while it runs. A file that doesn't validate is
+# reported and the menu keeps its last good layout.
+#
+# The menu is a grid of 8 columns. Each [[rows]] is a band `tracks` tall (a track
+# is `menu.track` in tokens.toml, gutter included). Its kind is one of:
+#   cells       - entries placed left to right; `span` is their width in columns.
+#                 An entry that doesn't apply now (Record a meeting while one
+#                 records) gives its place to the next; an empty row takes no space.
+#   activities  - a full-width card with its Stop for each running activity.
+#   tray        - the system tray's icons, a column each, wrapping onto new lines.
+#
+# Entries: auto_record, overlay, taskbar, placement, dark_when_away (toggles);
+# sound (the slider); canvas, record, switch_windows, copy_transcript, keymap,
+# agent_typed, notifications, all_controls (tiles, tools or links).
+# Faces: toggle, slider, tile, wide, tool, link. Each entry is placed once.
+
+[[rows]]
+kind = "activities"
+tracks = 5
+
+[[rows]]
+kind = "cells"
+tracks = 4
+cells = [
+    { entry = "auto_record", face = "toggle", span = 4, label = "Auto-record", icon = "mic" },
+    { entry = "canvas", face = "tile", span = 4, label = "Your work canvas", icon = "canvas", caption = "Canvas" },
+]
+
+[[rows]]
+kind = "cells"
+tracks = 4
+cells = [
+    { entry = "overlay", face = "toggle", span = 4, label = "Keyboard overlay", icon = "layers" },
+    { entry = "taskbar", face = "toggle", span = 4, label = "Windows taskbar", icon = "table" },
+]
+
+[[rows]]
+kind = "cells"
+tracks = 4
+cells = [
+    { entry = "placement", face = "toggle", span = 4, label = "Placement", icon = "grid" },
+    { entry = "dark_when_away", face = "toggle", span = 4, label = "Dark when away", icon = "lock" },
+]
+
+[[rows]]
+kind = "cells"
+tracks = 5
+cells = [{ entry = "record", face = "wide", span = 8, label = "Record a meeting", icon = "mic" }]
+
+[[rows]]
+kind = "cells"
+tracks = 6
+cells = [{ entry = "sound", face = "slider", span = 8 }]
+
+[[rows]]
+kind = "cells"
+tracks = 7
+cells = [
+    { entry = "switch_windows", face = "tool", span = 2, label = "Switch windows", icon = "search", caption = "Switch" },
+    { entry = "copy_transcript", face = "tool", span = 2, label = "Copy latest transcript", icon = "doc", caption = "Transcript" },
+    { entry = "keymap", face = "tool", span = 2, label = "Keyboard map", icon = "keyboard", caption = "Key map" },
+    { entry = "agent_typed", face = "tool", span = 2, label = "Type a task for the agent", icon = "agent", caption = "Agent" },
+]
+
+[[rows]]
+kind = "tray"
+tracks = 4
+
+[[rows]]
+kind = "cells"
+tracks = 3
+cells = [{ entry = "notifications", face = "link", span = 8, label = "Windows notification settings", icon = "bell" }]
+
+[[rows]]
+kind = "cells"
+tracks = 3
+cells = [{ entry = "all_controls", face = "link", span = 8, label = "All Workspace controls…", icon = "more" }]

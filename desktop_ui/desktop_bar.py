@@ -158,8 +158,8 @@ class DesktopBar:
         "resolution",
         "sample_bounds",
         "sampled_at",
-        "sizes",
         "spec_watch",
+        "specs",
         "status_service",
         "system",
         "taskbar",
@@ -226,9 +226,9 @@ class DesktopBar:
         self.sampled_at: float | None = None
         self.preference: appearance.Preference = self.observations.material()
         self.frost = appearance.Frost.SMOKED
-        self.sizes = self.starting_sizes()
-        self.window = BarWindow(self.loop, self, self.sizes)
-        self.spec_watch = SpecWatch(self.observations.specs, ui_spec.sizes, self.sizes, self.respec, self.errors.put)
+        self.specs = self.starting_specs()
+        self.window = BarWindow(self.loop, self, self.specs.sizes)
+        self.spec_watch = SpecWatch(self.observations.specs, ui_spec.specs, self.specs, self.respec, self.errors.put)
         self.notification_service: NotificationObserver | None = None
         self.notification_access = system_notices.Access.UNAVAILABLE
         self.notification_observation: system_notices.Observed | None = None
@@ -412,7 +412,8 @@ class DesktopBar:
                     dark_when_away=DARK_WHEN_IDLE_MINUTES if self.away_screens is not None and self.away_screens.setting.enabled else None,
                     sound=sound,
                     tray=tuple(entry.tip or "Tray application" for entry in self.window.tray),
-                )
+                ),
+                self.specs.controls,
             )
         )
         if not isinstance(self.opened, Menu):
@@ -667,7 +668,7 @@ class DesktopBar:
             case Inbox(rows=rows) if view.key is Key.ISLAND:
                 return self.window.measure_inbox(rows)
             case Menu() if view.key is Key.STATUS:
-                return expansion(opened, self.window.measure(view), self.sizes.menu)
+                return expansion(opened, self.window.measure(view), self.specs.sizes.menu)
             case _:
                 return self.window.measure(view)
 
@@ -712,10 +713,10 @@ class DesktopBar:
 
     def draw(self) -> None:
         width = QtGui.QGuiApplication.primaryScreen().geometry().width()
-        bar = self.sizes.bar
+        bar = self.specs.sizes.bar
         metrics = Metrics(width, bar.top, bar.gap, bar.edge)
         framed = frozendict(
-            (each.key, each) for each in snap(frame(placed(self.motion, self.sizes.capsule.height), metrics), self.window.devicePixelRatioF())
+            (each.key, each) for each in snap(frame(placed(self.motion, self.specs.sizes.capsule.height), metrics), self.window.devicePixelRatioF())
         )
         match self.preference:
             case appearance.Contrast():
@@ -737,17 +738,19 @@ class DesktopBar:
             if moving.key in framed
         )
         # The window keeps the room a capsule is heading for, so it resizes only as an expansion starts and settles.
-        reach = max((max(moving.height.value, moving.height.target) for moving in self.motion.capsules), default=float(self.sizes.capsule.height))
+        reach = max(
+            (max(moving.height.value, moving.height.target) for moving in self.motion.capsules), default=float(self.specs.sizes.capsule.height)
+        )
         self.window.present(
             Presented(
                 drawn,
                 reach,
                 self.opened,
-                sizes=self.sizes,
+                sizes=self.specs.sizes,
                 frost=self.frost,
                 contrast=contrast,
                 glass=self.preference is appearance.Material.GLASS,
-                shell_look=self.style(Tint.NONE, self.sizes.capsule.height),
+                shell_look=self.style(Tint.NONE, self.specs.sizes.capsule.height),
             )
         )
         # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
@@ -757,7 +760,7 @@ class DesktopBar:
     def style(self, tint: Tint, height: float) -> Look:
         pane = (
             desktop_ui.components.appearance.Menu(self.frost)
-            if expanded(height, self.sizes)
+            if expanded(height, self.specs.sizes)
             else desktop_ui.components.appearance.Capsule(self.frost)
         )
         return look(self.preference, pane, tint)
@@ -856,17 +859,17 @@ class DesktopBar:
             if capsule is not None and any(Marker.WAVE in slot for view in self.views for slot in view.slots):
                 capsule.update_indicators()
 
-    def starting_sizes(self) -> ui_spec.Sizes:
-        """The spec folder's sizes, or the kept copy's when an edit no longer validates."""
-        started, invalid = ui_spec.starting_sizes(self.observations.specs, self.observations.kept_specs)
+    def starting_specs(self) -> ui_spec.Specs:
+        """The spec folder's specs, or the kept copy's when an edit no longer validates."""
+        started, invalid = ui_spec.starting_specs(self.observations.specs, self.observations.kept_specs)
         if invalid is not None:
             self.errors.put(f"The bar started with its last good spec: {invalid}")
         return started
 
-    def respec(self, sizes: ui_spec.Sizes) -> None:
+    def respec(self, specs: ui_spec.Specs) -> None:
         """An edited spec validated: lay the bar out again with it, and keep it as the last good one."""
-        self.sizes = sizes
-        self.window.use(sizes)
+        self.specs = specs
+        self.window.use(specs.sizes)
         with suppress(OSError):
             ui_spec.keep(self.observations.specs, self.observations.kept_specs)
         self.render()

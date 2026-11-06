@@ -14,6 +14,7 @@ from typing import Annotated, Final
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
 
+from desktop_ui.island_menu import ControlsSpec, problems
 from usage import DIRECTORY
 
 SHIPPED: Final = Path(__file__).resolve().parent / "spec"
@@ -99,7 +100,16 @@ class SpecError(Exception):
     """A spec file that can't be used; the message names the file and the field."""
 
 
+@dataclass(frozen=True, slots=True)
+class Specs:
+    """Every spec the bar reads, loaded together so a reload applies all or none."""
+
+    sizes: Sizes
+    controls: ControlsSpec
+
+
 _SIZES = TypeAdapter(Sizes)
+_CONTROLS = TypeAdapter(ControlsSpec)
 
 
 def _table(path: Path) -> dict[str, object]:
@@ -128,6 +138,21 @@ def sizes(folder: Path = SHIPPED) -> Sizes:
     return loaded
 
 
+def controls(folder: Path = SHIPPED) -> ControlsSpec:
+    path = folder / "controls.toml"
+    try:
+        loaded = _CONTROLS.validate_python(_table(path))
+    except ValidationError as error:
+        raise _invalid(path, error) from error
+    if found := problems(loaded):
+        raise SpecError(f"{path.name}: {found[0]}")
+    return loaded
+
+
+def specs(folder: Path = SHIPPED) -> Specs:
+    return Specs(sizes(folder), controls(folder))
+
+
 def keep(folder: Path, kept: Path = KEPT) -> None:
     """Copy specs that just validated, so a later broken edit can't stop the desktop starting."""
     kept.mkdir(parents=True, exist_ok=True)
@@ -137,13 +162,13 @@ def keep(folder: Path, kept: Path = KEPT) -> None:
         partial.replace(kept / path.name)
 
 
-def starting_sizes(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[Sizes, SpecError | None]:
-    """The sizes to start with and, when the folder's don't validate, why the kept copy is used."""
+def starting_specs(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[Specs, SpecError | None]:
+    """The specs to start with and, when the folder's don't validate, why the kept copy is used."""
     try:
-        loaded = sizes(folder)
+        loaded = specs(folder)
     except SpecError as error:
         try:
-            return sizes(kept), error
+            return specs(kept), error
         except SpecError:
             raise error from None
     # The kept copy is a fallback; a data folder that can't be written costs only that.

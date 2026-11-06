@@ -12,8 +12,10 @@ its application.
 """
 
 from dataclasses import dataclass, field, replace
-from enum import Enum, auto
-from typing import Final, assert_never
+from enum import Enum, StrEnum, auto
+from typing import Annotated, Final, Literal, assert_never
+
+from pydantic import ConfigDict, Field
 
 from assistant.meeting_detection import AutomaticStatus
 from desktop_ui.keymap import shortcut, shortcut_hint
@@ -112,8 +114,8 @@ class TrayIcon:
 type Entry = Item | Live | Toggle | Slider | TrayIcon
 
 
-class Face(Enum):
-    """How a cell presents its entry."""
+class Face(StrEnum):
+    """How a cell presents its entry; `controls.toml` names it in lowercase."""
 
     CARD = auto()  # An ongoing activity across the grid, with its Stop.
     TOGGLE = auto()  # A round switch with the setting and its state.
@@ -142,16 +144,16 @@ class Cell:
     caption: str = ""  # A tile's short name; its entry's label stays its accessible name.
 
 
-def automatic_toggle(status: AutomaticStatus) -> Toggle:
+def automatic_detail(status: AutomaticStatus) -> str:
     match status:
         case AutomaticStatus.OFF:
-            return Toggle("Auto-record", "Teams · Off", "mic", Command.AUTOMATIC_RECORDING, on=False)
+            return "Teams · Off"
         case AutomaticStatus.CHECKING:
-            return Toggle("Auto-record", "Teams · Connecting…", "mic", Command.AUTOMATIC_RECORDING, on=True)
+            return "Teams · Connecting…"
         case AutomaticStatus.READY:
-            return Toggle("Auto-record", "Teams · On", "mic", Command.AUTOMATIC_RECORDING, on=True)
+            return "Teams · On"
         case AutomaticStatus.UNAVAILABLE:
-            return Toggle("Auto-record", "Teams · Check connection", "mic", Command.AUTOMATIC_RECORDING, on=True)
+            return "Teams · Check connection"
         case _:
             assert_never(status)
 
@@ -172,56 +174,207 @@ class Controls:
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
 
-def entries(controls: Controls) -> tuple[Cell, ...]:
-    """The grid for what's happening now; each cell's tracks include its share of the gutters."""
-    live: tuple[Live, ...] = (
+# ---- the menu as data: `desktop_ui/spec/controls.toml` ---------------------------------
+
+
+class EntryId(StrEnum):
+    """The entries a spec can place. What each does, and any wording that follows
+    state, stays here; the spec gives its place, look, label and symbol."""
+
+    AUTO_RECORD = auto()
+    CANVAS = auto()
+    OVERLAY = auto()
+    TASKBAR = auto()
+    PLACEMENT = auto()
+    DARK_WHEN_AWAY = auto()
+    RECORD = auto()
+    SOUND = auto()
+    SWITCH_WINDOWS = auto()
+    COPY_TRANSCRIPT = auto()
+    KEYMAP = auto()
+    AGENT_TYPED = auto()
+    NOTIFICATIONS = auto()
+    ALL_CONTROLS = auto()
+
+
+_SPEC = ConfigDict(extra="forbid")
+
+
+@dataclass(frozen=True, slots=True)
+class CellSpec:
+    entry: EntryId
+    face: Face
+    span: Annotated[int, Field(ge=1, le=COLUMNS)]
+    label: str = ""
+    """The accessible name; the sound slider takes Windows' own."""
+    icon: str = ""
+    caption: str = ""
+    """A tile's short name under its symbol."""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class CellsRow:
+    """Cells left to right; one whose entry is absent now (Record while recording)
+    gives its place to the next, and a row with none takes no space."""
+
+    kind: Literal["cells"]
+    tracks: Annotated[int, Field(ge=1, le=64)]
+    cells: tuple[CellSpec, ...]
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class ActivitiesRow:
+    """A full-width card for each running activity, `tracks` tall each."""
+
+    kind: Literal["activities"]
+    tracks: Annotated[int, Field(ge=1, le=64)]
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class TrayRow:
+    """The system tray's icons, a column each, wrapping onto lines `tracks` tall."""
+
+    kind: Literal["tray"]
+    tracks: Annotated[int, Field(ge=1, le=64)]
+    __pydantic_config__ = _SPEC
+
+
+type RowSpec = Annotated[CellsRow | ActivitiesRow | TrayRow, Field(discriminator="kind")]
+
+
+@dataclass(frozen=True, slots=True)
+class ControlsSpec:
+    """`controls.toml`: the menu's rows, top to bottom."""
+
+    rows: tuple[RowSpec, ...]
+    __pydantic_config__ = _SPEC
+
+
+def faces(entry: EntryId) -> frozenset[Face]:
+    """How each entry may present itself; cards and tray icons come only from their rows."""
+    match entry:
+        case EntryId.AUTO_RECORD | EntryId.OVERLAY | EntryId.TASKBAR | EntryId.PLACEMENT | EntryId.DARK_WHEN_AWAY:
+            return frozenset({Face.TOGGLE})
+        case EntryId.SOUND:
+            return frozenset({Face.SLIDER})
+        case (
+            EntryId.CANVAS
+            | EntryId.RECORD
+            | EntryId.SWITCH_WINDOWS
+            | EntryId.COPY_TRANSCRIPT
+            | EntryId.KEYMAP
+            | EntryId.AGENT_TYPED
+            | EntryId.NOTIFICATIONS
+            | EntryId.ALL_CONTROLS
+        ):
+            return frozenset({Face.TILE, Face.WIDE, Face.TOOL, Face.LINK})
+        case _:
+            assert_never(entry)
+
+
+def problems(spec: ControlsSpec) -> tuple[str, ...]:
+    """What makes a spec unusable, beyond its shape: each named by its row."""
+    found: list[str] = []
+    seen: set[EntryId] = set()
+    kinds = [row.kind for row in spec.rows]
+    found.extend(f"rows: more than one {kind} row" for kind in ("activities", "tray") if kinds.count(kind) > 1)
+    for index, row in enumerate(spec.rows):
+        match row:
+            case CellsRow(cells=cells):
+                if (width := sum(cell.span for cell in cells)) > COLUMNS:
+                    found.append(f"rows.{index}: its cells span {width} of the menu's {COLUMNS} columns")
+                for cell in cells:
+                    if cell.entry in seen:
+                        found.append(f"rows.{index}: {cell.entry} is already placed")
+                    seen.add(cell.entry)
+                    if cell.face not in faces(cell.entry):
+                        found.append(f"rows.{index}: {cell.entry} can't show as {cell.face}")
+                    if cell.entry is not EntryId.SOUND and not (cell.label and cell.icon):
+                        found.append(f"rows.{index}: {cell.entry} needs a label and an icon")
+            case ActivitiesRow() | TrayRow():
+                pass
+            case _:
+                assert_never(row)
+    return tuple(found)
+
+
+def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
+    return Toggle(spec.label, detail, spec.icon, choice, on=on)
+
+
+def entry(spec: CellSpec, controls: Controls) -> Entry | None:
+    """The entry `spec` places, as it reads now; None while it doesn't apply."""
+    match spec.entry:
+        case EntryId.AUTO_RECORD:
+            return toggle(spec, automatic_detail(controls.automatic), Command.AUTOMATIC_RECORDING, on=controls.automatic is not AutomaticStatus.OFF)
+        case EntryId.OVERLAY:
+            return toggle(spec, "On" if controls.overlay else "Off", Command.OVERLAY, on=controls.overlay)
+        case EntryId.TASKBAR:
+            return toggle(spec, "Shown" if controls.taskbar else "Hidden", Command.TASKBAR, on=controls.taskbar)
+        case EntryId.PLACEMENT:
+            return toggle(spec, "Paused" if controls.placement_paused else "On", Command.PLACEMENT, on=not controls.placement_paused)
+        case EntryId.DARK_WHEN_AWAY:
+            away = controls.dark_when_away
+            return toggle(spec, "Off" if away is None else f"External · {away} min idle", Command.DARK_WHEN_AWAY, on=away is not None)
+        case EntryId.CANVAS:
+            return Item(spec.label, spec.icon, Command.CANVAS)
+        case EntryId.RECORD:
+            return None if controls.recording is not None else Item(spec.label, spec.icon, Command.RECORD)
+        case EntryId.SOUND:
+            return controls.sound
+        case EntryId.SWITCH_WINDOWS:
+            return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER)
+        case EntryId.COPY_TRANSCRIPT:
+            return tool_item(spec.label, spec.icon, Tool.COPY_TRANSCRIPT)
+        case EntryId.KEYMAP:
+            return Item(spec.label, spec.icon, Command.KEYMAP)
+        case EntryId.AGENT_TYPED:
+            return tool_item(spec.label, spec.icon, Tool.AGENT_TYPED)
+        case EntryId.NOTIFICATIONS:
+            return Item(spec.label, spec.icon, Command.NOTIFICATIONS)
+        case EntryId.ALL_CONTROLS:
+            return Item(spec.label, spec.icon, Command.ALL_CONTROLS)
+        case _:
+            assert_never(spec.entry)
+
+
+def activities(controls: Controls) -> tuple[Live, ...]:
+    return (
         *((Live("Agent working", controls.agent, Command.STOP_AGENT),) if controls.agent is not None else ()),
         *((Live("Recording", controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()),
     )
-    cards = tuple(Cell(activity, Face.CARD, 0, COLUMNS, 5 * index, 5) for index, activity in enumerate(live))
-    top = 5 * len(cards)
-    toggles = (
-        automatic_toggle(controls.automatic),
-        Toggle("Keyboard overlay", "On" if controls.overlay else "Off", "layers", Command.OVERLAY, on=controls.overlay),
-        Toggle("Windows taskbar", "Shown" if controls.taskbar else "Hidden", "table", Command.TASKBAR, on=controls.taskbar),
-        Toggle("Placement", "Paused" if controls.placement_paused else "On", "grid", Command.PLACEMENT, on=not controls.placement_paused),
-        Toggle(
-            "Dark when away",
-            "Off" if controls.dark_when_away is None else f"External · {controls.dark_when_away} min idle",
-            "lock",
-            Command.DARK_WHEN_AWAY,
-            on=controls.dark_when_away is not None,
-        ),
-    )
-    modules = (
-        Cell(toggles[0], Face.TOGGLE, 0, 4, top, 4),
-        Cell(Item("Your work canvas", "canvas", Command.CANVAS), Face.TILE, 4, 4, top, 4, "Canvas"),
-        Cell(toggles[1], Face.TOGGLE, 0, 4, top + 4, 4),
-        Cell(toggles[2], Face.TOGGLE, 4, 4, top + 4, 4),
-        Cell(toggles[3], Face.TOGGLE, 0, 4, top + 8, 4),
-        Cell(toggles[4], Face.TOGGLE, 4, 4, top + 8, 4),
-    )
-    top += 12
-    record = () if controls.recording is not None else (Cell(Item("Record a meeting", "mic", Command.RECORD), Face.WIDE, 0, COLUMNS, top, 5),)
-    top += 5 * len(record)
-    sound = Cell(controls.sound, Face.SLIDER, 0, COLUMNS, top, 6)
-    top += 6
-    captioned: tuple[tuple[Entry, str], ...] = (
-        (tool_item("Switch windows", "search", Tool.WINDOW_SWITCHER), "Switch"),
-        (tool_item("Copy latest transcript", "doc", Tool.COPY_TRANSCRIPT), "Transcript"),
-        (Item("Keyboard map", "keyboard", Command.KEYMAP), "Key map"),
-        # Four two-column tiles fill the eight-column row edge to edge.
-        (tool_item("Type a task for the agent", "agent", Tool.AGENT_TYPED), "Agent"),
-    )
-    tools = tuple(Cell(entry, Face.TOOL, 2 * column, 2, top, 7, caption) for column, (entry, caption) in enumerate(captioned))
-    top += 7
-    tray = tuple(Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + 4 * (slot // COLUMNS), 4) for slot, name in enumerate(controls.tray))
-    top += 4 * ((len(tray) + COLUMNS - 1) // COLUMNS)
-    links = (
-        Cell(Item("Windows notification settings", "bell", Command.NOTIFICATIONS), Face.LINK, 0, COLUMNS, top, 3),
-        Cell(Item("All Workspace controls…", "more", Command.ALL_CONTROLS), Face.LINK, 0, COLUMNS, top + 3, 3),
-    )
-    return (*cards, *modules, *record, sound, *tools, *tray, *links)
+
+
+def entries(controls: Controls, spec: ControlsSpec) -> tuple[Cell, ...]:
+    """The grid for what's happening now, flowed from the spec's rows: each cell
+    follows the one before it, so no two overlap. Tracks include the gutters."""
+    cells: list[Cell] = []
+    top = 0
+    for row in spec.rows:
+        match row:
+            case ActivitiesRow(tracks=tracks):
+                for activity in activities(controls):
+                    cells.append(Cell(activity, Face.CARD, 0, COLUMNS, top, tracks))
+                    top += tracks
+            case TrayRow(tracks=tracks):
+                cells.extend(
+                    Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
+                    for slot, name in enumerate(controls.tray)
+                )
+                top += tracks * ((len(controls.tray) + COLUMNS - 1) // COLUMNS)
+            case CellsRow(tracks=tracks, cells=specs):
+                column = 0
+                for each in specs:
+                    if (present := entry(each, controls)) is not None:
+                        cells.append(Cell(present, each.face, column, each.span, top, tracks, each.caption))
+                        column += each.span
+                top += tracks if column else 0
+            case _:
+                assert_never(row)
+    return tuple(cells)
 
 
 @dataclass(frozen=True, slots=True)

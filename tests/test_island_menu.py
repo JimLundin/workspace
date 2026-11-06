@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from assistant.meeting_detection import AutomaticStatus
+from desktop_ui import ui_spec
 from desktop_ui.island_layout import tiles
 from desktop_ui.island_menu import (
     COLUMNS,
@@ -29,10 +30,10 @@ from desktop_ui.island_menu import (
     press,
     restores_focus,
 )
-from desktop_ui.ui_spec import sizes
 from protocol import Tool
 
-SIZES = sizes()
+SIZES = ui_spec.sizes()
+SPEC = ui_spec.controls()
 
 RESTING = Controls(None, None, sound=Slider("Sound", 0.4, muted=False))
 
@@ -59,20 +60,20 @@ def opened(outcome: Outcome) -> Menu:
 
 def test_running_activities_lead_as_cards_and_recording_replaces_its_start() -> None:
     # Defects: a running recording still offers "Record a meeting", or agent work has no Stop in the menu.
-    cells = entries(Controls("02:05", "Reading the request"))
+    cells = entries(Controls("02:05", "Reading the request"), SPEC)
     assert [(cell.entry, cell.face) for cell in cells[:2]] == [
         (Live("Agent working", "Reading the request", Command.STOP_AGENT), Face.CARD),
         (Live("Recording", "02:05", Command.STOP_RECORDING), Face.CARD),
     ]
     assert all(label(cell.entry) != "Record a meeting" for cell in cells)
-    assert any(label(cell.entry) == "Record a meeting" for cell in entries(RESTING))
+    assert any(label(cell.entry) == "Record a meeting" for cell in entries(RESTING, SPEC))
 
 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     # Defect: a track or column offset places one tile over another or past the menu's edge.
     tray = tuple(f"App {index}" for index in range(11))
     for controls in (RESTING, Controls("02:05", None), Controls("02:05", "Reading"), replace(RESTING, agent="Reading"), replace(RESTING, tray=tray)):
-        laid = tiles(Menu(entries(controls)), SIZES.menu)
+        laid = tiles(Menu(entries(controls, SPEC)), SIZES.menu)
         for tile in laid:
             assert tile.x > 0 and tile.x + tile.width < SIZES.menu.width
         for first in laid:
@@ -89,7 +90,7 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
 
 def test_toggles_show_their_state_and_apply_in_place() -> None:
     # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
-    cells = entries(Controls(None, None, AutomaticStatus.READY, overlay=True, taskbar=False, dark_when_away=2))
+    cells = entries(Controls(None, None, AutomaticStatus.READY, overlay=True, taskbar=False, dark_when_away=2), SPEC)
     toggles = [cell.entry for cell in cells if cell.face is Face.TOGGLE]
     assert toggles == [
         Toggle("Auto-record", "Teams · On", "mic", Command.AUTOMATIC_RECORDING, on=True),
@@ -110,14 +111,14 @@ def test_automatic_recording_reports_connection_failure_while_opted_in() -> None
         (AutomaticStatus.CHECKING, "Teams · Connecting…", True),
         (AutomaticStatus.UNAVAILABLE, "Teams · Check connection", True),
     ):
-        toggle = next(cell.entry for cell in entries(Controls(None, None, status)) if cell.face is Face.TOGGLE)
+        toggle = next(cell.entry for cell in entries(Controls(None, None, status), SPEC) if cell.face is Face.TOGGLE)
         assert toggle == Toggle("Auto-record", detail, "mic", Command.AUTOMATIC_RECORDING, on=on)
 
 
 def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     # Defects: an arrow skips the cell beside or below the selection, Left leaves
     # the grid's edge, or Down from the last cell strands the selection.
-    menu = Menu(entries(RESTING))
+    menu = Menu(entries(RESTING, SPEC))
     assert selected(press(menu, Key.DOWN)) == "Auto-record"
     assert selected(press(at(menu, "Auto-record"), Key.RIGHT)) == "Your work canvas"
     assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Placement"
@@ -133,12 +134,12 @@ def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
 def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
     # Defects: Left or Right moves off the slider instead of changing the volume,
     # a step leaves the 0 to 1 range, or an unknown level invents one.
-    menu = at(Menu(entries(RESTING)), "Sound")
+    menu = at(Menu(entries(RESTING, SPEC)), "Sound")
     assert press(menu, Key.RIGHT) == Applied(Volume(0.45))
     assert press(menu, Key.LEFT) == Applied(Volume(0.35))
-    full = at(Menu(entries(replace(RESTING, sound=Slider("Sound", 0.98, muted=False)))), "Sound")
+    full = at(Menu(entries(replace(RESTING, sound=Slider("Sound", 0.98, muted=False)), SPEC)), "Sound")
     assert press(full, Key.RIGHT) == Applied(Volume(1.0))
-    unknown = at(Menu(entries(Controls(None, None))), "Sound")
+    unknown = at(Menu(entries(Controls(None, None), SPEC)), "Sound")
     assert press(unknown, Key.RIGHT) == unknown
     assert press(menu, Key.ENTER) == menu
 
@@ -146,7 +147,7 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
 def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> None:
     # Defects: Enter on a card doesn't stop its activity, Escape chooses something,
     # or a repeated letter stays on its first match.
-    menu = Menu(entries(Controls("02:05", None)), selected=0)
+    menu = Menu(entries(Controls("02:05", None), SPEC), selected=0)
     assert press(menu, Key.ENTER) == Chosen(Command.STOP_RECORDING)
     assert press(menu, Key.ESCAPE) is Dismissed.ESCAPE
     first = opened(press(menu, Letter("k")))
@@ -157,11 +158,11 @@ def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -
 def test_tool_cells_derive_hints_and_short_captions() -> None:
     # Defects: the switcher advertises layer/tap labels instead of physical keys, or a
     # small tile shows a caption that doesn't name its tool.
-    tools = [(cell.entry, cell.caption) for cell in entries(RESTING) if cell.face is Face.TOOL]
+    tools = [(cell.entry, cell.caption) for cell in entries(RESTING, SPEC) if cell.face is Face.TOOL]
     assert tools[0] == (Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), "X S"), "Switch")
     assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map", "Agent"]
     # Defect: the tool row leaves part of the menu's width empty.
-    row = [cell for cell in entries(RESTING) if cell.face is Face.TOOL]
+    row = [cell for cell in entries(RESTING, SPEC) if cell.face is Face.TOOL]
     assert sum(cell.span for cell in row) == COLUMNS
 
 
@@ -175,7 +176,7 @@ def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> No
 def test_tray_icons_fill_rows_of_eight_after_the_tools_and_click_their_own_slot() -> None:
     # Defects: an icon lands on the wrong row or slot, the links overlap the tray,
     # or Enter on an icon clicks another application's icon.
-    menu = Menu(entries(replace(RESTING, tray=tuple(f"App {index}" for index in range(10)))))
+    menu = Menu(entries(replace(RESTING, tray=tuple(f"App {index}" for index in range(10))), SPEC))
     icons = [cell for cell in menu.cells if cell.face is Face.ICON]
     assert [cell.entry for cell in icons] == [TrayIcon(f"App {index}", index) for index in range(10)]
     assert [(cell.column, cell.track - icons[0].track) for cell in icons] == [*((column, 0) for column in range(8)), (0, 4), (1, 4)]
@@ -183,4 +184,4 @@ def test_tray_icons_fill_rows_of_eight_after_the_tools_and_click_their_own_slot(
     assert selected(press(at(menu, "App 1"), Key.DOWN)) == "App 9"
     assert selected(press(at(menu, "App 9"), Key.DOWN)) == "Windows notification settings"
     assert press(at(menu, "App 9"), Key.ENTER) == Chosen(TrayChoice(9))
-    assert not any(cell.face is Face.ICON for cell in entries(RESTING))
+    assert not any(cell.face is Face.ICON for cell in entries(RESTING, SPEC))

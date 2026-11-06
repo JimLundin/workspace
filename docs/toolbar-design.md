@@ -71,7 +71,7 @@ running activity, toggles (Auto-record Teams, keyboard overlay, Windows
 taskbar, window placement, dark when away), the Canvas tile, **Record a
 meeting**, a volume slider, small tools (switch windows, copy transcript, key
 map), the system tray icons, and links to Windows notification settings and the
-tray menu. `island_menu.entries` is the source of truth. Arrows move between
+tray menu. `desktop_ui/spec/controls.toml` is the source of truth: its rows, their order, each cell's span, label and symbol. It reloads live like `tokens.toml`. Arrows move between
 cells, Enter chooses, and Escape closes.
 
 ## Code
