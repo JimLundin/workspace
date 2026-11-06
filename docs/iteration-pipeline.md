@@ -110,7 +110,8 @@ change itself. A changed runtime pin (`.python-version` or
 Deploy copies the Git-listed source files to a fresh folder in Windows Temp and
 sends the running keeper the same install request the agent uses, naming that
 folder. The keeper checks a frozen copy (the tests the change affects, portable
-and native), records the running copy as a version, installs
+and native; what failed in its previous check runs first, and the first failure
+ends the check), records the running copy as a version, installs
 the files and restarts only the programs the change affects. A change to a
 protected file relaunches the keeper. Deploy waits for the keeper's result and
 reports it; a refusal or undo fails the command. When no keeper is running,
