@@ -42,7 +42,7 @@ from desktop_ui.navigation import (
     owner,
 )
 from desktop_ui.shell_items import PinnedApp
-from desktop_ui.window_layout import App, Program, Setup
+from desktop_ui.window_layout import App, Program, Setup, WorkspaceView
 from usage import DIRECTORY
 from winapi.win_events import CaptureStart, SwitchEnd, SwitchStart
 
@@ -183,7 +183,7 @@ def app_name(app: App | None) -> str | None:
     match app:
         case Program(exe=exe):
             return exe
-        case PinnedApp():
+        case PinnedApp() | WorkspaceView():
             return app.value
         case None:
             return None

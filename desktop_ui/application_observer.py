@@ -25,7 +25,21 @@ from assistant.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, owner, zoom_after
 from desktop_ui.navigation_log import NAVIGATION_LOG, START, Arrival, Entry, Moment, Tracker, append, arrived, navigated, noticed, seen, settled
 from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
-from desktop_ui.window_layout import NOWHERE, App, Placement, Program, Setup, Target, groups, managed, place, screens
+from desktop_ui.window_layout import (
+    CANVAS_TITLE,
+    NOWHERE,
+    App,
+    Group,
+    Placement,
+    Program,
+    Setup,
+    Target,
+    WorkspaceView,
+    groups,
+    managed,
+    place,
+    screens,
+)
 from winapi import app_user_model, screen, windows
 from winapi.icon_pixels import window_pixels
 from winapi.shapes import Window
@@ -123,8 +137,12 @@ class Desktop:
             tuple(window for window, _ in shown), frozendict((window.handle, index) for window, index in shown if index is not None), state
         )
 
-    def arrange(self, observed: Observed, placement: Placement, slots: frozenset[int]) -> None:
-        """Converge every placed window on its desktop and rectangle, creating only missing desktops."""
+    def arrange(self, observed: Observed, placement: Placement, slots: frozenset[int], *, follow: int) -> None:
+        """Converge every placed window on its desktop and rectangle, creating only missing desktops.
+
+        The window in front, `follow`, takes the user along when it moves to another desktop:
+        a window just opened or brought forward on the wrong desktop is the one being worked in.
+        """
         connection, state = self.connection, observed.state
         if connection is None or state is None:
             return
@@ -135,11 +153,18 @@ class Desktop:
         except OSError:
             self.disconnect()
             return
+        followed: int | None = None
         for handle, target in placement.items():
             with suppress(OSError):  # A window that closed or refuses a move is tried again next poll.
                 if observed.desktops.get(handle) != target.desktop:
                     connection.move(handle, ids[target.desktop])
+                    if handle == follow:
+                        followed = target.desktop
                 resize(handle, target, slot=handle in slots)
+        if followed is not None and ids[followed] != state.current:
+            with suppress(OSError):
+                connection.switch(ids[followed])
+                focus(follow)
 
     def show(self, handle: int) -> None:
         """Bring a window forward, first switching to its desktop when it's on another one."""
@@ -286,7 +311,11 @@ class Worker:
         observed = self.desktop.observe()
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
-        grouped = shelf(observed.windows, app_ids, self.previous.shelf)
+        own = os.getpid()
+        # The canvas is Workspace's own window: placed as an app, but never a running app on the shelf.
+        canvas = next((w.handle for w in observed.windows if w.title == CANVAS_TITLE and windows.process_id(w.handle) == own), None)
+        views = (Group(WorkspaceView.CANVAS, (canvas,)),) if canvas is not None else ()
+        grouped = shelf(tuple(w for w in observed.windows if w.handle != canvas), app_ids, self.previous.shelf)
         self.launches = outstanding(self.launches, grouped)
         slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
         current = frozenset(window.handle for window in slots)
@@ -296,16 +325,15 @@ class Worker:
         where = screens(screen.monitors())
         self.setup = where.setup if where is not None else None
         if where is not None and state is not None:
-            own = os.getpid()
             eligible = frozenset(
                 window.handle
                 for window in observed.windows
                 if managed(window, resizable=windows.resizable(window.handle), own=windows.process_id(window.handle) == own)
             )
-            self.placement = place(where, groups(grouped, eligible), self.placement)
+            self.placement = place(where, (*views, *groups(grouped, eligible)), self.placement)
             if not self.paused and not windows.dragging():  # A window being dragged snaps back once it's let go.
                 kept = frozendict((handle, target) for handle, target in self.placement.items() if handle != self.zoomed)
-                self.desktop.arrange(observed, kept, current)
+                self.desktop.arrange(observed, kept, current, follow=foreground)
         for window in slots:
             if not window.minimized:
                 frame(window.handle)
@@ -318,7 +346,7 @@ class Worker:
             len(state.ids) if state is not None else 1,
             state.ids.index(state.current) if state is not None else 0,
             foreground,
-            frozendict((group.app, group.windows) for group in groups(grouped, live)),
+            frozendict((group.app, group.windows) for group in (*views, *groups(grouped, live))),
             observed.desktops,
             self.placement,
             self.recent,

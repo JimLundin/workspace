@@ -13,6 +13,7 @@ from desktop_ui.components.meaning import Tint
 from desktop_ui.components.text import color
 from desktop_ui.components.widgets import Window, row
 from desktop_ui.vector_icons import icon
+from desktop_ui.window_layout import CANVAS_TITLE
 from winapi.appearance import Material
 
 
@@ -31,7 +32,7 @@ class CanvasFrame(Window):
     """
 
     def __init__(self, close: Callable[[], None], navigate: Callable[[], None], theme: Tokens) -> None:
-        super().__init__("Workspace · Canvas", close, width=1280, height=880)
+        super().__init__(CANVAS_TITLE, close, width=1280, height=880)
         self.navigate: Callable[[], None] = navigate
         self.theme: Tokens = theme
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)

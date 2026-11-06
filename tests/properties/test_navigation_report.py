@@ -7,7 +7,7 @@ from hypothesis import strategies
 
 from desktop_ui.navigation_log import Cause, Entry
 from desktop_ui.navigation_report import History, Move, suggested
-from desktop_ui.window_layout import LAYOUTS, App, Setup
+from desktop_ui.window_layout import LAYOUTS, App, Setup, first_places
 from tests.properties.generation import cases, property_test
 
 APPS = ("windowsterminal.exe", "code.exe", "msedge.exe", "outlook", "teams", "notepad.exe", None)
@@ -52,7 +52,7 @@ def replay_cases(draw: strategies.DrawFn) -> ReplayCase:
 def test_a_candidate_identical_to_the_current_layout_saves_nothing(case: ReplayCase) -> None:
     # Defect: the before cost taken from the logged desktops or causes rather than
     # replayed under the same model as the candidate, so every suggestion carries a bias.
-    layout = LAYOUTS[case.setup]
+    layout = first_places(case.setup)
     suggestion = suggested(case.history, layout, Move(case.app, layout[case.app]))
     assert suggestion is not None
     assert suggestion.before == suggestion.after

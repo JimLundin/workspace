@@ -12,6 +12,7 @@ from desktop_ui.window_layout import (
     Screens,
     Setup,
     Target,
+    WorkspaceView,
     dark_when_away,
     groups,
     managed,
@@ -74,40 +75,70 @@ def test_home_places_terminals_and_code_across_the_4k_and_teams_on_the_laptop() 
         Group(PinnedApp.TEAMS, (4,)),
         Group(EDGE, (5,)),
         Group(PinnedApp.OUTLOOK, (6,)),
+        Group(WorkspaceView.CANVAS, (7,)),
     )
     assert targets(place(home, apps, NOWHERE)) == {
-        1: (0, Rect(1920, -269, 3200, 1891)),
-        2: (0, Rect(3200, -269, 4480, 1891)),
-        3: (0, Rect(4480, -269, 5760, 1891)),
-        4: (0, Rect(0, 0, 1920, 1200)),
-        5: (1, Rect(1920, -269, 3840, 1891)),
-        6: (1, Rect(3840, -269, 5760, 1891)),
+        7: (0, Rect(1920, -269, 5760, 1891)),
+        1: (1, Rect(1920, -269, 3200, 1891)),
+        2: (1, Rect(3200, -269, 4480, 1891)),
+        3: (1, Rect(4480, -269, 5760, 1891)),
+        4: (1, Rect(0, 0, 1920, 1200)),
+        5: (2, Rect(1920, -269, 3840, 1891)),
+        6: (2, Rect(3840, -269, 5760, 1891)),
     }
 
 
-def test_laptop_alone_spreads_the_apps_over_three_desktops() -> None:
+def test_laptop_alone_gives_the_canvas_the_first_of_five_desktops_and_terminals_two_more() -> None:
+    # Defects: the canvas isn't alone on the first desktop, the second terminal
+    # doesn't take the right half of desktop 3, or the third doesn't join Code.
     alone = screens((LAPTOP,))
     assert alone is not None
-    apps = (Group(PinnedApp.OUTLOOK, (1,)), Group(PinnedApp.TEAMS, (2,)), Group(TERMINAL, (3,)), Group(CODE, (4,)), Group(EDGE, (5,)))
+    apps = (
+        Group(WorkspaceView.CANVAS, (9,)),
+        Group(PinnedApp.OUTLOOK, (1,)),
+        Group(PinnedApp.TEAMS, (2,)),
+        Group(TERMINAL, (3, 6, 7)),
+        Group(CODE, (4,)),
+        Group(EDGE, (5,)),
+    )
     assert targets(place(alone, apps, NOWHERE)) == {
-        1: (0, Rect(0, 0, 960, 1200)),
-        2: (0, Rect(960, 0, 1920, 1200)),
-        3: (1, Rect(0, 0, 960, 1200)),
-        4: (1, Rect(960, 0, 1920, 1200)),
-        5: (2, Rect(0, 0, 1920, 1200)),
+        9: (0, Rect(0, 0, 1920, 1200)),
+        1: (1, Rect(0, 0, 960, 1200)),
+        2: (1, Rect(960, 0, 1920, 1200)),
+        3: (2, Rect(0, 0, 960, 1200)),
+        6: (2, Rect(960, 0, 1920, 1200)),
+        7: (3, Rect(0, 0, 960, 1200)),
+        4: (3, Rect(960, 0, 1920, 1200)),
+        5: (4, Rect(0, 0, 1920, 1200)),
     }
 
 
-def test_work_puts_everything_on_one_desktop_across_three_screens() -> None:
+def test_windows_beyond_an_apps_places_share_its_last_place_and_fewer_leave_places_empty() -> None:
+    # Defects: a fourth terminal is dropped or overlaps the third, or a lone
+    # terminal is stretched over places meant for others.
+    alone = screens((LAPTOP,))
+    assert alone is not None
+    assert targets(place(alone, (Group(TERMINAL, (3, 6, 7, 8)),), NOWHERE)) == {
+        3: (2, Rect(0, 0, 960, 1200)),
+        6: (2, Rect(960, 0, 1920, 1200)),
+        # The half-width laptop place is portrait, so the two stack.
+        7: (3, Rect(0, 0, 960, 600)),
+        8: (3, Rect(0, 600, 960, 1200)),
+    }
+    assert targets(place(alone, (Group(TERMINAL, (3,)),), NOWHERE)) == {3: (2, Rect(0, 0, 960, 1200))}
+
+
+def test_work_gives_the_canvas_the_upper_screen_then_everything_on_one_desktop() -> None:
     work = screens((LAPTOP, ABOVE, SIDE))
     assert work is not None
     apps = (Group(PinnedApp.TEAMS, (1,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(CODE, (4,)), Group(EDGE, (5,)))
-    assert targets(place(work, apps, NOWHERE)) == {
-        1: (0, Rect(-1760, -1360, -320, -80)),
-        2: (0, Rect(-1760, -80, -320, 1200)),
-        3: (0, Rect(-320, -1440, 960, 0)),
-        4: (0, Rect(960, -1440, 2240, 0)),
-        5: (0, Rect(0, 0, 1920, 1200)),
+    assert targets(place(work, (Group(WorkspaceView.CANVAS, (6,)), *apps), NOWHERE)) == {
+        6: (0, Rect(-320, -1440, 2240, 0)),
+        1: (1, Rect(-1760, -1360, -320, -80)),
+        2: (1, Rect(-1760, -80, -320, 1200)),
+        3: (1, Rect(-320, -1440, 960, 0)),
+        4: (1, Rect(960, -1440, 2240, 0)),
+        5: (1, Rect(0, 0, 1920, 1200)),
     }
 
 
@@ -118,21 +149,21 @@ def test_undeclared_apps_keep_their_own_desktops_while_others_come_and_go() -> N
     alone = screens((LAPTOP,))
     assert alone is not None
     first = place(alone, (Group(PYTHON, (1, 2)), Group(NOTEPAD, (3,))), NOWHERE)
-    assert targets(first) == {1: (3, Rect(0, 0, 960, 1200)), 2: (3, Rect(960, 0, 1920, 1200)), 3: (4, Rect(0, 0, 1920, 1200))}
+    assert targets(first) == {1: (5, Rect(0, 0, 960, 1200)), 2: (5, Rect(960, 0, 1920, 1200)), 3: (6, Rect(0, 0, 1920, 1200))}
     second = place(alone, (Group(PAINT, (4,)), Group(NOTEPAD, (3,))), first)
-    assert targets(second) == {4: (3, Rect(0, 0, 1920, 1200)), 3: (4, Rect(0, 0, 1920, 1200))}
+    assert targets(second) == {4: (5, Rect(0, 0, 1920, 1200)), 3: (6, Rect(0, 0, 1920, 1200))}
     third = place(alone, (Group(PYTHON, (1, 2)), Group(PAINT, (4,))), first)
-    assert targets(third) == {1: (3, Rect(0, 0, 960, 1200)), 2: (3, Rect(960, 0, 1920, 1200)), 4: (4, Rect(0, 0, 1920, 1200))}
+    assert targets(third) == {1: (5, Rect(0, 0, 960, 1200)), 2: (5, Rect(960, 0, 1920, 1200)), 4: (6, Rect(0, 0, 1920, 1200))}
     from_home = frozendict({3: Target(2, Rect(0, 0, 1920, 1200))})
-    assert targets(place(alone, (Group(NOTEPAD, (3,)),), from_home)) == {3: (3, Rect(0, 0, 1920, 1200))}
+    assert targets(place(alone, (Group(NOTEPAD, (3,)),), from_home)) == {3: (5, Rect(0, 0, 1920, 1200))}
 
 
 def test_windows_stack_in_a_portrait_region() -> None:
     portrait = Screens(Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: Rect(0, 0, 1200, 1920)}))
     assert targets(place(portrait, (Group(PYTHON, (1, 2, 3)),), NOWHERE)) == {
-        1: (3, Rect(0, 0, 1200, 640)),
-        2: (3, Rect(0, 640, 1200, 1280)),
-        3: (3, Rect(0, 1280, 1200, 1920)),
+        1: (5, Rect(0, 0, 1200, 640)),
+        2: (5, Rect(0, 640, 1200, 1280)),
+        3: (5, Rect(0, 1280, 1200, 1920)),
     }
 
 

@@ -2,16 +2,18 @@
 declared desktop and screen region of each application in each setup, and the
 pure placement of observed windows onto them.
 
-Each declared application has one region of one role's monitor on one desktop.
-Several windows of an application share its region equally: side by side in a
-landscape region, stacked in a portrait one. Every other application gets a
-desktop of its own after the declared ones, filling the laptop's work area, and
-keeps that desktop while others come and go. Regions are exact fractions, so
+Each declared application has an ordered list of places: a region of one
+role's monitor on one desktop. Its windows fill the places in their stable
+order, and windows beyond the last place share that place equally: side by side
+in a landscape region, stacked in a portrait one. Every setup keeps the canvas
+alone on the first desktop. Every other application gets a desktop of its own
+after the declared ones, filling the laptop's work area, and keeps that desktop
+while others come and go. Regions are exact fractions, so
 neighbours' pixel edges are computed from the same value and meet without
 overlapping.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
@@ -104,7 +106,17 @@ class Program:
     exe: str
 
 
-type App = PinnedApp | Program
+class WorkspaceView(Enum):
+    """Workspace's own windows that have a place, as other applications do."""
+
+    CANVAS = "canvas"
+
+
+CANVAS_TITLE = "Workspace · Canvas"
+"""The canvas window's title, which tells it apart from Workspace's other windows."""
+
+
+type App = PinnedApp | Program | WorkspaceView
 
 TERMINAL, CODE, EDGE = Program("windowsterminal.exe"), Program("code.exe"), Program("msedge.exe")
 """Ordinary Edge is every Edge window that isn't a pinned web app's."""
@@ -137,43 +149,55 @@ class Position:
     region: Region
 
 
-LAYOUTS: frozendict[Setup, frozendict[App, Position]] = frozendict(
+type Places = tuple[Position, ...]
+"""An application's places in order; its windows beyond the last share that one."""
+
+LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
     {
         Setup.LAPTOP_ONLY: frozendict(
             {
-                PinnedApp.OUTLOOK: Position(0, Role.LAPTOP, LEFT_HALF),
-                PinnedApp.TEAMS: Position(0, Role.LAPTOP, RIGHT_HALF),
-                TERMINAL: Position(1, Role.LAPTOP, LEFT_HALF),
-                CODE: Position(1, Role.LAPTOP, RIGHT_HALF),
-                EDGE: Position(2, Role.LAPTOP, FULL),
+                WorkspaceView.CANVAS: (Position(0, Role.LAPTOP, FULL),),
+                PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, RIGHT_HALF),),
+                # Two terminals on desktop 3; the third works beside Code on desktop 4.
+                TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF), Position(2, Role.LAPTOP, RIGHT_HALF), Position(3, Role.LAPTOP, LEFT_HALF)),
+                CODE: (Position(3, Role.LAPTOP, RIGHT_HALF),),
+                EDGE: (Position(4, Role.LAPTOP, FULL),),
             }
         ),
         Setup.HOME: frozendict(
             {
+                WorkspaceView.CANVAS: (Position(0, Role.MAIN, FULL),),
                 # Two terminals read Terminal | Terminal | Code across the 4K screen.
-                TERMINAL: Position(0, Role.MAIN, LEFT_TWO_THIRDS),
-                CODE: Position(0, Role.MAIN, RIGHT_THIRD),
-                PinnedApp.TEAMS: Position(0, Role.LAPTOP, FULL),
-                EDGE: Position(1, Role.MAIN, LEFT_HALF),
-                PinnedApp.OUTLOOK: Position(1, Role.MAIN, RIGHT_HALF),
+                TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
+                CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
+                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
+                EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
+                PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
             }
         ),
         Setup.WORK: frozendict(
             {
-                PinnedApp.TEAMS: Position(0, Role.SIDE, TOP_HALF),
-                PinnedApp.OUTLOOK: Position(0, Role.SIDE, BOTTOM_HALF),
-                TERMINAL: Position(0, Role.ABOVE, LEFT_HALF),
-                CODE: Position(0, Role.ABOVE, RIGHT_HALF),
-                EDGE: Position(0, Role.LAPTOP, FULL),
+                WorkspaceView.CANVAS: (Position(0, Role.ABOVE, FULL),),
+                PinnedApp.TEAMS: (Position(1, Role.SIDE, TOP_HALF),),
+                PinnedApp.OUTLOOK: (Position(1, Role.SIDE, BOTTOM_HALF),),
+                TERMINAL: (Position(1, Role.ABOVE, LEFT_HALF),),
+                CODE: (Position(1, Role.ABOVE, RIGHT_HALF),),
+                EDGE: (Position(1, Role.LAPTOP, FULL),),
             }
         ),
     }
 )
-"""One position per application per setup, so no application is declared twice."""
+"""Each application's places per setup, so no application is declared twice."""
+
+
+def first_places(setup: Setup) -> frozendict[App, Position]:
+    """Each declared application's first place: where navigation first finds it."""
+    return frozendict((app, places[0]) for app, places in LAYOUTS[setup].items())
 
 
 def declared_desktops(setup: Setup) -> int:
-    return 1 + max((position.desktop for position in LAYOUTS[setup].values()), default=-1)
+    return 1 + max((position.desktop for places in LAYOUTS[setup].values() for position in places), default=-1)
 
 
 def managed(window: Window, *, resizable: bool, own: bool) -> bool:
@@ -214,21 +238,17 @@ def place(where: Screens, apps: Sequence[Group], previous: Placement) -> Placeme
     """Each managed window's desktop and rectangle; the previous placement keeps undeclared applications on their desktops."""
     declared = LAYOUTS[where.setup]
     extra = overflow(tuple(group for group in apps if group.app not in declared), previous, declared_desktops(where.setup))
-    laptop = where.roles[Role.LAPTOP]
 
-    def spot(group: Group) -> tuple[int, Rect, Region]:
-        match declared.get(group.app):
-            case Position(desktop=desktop, role=role, region=region):
-                return desktop, where.roles[role], region
-            case None:
-                return extra[group.app], laptop, FULL
+    def targets(group: Group) -> Iterator[tuple[int, Target]]:
+        places = declared.get(group.app) or (Position(extra[group.app], Role.LAPTOP, FULL),)
+        # Each place before the last holds one window; the last holds the rest, split equally.
+        alone, shared, last = group.windows[: len(places) - 1], group.windows[len(places) - 1 :], places[-1]
+        for handle, position in zip(alone, places, strict=False):
+            yield handle, Target(position.desktop, pixels(where.roles[position.role], position.region))
+        for handle, rect in zip(shared, split(where.roles[last.role], last.region, len(shared)), strict=True):
+            yield handle, Target(last.desktop, rect)
 
-    spots = tuple((group, *spot(group)) for group in apps)
-    return frozendict(
-        (handle, Target(desktop, rect))
-        for group, desktop, work, region in spots
-        for handle, rect in zip(group.windows, split(work, region, len(group.windows)), strict=True)
-    )
+    return frozendict(pair for group in apps for pair in targets(group))
 
 
 def overflow(apps: Sequence[Group], previous: Placement, first: int) -> frozendict[App, int]:

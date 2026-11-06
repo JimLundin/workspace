@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Final, assert_never
 
 from desktop_ui.shell_items import WEB_APPS, PinnedApp
-from desktop_ui.window_layout import App, Program
+from desktop_ui.window_layout import App, Program, WorkspaceView
 from miryoku.firmware import CHORDS
 from protocol import Tool
 
@@ -48,6 +48,8 @@ def label(app: App) -> str:
             return WEB_APPS[app].label
         case Program(exe=exe):
             return exe.removesuffix(".exe")
+        case WorkspaceView.CANVAS:
+            return "Canvas"
         case _:
             assert_never(app)
 

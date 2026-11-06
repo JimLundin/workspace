@@ -41,9 +41,10 @@ TERMINAL_KEY = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
 
 def world(apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1) -> World:
     placement = place(WORK if work else HOME, apps, NOWHERE)
+    # Desktop 1 is the canvas's; the apps start on the second.
     return World(
-        3,
-        0,
+        4,
+        1,
         foreground,
         frozendict((group.app, group.windows) for group in apps),
         frozendict((handle, target.desktop) for handle, target in placement.items()),
@@ -84,12 +85,12 @@ def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_use
     # Defects: a jump leaves the existing desktops, a jump to the current
     # desktop switches anyway, or arriving ignores the last window used.
     home = world(HOME_APPS)
-    assert decide(JumpDesktop(3, Source.KEY), home)[0] is None
-    assert decide(JumpDesktop(0, Source.KEY), home)[0] is None
-    assert decide(JumpDesktop(1, Source.KEY), home)[0] == Switch(1, 5)
-    assert decide(JumpDesktop(1, Source.KEY), replace(home, recent=(1, 6, 5)))[0] == Switch(1, 6)
-    assert decide(JumpDesktop(2, Source.KEY), home)[0] == Switch(2, None)
-    assert decide(JumpDesktop(1, Source.KEY), home)[1] == Navigated(JumpDesktop(1, Source.KEY), 0, 1, TERMINAL, EDGE)
+    assert decide(JumpDesktop(4, Source.KEY), home)[0] is None
+    assert decide(JumpDesktop(1, Source.KEY), home)[0] is None
+    assert decide(JumpDesktop(2, Source.KEY), home)[0] == Switch(2, 5)
+    assert decide(JumpDesktop(2, Source.KEY), replace(home, recent=(1, 6, 5)))[0] == Switch(2, 6)
+    assert decide(JumpDesktop(3, Source.KEY), home)[0] == Switch(3, None)
+    assert decide(JumpDesktop(2, Source.KEY), home)[1] == Navigated(JumpDesktop(2, Source.KEY), 1, 2, TERMINAL, EDGE)
 
 
 def test_zoom_exempts_the_window_in_front_until_pressed_again_or_focus_leaves() -> None:

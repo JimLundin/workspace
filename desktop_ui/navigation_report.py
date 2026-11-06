@@ -24,7 +24,6 @@ from desktop_ui.window_layout import (
     CODE,
     EDGE,
     FULL,
-    LAYOUTS,
     LEFT_HALF,
     LEFT_TWO_THIRDS,
     RIGHT_HALF,
@@ -37,6 +36,8 @@ from desktop_ui.window_layout import (
     Region,
     Role,
     Setup,
+    WorkspaceView,
+    first_places,
 )
 from miryoku.firmware import CHORDS
 
@@ -355,6 +356,8 @@ def source(app: App) -> str:
             return f"PinnedApp.{app.name}"
         case Program(exe=exe):
             return PROGRAM_NAMES.get(app, f'Program("{exe}")')
+        case WorkspaceView():
+            return f"WorkspaceView.{app.name}"
         case _:
             assert_never(app)
 
@@ -434,7 +437,8 @@ def hot_spot_lines(entries: Iterable[Entry]) -> Iterator[str]:
 
 
 def suggestion_lines(setup: Setup, history: History) -> Iterator[str]:
-    layout = LAYOUTS[setup]
+    # An app with several places is weighed at its first; the report only proposes.
+    layout = first_places(setup)
     found = suggestions(history, layout)
     if not found:
         yield "    No single move or swap would have cost less."

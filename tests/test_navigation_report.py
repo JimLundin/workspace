@@ -20,10 +20,19 @@ from desktop_ui.navigation_report import (
     totals,
 )
 from desktop_ui.shell_items import PinnedApp
-from desktop_ui.window_layout import EDGE, FULL, LAYOUTS, LEFT_HALF, TERMINAL, Position, Role, Setup
+from desktop_ui.window_layout import CODE, EDGE, FULL, LEFT_HALF, LEFT_TWO_THIRDS, RIGHT_HALF, RIGHT_THIRD, TERMINAL, App, Position, Role, Setup
 
 CLOCK = datetime(2026, 11, 4, 9, 30, tzinfo=timezone(timedelta(hours=1)))
-HOME = LAYOUTS[Setup.HOME]
+HOME: frozendict[App, Position] = frozendict(
+    {
+        TERMINAL: Position(0, Role.MAIN, LEFT_TWO_THIRDS),
+        CODE: Position(0, Role.MAIN, RIGHT_THIRD),
+        PinnedApp.TEAMS: Position(0, Role.LAPTOP, FULL),
+        EDGE: Position(1, Role.MAIN, LEFT_HALF),
+        PinnedApp.OUTLOOK: Position(1, Role.MAIN, RIGHT_HALF),
+    }
+)
+"""A fixed two-desktop home layout, so the replay arithmetic doesn't follow edits to `LAYOUTS`."""
 
 
 def entry(cause: Cause, apps: tuple[str | None, str | None], desktops: tuple[int, int]) -> Entry:
