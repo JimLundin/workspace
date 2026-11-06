@@ -337,7 +337,8 @@ def test_work_dismissal_and_restore_controls_change_the_local_canvas(tmp_path: P
         personal.handle(command, 11)
         native.publish(WorkSnapshot(personal=PersonalView(personal.read())))
         assert all(frame.context.id != saved.work.id for frame in canvas.group_frames)
-        canvas.refresh_dismissed()
+        canvas.build_background()
+        assert canvas.dismissed_menu is not None
         canvas.dismissed_menu.actions()[0].trigger()
         command = native.last_command()
         assert isinstance(command, RestoreWork)
@@ -790,7 +791,7 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
         assert store.read() == before
         canvas.menu_button.click()
         native.pump()
-        assert canvas.menu.isVisible()
+        assert canvas.menu.isVisible() and canvas.contents_action is not None
         assert canvas.menu.geometry().contains(canvas.menu.actionGeometry(canvas.contents_action).translated(canvas.menu.pos()))
         canvas.menu.close()
 
@@ -1241,6 +1242,7 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
         editor = canvas.detail(question.id)
         assert isinstance(editor, QuestionDetail)
         clarification = editor.question.text()
+        assert canvas.contents_action is not None
         canvas.contents_action.trigger()
         assert canvas.scope.mode is CanvasMode.CONTEXTS and not canvas.visible_cards
         next(frame for frame in canvas.group_frames if frame.context.id == group.id).contents.open_canvas.click()

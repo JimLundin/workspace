@@ -1,0 +1,56 @@
+# The canvas's right-click menus, top to bottom.
+#
+# Workspace reads this file each time a menu opens, so an edit shows on the next
+# right-click. A file that doesn't validate is reported and the menu uses its
+# last good copy.
+#
+# Each entry is an action and its label, a submenu ({ menu = "Name", items = [...] },
+# one level deep), or a separator ({ separator = true }). Each action appears once
+# in its menu; leave one out to hide it.
+#
+# Background actions: center, contents (its words follow the canvas's mode, so it
+# takes no label), arrange_threads, arrange_all, refresh, new_context, new_group,
+# note, document, document_link, web_reference, dismissed (a submenu of dismissed
+# work to restore), connect_source, choose_group.
+#
+# Bubble actions: focus, contents, connect, continue, edit_work, dismiss, not_mine
+# (these four on work threads only), rename_group (groups only), put_inside,
+# move_to_canvas, relationships (a submenu, while the bubble has any).
+
+background = [
+    { action = "center", label = "Center" },
+    { action = "contents" },
+    { menu = "Arrange", items = [
+        { action = "arrange_threads", label = "Arrange threads" },
+        { action = "arrange_all", label = "Arrange all, including moved bubbles" },
+    ] },
+    { separator = true },
+    { action = "refresh", label = "Refresh sources" },
+    { menu = "Add", items = [
+        { action = "new_context", label = "New work context" },
+        { action = "new_group", label = "New group" },
+        { action = "note", label = "Note" },
+        { action = "document", label = "Document…" },
+        { action = "document_link", label = "Document link…" },
+        { action = "web_reference", label = "Web reference…" },
+    ] },
+    { action = "dismissed", label = "Dismissed work" },
+    { menu = "Connections", items = [
+        { action = "connect_source", label = "Connect source to this work" },
+        { action = "choose_group", label = "Put selected piece inside…" },
+    ] },
+]
+
+bubble = [
+    { action = "focus", label = "Focus bubble" },
+    { action = "contents", label = "Show / hide contents" },
+    { action = "connect", label = "Connect to another bubble…" },
+    { action = "continue", label = "Continue with agent" },
+    { action = "edit_work", label = "Edit work context" },
+    { action = "dismiss", label = "Dismiss work" },
+    { action = "not_mine", label = "This isn't my work" },
+    { action = "rename_group", label = "Rename group" },
+    { action = "put_inside", label = "Put inside another bubble…" },
+    { action = "move_to_canvas", label = "Move to canvas" },
+    { action = "relationships", label = "Relationships" },
+]

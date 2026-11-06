@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from desktop_ui import ui_spec
+from desktop_ui.canvas_menu import BackgroundAction, BubbleAction, flat
 from desktop_ui.island_layout import Metrics, Placed, arrange, frame, tiles
 from desktop_ui.island_menu import Command, Item, Live, Menu, Toggle, entries
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Spinner, Text, Zone, island, order
@@ -174,3 +175,33 @@ def test_a_bar_edit_that_loses_or_repeats_a_part_is_refused(tmp_path: Path) -> N
         tmp_path / "twice", ISLAND.replace('["recording", "inbox"]', '["recording", "inbox", "agent"]')
     )
     assert "clock appears more than once" in island_refusal(tmp_path / "clock", ISLAND.replace('"wifi"]', '"wifi", "clock"]'))
+
+
+def test_the_shipped_canvas_menus_offer_every_action_once() -> None:
+    # Defect: an edit to canvas.toml drops a canvas action, so it can't be reached.
+    menus = ui_spec.canvas_menus()
+    background = {item.action for item in flat(menus.background)}
+    bubble = {item.action for item in flat(menus.bubble)}
+    assert background == set(BackgroundAction) and bubble == set(BubbleAction)
+
+
+def test_a_canvas_menu_edit_that_repeats_or_miswords_is_refused(tmp_path: Path) -> None:
+    # Defect: an action listed twice runs twice, a label hides the mode toggle's state,
+    # or an unlabelled item shows as a blank line, instead of keeping the last good menus.
+    text = (SHIPPED / ui_spec.CANVAS_FILE).read_text(encoding="utf-8")
+
+    def refused(name: str, edited: str) -> str:
+        path = tmp_path / name
+        path.mkdir()
+        (path / ui_spec.CANVAS_FILE).write_text(edited, encoding="utf-8")
+        try:
+            ui_spec.canvas_menus(path)
+        except SpecError as error:
+            return str(error)
+        raise AssertionError("The canvas menus were accepted.")
+
+    assert "note appears more than once" in refused(
+        "twice", text.replace('{ action = "new_group", label = "New group" }', '{ action = "note", label = "New group" }')
+    )
+    assert "contents takes no label" in refused("stated", text.replace('{ action = "contents" }', '{ action = "contents", label = "Contents" }'))
+    assert "center needs a label" in refused("bare", text.replace('{ action = "center", label = "Center" }', '{ action = "center" }'))

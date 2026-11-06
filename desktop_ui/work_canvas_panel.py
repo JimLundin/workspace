@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import assert_never
 from uuid import uuid4
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -73,6 +74,8 @@ from automation.personal_work import (
 )
 from automation.task import Control
 from automation.work_documents import LocalDocument, WebDocument, document_identity
+from desktop_ui import ui_spec
+from desktop_ui.canvas_menu import BackgroundAction, BackgroundItem, BackgroundMenu, BubbleAction, BubbleItem, BubbleMenu, CanvasMenus, Separator
 from desktop_ui.components.appearance import GLASS_ACCENT, Tokens
 from desktop_ui.components.canvas_bubble import CanvasBubble
 from desktop_ui.components.canvas_chrome import CanvasFrame, CanvasSurface, CanvasToolbar, GlassCapsule, ScrollEdge, content_style
@@ -160,27 +163,93 @@ class CanvasPanel:
         self.update_voice_context()
 
     def create_context_controls(self) -> None:
+        """Both right-click menus are built from `canvas.toml` as they open."""
         self.menu: QtWidgets.QMenu = rounded(QtWidgets.QMenu(self.frame))
-        self.menu.addAction("Center", self.fit)
-        self.contents_action: QtGui.QAction = self.menu.addAction("Collapse containers", self.toggle_contents)
-        arranging = rounded(self.menu.addMenu("Arrange"))
-        arranging.addAction("Arrange threads", self.reflow)
-        arranging.addAction("Arrange all, including moved bubbles", self.release_positions)
-        self.menu.addSeparator()
-        self.menu.addAction("Refresh sources", self.refresh)
-        adding = rounded(self.menu.addMenu("Add"))
-        adding.addAction("New work context", self.create)
-        adding.addAction("New group", self.create_group)
-        adding.addAction("Note", self.create_note)
-        adding.addAction("Document…", self.create_document)
-        adding.addAction("Document link…", self.create_document_link)
-        adding.addAction("Web reference…", self.create_web_reference)
-        self.dismissed_menu: QtWidgets.QMenu = rounded(self.menu.addMenu("Dismissed work"))
-        self.menu.aboutToShow.connect(self.refresh_dismissed)
-        connections = rounded(self.menu.addMenu("Connections"))
-        connections.addAction("Connect source to this work", self.start_connection)
-        connections.addAction("Put selected piece inside…", self.choose_group)
+        self.submenus: tuple[QtWidgets.QMenu, ...] = ()
+        self.contents_action: QtGui.QAction | None = None
+        self.dismissed_menu: QtWidgets.QMenu | None = None
+        self.build_background()
+        self.menu.aboutToShow.connect(self.build_background)
         self.context_popup: QtWidgets.QMenu = rounded(QtWidgets.QMenu(self.frame))
+
+    def canvas_menus(self) -> CanvasMenus:
+        menus, invalid = ui_spec.canvas()
+        if invalid is not None:
+            self.work.problem(f"The canvas menus used their last good spec: {invalid}")
+        return menus
+
+    def submenu(self, parent: QtWidgets.QMenu, title: str) -> QtWidgets.QMenu:
+        """A submenu that lives until its menu is next rebuilt."""
+        menu = rounded(parent.addMenu(title))
+        self.submenus = (*self.submenus, menu)
+        return menu
+
+    def clear_menu(self, menu: QtWidgets.QMenu) -> None:
+        kept = tuple(each for each in self.submenus if each.parent() is not menu)
+        for each in self.submenus:
+            if each.parent() is menu:
+                each.deleteLater()
+        self.submenus = kept
+        menu.clear()
+
+    def contents_label(self) -> str:
+        return "Show group contents" if self.scope.mode is CanvasMode.CONTEXTS else "Collapse containers"
+
+    def build_background(self) -> None:
+        self.clear_menu(self.menu)
+        self.contents_action, self.dismissed_menu = None, None
+        for item in self.canvas_menus().background:
+            match item:
+                case BackgroundItem():
+                    self.add_background(self.menu, item)
+                case BackgroundMenu(menu=title, items=inner):
+                    menu = self.submenu(self.menu, title)
+                    for each in inner:
+                        match each:
+                            case BackgroundItem():
+                                self.add_background(menu, each)
+                            case Separator():
+                                menu.addSeparator()
+                            case _:
+                                assert_never(each)
+                case Separator():
+                    self.menu.addSeparator()
+                case _:
+                    assert_never(item)
+
+    def add_background(self, menu: QtWidgets.QMenu, item: BackgroundItem) -> None:
+        match item.action:
+            case BackgroundAction.CENTER:
+                menu.addAction(item.label, self.fit)
+            case BackgroundAction.CONTENTS:
+                self.contents_action = menu.addAction(self.contents_label(), self.toggle_contents)
+            case BackgroundAction.ARRANGE_THREADS:
+                menu.addAction(item.label, self.reflow)
+            case BackgroundAction.ARRANGE_ALL:
+                menu.addAction(item.label, self.release_positions)
+            case BackgroundAction.REFRESH:
+                menu.addAction(item.label, self.refresh)
+            case BackgroundAction.NEW_CONTEXT:
+                menu.addAction(item.label, self.create)
+            case BackgroundAction.NEW_GROUP:
+                menu.addAction(item.label, self.create_group)
+            case BackgroundAction.NOTE:
+                menu.addAction(item.label, self.create_note)
+            case BackgroundAction.DOCUMENT:
+                menu.addAction(item.label, self.create_document)
+            case BackgroundAction.DOCUMENT_LINK:
+                menu.addAction(item.label, self.create_document_link)
+            case BackgroundAction.WEB_REFERENCE:
+                menu.addAction(item.label, self.create_web_reference)
+            case BackgroundAction.DISMISSED:
+                self.dismissed_menu = self.submenu(menu, item.label)
+                self.refresh_dismissed()
+            case BackgroundAction.CONNECT_SOURCE:
+                menu.addAction(item.label, self.start_connection)
+            case BackgroundAction.CHOOSE_GROUP:
+                menu.addAction(item.label, self.choose_group)
+            case _:
+                assert_never(item.action)
 
     def create_toolbar(self) -> None:
         # The island bar's rule at the window's foot: one island at rest (speak, search, more);
@@ -272,7 +341,8 @@ class CanvasPanel:
                 return True
 
     def position_chrome(self) -> None:
-        self.contents_action.setText("Show group contents" if self.scope.mode is CanvasMode.CONTEXTS else "Collapse containers")
+        if self.contents_action is not None:
+            self.contents_action.setText(self.contents_label())
         # Searching turns the island into its field; speaking and options return afterwards.
         searching = not self.search.isHidden()
         self.voice_hint.setVisible(not searching)
@@ -772,29 +842,62 @@ class CanvasPanel:
 
     def context_menu(self, identity: str) -> None:
         self.select(identity)
-        self.context_popup.clear()
-        self.context_popup.addAction("Focus bubble", lambda: self.open_context(identity))
-        self.context_popup.addAction("Show / hide contents", lambda: self.toggle_bubble(identity))
-        self.context_popup.addAction("Connect to another bubble…", lambda: self.interaction.start_relation(identity))
-        current = next((item for item in containers(self.view.catalog, self.document) if item.id == identity), None)
-        match current:
-            case WorkThread():
-                self.context_popup.addAction("Continue with agent", lambda: self.study_work(identity))
-                self.context_popup.addAction("Edit work context", lambda: self.inspect(identity))
-                self.context_popup.addAction("Dismiss work", lambda: self.dismiss_work(identity, "Dismissed by the user."))
-                self.context_popup.addAction("This isn't my work", lambda: self.dismiss_work(identity, "This is not my responsibility."))
-            case CanvasCollection():
-                self.context_popup.addAction("Rename group", lambda: self.rename_group(identity))
-            case _:
-                pass
-        self.context_popup.addAction("Put inside another bubble…", self.choose_group)
-        self.context_popup.addAction("Move to canvas", lambda: self.add_to_group(None, identity))
-        related = tuple(relation for relation in self.document.relations if identity in (relation.start, relation.end))
-        if related:
-            menu = self.context_popup.addMenu("Relationships")
-            for relation in related:
-                menu.addAction(relation.reason, self.relation_action(relation))
+        self.clear_menu(self.context_popup)
+        for item in self.canvas_menus().bubble:
+            match item:
+                case BubbleItem():
+                    self.add_bubble(self.context_popup, item, identity)
+                case BubbleMenu(menu=title, items=inner):
+                    menu = self.submenu(self.context_popup, title)
+                    for each in inner:
+                        match each:
+                            case BubbleItem():
+                                self.add_bubble(menu, each, identity)
+                            case Separator():
+                                menu.addSeparator()
+                            case _:
+                                assert_never(each)
+                case Separator():
+                    self.context_popup.addSeparator()
+                case _:
+                    assert_never(item)
         self.context_popup.popup(QtGui.QCursor.pos())
+
+    def add_bubble(self, menu: QtWidgets.QMenu, item: BubbleItem, identity: str) -> None:
+        """Work-thread actions apply to work threads, Rename to groups, Relationships while there are any."""
+        current = next((each for each in containers(self.view.catalog, self.document) if each.id == identity), None)
+        work = isinstance(current, WorkThread)
+        match item.action:
+            case BubbleAction.FOCUS:
+                menu.addAction(item.label, lambda: self.open_context(identity))
+            case BubbleAction.CONTENTS:
+                menu.addAction(item.label, lambda: self.toggle_bubble(identity))
+            case BubbleAction.CONNECT:
+                menu.addAction(item.label, lambda: self.interaction.start_relation(identity))
+            case BubbleAction.CONTINUE if work:
+                menu.addAction(item.label, lambda: self.study_work(identity))
+            case BubbleAction.EDIT_WORK if work:
+                menu.addAction(item.label, lambda: self.inspect(identity))
+            case BubbleAction.DISMISS if work:
+                menu.addAction(item.label, lambda: self.dismiss_work(identity, "Dismissed by the user."))
+            case BubbleAction.NOT_MINE if work:
+                menu.addAction(item.label, lambda: self.dismiss_work(identity, "This is not my responsibility."))
+            case BubbleAction.RENAME_GROUP if isinstance(current, CanvasCollection):
+                menu.addAction(item.label, lambda: self.rename_group(identity))
+            case BubbleAction.PUT_INSIDE:
+                menu.addAction(item.label, self.choose_group)
+            case BubbleAction.MOVE_TO_CANVAS:
+                menu.addAction(item.label, lambda: self.add_to_group(None, identity))
+            case BubbleAction.RELATIONSHIPS:
+                related = tuple(relation for relation in self.document.relations if identity in (relation.start, relation.end))
+                if related:
+                    relationships = self.submenu(menu, item.label)
+                    for relation in related:
+                        relationships.addAction(relation.reason, self.relation_action(relation))
+            case BubbleAction.CONTINUE | BubbleAction.EDIT_WORK | BubbleAction.DISMISS | BubbleAction.NOT_MINE | BubbleAction.RENAME_GROUP:
+                pass  # Not for this kind of bubble.
+            case _:
+                assert_never(item.action)
 
     def create_group(self) -> None:
         title, accepted = QtWidgets.QInputDialog.getText(self.frame, "New canvas group", "Group name")
@@ -1010,10 +1113,13 @@ class CanvasPanel:
             self.work.send(DismissWork(work.id, work.revision, reason))
 
     def refresh_dismissed(self) -> None:
-        self.dismissed_menu.clear()
-        self.dismissed_menu.setEnabled(bool(self.view.catalog.dismissed))
+        menu = self.dismissed_menu
+        if menu is None:
+            return
+        menu.clear()
+        menu.setEnabled(bool(self.view.catalog.dismissed))
         for dismissed in self.view.catalog.dismissed:
-            action = self.dismissed_menu.addAction("Restore · " + dismissed.work.definition.title)
+            action = menu.addAction("Restore · " + dismissed.work.definition.title)
             action.setToolTip(dismissed.reason)
             action.triggered.connect(self.restore_work(dismissed.work.id))
 
