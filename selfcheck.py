@@ -1,6 +1,7 @@
 """selfcheck: is this copy of the workspace sound? Uses installed or bundled SDK dependencies.
 
     python selfcheck.py [FOLDER] [--fast | --native] [--changed-from BASE] [--durations N]
+                        [--previous REPORT] [--stop-at-first-failure]
 
 1. Every .py file compiles.
 2. Every module imports (off Windows, the ones that need Windows are skipped).
@@ -17,6 +18,9 @@ With --changed-from, a check runs only the test modules that import a file chang
 from BASE, directly or through test helpers, and compiles and imports only changed
 source. A changed asset in ASSET_READERS counts as a change to its readers; any other
 non-Python change runs the whole profile. The full suite runs in CI.
+With --previous, the modules that failed in that earlier report run first, alone,
+so a retried fix that still fails says so in seconds. With --stop-at-first-failure
+no module starts after one fails: an install check needs only a yes or no.
 
 Discovered member values remain objects; the runner validates origin and the
 supported keyword arguments before invoking a test.
@@ -65,6 +69,10 @@ class Scope:
     profile: Profile
     base: Path | None = None
     """The running source the candidate changes; None runs the profile's whole suite."""
+    first: frozenset[str] = frozenset()
+    """Test modules (tests/test_x.py) to run before the rest: the ones that failed last time."""
+    stop: bool = False
+    """Start no module after one fails."""
 
 
 FULL_SCOPE = Scope(Profile.FULL)
@@ -389,35 +397,57 @@ def import_changed(root: Path, changed: frozenset[str], problems: list[str]) -> 
                     problems.append(f"doesn't import: {module}\n{''.join(traceback.format_exception(error))}")
 
 
-def run_tests(root: Path, problems: list[str], paths: list[Path]) -> tuple[int, int, tuple[tuple[float, str], ...]]:
+def failed_modules(report: str) -> frozenset[str]:
+    """The test modules an earlier report names as failed: `FAILED tests.test_x[.test_y]`."""
+    return frozenset(
+        f"tests/{line.removeprefix('FAILED tests.').split('.')[0].split()[0]}.py"
+        for line in report.splitlines()
+        if line.startswith("FAILED tests.test_")
+    )
+
+
+def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope = FULL_SCOPE) -> tuple[int, int, tuple[tuple[float, str], ...]]:
     """Passed tests, skipped test modules and per-test timings.
 
-    Reviewed portable modules run on worker processes while the other non-native
-    modules run here; native modules run after the workers exit, one at a time.
+    `scope.first` modules run first, alone. Then reviewed portable modules run on
+    worker processes while the other non-native modules run here; native modules
+    run after the workers exit, one at a time. With `scope.stop`, nothing starts
+    after a failure, and the modules left out are reported.
     """
     relative = {path: path.relative_to(root).as_posix() for path in paths}
-    portable = [path for name in PORTABLE for path in paths if relative[path] == name]
-    following = [path for path in paths if path.name.startswith("test_windows_") or relative[path] in AFTER_WORKERS]
-    alongside = [path for path in paths if path not in portable and path not in following]
+    leading = [path for path in paths if relative[path] in scope.first]
+    rest = [path for path in paths if path not in leading]
+    portable = [path for name in PORTABLE for path in rest if relative[path] == name]
+    following = [path for path in rest if path.name.startswith("test_windows_") or relative[path] in AFTER_WORKERS]
+    alongside = [path for path in rest if path not in portable and path not in following]
     # This coordinator owns the run's counters and ledgers; workers return
     # immutable outcomes only.
     outcomes: list[Outcome] = []
 
+    def failed() -> bool:
+        return scope.stop and any(outcome[2] for outcome in outcomes)
+
     def sequential(group: list[Path]) -> None:
         for path in group:
+            if failed():
+                return
             started = time.perf_counter()
             outcome = run_module(path)
             _progress(path, outcome, time.perf_counter() - started)
             outcomes.append(outcome)
 
+    sequential(leading)
     if len(portable) < 2:
         sequential([*portable, *alongside, *following])
-    else:
+    elif not failed():
         started = time.perf_counter()
         with ProcessPoolExecutor(max_workers=WORKERS, initializer=_prepare_worker, initargs=(str(root),)) as pool:
             pending = [(path, pool.submit(run_module, path)) for path in portable]
             sequential(alongside)
             for path, future in pending:
+                if failed():
+                    pool.shutdown(wait=True, cancel_futures=True)
+                    break
                 try:
                     outcome = future.result()
                 except BrokenProcessPool:
@@ -431,6 +461,8 @@ def run_tests(root: Path, problems: list[str], paths: list[Path]) -> tuple[int, 
         sequential(following)
     for _, _, found, _ in outcomes:
         problems.extend(found)
+    if (left := len(paths) - len(outcomes)) and failed():
+        problems.append(f"Stopped at the first failure: {left} affected test module{'' if left == 1 else 's'} not run.")
     measured = tuple(timing for outcome in outcomes for timing in outcome[3])
     return sum(outcome[0] for outcome in outcomes), sum(outcome[1] for outcome in outcomes), measured
 
@@ -464,7 +496,7 @@ def check(root: Path, scope: Scope = FULL_SCOPE, durations: int = 0) -> tuple[bo
             import_all(root, problems)
             timings.append((time.perf_counter() - started, "import all modules"))
     paths = test_paths(root, profile, changed)
-    passed, skipped, measured = run_tests(root, problems, paths) if not problems else (0, 0, ())
+    passed, skipped, measured = run_tests(root, problems, paths, scope) if not problems else (0, 0, ())
     timings.extend(measured)
     summary = f"{passed} passed, {len([p for p in problems if p.startswith('FAILED')])} failed, {skipped} module{'' if skipped == 1 else 's'} skipped"
     if scope.base is not None:
@@ -485,6 +517,8 @@ def main() -> None:
     profiles.add_argument("--native", action="store_true", help="only the Windows integration modules a passing fast check deferred")
     parser.add_argument("--durations", type=int, default=0, metavar="N", help="report the N slowest checks")
     parser.add_argument("--changed-from", type=Path, metavar="BASE", help="run only tests affected by changes from BASE")
+    parser.add_argument("--previous", type=Path, metavar="REPORT", help="first run the modules that failed in this earlier report")
+    parser.add_argument("--stop-at-first-failure", action="store_true", help="start no test module after one fails")
     match dict(inspect.getmembers(parser.parse_args())):
         case {
             "folder": Path() as folder,
@@ -492,6 +526,8 @@ def main() -> None:
             "native": bool() as native,
             "durations": int() as durations,
             "changed_from": (Path() | None) as base,
+            "previous": (Path() | None) as previous,
+            "stop_at_first_failure": bool() as stop,
         }:
             pass
         case _:
@@ -499,7 +535,11 @@ def main() -> None:
     if durations < 0:
         parser.error("durations must be nonnegative")
     profile = Profile.FAST if fast else Profile.NATIVE if native else Profile.FULL
-    ok, report = check(folder.resolve(), Scope(profile, base.resolve() if base is not None else None), durations)
+    try:
+        first = failed_modules(previous.read_text(encoding="utf-8", errors="replace")) if previous is not None else frozenset[str]()
+    except OSError:
+        first = frozenset[str]()  # No earlier report: nothing failed before.
+    ok, report = check(folder.resolve(), Scope(profile, base.resolve() if base is not None else None, first, stop=stop), durations)
     sys.stdout.write(report)
     sys.exit(0 if ok else 1)
 

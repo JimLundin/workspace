@@ -783,11 +783,16 @@ class _Check:
         self.deadline = time.monotonic() + CHECK_S
         STATE.mkdir(parents=True, exist_ok=True)
         self.output = STATE / "check.txt"
+        previous = STATE / "check-previous.txt"
+        with contextlib.suppress(OSError):
+            self.output.replace(previous)
         # The agent's fast check already compiled, imported and ran every portable
         # test on these exact bytes; repeating that doubled each install's checks.
         # Only the tests the change affects; the full suite runs in CI.
         fast_checked = checked == self.digest
         profile: tuple[str, ...] = ("--native", "--changed-from", str(LIVE)) if fast_checked else ("--changed-from", str(LIVE))
+        # An install needs only a yes or no: what failed last time runs first, and the first failure ends the check.
+        profile = (*profile, "--previous", str(previous), "--stop-at-first-failure")
         _log("checking the workspace: " + ("native modules after its passing fast check" if fast_checked else "the tests the change affects"))
         with self.output.open("wb") as out:
             self.process = subprocess.Popen(

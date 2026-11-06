@@ -66,6 +66,27 @@ def test_worker_modules_report_their_passes_and_failures(tmp_path: Path) -> None
     assert "3 passed, 1 failed" in report
 
 
+def test_an_install_check_runs_last_failures_first_and_stops_at_the_first_failure(tmp_path: Path) -> None:
+    # Defects: a retried fix that still fails waits behind every other module
+    # before saying so, or the check keeps running modules after one failed,
+    # or it hides that it stopped early.
+    files = {
+        **SOUND,
+        "tests/test_a_first.py": "def test_passes() -> None:\n    assert True\n",
+        "tests/test_z_last.py": "def test_still_broken() -> None:\n    assert False, 'still broken'\n",
+    }
+    root = tree(tmp_path / "tree", files)
+    previous = tmp_path / "previous.txt"
+    previous.write_text("FAILED tests.test_z_last.test_still_broken\nTraceback ...\n\n0 passed, 1 failed\n", encoding="utf-8")
+    code, report = selfcheck(root, "--previous", str(previous), "--stop-at-first-failure")
+    assert code == 1, report
+    progress = [line.split()[1] for line in report.splitlines() if line.strip().endswith("failed") and ".py:" in line]
+    assert progress == ["test_z_last.py:"], report
+    assert "Stopped at the first failure: 3 affected test modules not run." in report
+    code, report = selfcheck(root, "--previous", str(tmp_path / "absent.txt"))
+    assert code == 1 and "test_a_first.py: 1 passed" in report and "Stopped" not in report
+
+
 def test_a_change_runs_only_the_tests_that_import_it(tmp_path: Path) -> None:
     # Detect the scoped check running unaffected tests, missing a test that
     # reaches the change through a helper, or missing an asset's implicit readers.
