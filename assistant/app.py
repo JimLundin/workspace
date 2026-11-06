@@ -1,12 +1,16 @@
-"""The assistant owns the tray, conversation views, microphone, and meetings.
+"""The assistant: the agent and its work, the canvas document, meetings and the microphone.
 
-Durable work executes on the worker's threads in this process. The keyboard
-sends its tool requests here without depending on either work storage or model calls.
+It runs without the desktop and the desktop without it. It never touches the
+desktop's windows: it sends `contracts.desktop_link` messages through a
+`DesktopPort` and takes the desktop's commands from the link. The keyboard
+sends it only the requests it owns (dictation, the agent, meetings), to its own
+hidden window, and durable work executes on the worker's threads here.
 """
 
 import contextlib
 import os
 import queue
+import sqlite3
 import threading
 import time
 import traceback
@@ -17,14 +21,14 @@ from pathlib import Path
 from typing import Final, Protocol, assert_never
 
 import components
-import keeper
-import keeper_control
 import usage
 from assistant.activity import ActivityTracker
 from automation.activity import ContextSnapshot, Observation, Policy
 from config import APPS
 from usage import DIRECTORY, Detail
+lazy import contracts.desktop_link
 lazy from assistant import control_policy
+lazy from assistant.agent_window import AgentWindow
 lazy from assistant.automatic_meetings import AutomaticAttention, AutomaticMeetings
 lazy from assistant.browser import Browser
 lazy from assistant.browser_session import Product
@@ -32,8 +36,11 @@ lazy from assistant.communications_browser import TeamsWeb
 lazy from assistant.communications_service import Communications
 lazy from assistant.communications_state import COMMUNICATIONS_STATE
 lazy from assistant.desktop import WinDesktop
+lazy from assistant.desktop_commands import DesktopCommands
+lazy from assistant.desktop_port import DesktopPort, LevelFeed, LinkedDesktop, SessionView, ViewThread
 lazy from assistant.features import Assistant
 lazy from assistant.feed_contracts import STORED_BOARD
+lazy from assistant.feed_inbox import FeedInbox
 lazy from assistant.feed_research import Research
 lazy from assistant.feed_sources import Candidate
 lazy from assistant.feed_triage_service import Triage, classify
@@ -50,7 +57,6 @@ lazy from assistant.personal_work_service import PersonalWork
 lazy from assistant.personal_work_sources import BrowserSources
 lazy from assistant.personal_work_store import PersonalStore
 lazy from assistant.personal_work_tools import source_request
-lazy from assistant.report import write_report
 lazy from assistant.state_store import windows_store
 lazy from assistant.work_agent import WorkAgent
 lazy from assistant.work_bridge import WorkOwners
@@ -60,6 +66,20 @@ lazy from automation.store import TaskStore
 lazy from automation.work_folder import BROWSER_PROFILE, WORK
 lazy from automation.worker import OwnerCalls, Worker, native_runner, warm_sdk
 lazy from contracts.canvas_activity import CanvasInstruction, CanvasRun
+lazy from contracts.desktop_link import (
+    AutomaticChanged,
+    CanvasChanged,
+    JobChanged,
+    MeetingPage,
+    Notify,
+    OpenReference,
+    RecordingChanged,
+    RouteSpeech,
+    ShowWork,
+    VoiceChanged,
+    WorkChanged,
+    from_desktop,
+)
 lazy from contracts.meeting_detection import PREFERENCE, AutomaticStatus
 lazy from contracts.personal_work import (
     AddDocument,
@@ -76,26 +96,23 @@ lazy from contracts.personal_work import (
     WorkThread,
 )
 lazy from contracts.recording_state import RecordingAction, RecordingState
-lazy from contracts.status import State
+lazy from contracts.status import Job, State
 lazy from contracts.task import Control, RequestKind
-lazy from contracts.work_commands import ControlTask, WorkViewCommand
+lazy from contracts.work_canvas_contracts import CanvasPublication
+lazy from contracts.work_commands import ControlTask, ReadMeeting, WorkViewCommand
 lazy from contracts.work_snapshot import WorkSnapshot
-lazy from desktop_ui.keymap import indicator_text
-lazy from desktop_ui.navigation import Source, SwitcherPick
-lazy from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
-lazy from desktop_ui.tray import Tray
-lazy from desktop_ui.ui import Ui
-lazy from desktop_ui.ui_spec import SpecError
-lazy from miryoku.layout import Layer
-lazy from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, WM_WINDOWS_KEY_TAP, LayoutState, Tool, decode_indicator
+lazy from link.server import Server
+lazy from protocol import WM_LAYOUT_STATE, WM_REQUEST, LayoutState, Tool, decode
 lazy from winapi import audio, recording, screen, shell, system, windows
 lazy from winapi.pcm import RATE
-lazy from winapi.shapes import Rect, Window
+lazy from winapi.shapes import Window
+lazy from winapi.system_notices import Observed
 
 ROOT: Final = Path(__file__).resolve().parent.parent
 LOCK_NAME: Final = "Local\\workspace-assistant"
 LOG: Final = DIRECTORY / "assistant.log"
-WM_TRAY: Final = system.WM_APP + 20
+WM_LINK: Final = system.WM_APP + 21
+"""Link reader -> control thread: commands from the desktop are waiting."""
 
 
 def log(text: str) -> None:
@@ -109,12 +126,18 @@ def log(text: str) -> None:
 # ---- the request context ---------------------------------------------------------------
 
 
+def workspace_processes() -> frozenset[int]:
+    """This process and the desktop's: either's windows are Workspace's own."""
+    desktop = windows.find(components.DESKTOP.window.title)
+    return frozenset((os.getpid(), *((windows.process_id(desktop),) if desktop else ())))
+
+
 def foreground_context() -> Observation:
     """Keep Workspace's own windows from replacing the app a request refers to."""
     handle = windows.foreground()
     if not handle:
         return "unavailable"
-    if windows.process_id(handle) == os.getpid():
+    if windows.process_id(handle) in workspace_processes():
         return "workspace"
     return Window(handle, windows.title(handle), windows.exe(handle), minimized=windows.is_minimized(handle))
 
@@ -125,15 +148,6 @@ def foreground_context() -> Observation:
 class Exit(Enum):
     QUIT = auto()
     ALREADY_RUNNING = auto()
-
-
-def indicator_area() -> Rect:
-    """Where the layer indicator goes: the bottom of the main monitor."""
-    monitors = screen.monitors()
-    return next((m.work for m in monitors if m.primary), monitors[0].work)
-
-
-WM_SHOW_MENU: Final = 0x8056
 
 
 def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
@@ -184,46 +198,57 @@ class AssistantApp:
         "automation",
         "canvas",
         "capture_timer",
+        "commands",
+        "commands_handler",
         "communications",
         "desktop",
+        "feed",
         "jobs",
         "layout",
+        "levels",
+        "machine",
         "meetings",
         "mic_event",
-        "overlay",
         "personal",
+        "publication",
+        "session",
         "settings",
         "startup",
         "startup_effects",
         "timings",
-        "tray",
-        "tray_spec",
         "triage",
-        "ui",
+        "view_thread",
         "window",
         "work_owners",
         "worker",
     )
 
-    def __init__(self, settings: Settings | Missing, ui: Ui, *, startup_effects: control_policy.StartupEffects | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | Missing,
+        desktop: DesktopPort,
+        *,
+        startup_effects: control_policy.StartupEffects | None = None,
+        window: components.Window = components.ASSISTANT.window,
+    ) -> None:
         self.startup_effects: control_policy.StartupEffects = NativeStartup() if startup_effects is None else startup_effects
         self.timings = Timings("startup")
         self._recording_phase = "idle"
-        self.ui = ui
-        self.ui.configure_controls(
-            on_agent_waiting=lambda waiting: self.show(State.NEEDS_INPUT if waiting else State.AGENT),
-            on_recording=self.recording_action,
-        )
-        self.overlay = OverlayState(enabled=load_enabled())
-        self.ui.desktop_overlay(enabled=self.overlay.enabled)
+        self.desktop = desktop
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
-        self.window = shell.AppWindow(components.ASSISTANT.window.title, self.on_message)
-        self.tray = Tray(self.window.handle, WM_TRAY)
-        self.tray_spec: control_policy.TraySpec = control_policy.tray(reload=False)
-        self.automatic_attention = AutomaticAttention(self.ui.desktop_automatic, self.warn_automatic_recording)
+        self.commands: queue.Queue[bytes] = queue.Queue()
+        self.publication: CanvasPublication | None = None
+        self.session: AgentWindow | None = None
+        """The agent session, once the work frontend has asked for it."""
+        self.window = shell.AppWindow(window.title, self.on_message)
+        self.view_thread = ViewThread()
+        self.automatic_attention = AutomaticAttention(lambda status: self.desktop.send(AutomaticChanged(status)), self.warn_automatic_recording)
         self.mic_event = system.create_event()
         mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
-        self.desktop = WinDesktop(self.window.handle, mic, self.ui, on_state=self.show, on_notify=self.tray.notify, on_problem=self.problem)
+        self.machine = WinDesktop(
+            self.window.handle, mic, on_state=self.show, on_job=self.job_changed, on_notify=self.notify, on_problem=self.problem
+        )
+        self.levels = LevelFeed(mic.level, desktop)
         self.timings.mark("control window and microphone")
         self.settings, missing = configured(settings)
         self.activity: ActivityTracker
@@ -239,14 +264,7 @@ class AssistantApp:
             tasks,
             saved_context,
             self.automation,
-            lambda runner: self.ui.agent(
-                runner.stop,
-                on_problem=self.problem,
-                on_reset=runner.new_conversation,
-                on_submit=runner.start,
-                on_work=self.show_work,
-                reveal=False,
-            ),
+            self.session_window,
             on_snapshot=self.work_changed,
             on_done=self.agent_done,
             report_error=log,
@@ -259,22 +277,21 @@ class AssistantApp:
             self.agent.running,
             policy=Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),
         )
-        self.communications = Communications(
-            TeamsWeb(BROWSER_PROFILE),
-            windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE),
-            self.ui.communications_changed,
-        )
         self.canvas: WorkCanvas = WorkCanvas(
             WORK.root / "canvas.sqlite3",
             self.continue_thread,
-            self.ui.publish_canvas,
+            self.canvas_published,
             autonomous=bool(self.settings.api_key and self.settings.base_url),
         )
         self.personal = self.create_personal(tasks)
         self.recover_canvas(tasks)
         self.triage = self.create_feed(FeedWork(tasks, saved_context, context))
+        self.feed = FeedInbox(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
+        self.communications = Communications(
+            TeamsWeb(BROWSER_PROFILE), windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE), self.feed.communications
+        )
         self.work_owners = WorkOwners(self.triage.command, self.personal.handle, self.canvas.command)
-        self.ui.configure_feed(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
+        self.commands_handler = DesktopCommands(self.canvas, desktop, self)
         self.timings.mark("communications and desktop owners")
         archive = MeetingArchive(DIRECTORY / "meetings")
         self.meetings = Meetings(
@@ -292,14 +309,7 @@ class AssistantApp:
             publish=self.automatic_recording_changed,
         )
         self.timings.mark("meeting services")
-        self.assistant = Assistant(
-            self.desktop,
-            self.settings,
-            record=self.record,
-            submit=self.jobs.put,
-            controls=self,
-            missing=missing,
-        )
+        self.assistant = Assistant(self.machine, self.settings, record=self.record, submit=self.jobs.put, controls=self, missing=missing)
         self.layout: LayoutState | None = None
         self.capture_timer: int | None = None
         """What the layout last said; None until it does."""
@@ -317,7 +327,35 @@ class AssistantApp:
             )
         )
         if missing is not None:
-            self.tray.notify("Workspace", f"The AI tools need {', '.join(missing.names)}; the layout works without them.", warning=True)
+            self.notify("Workspace", f"The AI tools need {', '.join(missing.names)}; the layout works without them.")
+
+    # ---- the agent session's view ------------------------------------------------------
+
+    def session_window(self, runner: WorkAgent) -> AgentWindow:
+        """The agent session: its snapshots go to the desktop and the canvas, from one view thread."""
+        window = AgentWindow(
+            runner.stop,
+            post=self.view_thread.post,
+            create_view=lambda _: SessionView(self.desktop, self.canvas.observe_session),
+            on_problem=self.problem,
+            on_reset=runner.new_conversation,
+            on_submit=runner.start,
+            on_waiting=lambda waiting: self.show(State.NEEDS_INPUT if waiting else State.AGENT),
+            on_recording=self.recording_action,
+            on_work=self.show_work,
+            log=log,
+        )
+        if self.publication is not None:
+            window.canvas_attention(self.publication.attention)
+        self.session = window
+        return window
+
+    def canvas_published(self, publication: CanvasPublication) -> None:
+        """Any thread: the canvas document's owner changed it; the session and the desktop observe it."""
+        self.publication = publication
+        if self.session is not None:
+            self.session.canvas_attention(publication.attention)
+        self.desktop.send(CanvasChanged(publication))
 
     # ---- running -----------------------------------------------------------------------
 
@@ -339,8 +377,6 @@ class AssistantApp:
             log(f"Meeting canvas intake failed: {error}. The journal is saved; startup will retry intake.")
 
     def create_personal(self, tasks: TaskStore) -> PersonalWork:
-        self.ui.configure_work(self.work_command, on_problem=self.problem)
-        self.ui.configure_canvas(self.canvas, self.agent.notify_canvas, observe_session=self.canvas.observe_session)
         self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
         return PersonalWork(
             PersonalStore(tasks.path),
@@ -377,29 +413,12 @@ class AssistantApp:
             if run.work_id == work.id:
                 self.agent.command(ControlTask(run.task_id, Control.CANCEL))
 
-    def start_background(self) -> None:
-        self.startup.start()
-        if os.environ.get("WORKSPACE_DESKTOP", "on").lower() != "off":
-            # Prepare Qt controls while starting the desktop, so the first
-            # canvas click reuses the current native scene and font resources.
-            work = self.ui.work_window()
-            work.publish(replace(self.agent.snapshot(), personal=self.personal.snapshot()))
-            work.prepare()
-            self.ui.desktop(
-                show_work=self.show_work,
-                stop=lambda: self.choose_tool(Tool.STOP),
-                overlay=self.toggle_overlay,
-                menu=self.request_menu,
-                on_problem=self.problem,
-                audio_level=self.desktop.mic.level,
-                tool=self.choose_tool,
-            )
-
     def run(self) -> None:
-        self.capture_timer = control_policy.initialize_controls(self.window.handle, self.start_background, self.startup_effects)
+        self.capture_timer = control_policy.initialize_controls(self.window.handle, self.startup.start, self.startup_effects)
         self.timings.mark("workers and readiness")
+        self.desktop.send(WorkChanged(replace(self.agent.snapshot(), personal=self.personal.snapshot())))
         if self.settings.api_key:
-            threading.Thread(target=self.agent.prepare, name="agent panel warmup", daemon=True).start()
+            threading.Thread(target=self.agent.prepare, name="agent session warmup", daemon=True).start()
         system.run_message_loop()
 
     def quit(self) -> None:
@@ -409,7 +428,7 @@ class AssistantApp:
             self.capture_timer = None
         self.assistant.stop_capture(discard=True, reason="shutdown")
         timings.mark("stop capture")
-        # Park running work while the desktop owners its calls reach still exist.
+        # Park running work while the owners its calls reach still exist.
         self.automation.close()
         timings.mark("worker")
         self.agent.close()
@@ -424,32 +443,19 @@ class AssistantApp:
         timings.mark("Teams worker")
         self.automatic_meetings.close()
         try:
-            self.ui.close_desktop()
-        except OSError as error:
-            log(str(error))
-        try:
             self.meetings.close()
         except OSError as error:
             log(str(error))
-        timings.mark("meetings and work frontend")
+        timings.mark("meetings")
         self.activity.close()
-        self.ui.close_windows()
-        self.ui.close()
-        timings.mark("Qt shutdown")
+        self.view_thread.close()
+        self.levels.close()
         self.jobs.put(None)
-        self.desktop.close_microphone()
-        self.tray.remove()
+        self.machine.close_microphone()
         self.window.destroy()
         system.close_event(self.mic_event)
         timings.mark("microphone cleanup")
         system.post_quit()
-
-    def choose_tool(self, tool: Tool) -> None:
-        """Marshal menu choices from Qt to the assistant's control-thread owner."""
-        system.post_message(self.window.handle, control_policy.WM_TOOL_CHOSEN, tool.value, 0)
-
-    def open_inbox(self) -> None:
-        self.ui.open_inbox()
 
     def show_agent(self) -> None:
         self.agent.show()
@@ -459,16 +465,6 @@ class AssistantApp:
 
     def toggle_meeting(self) -> None:
         self.recording_action("stop" if self.meetings.snapshot().capturing else "start")
-
-    def switch_windows(self) -> None:
-        def focus(handle: int) -> None:
-            self.ui.navigate(SwitcherPick(handle, Source.KEY))
-
-        def collect() -> None:
-            own = os.getpid()
-            self.ui.switch_windows(tuple(w for w in windows.windows() if windows.process_id(w.handle) != own), focus)
-
-        threading.Thread(target=collect, name="window list", daemon=True).start()
 
     def work(self) -> None:
         """The worker thread: slow jobs, one at a time."""
@@ -483,26 +479,40 @@ class AssistantApp:
         with contextlib.suppress(OSError):
             usage.record("assistant", feature, details)
 
-    # ---- what the user sees ------------------------------------------------------------
+    # ---- what the desktop shows --------------------------------------------------------
 
     def show(self, state: State) -> None:
+        self.levels.listen(enabled=self.assistant.listening is not None)
         if self.assistant.listening is not None:
             state = State.LISTENING
         if state in (State.READY, State.LAYOUT_OFF) and self.agent.running():
             state = State.NEEDS_INPUT if self.agent.window is not None and self.agent.window.waiting else State.AGENT
-        self.ui.desktop_state(state, agent_speaking=self.assistant.listening is Tool.AGENT_VOICE)
-        self.tray.show(State.RECORDING if self.meetings.snapshot().capturing else state)
+        self.desktop.send(VoiceChanged(state, agent_speaking=self.assistant.listening is Tool.AGENT_VOICE))
+
+    def job_changed(self, job: Job | None) -> None:
+        self.desktop.send(JobChanged(job))
+
+    def notify(self, title: str, text: str) -> None:
+        self.desktop.send(Notify(title, text))
+
+    def problem(self, message: str) -> None:
+        log(message)
+        self.desktop.send(Notify("Workspace", message, warning=True))
 
     def recording_changed(self, state: RecordingState) -> None:
-        self.ui.desktop_recording(state)
+        self.desktop.send(RecordingChanged(state))
         self.agent.prepare()
         if self.agent.window is not None:
             self.agent.window.recording(state)
         prior, self._recording_phase = self._recording_phase, state.phase
         failed_capture = prior in ("starting", "recording", "stopping") and state.phase == "finishing" and bool(state.detail)
         if (prior != state.phase and state.phase in ("paused", "interrupted")) or failed_capture:
-            self.tray.notify(
-                "Meeting transcript", state.detail or "Recording was interrupted. Choose Open meeting transcripts for the saved part.", warning=True
+            self.desktop.send(
+                Notify(
+                    "Meeting transcript",
+                    state.detail or "Recording was interrupted. Choose Open meeting transcripts for the saved part.",
+                    warning=True,
+                )
             )
         self.show(State.LISTENING if self.assistant.listening is not None else State.READY if self.assistant.layout_on else State.LAYOUT_OFF)
 
@@ -532,10 +542,12 @@ class AssistantApp:
         self.automatic_attention.changed(status)
 
     def warn_automatic_recording(self) -> None:
-        self.tray.notify(
-            "Automatic Teams recording",
-            "Meeting detection is unavailable. Check the browser connection or choose Record a meeting manually.",
-            warning=True,
+        self.desktop.send(
+            Notify(
+                "Automatic Teams recording",
+                "Meeting detection is unavailable. Check the browser connection or choose Record a meeting manually.",
+                warning=True,
+            )
         )
 
     def review_feed(self, batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
@@ -545,11 +557,11 @@ class AssistantApp:
     def work_changed(self, snapshot: WorkSnapshot) -> None:
         self.canvas.observe_work(snapshot)
         self.triage.context_changed(snapshot.tasks, snapshot.context)
-        self.ui.work_window().publish(replace(snapshot, personal=self.personal.snapshot()))
+        self.desktop.send(WorkChanged(replace(snapshot, personal=self.personal.snapshot())))
 
     def personal_changed(self, view: PersonalView) -> None:
         self.canvas.observe_catalog(view.catalog)
-        self.ui.work_window().publish(replace(self.agent.snapshot(), personal=view))
+        self.desktop.send(WorkChanged(replace(self.agent.snapshot(), personal=view)))
 
     def continue_thread(self, run: CanvasRun) -> None:
         self.agent.watch(tuple(binding.task_id for binding in self.canvas.read().runs), owner="canvas")
@@ -562,6 +574,12 @@ class AssistantApp:
                 self.personal.enqueue(command)
             case RefreshPersonalWork.REFRESH:
                 self.personal.refresh()
+            case ReadMeeting(transcript_path=path, offset=offset):
+                try:
+                    page = MeetingStore(Path(path).parent).conversation(offset)
+                except OSError, ValueError, sqlite3.Error:
+                    page = None
+                self.desktop.send(MeetingPage(path, page))
             case OpenWorkSource(source_id):
                 source = next((source for source in self.personal.snapshot().catalog.sources if source.id == source_id), None)
                 if source is None:
@@ -570,14 +588,14 @@ class AssistantApp:
                     self.open_meeting_file(Path(source.meeting.transcript_path))
                     return
                 if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE):
-                    self.ui.open_reference(source.url)
+                    self.desktop.send(OpenReference(source.url))
                     return
                 self.agent.start(source_request(source))
             case _:
                 self.agent.command(command)
 
     def show_work(self) -> None:
-        self.ui.work_window().show()
+        self.desktop.send(ShowWork(focus=True))
         self.agent.refresh()
 
     def open_meeting_file(self, path: Path) -> None:
@@ -608,212 +626,117 @@ class AssistantApp:
             self.assistant.idle()
 
     def run_agent(self, text: str) -> None:
-        self.ui.voice_agent(text, self.agent.voice)
+        """Spoken words for the agent: the desktop routes them by its focus; without one, the conversation takes them."""
+        if self.desktop.connected:
+            self.desktop.send(RouteSpeech(text))
+        else:
+            self.agent.voice(text)
 
-    def problem(self, message: str) -> None:
-        log(message)
-        system.beep(system.MB_ICONEXCLAMATION)
-        self.tray.notify("Workspace", message, warning=True)
+    # ---- the desktop's commands (`DesktopCommands.Controls`) ---------------------------
 
-    def show_overlay(self, work: Rect) -> None:
-        self.ui.show_keyboard_overlay(self.overlay.layer, self.overlay.title, work, visible=self.overlay.visible, pressed=self.overlay.pressed)
+    def use_tool(self, tool: Tool) -> None:
+        self.assistant.handle(tool, down=True)
 
-    def display_overlay(self, change: control_policy.OverlayChange) -> None:
-        self.overlay = replace(self.overlay, enabled=change.enabled)
-        self.show_overlay(indicator_area())
-        self.ui.desktop_overlay(enabled=change.enabled)
+    def voice(self, text: str) -> None:
+        self.agent.voice(text)
 
-    def persist_overlay(self, change: control_policy.OverlayChange) -> None:
-        save_enabled(enabled=change.enabled)
+    def notify_canvas(self, title: str, target: str) -> None:
+        self.agent.notify_canvas(title, target)
 
-    def toggle_overlay(self) -> None:
-        change = control_policy.OverlayChange(enabled=not self.overlay.enabled)
-        if (problem := control_policy.change_overlay(change, self)) is not None:
-            self.problem(problem)
+    def notices(self, observed: Observed) -> None:
+        self.feed.notices(observed)
+
+    def refresh(self) -> None:
+        self.agent.refresh()
+
+    def resume(self, task_id: str) -> None:
+        self.agent.command(ControlTask(task_id, Control.RESUME))
+
+    def received(self, frame: bytes) -> None:
+        """Link thread: hand the desktop's command to the control thread, in order."""
+        self.commands.put(frame)
+        system.post_message(self.window.handle, WM_LINK, 0, 0)
+
+    def drain_commands(self) -> None:
+        while True:
+            try:
+                frame = self.commands.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                self.commands_handler.handle(from_desktop(frame))
+            except contracts.desktop_link.WireError as error:
+                log(f"Refused a frame from the desktop: {error}")
+            except (OSError, ValueError, sqlite3.Error) as error:
+                self.problem(str(error))
 
     # ---- messages ----------------------------------------------------------------------
 
     def layout_changed(self, value: int) -> None:
         with contextlib.suppress(ValueError):
             self.layout = LayoutState(value)
-        work = indicator_area()
-        if self.layout is not LayoutState.QUIT:
-            self.ui.flash("Layout on" if self.layout is LayoutState.ON else "Layout off", work)
         self.assistant.layout_on = self.layout is LayoutState.ON
         if not self.assistant.layout_on:
             self.assistant.stop_capture(reason="layout_off")
-        self.ui.desktop_layout(enabled=self.assistant.layout_on)
-        self.overlay = self.overlay.set_layout(on=self.assistant.layout_on)
-        self.ui.show_pressed_keys(self.overlay.pressed, reset=True)
-        self.show_overlay(work)
         if self.assistant.listening is None:
             self.assistant.idle()
 
     def on_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
         try:
-            if message == shell.TASKBAR_CREATED:
-                self.tray.restore()
-                return 0
             if message == system.WM_TIMER and wparam == self.capture_timer:
                 self.assistant.expire_capture(time.monotonic())
                 return 0
-            if message == WM_SHOW_MENU:
-                self.menu()
+            if message == WM_LINK:
+                self.drain_commands()
                 return 0
-            if message in (WM_KEY_STATE, WM_REQUEST, control_policy.WM_TOOL_CHOSEN):
-                action = control_policy.control_event(control_policy.WindowInput(message, wparam, lparam), APPS)
-                match action:
-                    case control_policy.PhysicalKey(scancode=scancode, down=down):
-                        self.overlay = self.overlay.key(scancode, down=down)
-                        self.ui.show_pressed_keys(self.overlay.pressed, reset=action.reset)
-                    case control_policy.FeatureRequest(request=request, down=down):
-                        self.assistant.handle(request, down=down)
-                    case control_policy.ChosenTool(tool=tool):
-                        self.assistant.handle(tool, down=True)
-                    case None:
-                        pass
-                    case _:
-                        assert_never(action)
-                return 0
-            if message == WM_INDICATOR:
-                index, locked, caps_word = decode_indicator(wparam)
-                layer = next((layer for layer in Layer if layer.value == index), None)
-                work = indicator_area()
-                self.ui.indicate(indicator_text(layer, locked=locked, caps_word=caps_word), work)
-                self.overlay = self.overlay.indicate(layer, locked=locked, caps_word=caps_word)
-                self.show_overlay(work)
+            if message == WM_REQUEST:
+                if (request := decode(wparam, APPS)) is not None:
+                    self.assistant.handle(request, down=bool(lparam))
                 return 0
             if message == WM_LAYOUT_STATE:
                 self.layout_changed(wparam)
                 return 0
-            if message == WM_CHORD:
-                self.ui.desktop_chord(held=bool(wparam))
-                return 0
-            if message == WM_WINDOWS_KEY_TAP:
-                self.ui.toggle_taskbar()
-                return 0
             if message == system.WM_CLOSE:  # the keeper asks: it's restarting or installing
                 self.quit()
-                return 0
-            if message == WM_TRAY and lparam in (system.WM_LBUTTONUP, system.WM_RBUTTONUP):
-                self.menu()
                 return 0
         except Exception:
             log(traceback.format_exc())
         return None
-
-    def request_menu(self) -> None:
-        system.post_message(self.window.handle, WM_SHOW_MENU, 0, 0)
-
-    def menu(self) -> None:
-        state = control_policy.MenuState(
-            layout=self.layout, overlay_enabled=self.overlay.enabled, agent_running=self.agent.running(), capturing=self.meetings.snapshot().capturing
-        )
-        try:
-            self.tray_spec = control_policy.tray()
-        except SpecError as error:
-            self.problem(f"The tray menu kept its last good spec: {error}")
-        items = control_policy.menu_items(state, self.tray_spec)
-        match shell.show_menu(self.window.handle, items):
-            case control_policy.Menu.TOGGLE_LAYOUT.value:
-                if not control_policy.toggle_layout(self.startup_effects):
-                    self.problem("Couldn't reach the layout. Try Start layout or Restart layout.")
-            case control_policy.Menu.RESTART_LAYOUT.value:
-                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("layout"))
-            case control_policy.Menu.RESTART_ASSISTANT.value:
-                keeper_control.ask(keeper.REQUESTS, keeper_control.Restart("assistant"))
-            case control_policy.Menu.OVERLAY.value:
-                self.toggle_overlay()
-            case control_policy.Menu.KEYMAP.value:
-                self.ui.show_keymap()
-            case control_policy.Menu.AGENT.value:
-                self.assistant.handle(Tool.AGENT_TYPED, down=True)
-            case control_policy.Menu.WORK.value:
-                self.show_work()
-            case control_policy.Menu.TASKBAR.value:
-                self.ui.toggle_taskbar()
-            case control_policy.Menu.STOP_AGENT.value:
-                self.agent.stop()
-            case control_policy.Menu.MEETING.value:
-                self.assistant.handle(Tool.MEETING_TOGGLE, down=True)
-            case control_policy.Menu.TRANSCRIPTS.value:
-                self.recording_action("folder")
-            case control_policy.Menu.UNDO.value:
-                keeper_control.ask(keeper.REQUESTS, keeper_control.Undo())
-            case control_policy.Menu.USAGE.value:
-                os.startfile(write_report())
-            case control_policy.Menu.LOGS.value:
-                DIRECTORY.mkdir(parents=True, exist_ok=True)
-                os.startfile(DIRECTORY)
-            case control_policy.Menu.QUIT.value:
-                self.quit()
-            case _:
-                pass
 
 
 class Controller(Protocol):
     def run(self) -> None: ...
 
 
-def create_ui() -> Ui:
-    # Resolve the lazy Qt module only after physical-pixel initialization.
-    return Ui()
-
-
-def create_controller(settings: Settings | Missing, ui: Ui) -> Controller:
-    return AssistantApp(settings, ui)
-
-
-@dataclass(frozen=True, slots=True)
-class Runtime:
-    """The identity and factories of one owned native/Qt process lifetime.
-
-    Factories are invoked on their required threads; the native window title
-    identifies the same controller when Qt exits before its message loop.
-    """
-
-    title: str = components.ASSISTANT.window.title
-    lock_name: str = LOCK_NAME
-    ui: Callable[[], Ui] = create_ui
-    controller: Callable[[Settings | Missing, Ui], Controller] = create_controller
-
-
-def run(settings: Settings | Missing, *, timings: Timings | None = None, runtime: Runtime | None = None) -> Exit:
-    """Blocks until quit from the tray."""
+def run(
+    settings: Settings | Missing,
+    *,
+    timings: Timings | None = None,
+    window: components.Window = components.ASSISTANT.window,
+    lock_name: str = LOCK_NAME,
+) -> Exit:
+    """Blocks until the keeper asks it to close; a test names its own `window` and `lock_name`."""
     screen.use_physical_pixels()  # before any window exists
-    runtime = Runtime() if runtime is None else runtime
-    lock = system.create_lock(runtime.lock_name)
+    lock = system.create_lock(lock_name)
     if lock is None:
         return Exit.ALREADY_RUNNING
     try:
         timings = timings or Timings("startup")
-        ui = runtime.ui()
-        timings.mark("Qt initialization")
-        errors: queue.Queue[BaseException] = queue.Queue()
+        app: AssistantApp | None = None
 
-        def control() -> None:
-            try:
-                runtime.controller(settings, ui).run()
-            except BaseException as error:
-                errors.put(error)
-            finally:
-                try:
-                    ui.close()
-                except BaseException as error:
-                    errors.put(error)
+        def received(frame: bytes) -> None:
+            if app is not None:
+                app.received(frame)
 
-        controller = threading.Thread(target=control, name="assistant control", daemon=True)
-        controller.start()
+        published = components.endpoint("assistant")
+        server = Server(os.urandom(24).hex(), received)
+        app = AssistantApp(settings, LinkedDesktop(server), window=window)
+        server.start(published)
+        timings.mark("link")
         try:
-            ui.run()
+            app.run()
         finally:
-            if controller.is_alive() and (window := windows.find(runtime.title)) is not None:
-                system.post_message(window, system.WM_CLOSE, 0, 0)
-            controller.join(timeout=10)
-        if controller.is_alive():
-            raise OSError("The assistant control thread did not finish closing.")
-        if not errors.empty():
-            raise errors.get_nowait()
+            server.close()
         return Exit.QUIT
     finally:
         system.release_lock(lock)

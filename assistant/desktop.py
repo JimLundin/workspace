@@ -1,24 +1,23 @@
-"""The `Desktop` the assistant's features use, done with Windows calls and Qt."""
+"""The `Desktop` the assistant's features use: the microphone, typing and the clipboard on
+Windows, and callbacks for what the desktop process should show."""
 
 from collections.abc import Callable
 
 from winapi import audio, clipboard, inputs
 lazy from contracts.status import Job, State
-lazy from desktop_ui.navigation import Order
-lazy from desktop_ui.ui import Ui
 lazy from protocol import MAGIC
 
 
 class WinDesktop:
-    __slots__ = ("mic", "mic_follower", "on_notify", "on_problem", "on_state", "owner", "ui")
+    __slots__ = ("mic", "mic_follower", "on_job", "on_notify", "on_problem", "on_state", "owner")
 
     def __init__(  # noqa: PLR0913 - native owner, devices and event callbacks
         self,
         owner: int,
         mic: audio.Microphone,
-        ui: Ui,
         *,
         on_state: Callable[[State], None],
+        on_job: Callable[[Job | None], None],
         on_notify: Callable[[str, str], None],
         on_problem: Callable[[str], None],
     ) -> None:
@@ -27,8 +26,8 @@ class WinDesktop:
         self.mic = mic
         self.mic_follower = audio.DefaultFollower(mic)
         """Keeps dictation and the level meter on the current default capture device."""
-        self.ui = ui
         self.on_state = on_state
+        self.on_job = on_job
         self.on_notify = on_notify
         self.on_problem = on_problem
 
@@ -55,21 +54,16 @@ class WinDesktop:
         if not clipboard.set_text(self.owner, text):
             raise OSError("The clipboard is busy. Try copying the transcript again.")
 
-    # ---- the assistant's own windows ---------------------------------------------------
+    # ---- what the desktop shows --------------------------------------------------------
 
     def show_state(self, state: State) -> None:
         self.on_state(state)
 
     def busy(self, job: Job | None) -> None:
-        self.ui.desktop_job(job)
+        self.on_job(job)
 
     def notify(self, title: str, text: str) -> None:
         self.on_notify(title, text)
 
     def problem(self, message: str) -> None:
         self.on_problem(message)
-
-    # ---- other programs' windows -------------------------------------------------------
-
-    def navigate(self, order: Order) -> None:
-        self.ui.navigate(order)

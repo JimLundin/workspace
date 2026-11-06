@@ -98,6 +98,11 @@ class WorkCanvas:
                 # full action history belongs to the separate execution ledger.
                 connection.execute("UPDATE canvas SET payload=? WHERE id=1", (DOCUMENT.dump_json(retained_document),))
 
+    def publication(self) -> CanvasPublication:
+        """What the canvas shows now, to give a client back the record after a refused edit."""
+        with self._lock:
+            return published(self._observed_catalog(), self.read(), None)
+
     def _observed_catalog(self) -> Catalog:
         return self._catalog or Catalog()
 

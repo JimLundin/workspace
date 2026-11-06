@@ -36,7 +36,6 @@ from contracts.presentation import Done, Finished, LiveMessage, Problem, Progres
 from contracts.publication import Post, Unavailable, ViewPublication
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.task import TextAnswer
-from desktop_ui.view_publication import log_view
 
 
 class View(Protocol):
@@ -80,6 +79,7 @@ class AgentWindow:
         "__weakref__",
         "_callbacks",
         "_input",
+        "_log",
         "_started",
         "lock",
         "publication",
@@ -98,6 +98,7 @@ class AgentWindow:
         on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
+        log: Callable[[str], None],
     ) -> None:
         # This conversation owns one view, request lifetime and snapshot stream.
         # Its independent interaction callbacks are composed together here so a
@@ -107,7 +108,8 @@ class AgentWindow:
         self.state = Session(identity=uuid.uuid4().hex)
         self.lock = threading.RLock()
         self._started = time.monotonic()
-        self.publication: ViewPublication[View] = ViewPublication(post, lambda: create_view(self), self._render, log=log_view)
+        self._log = log
+        self.publication: ViewPublication[View] = ViewPublication(post, lambda: create_view(self), self._render, log=log)
         self.publication.post(self._prepare)
 
     @property
@@ -131,11 +133,11 @@ class AgentWindow:
             case Unavailable.CLOSED:
                 return None
             case Unavailable.FAILED:
-                self.problem("The agent panel couldn't open. Reopen Agent session to retry; details are in agent-ui.log.")
+                self.problem("The agent session couldn't reach its view. Reopen Agent session to retry; details are in assistant.log.")
                 return None
             case _:
                 if created:
-                    log_view(f"Agent conversation view ready in {time.monotonic() - self._started:.2f}s.")
+                    self._log(f"Agent conversation view ready in {time.monotonic() - self._started:.2f}s.")
                 return opened
 
     def _render(self, view: View | None) -> None:

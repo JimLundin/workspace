@@ -3,9 +3,9 @@
 import contextlib
 import threading
 
+from assistant.agent_window import AgentWindow
 from contracts.agent_session import AgentRequest
 from contracts.task import TextAnswer
-from desktop_ui.agent_window import AgentWindow
 from tests.agent_requests import asked
 from tests.test_agent_window import RecordingWindow
 

@@ -1,6 +1,7 @@
-"""Run the assistant: `pythonw -m assistant`. It puts an icon in the notification
-area and runs until you choose Quit there. The keeper (`workspace.pyw`) starts the
-layout and the assistant. See the README for the keys and the settings.
+"""Run the assistant: `pythonw -m assistant`. It has no window of its own: the
+desktop (`python -m desktop`) shows its work over a loopback link, and either runs
+without the other. The keeper (`workspace.pyw`) starts both, with the gateway and
+the layout. See the README for the keys and the settings.
 """
 
 import os
@@ -24,7 +25,7 @@ def main() -> None:
         case Exit.QUIT:
             pass
         case Exit.ALREADY_RUNNING:
-            show_error("Workspace is already running (its icon is in the notification area).")
+            show_error("The Workspace assistant is already running.")
 
 
 if __name__ == "__main__":

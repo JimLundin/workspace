@@ -4,11 +4,11 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
+from assistant.agent_window import AgentWindow, View
 from contracts.agent_session import Snapshot, pending
 from contracts.presentation import Answer, StreamState
 from contracts.recording_state import RecordingAction
 from contracts.task import TextAnswer
-from desktop_ui.agent_window import AgentWindow, View
 from tests.agent_requests import asked, body
 
 
@@ -56,6 +56,7 @@ class RecordingWindow(AgentWindow):
             stop,
             post=self.jobs.append,
             create_view=lambda agent: self.view,
+            log=lambda _text: None,
             on_problem=on_problem,
             on_reset=on_reset,
             on_submit=on_submit,
@@ -189,7 +190,7 @@ def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
             raise RuntimeError("Fixture: window initialization failed")
         return view
 
-    panel = AgentWindow(lambda: None, post=jobs.append, create_view=create, on_problem=problems.append)
+    panel = AgentWindow(lambda: None, post=jobs.append, create_view=create, on_problem=problems.append, log=lambda _text: None)
     while jobs:
         jobs.popleft()()
     assert len(problems) == 1 and not panel.publication.ready.is_set()
@@ -211,7 +212,7 @@ def test_snapshot_renders_follow_the_ui_queue_and_stop_after_close() -> None:
     def observed_counts() -> tuple[int, ...]:
         return tuple(sum(pending(message) for message in state.messages) for state in view.states)
 
-    panel = AgentWindow(lambda: None, post=jobs.append, create_view=lambda _: view)
+    panel = AgentWindow(lambda: None, post=jobs.append, create_view=lambda _: view, log=lambda _text: None)
     try:
         while jobs:
             jobs.popleft()()

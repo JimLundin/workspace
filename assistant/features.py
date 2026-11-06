@@ -17,9 +17,8 @@ from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, 
 from assistant.text import typed_text
 from contracts.hotkeys import Route, needs_settings, route
 from contracts.status import Job, State
-from desktop_ui.navigation import AppKey, Order, Source, keyed
 from diagnostics import failure_info
-from protocol import App, Request, Tool
+from protocol import App, Request, Side, Tool, owner
 from usage import Detail
 from winapi.pcm import RATE
 
@@ -44,9 +43,6 @@ class Desktop(Protocol):
     def problem(self, message: str) -> None:
         """Something went wrong that the user should hear about."""
 
-    def navigate(self, order: Order) -> None:
-        """Hand a navigation or placement order to the desktop's window owner."""
-
 
 Recorder = Callable[[str, Mapping[str, Detail]], None]
 """Writes one use of a feature to the usage log."""
@@ -58,8 +54,6 @@ class Controls(Protocol):
     def run_agent(self, text: str) -> None: ...
     def show_agent(self) -> None: ...
     def stop_agent(self) -> None: ...
-    def open_inbox(self) -> None: ...
-    def switch_windows(self) -> None: ...
     def toggle_meeting(self) -> None: ...
 
 
@@ -143,10 +137,10 @@ class Assistant:
 
     def handle(self, request: Request, *, down: bool) -> None:
         """Dispatch a key edge or menu press."""
+        if owner(request) is Side.DESKTOP:
+            return  # The layout sends app keys and window keys to the desktop, which owns them.
         match request:
             case App():
-                if down:
-                    self.timed(f"app:{request.name}", lambda: self.order(AppKey(request, Source.KEY)))
                 return
             case Tool():
                 kind = route(request)
@@ -173,14 +167,10 @@ class Assistant:
                     self.controls.stop_agent()
             case Route.TRANSCRIPT:
                 self.submit(self.copy_transcript)
-            case Route.NAVIGATE:
-                self.timed(request.name.lower(), lambda: self.order(keyed(request)))
+            case Route.NAVIGATE | Route.INBOX | Route.SWITCHER:
+                pass  # The desktop's (see `owner`).
             case Route.AGENT_SESSION:
                 self.submit(lambda: self.timed(request.name.lower(), self.agent_session))
-            case Route.INBOX:
-                self.controls.open_inbox()
-            case Route.SWITCHER:
-                self.controls.switch_windows()
             case Route.MEETING:
                 self.controls.toggle_meeting()
             case _:
@@ -353,7 +343,3 @@ class Assistant:
 
     def agent_session(self) -> None:
         self.controls.show_agent()
-
-    def order(self, order: Order | None) -> None:
-        if order is not None:
-            self.desktop.navigate(order)

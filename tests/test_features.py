@@ -9,7 +9,6 @@ from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from contracts.json_value import Json
 from contracts.status import Job, State
-from desktop_ui.navigation import AppKey, Direction, JumpDesktop, Order, Placing, Source, SpatialFocus, Zoom
 from protocol import App, Installed, Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
 from usage import Detail
@@ -32,14 +31,13 @@ def answered(text: str) -> Reply:
 
 
 class FakeDesktop:
-    __slots__ = ("input_error", "jobs", "log", "orders", "recording_error", "speech")
+    __slots__ = ("input_error", "jobs", "log", "recording_error", "speech")
 
     def __init__(self, *, input_error: OSError | None = None, recording_error: OSError | None = None) -> None:
         self.input_error, self.recording_error = input_error, recording_error
         self.log: list[str] = []
         self.jobs: list[Job | None] = []
         self.speech = SPEECH
-        self.orders: list[Order] = []
 
     def start_listening(self) -> str | None:
         self.log.append("listen")
@@ -71,10 +69,6 @@ class FakeDesktop:
     def problem(self, message: str) -> None:
         self.log.append(f"problem {message}")
 
-    def navigate(self, order: Order) -> None:
-        self.orders.append(order)
-        self.log.append("navigate")
-
 
 class FakeControls:
     """Publish control effects to the fixture's action recorder."""
@@ -92,12 +86,6 @@ class FakeControls:
 
     def stop_agent(self) -> None:
         self.record("STOP")
-
-    def open_inbox(self) -> None:
-        self.record("INBOX")
-
-    def switch_windows(self) -> None:
-        self.record("SWITCHER")
 
     def toggle_meeting(self) -> None:
         self.record("MEETING")
@@ -444,21 +432,14 @@ def test_voice_sends_a_task_and_typed_opens_the_agent_session() -> None:
 TERMINAL = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
 
 
-def test_app_and_navigation_keys_hand_their_orders_to_the_window_owner() -> None:
-    # Defects: an app key no longer reaches the window owner, a desktop key
-    # jumps to the wrong desktop, or placement keys are dropped.
+def test_desktop_owned_keys_never_reach_the_assistants_features() -> None:
+    # Defect: an app, window, inbox or switcher key (the desktop's) also runs in
+    # the assistant, so it acts twice or records usage the desktop already did.
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint)
-        for request in (TERMINAL, Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE):
+        for request in (TERMINAL, Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER):
             rig.press(request)
-        assert rig.desktop.orders == [
-            AppKey(TERMINAL, Source.KEY),
-            JumpDesktop(1, Source.KEY),
-            SpatialFocus(Direction.UP, Source.KEY),
-            Zoom(Source.KEY),
-            Placing.TOGGLE_PAUSE,
-        ]
-        assert rig.ok("app:terminal")
+        assert not rig.take() and not rig.used and not rig.agent
 
 
 def test_desktop_controls_run_on_press_without_worker_submission() -> None:
@@ -467,9 +448,8 @@ def test_desktop_controls_run_on_press_without_worker_submission() -> None:
         # This test owns the bounded queue of submitted effects and never executes them.
         jobs: list[Callable[[], None]] = []
         rig = Rig(endpoint, submit=jobs.append)
-        for tool in (Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER, Tool.MEETING_TOGGLE):
-            rig.press(tool)
-        assert rig.agent == ["INBOX", "SWITCHER", "MEETING"]
+        rig.press(Tool.MEETING_TOGGLE)
+        assert rig.agent == ["MEETING"]
         assert not jobs and not rig.used and not rig.desktop.jobs and not rig.take()
 
 
@@ -481,12 +461,10 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
         rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)))
         rig.hold(Tool.DICTATE)
         rig.press(Tool.AGENT_TYPED)
-        rig.press(TERMINAL)
-        rig.press(Tool.OPEN_INBOX)
         rig.press(Tool.MEETING_TOGGLE)
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
-        assert rig.take() == [problem, problem, "navigate"]
-        assert rig.agent == ["INBOX", "MEETING"]
+        assert rig.take() == [problem, problem]
+        assert rig.agent == ["MEETING"]
         assert endpoint.received == []
 
 
