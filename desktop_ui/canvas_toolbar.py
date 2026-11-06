@@ -137,33 +137,38 @@ class CanvasToolbarSpec:
     sections: tuple[Section, ...]
 
 
+def item_problems(place: str, item: CanvasItem | BubbleItem | RelationItem) -> tuple[str, ...]:
+    """What's wrong with one item where it is placed."""
+    stated = (isinstance(item, CanvasItem) and item.action is CanvasTool.CONTENTS) or (
+        isinstance(item, BubbleItem) and item.action is BubbleAction.RELATIONSHIPS
+    )
+    return (
+        *((f"{place}: {item.action} needs a label",) if not stated and not item.label else ()),
+        *((f"{place}: {item.action} takes no label: its words follow what it shows",) if stated and item.label else ()),
+        *((f"{place}: {item.action} needs an icon from the symbol set, not {item.icon!r}",) if item.icon not in REGULAR else ()),
+    )
+
+
 def toolbar_problems(spec: CanvasToolbarSpec) -> tuple[str, ...]:
     """What makes the spec unusable beyond its shape, each named by where it is."""
-    found: list[str] = []
-    expanded = [item for section in spec.sections if not isinstance(section, DismissedSection) for item in section.items]
+    expanded = tuple(item for section in spec.sections if not isinstance(section, DismissedSection) for item in section.items)
     # Canvas, bubble and relationship actions share names (`contents`), so each kind counts its own.
-    actions = [(type(item).__name__, str(item.action)) for item in expanded]
-    found.extend(f"sections: {action} appears more than once" for kind, action in sorted(set(actions)) if actions.count((kind, action)) > 1)
-    for place, items in (("row", (*spec.row.canvas, *spec.row.bubble)), ("sections", expanded)):
-        for item in items:
-            stated = (isinstance(item, CanvasItem) and item.action is CanvasTool.CONTENTS) or (
-                isinstance(item, BubbleItem) and item.action is BubbleAction.RELATIONSHIPS
-            )
-            if not stated and not item.label:
-                found.append(f"{place}: {item.action} needs a label")
-            if stated and item.label:
-                found.append(f"{place}: {item.action} takes no label: its words follow what it shows")
-            if item.icon not in REGULAR:
-                found.append(f"{place}: {item.action} needs an icon from the symbol set, not {item.icon!r}")
-    found.extend(
-        f"sections: {section.title} needs an icon from the symbol set"
-        for section in spec.sections
-        if isinstance(section, DismissedSection) and section.icon not in REGULAR
+    actions = tuple((type(item).__name__, str(item.action)) for item in expanded)
+    return (
+        *(f"sections: {action} appears more than once" for kind, action in sorted(set(actions)) if actions.count((kind, action)) > 1),
+        *(problem for item in (*spec.row.canvas, *spec.row.bubble) for problem in item_problems("row", item)),
+        *(problem for item in expanded for problem in item_problems("sections", item)),
+        *(
+            f"sections: {section.title} needs an icon from the symbol set"
+            for section in spec.sections
+            if isinstance(section, DismissedSection) and section.icon not in REGULAR
+        ),
+        *(
+            f"sections: more than one {kind.__name__}"
+            for kind in (BubbleSection, RelationSection, DismissedSection)
+            if sum(isinstance(section, kind) for section in spec.sections) > 1
+        ),
     )
-    for kind in (BubbleSection, RelationSection, DismissedSection):
-        if sum(isinstance(section, kind) for section in spec.sections) > 1:
-            found.append(f"sections: more than one {kind.__name__}")
-    return tuple(found)
 
 
 # ---- what the toolbar shows ------------------------------------------------------------
@@ -269,17 +274,18 @@ def applies(action: BubbleAction, bubble: Bubble, *, related: bool) -> bool:
             assert_never(action)
 
 
+def item_tiles(item: BubbleItem, bubble: Bubble, relationships: Sequence[Relationship]) -> tuple[Tile, ...]:
+    """One item's tiles: none if it doesn't apply, a tile per relationship for Relationships."""
+    if not applies(item.action, bubble, related=bool(relationships)):
+        return ()
+    if item.action is BubbleAction.RELATIONSHIPS:
+        return tuple(Tile(each.reason, item.icon, Open(each)) for each in relationships)
+    return (Tile(item.label, item.icon, OnBubble(item.action, bubble.identity)),)
+
+
 def bubble_tiles(items: Sequence[BubbleItem], bubble: Bubble, relationships: Sequence[Relationship]) -> tuple[Tile, ...]:
     """The bubble's tiles; Relationships becomes a tile per relationship."""
-    tiles: list[Tile] = []
-    for item in items:
-        if not applies(item.action, bubble, related=bool(relationships)):
-            continue
-        if item.action is BubbleAction.RELATIONSHIPS:
-            tiles.extend(Tile(each.reason, item.icon, Open(each)) for each in relationships)
-        else:
-            tiles.append(Tile(item.label, item.icon, OnBubble(item.action, bubble.identity)))
-    return tuple(tiles)
+    return tuple(tile for item in items for tile in item_tiles(item, bubble, relationships))
 
 
 def row(spec: CanvasToolbarSpec, subject: Subject, relationships: Sequence[Relationship], *, collapsed: bool) -> tuple[Tile, ...]:
@@ -294,6 +300,30 @@ def row(spec: CanvasToolbarSpec, subject: Subject, relationships: Sequence[Relat
             assert_never(subject)
 
 
+def group(
+    section: Section,
+    subject: Subject,
+    relationships: Sequence[Relationship],
+    dismissed: Sequence[Dismissed],
+    *,
+    collapsed: bool,
+) -> Group | None:
+    """`section`'s group now; None for a section about another kind of subject."""
+    match section:
+        case CanvasSection(title=title, items=items):
+            return Group(title, tuple(canvas_tile(item, collapsed=collapsed) for item in items))
+        case BubbleSection(items=items) if isinstance(subject, Bubble):
+            return Group(subject.title, bubble_tiles(items, subject, relationships))
+        case RelationSection(items=items) if isinstance(subject, Relationship):
+            return Group(subject.reason, tuple(Tile(item.label, item.icon, OnRelationship(item.action, subject.index)) for item in items))
+        case DismissedSection(title=title, icon=symbol):
+            return Group(title, tuple(Tile("Restore · " + each.title, symbol, Restore(each.work)) for each in dismissed))
+        case BubbleSection() | RelationSection():
+            return None  # Not about this subject.
+        case _:
+            assert_never(section)
+
+
 def sections(
     spec: CanvasToolbarSpec,
     subject: Subject,
@@ -304,19 +334,5 @@ def sections(
 ) -> tuple[Group, ...]:
     """The expanded toolbar's groups now, top to bottom; a group with no tiles is left out.
     `relationships` are the selected bubble's."""
-    groups: list[Group] = []
-    for section in spec.sections:
-        match section:
-            case CanvasSection(title=title, items=items):
-                groups.append(Group(title, tuple(canvas_tile(item, collapsed=collapsed) for item in items)))
-            case BubbleSection(items=items) if isinstance(subject, Bubble):
-                groups.append(Group(subject.title, bubble_tiles(items, subject, relationships)))
-            case RelationSection(items=items) if isinstance(subject, Relationship):
-                groups.append(Group(subject.reason, tuple(Tile(item.label, item.icon, OnRelationship(item.action, subject.index)) for item in items)))
-            case DismissedSection(title=title, icon=symbol):
-                groups.append(Group(title, tuple(Tile("Restore · " + each.title, symbol, Restore(each.work)) for each in dismissed)))
-            case BubbleSection() | RelationSection():
-                pass  # Not about this subject.
-            case _:
-                assert_never(section)
-    return tuple(group for group in groups if group.tiles)
+    shown = (group(section, subject, relationships, dismissed, collapsed=collapsed) for section in spec.sections)
+    return tuple(each for each in shown if each is not None and each.tiles)
