@@ -16,6 +16,7 @@ if sys.platform != "win32":
 from components import ASSISTANT, Window
 from keeper import Process, WindowsUser32
 from runtime import activate
+from winapi.processes import ProcessJob
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -142,16 +143,24 @@ def run_alone(tmp_path: Path, *parts: str) -> str:
     """Run one side's `run` in a fresh interpreter, with a keeper state folder the other side never wrote to."""
     state = tmp_path / "state"
     state.mkdir()
-    checked = subprocess.run(
-        [sys.executable, "-S", "-c", "".join(textwrap.dedent(part) for part in parts)],
-        cwd=ROOT,
-        env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path), WORKSPACE_STATE=str(state), WORKSPACE_READY=str(state / "ready")),
-        capture_output=True,
-        timeout=90,
-        check=False,
-    )
-    output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
+    # The run's helpers (the shared browser host personal work samples through)
+    # outlive it by design; the job ends them with the run, as a crash would.
+    job = ProcessJob()
+    try:
+        with subprocess.Popen(
+            [sys.executable, "-S", "-c", "".join(textwrap.dedent(part) for part in parts)],
+            cwd=ROOT,
+            env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path), WORKSPACE_STATE=str(state), WORKSPACE_READY=str(state / "ready")),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        ) as process:
+            job.add(process.pid)
+            stdout, _ = process.communicate(timeout=90)
+            code = process.returncode
+    finally:
+        job.close()
+    output = stdout.decode("utf-8", errors="replace")
+    assert code == 0, f"Native exit {code & 0xFFFFFFFF:#x}: {output}"
     assert (state / "ready").exists(), output
     return output
 
