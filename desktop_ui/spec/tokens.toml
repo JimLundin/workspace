@@ -1,4 +1,4 @@
-# The island bar's geometry, in device-independent pixels.
+# The island bar's geometry, in device-independent pixels (DIPs).
 #
 # Workspace reloads this file while it runs: save it and the bar re-lays itself
 # out. A file that doesn't validate (a missing, unknown or out-of-range value) is
