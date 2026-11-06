@@ -366,7 +366,7 @@ class MenuCell(QtWidgets.QAbstractButton):
                 self.paint_symbol(painter, name, on=False)
                 painter.setPen(ink)
                 painter.setFont(font(strong=True))
-                painter.drawText(bounds.adjusted(48, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, cell.caption)
+                painter.drawText(bounds.adjusted(38, 0, -8, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, cell.caption)
             case Item(icon=name) if cell.face is Face.TOOL:
                 self.paint_icon(painter, name, ink, QtCore.QPointF(bounds.width() / 2 - 8, 12))
                 painter.setPen(quiet)
@@ -388,7 +388,8 @@ class MenuCell(QtWidgets.QAbstractButton):
     def paint_symbol(self, painter: QtGui.QPainter, name: str, *, on: bool) -> None:
         """A symbol in its own circle at the cell's leading edge, filled with the accent while its setting is on."""
         lettering = self.capsule.look.lettering
-        at = QtCore.QPointF(12 if self.tile.cell.face is Face.TILE else 4, (self.height() - 28) / 2)
+        # Tiles and toggles share one leading edge, so their symbols line up down the grid.
+        at = QtCore.QPointF(4, (self.height() - 28) / 2)
         painter.setPen(Qt.PenStyle.NoPen)
         if on:
             painter.setBrush(QtGui.QColor(GLASS_ACCENT) if not self.capsule.contrast else color(lettering.ink))
