@@ -5,6 +5,7 @@ from dataclasses import replace
 from assistant.meeting_detection import AutomaticStatus
 from desktop_ui.island_layout import MENU_WIDTH, tiles
 from desktop_ui.island_menu import (
+    COLUMNS,
     Applied,
     Chosen,
     Command,
@@ -91,7 +92,7 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
         Toggle("Auto-record", "Teams · On", "mic", Command.AUTOMATIC_RECORDING, on=True),
         Toggle("Keyboard overlay", "On", "layers", Command.OVERLAY, on=True),
         Toggle("Windows taskbar", "Hidden", "table", Command.TASKBAR, on=False),
-        Toggle("Window placement", "On", "grid", Command.PLACEMENT, on=True),
+        Toggle("Placement", "On", "grid", Command.PLACEMENT, on=True),
         Toggle("Dark when away", "External · 2 min idle", "lock", Command.DARK_WHEN_AWAY, on=True),
     ]
     menu = Menu(cells)
@@ -116,7 +117,7 @@ def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     menu = Menu(entries(RESTING))
     assert selected(press(menu, Key.DOWN)) == "Auto-record"
     assert selected(press(at(menu, "Auto-record"), Key.RIGHT)) == "Your work canvas"
-    assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Window placement"
+    assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Placement"
     assert selected(press(at(menu, "Windows taskbar"), Key.LEFT)) == "Keyboard overlay"
     assert selected(press(at(menu, "Dark when away"), Key.DOWN)) == "Record a meeting"
     assert selected(press(at(menu, "Record a meeting"), Key.DOWN)) == "Sound"
@@ -155,7 +156,10 @@ def test_tool_cells_derive_hints_and_short_captions() -> None:
     # small tile shows a caption that doesn't name its tool.
     tools = [(cell.entry, cell.caption) for cell in entries(RESTING) if cell.face is Face.TOOL]
     assert tools[0] == (Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), "X S"), "Switch")
-    assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map"]
+    assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map", "Agent"]
+    # Defect: the tool row leaves part of the menu's width empty.
+    row = [cell for cell in entries(RESTING) if cell.face is Face.TOOL]
+    assert sum(cell.span for cell in row) == COLUMNS
 
 
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:

@@ -184,7 +184,7 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
         automatic_toggle(controls.automatic),
         Toggle("Keyboard overlay", "On" if controls.overlay else "Off", "layers", Command.OVERLAY, on=controls.overlay),
         Toggle("Windows taskbar", "Shown" if controls.taskbar else "Hidden", "table", Command.TASKBAR, on=controls.taskbar),
-        Toggle("Window placement", "Paused" if controls.placement_paused else "On", "grid", Command.PLACEMENT, on=not controls.placement_paused),
+        Toggle("Placement", "Paused" if controls.placement_paused else "On", "grid", Command.PLACEMENT, on=not controls.placement_paused),
         Toggle(
             "Dark when away",
             "Off" if controls.dark_when_away is None else f"External · {controls.dark_when_away} min idle",
@@ -210,6 +210,8 @@ def entries(controls: Controls) -> tuple[Cell, ...]:
         (tool_item("Switch windows", "search", Tool.WINDOW_SWITCHER), "Switch"),
         (tool_item("Copy latest transcript", "doc", Tool.COPY_TRANSCRIPT), "Transcript"),
         (Item("Keyboard map", "keyboard", Command.KEYMAP), "Key map"),
+        # Four two-column tiles fill the eight-column row edge to edge.
+        (tool_item("Type a task for the agent", "agent", Tool.AGENT_TYPED), "Agent"),
     )
     tools = tuple(Cell(entry, Face.TOOL, 2 * column, 2, top, 7, caption) for column, (entry, caption) in enumerate(captioned))
     top += 7
