@@ -35,6 +35,15 @@ class AnswerTask:
 
 type WorkCommand = Submit | ControlTask | AnswerTask
 
+
+@dataclass(frozen=True, slots=True)
+class ReadMeeting:
+    """A page of a meeting's conversation, for the canvas's meeting detail."""
+
+    transcript_path: str
+    offset: int
+
+
 type WorkViewCommand = (
-    WorkCommand | AddDocument | AddWebPage | DismissWork | RestoreWork | SaveWork | UnlinkWork | OpenWorkSource | RefreshPersonalWork
+    WorkCommand | AddDocument | AddWebPage | DismissWork | RestoreWork | SaveWork | UnlinkWork | OpenWorkSource | RefreshPersonalWork | ReadMeeting
 )

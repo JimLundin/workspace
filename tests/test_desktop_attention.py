@@ -3,10 +3,7 @@
 from dataclasses import replace
 
 from contracts.canvas_activity import Attention, CanvasQuestion, SessionRequest, TaskRequest
-from contracts.task import TextAnswer
-from contracts.work_canvas_contracts import Announcement
-from contracts.work_commands import AnswerTask
-from desktop_ui.desktop_attention import (
+from contracts.desktop_attention import (
     AnswerQuestion,
     CanvasFocus,
     Speech,
@@ -17,6 +14,9 @@ from desktop_ui.desktop_attention import (
     interrupts,
     speech_target,
 )
+from contracts.task import TextAnswer
+from contracts.work_canvas_contracts import Announcement
+from contracts.work_commands import AnswerTask
 
 
 def questions() -> tuple[CanvasQuestion, CanvasQuestion]:

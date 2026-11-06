@@ -23,6 +23,7 @@ from pydantic import TypeAdapter, ValidationError
 from contracts.agent_session import Session
 from contracts.canvas_activity import CanvasRequest, CanvasRun
 from contracts.meeting_detection import AutomaticStatus
+from contracts.meetings import MeetingConversation
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job, State
 from contracts.task import TextAnswer
@@ -76,7 +77,18 @@ class AutomaticChanged:
     status: AutomaticStatus
 
 
-type DesktopState = SessionChanged | WorkChanged | CanvasChanged | VoiceChanged | JobChanged | RecordingChanged | AutomaticChanged
+@dataclass(frozen=True, slots=True)
+class MicLevel:
+    """The microphone's level while it listens, for the bar's trace; None when unobserved."""
+
+    level: float | None
+
+    def __post_init__(self) -> None:
+        if self.level is not None and not 0.0 <= self.level <= 1.0:
+            raise ValueError(f"A microphone level is from 0 to 1, not {self.level}.")
+
+
+type DesktopState = SessionChanged | WorkChanged | CanvasChanged | VoiceChanged | JobChanged | RecordingChanged | AutomaticChanged | MicLevel
 
 # ---- to the desktop: events ------------------------------------------------------------
 
@@ -117,7 +129,31 @@ class ReplyFailed:
     """A spoken reply to a canvas question could not be delivered."""
 
 
-type DesktopEvent = ShowWork | RouteSpeech | Notify | OpenReference | ReplyFailed
+@dataclass(frozen=True, slots=True)
+class MeetingPage:
+    """The page of a meeting's conversation the desktop asked for; None when it can't be read."""
+
+    transcript_path: str
+    page: MeetingConversation | None
+
+
+@dataclass(frozen=True, slots=True)
+class RunRefused:
+    """A canvas instruction the assistant saved but couldn't queue: the canvas keeps it
+    pending, so a retry reuses the same binding instead of saving another."""
+
+    run: CanvasRun
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasStatus:
+    """A word for the canvas's status line about what the user just asked of it."""
+
+    text: str
+
+
+type DesktopEvent = ShowWork | RouteSpeech | Notify | OpenReference | ReplyFailed | MeetingPage | RunRefused | CanvasStatus
 type ToDesktop = DesktopState | DesktopEvent
 
 # ---- to the assistant ------------------------------------------------------------------
@@ -223,11 +259,15 @@ _TO_DESKTOP: Final[frozendict[str, TypeAdapter[ToDesktop]]] = frozendict(
             JobChanged,
             RecordingChanged,
             AutomaticChanged,
+            MicLevel,
             ShowWork,
             RouteSpeech,
             Notify,
             OpenReference,
             ReplyFailed,
+            MeetingPage,
+            RunRefused,
+            CanvasStatus,
         )
     }
 )
@@ -292,9 +332,11 @@ def state_key(message: ToDesktop) -> str | None:
     """A state's coalescing key (its type): the latest replaces a waiting one and is replayed
     to a desktop that connects. Events have none."""
     match message:
-        case SessionChanged() | WorkChanged() | CanvasChanged() | VoiceChanged() | JobChanged() | RecordingChanged() | AutomaticChanged():
+        case (
+            SessionChanged() | WorkChanged() | CanvasChanged() | VoiceChanged() | JobChanged() | RecordingChanged() | AutomaticChanged() | MicLevel()
+        ):
             return type(message).__name__
-        case ShowWork() | RouteSpeech() | Notify() | OpenReference() | ReplyFailed():
+        case ShowWork() | RouteSpeech() | Notify() | OpenReference() | ReplyFailed() | MeetingPage() | RunRefused() | CanvasStatus():
             return None
         case _:
             assert_never(message)
