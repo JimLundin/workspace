@@ -3,8 +3,7 @@
 Workspace owns the Windows keyboard, dictation, assistant, floating desktop bar,
 automation and the native Qt work canvas. [GLOSSARY.md](GLOSSARY.md) defines
 its terms.
-Keep its Python/Qt runtime. The embedded browser belongs to the paused
-[Shared Workspace](https://github.com/JimLundin/shared-workspace) project.
+Keep its Python/Qt runtime. The embedded browser is out of scope; it will move to a separate project.
 Use `workspace` for installation and data paths, environment variables, window
 identifiers and new artifacts.
 

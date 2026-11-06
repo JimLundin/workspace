@@ -90,7 +90,7 @@ def test_the_desktop_reconnects_when_the_assistant_restarts(tmp_path: Path) -> N
     client = Client(endpoint, desktop.receive, desktop.status)
     client.start()
     try:
-        assert until(lambda: desktop.statuses == [Status.CONNECTED])
+        assert until(lambda: desktop.statuses == [Status.CONNECTED] and desktop.frames == [b"before"])
         server.close()
         assert until(lambda: desktop.statuses == [Status.CONNECTED, Status.DISCONNECTED])
         assert until(lambda: not client.send(b"lost"))
@@ -99,7 +99,7 @@ def test_the_desktop_reconnects_when_the_assistant_restarts(tmp_path: Path) -> N
         restarted.send(b"after", "session")
         restarted.start(endpoint)
         try:
-            assert until(lambda: desktop.statuses[-1] is Status.CONNECTED and desktop.frames[-1] == b"after")
+            assert until(lambda: desktop.statuses[-1:] == [Status.CONNECTED] and b"after" in desktop.frames)
             assert client.send(b"again")
             assert until(lambda: second.frames == [b"again"])
         finally:
