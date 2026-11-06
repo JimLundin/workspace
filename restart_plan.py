@@ -134,18 +134,35 @@ def changed(before: Tree, after: Tree) -> frozenset[str]:
     return frozenset(name for name in before.files | after.files if _digest(before, name) != _digest(after, name))
 
 
+def _packages(tree: Tree) -> frozenset[str]:
+    """Top-level folders that are Python packages: their data files belong to their importers."""
+    return frozenset(name.split("/")[0] for name in tree.files if name.count("/") == 1 and name.endswith("/__init__.py"))
+
+
 def restart_plan(before: Tree, after: Tree, protected: frozenset[str]) -> RestartPlan:
-    """Relaunch for protected files or the keeper's closure; every child for other assets."""
+    """Relaunch for protected files or the keeper's closure.
+
+    Data files a child reloads itself (`Entry.live_assets`) restart nothing. A data
+    file inside a package restarts the children that import that package; any other
+    (the lock, `pyproject.toml`) restarts every child.
+    """
     names = changed(before, after)
     if names & protected:
         return Relaunch.KEEPER
     graphs = (_graph(before), _graph(after))
-    affected = frozenset(module_name(name) for name in names if name.endswith((".py", ".pyw")))
+    affected = {module_name(name) for name in names if name.endswith((".py", ".pyw"))}
     if any(affected & closure("keeper", graph) for graph in graphs):
         return Relaunch.KEEPER
-    assets = any(not name.endswith((".py", ".pyw")) and not name.startswith(DOCUMENTATION) and name not in NOTES for name in names)
-    if assets:
+    live = tuple(prefix for entry in CATALOGUE.values() for prefix in entry.live_assets)
+    assets = tuple(
+        name
+        for name in names
+        if not name.endswith((".py", ".pyw")) and not name.startswith(DOCUMENTATION) and name not in NOTES and not name.startswith(live)
+    )
+    packages = _packages(before) | _packages(after)
+    if any(name.split("/")[0] not in packages for name in assets):
         return RestartChildren(tuple(CATALOGUE))
+    affected.update(name.split("/")[0] for name in assets)
     return RestartChildren(
         tuple(name for name, entry in CATALOGUE.items() if any(affected & closure(entry.module + ".__main__", graph) for graph in graphs))
     )

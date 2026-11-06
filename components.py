@@ -43,6 +43,8 @@ class Entry:
     """Posted to `window` to ask for a clean exit; the layout lets go of held keys first."""
     shutdown_s: float
     """How long the keeper waits for a clean exit before ending the process."""
+    live_assets: tuple[str, ...] = ()
+    """Folders of data files the running program reloads itself; changing one restarts nothing."""
 
     def marker(self, state: Path) -> Path:
         return state / f"ready-{self.name}"
@@ -58,6 +60,7 @@ ASSISTANT: Final = Entry(
     window=Window("workspace assistant", "workspace assistant class"),
     quit_message=WM_CLOSE,
     shutdown_s=60.0,
+    live_assets=("desktop_ui/spec/",),
 )
 
 CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (LAYOUT, ASSISTANT)})
@@ -119,6 +122,16 @@ def read_marker(marker: Path) -> Writer | None:
             return Writer(int(pid), int(started))
         case _:
             return None
+
+
+STATE_VARIABLE: Final = "WORKSPACE_STATE"
+"""The keeper's state folder, passed to every child it starts."""
+
+
+def endpoint(name: Component) -> Path | None:
+    """Where `name` publishes how to reach it; None outside the keeper."""
+    state = os.environ.get(STATE_VARIABLE)
+    return Path(state) / f"endpoint-{name}" if state else None
 
 
 def ready() -> None:

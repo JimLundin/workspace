@@ -38,7 +38,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Final, Protocol, assert_never
 
-from components import CATALOGUE, Component, Entry, read_marker
+from components import CATALOGUE, STATE_VARIABLE, Component, Entry, read_marker
 
 if sys.platform == "win32":
     import msvcrt
@@ -828,7 +828,7 @@ def main(ui: Ui) -> None:
             component = CATALOGUE[name]
             marker = component.marker(STATE)
             marker.unlink(missing_ok=True)
-            env = {**os.environ, "WORKSPACE_READY": str(marker)}
+            env = {**os.environ, "WORKSPACE_READY": str(marker), STATE_VARIABLE: str(STATE)}
             with (DIRECTORY / f"{name}.log").open("ab") as errors:
                 process = subprocess.Popen([_pythonw(), "-m", component.module], cwd=LIVE, env=env, stderr=errors, creationflags=0x0800_0000)
             _log(f"started {name}")
