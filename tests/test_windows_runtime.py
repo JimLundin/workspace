@@ -116,6 +116,28 @@ def test_qt_import_keeps_asyncio_workers_usable_in_a_fresh_interpreter() -> None
     assert b"Qt and async workers passed" in checked.stdout
 
 
+def test_specs_validate_after_qt_loads_in_a_fresh_interpreter() -> None:
+    # Defect: a desktop module that loads Qt before pydantic's lazily exported
+    # names fails to import (PySide's import hook re-enters pydantic mid-load),
+    # so an install whose changed modules import in that order is refused.
+    activate()
+    script = (
+        "from runtime import activate; activate(); "
+        "import desktop_ui.components.canvas_chrome; from pydantic import Field; "
+        "import desktop_ui.ui_spec; desktop_ui.ui_spec.specs(); print('Qt then specs passed')"
+    )
+    checked = subprocess.run(
+        [sys.executable, "-S", "-c", script],
+        cwd=ROOT,
+        env=dict(os.environ, PYTHONUTF8="1"),
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert checked.returncode == 0, (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
+    assert b"Qt then specs passed" in checked.stdout
+
+
 def test_native_controller_messages_and_qt_share_a_clean_process_lifetime(tmp_path: Path) -> None:
     script = textwrap.dedent("""\
         import faulthandler
