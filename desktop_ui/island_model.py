@@ -23,6 +23,7 @@ from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
 
 from contracts.recording_state import RecordingState
+from contracts.status import Job
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
 from desktop_ui.island_moment import Notice
@@ -132,12 +133,6 @@ class CapsuleView:
     action: Action
     tint: meaning.Tint = meaning.Tint.NONE
     detail: Detail | None = field(default=None, kw_only=True)
-
-
-class Job(Enum):
-    """A quick job Workspace runs for you after a key press."""
-
-    TRANSCRIBING = auto()  # speech to text after dictation
 
 
 @dataclass(frozen=True, slots=True)

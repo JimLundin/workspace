@@ -4,7 +4,10 @@ import threading
 from collections import deque
 from collections.abc import Callable
 
-from desktop_ui.view_publication import Unavailable, ViewPublication
+from contracts.publication import Unavailable, ViewPublication
+
+logged: list[str] = []
+"""What the publications under test logged: a view that failed to open, with its traceback."""
 
 
 class RecordingView:
@@ -40,7 +43,7 @@ def test_changes_from_any_thread_coalesce_into_one_render_on_the_view_thread() -
             assert release.wait(timeout=3)
 
     view = RecordingView()
-    publication = ViewPublication(thread.jobs.append, lambda: view, render)
+    publication = ViewPublication(thread.jobs.append, lambda: view, render, log=logged.append)
     assert publication.opened() is view and renders == [(view, threading.get_ident())]
 
     def produce() -> None:
@@ -74,11 +77,13 @@ def test_creation_is_lazy_retries_after_failure_and_never_outlives_a_close() -> 
         attempts.append(RecordingView())
         return attempts[-1]
 
-    publication = ViewPublication(thread.jobs.append, create, lambda _view: None)
+    publication = ViewPublication(thread.jobs.append, create, lambda _view: None, log=logged.append)
     publication.changed()
     thread.run()
     assert not attempts and not publication.ready.is_set()
     assert publication.opened() is Unavailable.FAILED and not publication.ready.is_set()
+    # A view that fails to open is logged, so its cause can be found.
+    assert "Fixture: native view unavailable" in logged[-1]
     assert publication.opened() is attempts[1] and publication.ready.is_set()
     assert publication.opened() is attempts[1]
 
@@ -89,7 +94,7 @@ def test_creation_is_lazy_retries_after_failure_and_never_outlives_a_close() -> 
         closing.close()
         return late
 
-    closing = ViewPublication(thread.jobs.append, closed_during_creation, lambda _view: None)
+    closing = ViewPublication(thread.jobs.append, closed_during_creation, lambda _view: None, log=logged.append)
     assert closing.opened() is Unavailable.CLOSED and late.closed and not closing.ready.is_set()
     thread.run()
     assert closing.closed_ready.is_set()
@@ -101,7 +106,7 @@ def test_close_releases_then_closes_the_view_once_and_confirms_after_the_view_th
     thread = ViewThread()
     events: list[str] = []
     view = RecordingView()
-    publication = ViewPublication(thread.jobs.append, lambda: view, lambda _view: events.append("render"))
+    publication = ViewPublication(thread.jobs.append, lambda: view, lambda _view: events.append("render"), log=logged.append)
     assert publication.opened() is view and events == ["render"]
     events.clear()
     publication.changed()

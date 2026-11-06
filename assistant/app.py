@@ -76,10 +76,10 @@ lazy from contracts.personal_work import (
     WorkThread,
 )
 lazy from contracts.recording_state import RecordingAction, RecordingState
+lazy from contracts.status import State
 lazy from contracts.task import Control, RequestKind
 lazy from contracts.work_commands import ControlTask, WorkViewCommand
 lazy from contracts.work_snapshot import WorkSnapshot
-lazy from desktop_ui.icons import State
 lazy from desktop_ui.keymap import indicator_text
 lazy from desktop_ui.navigation import Source, SwitcherPick
 lazy from desktop_ui.overlay import OverlayState, load_enabled, save_enabled

@@ -8,8 +8,7 @@ lazy from dataclasses import replace
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from contracts.json_value import Json
-from desktop_ui.icons import State
-from desktop_ui.island_model import Job
+from contracts.status import Job, State
 from desktop_ui.navigation import AppKey, Direction, JumpDesktop, Order, Placing, Source, SpatialFocus, Zoom
 from protocol import App, Installed, Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint

@@ -18,13 +18,14 @@ lazy from PySide6.QtTest import QTest
 
 from contracts.meeting_detection import AutomaticStatus
 from contracts.recording_state import RecordingState
+from contracts.status import Job
 from desktop_ui import shell_surface
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
 from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu
-from desktop_ui.island_model import Agent, Glyph, Job, Key
+from desktop_ui.island_model import Agent, Glyph, Key
 from desktop_ui.island_surface import ControlButton, MenuCell
 from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.qt_runtime import prepare

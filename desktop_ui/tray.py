@@ -2,7 +2,8 @@
 
 import threading
 
-from desktop_ui.icons import State, dot
+from contracts.status import State
+from desktop_ui.icons import dot
 lazy from winapi import shell
 
 

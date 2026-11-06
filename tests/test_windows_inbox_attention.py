@@ -19,10 +19,11 @@ from assistant.notification_sources import NOTIFICATION_STATE
 from assistant.state_store import SavedState
 from contracts.canvas_activity import SessionRequest
 from contracts.feed_origin import FeedRequest
+from contracts.status import Job
 from contracts.task import TextAnswer
 from contracts.work_canvas_contracts import CanvasEdits
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
-from desktop_ui.island_model import Agent, Job, Key
+from desktop_ui.island_model import Agent, Key
 from desktop_ui.island_motion import settled
 from desktop_ui.island_surface import Capsule
 from desktop_ui.qt_runtime import prepare

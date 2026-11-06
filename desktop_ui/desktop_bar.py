@@ -27,6 +27,7 @@ lazy import winapi.ambient
 lazy from config import APPS, DARK_WHEN_IDLE_MINUTES
 lazy from contracts.meeting_detection import AutomaticStatus
 lazy from contracts.recording_state import RecordingAction, RecordingState
+lazy from contracts.status import Job
 lazy from desktop_ui import island_menu, island_moment, ui_spec
 lazy from desktop_ui.agent_progress import Phase, coalesced, hint, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
@@ -52,7 +53,7 @@ lazy from desktop_ui.island_menu import (
     entries,
     restores_focus,
 )
-lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island, order
+lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Key, Marker, Observed, Spinner, capture, island, order
 lazy from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded

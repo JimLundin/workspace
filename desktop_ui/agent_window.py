@@ -33,9 +33,10 @@ from contracts.attention import AttentionSnapshot
 from contracts.canvas_activity import CanvasRequest
 from contracts.feed_origin import FeedRequest
 from contracts.presentation import Done, Finished, LiveMessage, Problem, Progress, Said
+from contracts.publication import Post, Unavailable, ViewPublication
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.task import TextAnswer
-from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
+from desktop_ui.view_publication import log_view
 
 
 class View(Protocol):
@@ -106,7 +107,7 @@ class AgentWindow:
         self.state = Session(identity=uuid.uuid4().hex)
         self.lock = threading.RLock()
         self._started = time.monotonic()
-        self.publication: ViewPublication[View] = ViewPublication(post, lambda: create_view(self), self._render)
+        self.publication: ViewPublication[View] = ViewPublication(post, lambda: create_view(self), self._render, log=log_view)
         self.publication.post(self._prepare)
 
     @property

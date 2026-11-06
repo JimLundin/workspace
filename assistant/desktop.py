@@ -3,8 +3,7 @@
 from collections.abc import Callable
 
 from winapi import audio, clipboard, inputs
-lazy from desktop_ui.icons import State
-lazy from desktop_ui.island_model import Job
+lazy from contracts.status import Job, State
 lazy from desktop_ui.navigation import Order
 lazy from desktop_ui.ui import Ui
 lazy from protocol import MAGIC

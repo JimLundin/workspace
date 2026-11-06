@@ -47,6 +47,7 @@ from contracts.personal_work import (
     WorkThread,
     source_id,
 )
+from contracts.status import State
 from contracts.task import ActionNotApplied, ActionVerified, TextAnswer
 from contracts.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
 from contracts.work_canvas_context import CanvasMode
@@ -67,7 +68,6 @@ from contracts.work_documents import WebDocument
 from contracts.work_snapshot import ReplyProblem, WorkSnapshot
 from desktop_ui.components.canvas_look import surface_fill
 from desktop_ui.components.voice_legend import VoiceLegend
-from desktop_ui.icons import State
 from desktop_ui.island_model import Key
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application

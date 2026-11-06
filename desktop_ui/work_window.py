@@ -6,10 +6,11 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Protocol
 
+from contracts.publication import Post, Unavailable, ViewPublication
 from contracts.task import requested
 from contracts.work_commands import AnswerTask, WorkViewCommand
 from contracts.work_snapshot import WorkSnapshot
-from desktop_ui.view_publication import Post, Unavailable, ViewPublication, log_view
+from desktop_ui.view_publication import log_view
 
 
 class WorkView(Protocol):
@@ -60,7 +61,7 @@ class WorkWindow:
         self._shown: bool = False
         self._loading: WorkOpening | None = None
         self.state = WorkSnapshot()
-        self.publication: ViewPublication[WorkView] = ViewPublication(post, lambda: create_view(self), self._render)
+        self.publication: ViewPublication[WorkView] = ViewPublication(post, lambda: create_view(self), self._render, log=log_view)
 
     def publish(self, snapshot: WorkSnapshot) -> None:
         with self._lock:

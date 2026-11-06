@@ -17,8 +17,9 @@ lazy from PySide6.QtCore import Qt
 from desktop_ui.qt_runtime import prepare
 from runtime import activate
 lazy from contracts.recording_state import RecordingState
+lazy from contracts.status import Job
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
-lazy from desktop_ui.island_model import Agent, Job
+lazy from desktop_ui.island_model import Agent
 lazy from desktop_ui.island_moment import Notice
 lazy from desktop_ui.qt_ui import application
 lazy from winapi import screen
