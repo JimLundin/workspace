@@ -6,7 +6,7 @@ from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, place
 
 
 def shown(key: Key, zone: Zone, width: float, *parts: Text | Glyph) -> Shown:
-    return Shown(CapsuleView(key, zone, (parts,), key.name, Action.OPEN_MENU), Content(width, tuple(Spot(part, 12, 10) for part in parts)))
+    return Shown(CapsuleView(key, zone, (parts,), key.name, Action.OPEN_MENU), Content(width, tuple(Spot(part, 12, 10) for part in parts), 34))
 
 
 ISLAND = shown(Key.ISLAND, Zone.ISLAND, 112, Text("10:22"))
@@ -23,11 +23,11 @@ def test_a_new_capsule_grows_from_nothing_beside_a_resting_island() -> None:
     # Defects: an arriving capsule appears at full size, or the island restarts its own arrival.
     resting = retarget(IslandMotion(), (ISLAND,), animate=False)
     arriving = retarget(resting, (ISLAND, INBOX), animate=True)
-    island, inbox = placed(arriving)
+    island, inbox = placed(arriving, 34)
     assert (island.presence, inbox.presence) == (1, 0) and inbox.width == 36
-    halfway = placed(run(arriving, 0.1))
+    halfway = placed(run(arriving, 0.1), 34)
     assert 0 < halfway[1].presence < 1 and halfway[0].presence == 1
-    assert settled(run(arriving, 2)) and placed(run(arriving, 2))[1].presence == 1
+    assert settled(run(arriving, 2)) and placed(run(arriving, 2), 34)[1].presence == 1
 
 
 def test_a_leaving_capsule_keeps_its_last_content_until_it_has_collapsed() -> None:
@@ -63,6 +63,6 @@ def test_reduced_motion_finishes_every_capsule_at_once() -> None:
     both = retarget(IslandMotion(), (ISLAND, INBOX), animate=False)
     flight = run(retarget(both, (shown(Key.ISLAND, Zone.ISLAND, 160, Glyph("wifi-off"), Text("10:22")),), animate=True), 0.05)
     done = finish(flight)
-    assert settled(done) and [(each.key, each.width, each.presence) for each in placed(done)] == [(Key.ISLAND, 160, 1)]
+    assert settled(done) and [(each.key, each.width, each.presence) for each in placed(done, 34)] == [(Key.ISLAND, 160, 1)]
     menu = Shown(ISLAND.view, Content(272, (), 300))
-    assert [(each.width, each.height) for each in placed(retarget(both, (menu,), animate=False))] == [(272, 300)]
+    assert [(each.width, each.height) for each in placed(retarget(both, (menu,), animate=False), 34)] == [(272, 300)]

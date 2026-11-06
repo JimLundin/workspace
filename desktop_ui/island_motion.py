@@ -10,7 +10,7 @@ morphs between them.
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
-from desktop_ui.island_layout import HEIGHT, Content, Placed
+from desktop_ui.island_layout import Content, Placed
 from desktop_ui.island_model import CapsuleView, Key, Part, Text
 from desktop_ui.motion import APPEAR, FADE, LEAVE, MORPH, Motion, jump, resting, settle, still, toward
 
@@ -136,8 +136,9 @@ def settled(motion: IslandMotion) -> bool:
     return all(all(resting(spring) for spring in (moving.width, moving.height, moving.presence, moving.fade)) for moving in motion.capsules)
 
 
-def placed(motion: IslandMotion) -> tuple[Placed, ...]:
+def placed(motion: IslandMotion, row: float) -> tuple[Placed, ...]:
+    """Each capsule's current frame; none is shorter than a capsule's `row` height."""
     return tuple(
-        Placed(moving.key, moving.view.zone, max(0.0, moving.width.value), max(float(HEIGHT), moving.height.value), moving.presence.value)
+        Placed(moving.key, moving.view.zone, max(0.0, moving.width.value), max(row, moving.height.value), moving.presence.value)
         for moving in motion.capsules
     )

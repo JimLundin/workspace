@@ -24,10 +24,11 @@ from automation.task import TextAnswer
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.island_model import Agent, Job, Key
 from desktop_ui.island_motion import settled
-from desktop_ui.island_surface import TOP, Capsule
+from desktop_ui.island_surface import Capsule
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.ui import Ui, Views
+from desktop_ui.ui_spec import sizes
 from desktop_ui.work_canvas_window import CanvasWindow
 from desktop_ui.work_window import WorkWindow
 from tests.agent_requests import asked
@@ -35,6 +36,8 @@ from tests.communications_fixture import communication_feed
 from tests.test_communications_service import LocalCipher
 from tests.test_work_canvas import local_canvas
 from winapi.system_notices import Notice, NoticeKey, Observed
+
+TOP = round(sizes().bar.top)
 
 prepare()
 

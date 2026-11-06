@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from assistant.meeting_detection import AutomaticStatus
-from desktop_ui.island_layout import MENU_WIDTH, tiles
+from desktop_ui.island_layout import tiles
 from desktop_ui.island_menu import (
     COLUMNS,
     Applied,
@@ -29,7 +29,10 @@ from desktop_ui.island_menu import (
     press,
     restores_focus,
 )
+from desktop_ui.ui_spec import sizes
 from protocol import Tool
+
+SIZES = sizes()
 
 RESTING = Controls(None, None, sound=Slider("Sound", 0.4, muted=False))
 
@@ -69,9 +72,9 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     # Defect: a track or column offset places one tile over another or past the menu's edge.
     tray = tuple(f"App {index}" for index in range(11))
     for controls in (RESTING, Controls("02:05", None), Controls("02:05", "Reading"), replace(RESTING, agent="Reading"), replace(RESTING, tray=tray)):
-        laid = tiles(Menu(entries(controls)))
+        laid = tiles(Menu(entries(controls)), SIZES.menu)
         for tile in laid:
-            assert tile.x > 0 and tile.x + tile.width < MENU_WIDTH
+            assert tile.x > 0 and tile.x + tile.width < SIZES.menu.width
         for first in laid:
             for second in laid:
                 if first.index < second.index:

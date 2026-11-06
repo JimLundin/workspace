@@ -82,6 +82,7 @@ ASSET_READERS: Final = frozendict(
         "StartWorkspace.cmd": ("runtime.py",),
         "assistant/uia.ps1": ("assistant/uia.py",),
         "desktop_ui/fonts/": ("desktop_ui/components/typeface.py", "desktop_ui/components/text.py"),
+        "desktop_ui/spec/": ("desktop_ui/ui_spec.py",),
         "tests/uia_fixture.ps1": ("tests/test_windows_computer.py",),
         # A sample log for `scripts.navigation_report --log`; no test reads it.
         "tests/navigation_report_fixture.jsonl": (),

@@ -24,7 +24,7 @@ def arrangement(draw: strategies.DrawFn) -> tuple[Shown, ...]:
     included = draw(strategies.lists(strategies.booleans(), min_size=len(optional), max_size=len(optional)))
     keys = (Key.ISLAND, *(key for key, chosen in zip(optional, included, strict=True) if chosen))
     return tuple(
-        Shown(CapsuleView(key, ZONES[key], (), key.name, Action.OPEN_MENU), Content(draw(strategies.integers(34, 260)), ()))
+        Shown(CapsuleView(key, ZONES[key], (), key.name, Action.OPEN_MENU), Content(draw(strategies.integers(34, 260)), (), 34))
         for key in Key
         if key in keys
     )
@@ -43,10 +43,10 @@ def test_capsules_never_overlap_in_flight_and_rest_exactly_one_gap_apart(journey
         motion = retarget(motion, target, animate=True)
         for step in journey.steps:
             motion = advance(motion, step)
-            boxes = tuple(framed.box for framed in frame(placed(motion), Metrics(4000)))
+            boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12)))
             assert all(left.x + left.width <= right.x + 1e-9 for left, right in pairwise(boxes)), "Capsules overlapped in flight."
     while not settled(motion):
         motion = advance(motion, 0.05)
-    boxes = tuple(framed.box for framed in frame(placed(motion), Metrics(4000)))
+    boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12)))
     assert [box.width for box in boxes] == [shown.content.width for shown in journey.arrangements[-1]]
     assert all(abs(right.x - (left.x + left.width) - 6) < 1e-9 for left, right in pairwise(boxes))

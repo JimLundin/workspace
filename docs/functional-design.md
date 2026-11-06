@@ -81,3 +81,4 @@ See [the durable-work decision](adr/0001-durable-work.md).
 | `application_observer.py`, `window_layout.py`, `navigation.py`, `desktop_pager.py` | [Window placement](window-placement.md) and navigation |
 | `keymap*.py`, `overlay*.py`, `layer_indicator.py` | The key map, keyboard overlay and layer indicator |
 | `components/`, `fonts/` | Shared appearance, controls and type |
+| `ui_spec.py`, `ui_spec_watch.py`, `spec/` | The desktop's declarative specs (sizes in `tokens.toml`), validated and reloaded while it runs |

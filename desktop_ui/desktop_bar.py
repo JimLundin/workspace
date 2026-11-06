@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from pathlib import Path
 from typing import assert_never
 lazy import os
 
@@ -26,7 +27,7 @@ lazy import winapi.ambient
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
 lazy from config import APPS, DARK_WHEN_IDLE_MINUTES
-lazy from desktop_ui import island_menu, island_moment
+lazy from desktop_ui import island_menu, island_moment, ui_spec
 lazy from desktop_ui.agent_progress import Phase, coalesced, hint, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
 lazy from desktop_ui.application_observer import EMPTY_ARRANGEMENT, ApplicationObserver, Arrangement
@@ -36,7 +37,7 @@ lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.desktop_pager import pager
-lazy from desktop_ui.island_layout import HEIGHT, Content, Metrics, expansion, frame, snap
+lazy from desktop_ui.island_layout import Content, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import (
     Applied,
     Chosen,
@@ -54,7 +55,7 @@ lazy from desktop_ui.island_menu import (
 lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Job, Key, Marker, Observed, Spinner, capture, island
 lazy from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
-lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
+lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
 lazy from desktop_ui.navigation import AppKey, CycleApp, Order, Placing, ShowWindow, Source
@@ -63,6 +64,7 @@ lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TaskbarControl
 lazy from desktop_ui.shell_items import EMPTY_SHELF, Application, Item, Pinned, PinnedApp, Shelf
+lazy from desktop_ui.ui_spec_watch import SpecWatch
 lazy from desktop_ui.window_layout import App, Program, WorkspaceView
 lazy from protocol import Installed, Tool
 lazy from usage import Detail
@@ -102,6 +104,9 @@ class BarObservations:
     material: Callable[[], appearance.Preference] = appearance.preference
     motion: Callable[[], bool] = appearance.animations_enabled
     local_time: Callable[[], datetime] = datetime.now
+    specs: Path = ui_spec.SHIPPED
+    """The spec folder the bar lays itself out from and reloads while it runs."""
+    kept_specs: Path = ui_spec.KEPT
 
 
 def level(value: float | None) -> float:
@@ -153,6 +158,8 @@ class DesktopBar:
         "resolution",
         "sample_bounds",
         "sampled_at",
+        "sizes",
+        "spec_watch",
         "status_service",
         "system",
         "taskbar",
@@ -219,7 +226,9 @@ class DesktopBar:
         self.sampled_at: float | None = None
         self.preference: appearance.Preference = self.observations.material()
         self.frost = appearance.Frost.SMOKED
-        self.window = BarWindow(self.loop, self)
+        self.sizes = self.starting_sizes()
+        self.window = BarWindow(self.loop, self, self.sizes)
+        self.spec_watch = SpecWatch(self.observations.specs, ui_spec.sizes, self.sizes, self.respec, self.errors.put)
         self.notification_service: NotificationObserver | None = None
         self.notification_access = system_notices.Access.UNAVAILABLE
         self.notification_observation: system_notices.Observed | None = None
@@ -658,7 +667,7 @@ class DesktopBar:
             case Inbox(rows=rows) if view.key is Key.ISLAND:
                 return self.window.measure_inbox(rows)
             case Menu() if view.key is Key.STATUS:
-                return expansion(opened, self.window.measure(view))
+                return expansion(opened, self.window.measure(view), self.sizes.menu)
             case _:
                 return self.window.measure(view)
 
@@ -703,8 +712,11 @@ class DesktopBar:
 
     def draw(self) -> None:
         width = QtGui.QGuiApplication.primaryScreen().geometry().width()
-        metrics = Metrics(width, top=TOP)
-        framed = frozendict((each.key, each) for each in snap(frame(placed(self.motion), metrics), self.window.devicePixelRatioF()))
+        bar = self.sizes.bar
+        metrics = Metrics(width, bar.top, bar.gap, bar.edge)
+        framed = frozendict(
+            (each.key, each) for each in snap(frame(placed(self.motion, self.sizes.capsule.height), metrics), self.window.devicePixelRatioF())
+        )
         match self.preference:
             case appearance.Contrast():
                 contrast = True
@@ -725,16 +737,17 @@ class DesktopBar:
             if moving.key in framed
         )
         # The window keeps the room a capsule is heading for, so it resizes only as an expansion starts and settles.
-        reach = max((max(moving.height.value, moving.height.target) for moving in self.motion.capsules), default=float(HEIGHT))
+        reach = max((max(moving.height.value, moving.height.target) for moving in self.motion.capsules), default=float(self.sizes.capsule.height))
         self.window.present(
             Presented(
                 drawn,
                 reach,
                 self.opened,
+                sizes=self.sizes,
                 frost=self.frost,
                 contrast=contrast,
                 glass=self.preference is appearance.Material.GLASS,
-                shell_look=self.style(Tint.NONE, HEIGHT),
+                shell_look=self.style(Tint.NONE, self.sizes.capsule.height),
             )
         )
         # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
@@ -742,7 +755,11 @@ class DesktopBar:
             self.tray_host.locate(self.window.tray_locations())
 
     def style(self, tint: Tint, height: float) -> Look:
-        pane = desktop_ui.components.appearance.Menu(self.frost) if height > HEIGHT else desktop_ui.components.appearance.Capsule(self.frost)
+        pane = (
+            desktop_ui.components.appearance.Menu(self.frost)
+            if expanded(height, self.sizes)
+            else desktop_ui.components.appearance.Capsule(self.frost)
+        )
         return look(self.preference, pane, tint)
 
     def spinning(self) -> bool:
@@ -839,10 +856,26 @@ class DesktopBar:
             if capsule is not None and any(Marker.WAVE in slot for view in self.views for slot in view.slots):
                 capsule.update_indicators()
 
+    def starting_sizes(self) -> ui_spec.Sizes:
+        """The spec folder's sizes, or the kept copy's when an edit no longer validates."""
+        started, invalid = ui_spec.starting_sizes(self.observations.specs, self.observations.kept_specs)
+        if invalid is not None:
+            self.errors.put(f"The bar started with its last good spec: {invalid}")
+        return started
+
+    def respec(self, sizes: ui_spec.Sizes) -> None:
+        """An edited spec validated: lay the bar out again with it, and keep it as the last good one."""
+        self.sizes = sizes
+        self.window.use(sizes)
+        with suppress(OSError):
+            ui_spec.keep(self.observations.specs, self.observations.kept_specs)
+        self.render()
+
     def close(self) -> None:
         if self.closed:
             return
         self.closed = True
+        self.spec_watch.close()
         self.timer.stop()
         self.audio_timer.stop()
         if self.hints is not None:

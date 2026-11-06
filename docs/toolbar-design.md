@@ -76,6 +76,12 @@ cells, Enter chooses, and Escape closes.
 
 ## Code
 
+Every size the bar lays out and paints is in `desktop_ui/spec/tokens.toml`,
+validated by `ui_spec`. The running bar reloads the file when it changes
+(`ui_spec_watch`) and re-lays itself out, without a restart. A file that
+doesn't validate is reported and the bar keeps its last good sizes; a copy of
+those starts the bar if an edit is still broken at the next start.
+
 `island_moment`, `island_agent`, `island_model`, `island_menu`,
 `island_layout`, `island_motion` and `plain_text` in `desktop_ui/` are pure
 decisions. `DesktopBar` owns observations and timers, `island_surface` owns the

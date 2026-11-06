@@ -13,12 +13,12 @@ from typing import Final, assert_never, override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from desktop_ui import ui_spec
 from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components import typeface
 from desktop_ui.components.appearance import GlassLook, Look, SolidLook
 from desktop_ui.components.text import color
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
-from desktop_ui.island_layout import CONTROL, HEIGHT, ICON, PART_GAP
 from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.shell_items import WEB_APPS, PinnedApp, Shelf
 from desktop_ui.vector_icons import icon
@@ -26,10 +26,10 @@ from desktop_ui.window_layout import App, Program, WorkspaceView
 from winapi.icon_pixels import Pixels
 from winapi.tray_host import Click
 
-INSET: Final = (HEIGHT - CONTROL) // 2
-"""Each end control sits concentric, this far inside its capsule."""
-FACE_INSET: Final = (CONTROL - ICON) // 2
-"""A symbol's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
+
+def face_inset(capsule: ui_spec.Capsule) -> int:
+    """A symbol's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
+    return round(capsule.control - capsule.icon) // 2
 
 
 def pixmap(image: Pixels) -> QtGui.QPixmap:
@@ -84,7 +84,7 @@ class Target:
 
 
 class ShellButton(KeyboardFocus):
-    """One accessible target: a 28 px circle, or a pill for text wider than one, painting its face at 16 px."""
+    """One accessible target: a control's circle, or a pill for text wider than one, painting its face at icon size."""
 
     def __init__(self, section: Section, target: Target) -> None:
         super().__init__(section.body)
@@ -92,7 +92,9 @@ class ShellButton(KeyboardFocus):
         self.target = target
         self.picture: QtGui.QPixmap | None = None
         self.pictures: tuple[QtGui.QPixmap | None, ...] = ()
-        width = CONTROL
+        capsule = section.sizes.capsule
+        control = round(capsule.control)
+        width = control
         match target.face:
             case Glyph():
                 pass
@@ -100,12 +102,12 @@ class ShellButton(KeyboardFocus):
                 self.picture = pixmap(image)
             case Stack(icons=icons):
                 self.pictures = tuple(pixmap(each) if isinstance(each, Pixels) else None for each in icons)
-                width = CONTROL + STACK_STEP * (len(icons) - 1)
+                width = control + STACK_STEP * (len(icons) - 1)
             case str() as text:
-                width = max(CONTROL, math.ceil(QtGui.QFontMetricsF(page_font()).horizontalAdvance(text)) + 2 * FACE_INSET)
+                width = max(control, math.ceil(QtGui.QFontMetricsF(page_font()).horizontalAdvance(text)) + 2 * face_inset(capsule))
             case _:
                 assert_never(target.face)
-        self.setFixedSize(width, CONTROL)
+        self.setFixedSize(width, control)
         self.setToolTip(target.name)
         self.setAccessibleName(target.name)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)  # Qt repaints it as the pointer enters and leaves.
@@ -157,14 +159,16 @@ class ShellButton(KeyboardFocus):
             return
         ink = appearance.lettering.ink
         painter.setOpacity(ink.opacity)
-        symbol = icon(name, ink.color).pixmap(QtCore.QSize(ICON, ICON), self.devicePixelRatioF())
+        side = round(self.section.sizes.capsule.icon)
+        symbol = icon(name, ink.color).pixmap(QtCore.QSize(side, side), self.devicePixelRatioF())
         painter.drawPixmap(face, symbol, QtCore.QRectF(symbol.rect()))
 
     def snapped(self) -> QtCore.QPointF:
-        """The 16 px face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
+        """The face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
+        capsule = self.section.sizes.capsule
         scale = self.devicePixelRatioF()
         origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
-        corner = origin + QtCore.QPointF((self.width() - ICON) / 2, FACE_INSET)
+        corner = origin + QtCore.QPointF((self.width() - capsule.icon) / 2, face_inset(capsule))
         return QtCore.QPointF(round(corner.x() * scale) / scale, round(corner.y() * scale) / scale) - origin
 
     @override
@@ -177,7 +181,8 @@ class ShellButton(KeyboardFocus):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         self.paint_feedback(painter, lettering, selected=self.target.active)
         ink = lettering.ink
-        face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(ICON, ICON))
+        side = self.section.sizes.capsule.icon
+        face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(side, side))
         match self.target.face:
             case Glyph(name=name):
                 self.paint_glyph(painter, name, face)
@@ -222,13 +227,15 @@ class HorizontalScroll(QtWidgets.QScrollArea):
 
 
 class Section(QtWidgets.QWidget):
-    """A 34 px capsule of round controls, 3 px inside its ends and one part gap apart.
+    """A capsule of round controls, concentric at its ends and one part gap apart.
 
     Overflow stays reachable by scrolling horizontally; no icons are silently dropped.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, sizes: ui_spec.Sizes) -> None:
         super().__init__(parent)
+        self.sizes = sizes
+        self.targets: tuple[Target, ...] = ()
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.overflow = HorizontalScroll(self)
         self.body = QtWidgets.QWidget()
@@ -249,13 +256,22 @@ class Section(QtWidgets.QWidget):
         for button in self.buttons:
             button.hide()
             button.deleteLater()
-        self.buttons = tuple(ShellButton(self, target) for target in targets)
+        self.targets = tuple(targets)
+        self.buttons = tuple(ShellButton(self, target) for target in self.targets)
+        capsule = self.sizes.capsule
+        gap = round(capsule.part_gap)
         x = 0
         for button in self.buttons:
-            button.move(x, INSET)
+            button.move(x, round(capsule.inset))
             button.show()
-            x += button.width() + PART_GAP
-        self.body.setFixedSize(max(0, x - PART_GAP), HEIGHT)
+            x += button.width() + gap
+        self.body.setFixedSize(max(0, x - gap), round(capsule.height))
+
+    def use(self, sizes: ui_spec.Sizes) -> None:
+        """Rebuild the controls at new sizes; the next `place` positions the capsule."""
+        if sizes != self.sizes:
+            self.sizes = sizes
+            self.show_targets(self.targets)
 
     def apply_look(self, appearance: Look) -> None:
         if appearance == self.appearance:
@@ -266,16 +282,17 @@ class Section(QtWidgets.QWidget):
         self.update()
 
     def place(self, left: int, right: int) -> None:
-        self.setGeometry(left, 8, max(0, min(right - left, self.body.width() + 2 * INSET)), HEIGHT)
-        self.overflow.setGeometry(INSET, 0, max(0, self.width() - 2 * INSET), HEIGHT)
-        self.setVisible(bool(self.buttons) and right - left >= HEIGHT)
+        top, height, inset = round(self.sizes.bar.top), round(self.sizes.capsule.height), round(self.sizes.capsule.inset)
+        self.setGeometry(left, top, max(0, min(right - left, self.body.width() + 2 * inset)), height)
+        self.overflow.setGeometry(inset, 0, max(0, self.width() - 2 * inset), height)
+        self.setVisible(bool(self.buttons) and right - left >= height)
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         outline = QtGui.QPainterPath()
-        outline.addRoundedRect(QtCore.QRectF(self.rect()), HEIGHT / 2, HEIGHT / 2)
+        outline.addRoundedRect(QtCore.QRectF(self.rect()), self.height() / 2, self.height() / 2)
         match self.appearance:
             case GlassLook():
                 # GlassScene owns the material; this invisible fill keeps native hit testing.
@@ -329,8 +346,8 @@ class ShellSections:
     The pager is the bar's only toolbar: every desktop with its apps, each app a click target.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget) -> None:
-        self.pager = Section(parent)
+    def __init__(self, parent: QtWidgets.QWidget, sizes: ui_spec.Sizes) -> None:
+        self.pager = Section(parent, sizes)
         self.app_snapshot: tuple[Shelf, int] | None = None
         self.pager_view: tuple[PagerView, Mapping[str, Pixels | None]] | None = None
         self.icons: dict[str, Pixels] = {}

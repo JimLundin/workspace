@@ -25,11 +25,12 @@ from desktop_ui.desktop_pager import pager
 from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu
 from desktop_ui.island_model import Agent, Glyph, Job, Key
-from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuCell
+from desktop_ui.island_surface import ControlButton, MenuCell
 from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
 from desktop_ui.shell_items import PinnedApp
+from desktop_ui.ui_spec import sizes
 from desktop_ui.vector_icons import symbol
 from desktop_ui.window_layout import EDGE, TERMINAL, App, WorkspaceView
 from protocol import Tool
@@ -38,6 +39,9 @@ from winapi import appearance, windows
 from winapi._core import fn, user32
 from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 from winapi.tray_host import Click, Entry
+
+TOP = round(sizes().bar.top)
+SHADOW = round(sizes().bar.shadow)
 
 prepare()
 

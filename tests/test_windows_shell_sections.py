@@ -33,6 +33,7 @@ from desktop_ui.shell_items import (
 )
 from desktop_ui.shell_surface import STACK_STEP, ShellSections, page_font
 from desktop_ui.ui import Ui
+from desktop_ui.ui_spec import sizes
 from desktop_ui.window_layout import EDGE, TERMINAL, App, Program, WorkspaceView
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import Pixels, pixels
@@ -205,7 +206,7 @@ def test_pager_icons_route_clicks_to_their_app_and_keep_overflow_reachable() -> 
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
-    sections = ShellSections(parent)
+    sections = ShellSections(parent, sizes())
     clicked: list[tuple[App, Click]] = []
     jumped: list[Navigation] = []
     many = tuple((Program(f"app{index}.exe"),) for index in range(14))
@@ -250,7 +251,7 @@ def test_shell_sections_leave_glass_transparent_and_use_the_shared_solid_surface
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(600, 50)
-    sections = ShellSections(parent)
+    sections = ShellSections(parent, sizes())
     sections.desktops(pager(((WorkspaceView.CANVAS,), (TERMINAL,)), 0, chord=False), lambda _: None, lambda _app, _click: None)
     sections.place(250, 600)
     sections.pager.apply_look(look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE))
@@ -288,7 +289,7 @@ def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_work
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(1200, 50)
-    sections = ShellSections(parent)
+    sections = ShellSections(parent, sizes())
     chosen = look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE)
     editor = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),), image=Pixels(40, bytes((80, 160, 240, 255)) * 1600))
     sections.applications((Shelf(EMPTY_SHELF.pinned, (editor,)), 0))
@@ -328,7 +329,7 @@ def test_a_pager_of_one_desktop_leaves_no_targets_behind() -> None:
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
-    sections = ShellSections(parent)
+    sections = ShellSections(parent, sizes())
     sections.desktops(pager(((),), 0, chord=False), lambda _: None, lambda _app, _click: None)
     sections.desktops(pager(((TERMINAL,), (EDGE,), ()), 0, chord=False), lambda _: None, lambda _app, _click: None)
     sections.place(12, 600)

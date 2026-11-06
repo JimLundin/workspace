@@ -11,37 +11,14 @@ still lands on it.
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Final, assert_never
+from typing import assert_never
 
+from desktop_ui import ui_spec
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
 from desktop_ui.island_model import Badge, Control, Detail, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
 
-# A 34 px capsule with a 3 px inset holds concentric 28 px controls.
-HEIGHT: Final = 34
-CONTROL: Final = 28
-ICON: Final = 16
-SPINNER: Final = 14
-DOT: Final = 8
-DOTS: Final = 18
-WAVE_BARS: Final = 18
-WAVE: Final = WAVE_BARS * 4 - 2
-PART_GAP: Final = 6
-SLOT_GAP: Final = 12
-TEXT_PAD: Final = 12
-ICON_PAD: Final = 10
-# A capsule expanded into the menu: a grid of tiles inside a larger radius, below
-# its own row. Tracks include the gutter, which each cell splits around itself.
-MENU_WIDTH: Final = 320
-MENU_RADIUS: Final = 21
-MENU_PAD: Final = 6
-MENU_HEAD: Final = 34
-TRACK: Final = 10
-GUTTER: Final = 8
-COLUMN: Final = (MENU_WIDTH - 2 * MENU_PAD) / COLUMNS
-# Detail lines under a capsule's row: 16 px apart, the first tucked into the row's lower padding.
-LINE: Final = 16
-LINES_TOP: Final = 28
-LINES_BOTTOM: Final = 10
+# Every size comes from `ui_spec.Sizes` (`desktop_ui/spec/tokens.toml`), which the
+# desktop reloads while it runs; nothing here keeps a size of its own.
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +34,7 @@ class Spot:
 class Content:
     width: float
     spots: tuple[Spot, ...]
-    height: float = HEIGHT
+    height: float
     lines: tuple[str, ...] = ()  # Detail under the row, already fitted to the width.
 
 
@@ -73,46 +50,48 @@ class Tile:
     height: float
 
 
-def tiles(menu: Menu) -> tuple[Tile, ...]:
+def tiles(menu: Menu, grid: ui_spec.MenuGrid) -> tuple[Tile, ...]:
+    """Tracks include the gutter, which each cell splits around itself."""
+    column = (grid.width - 2 * grid.pad) / COLUMNS
     return tuple(
         Tile(
             index,
             cell,
-            MENU_PAD + cell.column * COLUMN + GUTTER / 2,
-            MENU_PAD + MENU_HEAD + cell.track * TRACK + GUTTER / 2,
-            cell.span * COLUMN - GUTTER,
-            cell.tracks * TRACK - GUTTER,
+            grid.pad + cell.column * column + grid.gutter / 2,
+            grid.pad + grid.head + cell.track * grid.track + grid.gutter / 2,
+            cell.span * column - grid.gutter,
+            cell.tracks * grid.track - grid.gutter,
         )
         for index, cell in enumerate(menu.cells)
     )
 
 
-def expansion(menu: Menu, row: Content) -> Content:
+def expansion(menu: Menu, row: Content, grid: ui_spec.MenuGrid) -> Content:
     """A capsule expanded into the menu: its own row on top, right-aligned so it stays put as the capsule widens."""
-    bottom = max((tile.y + tile.height + GUTTER / 2 for tile in tiles(menu)), default=MENU_PAD + MENU_HEAD)
-    width = max(float(MENU_WIDTH), row.width)
+    bottom = max((tile.y + tile.height + grid.gutter / 2 for tile in tiles(menu, grid)), default=grid.pad + grid.head)
+    width = max(float(grid.width), row.width)
     spots = tuple(Spot(spot.part, spot.x + width - row.width, spot.width) for spot in row.spots)
-    return Content(width, spots, bottom + MENU_PAD)
+    return Content(width, spots, bottom + grid.pad)
 
 
-def extent(part: Part, measure: Callable[[Text], float]) -> float:
+def extent(part: Part, measure: Callable[[Text], float], capsule: ui_spec.Capsule) -> float:
     match part:
         case Text(tone=tone, strong=strong, reserve=reserve):
             return max(measure(part), measure(Text(reserve, tone, strong=strong))) if reserve else measure(part)
         case Glyph():
-            return ICON
+            return capsule.icon
         case Spinner():
-            return SPINNER
+            return capsule.spinner
         case Badge():
             return 0  # It overlays the corner of the symbol before it.
         case Control():
-            return CONTROL
+            return capsule.control
         case Marker.WAVE:
-            return WAVE
+            return capsule.wave
         case Marker.DOT:
-            return DOT
+            return capsule.dot
         case Marker.DOTS:
-            return DOTS
+            return capsule.dots
         case _:
             assert_never(part)
 
@@ -125,16 +104,17 @@ def textual(part: Part) -> bool:
             return False
 
 
-def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], detail: Detail | None = None) -> Content:
-    """Parts left to right with their gaps. A control at either end sits concentric, 3 px from the edge;
+def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: ui_spec.Sizes, detail: Detail | None = None) -> Content:
+    """Parts left to right with their gaps. A control at either end sits concentric with the capsule;
     content without text pads like an icon and is never narrower than a circle.
 
     Detail lines go under the row, fitted to the capsule's width. A detail wider
     than the row keeps the row at its leading edge and a trailing control at the far one.
     """
+    capsule, lined = sizes.capsule, sizes.detail
     parts = tuple(part for slot in slots for part in slot)
-    pad = TEXT_PAD if any(textual(part) for part in parts) else ICON_PAD
-    inset = (HEIGHT - CONTROL) / 2
+    pad = capsule.text_pad if any(textual(part) for part in parts) else capsule.icon_pad
+    inset = capsule.inset
 
     def edge(part: Part) -> float:
         match part:
@@ -147,26 +127,26 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], detail: Det
     spots: list[Spot] = []
     for index, slot in enumerate(slots):
         if index and slot:
-            x += SLOT_GAP
+            x += capsule.slot_gap
         for position, part in enumerate(slot):
-            width = extent(part, measure)
+            width = extent(part, measure, capsule)
             if position and width:
                 # Two readings side by side keep the space of separate facts.
-                x += SLOT_GAP if textual(part) and textual(slot[position - 1]) else PART_GAP
+                x += capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap
             spots.append(Spot(part, x, width))
             x += width
     end = x + (edge(parts[-1]) if parts else pad)
     if detail is None:
-        width = max(float(HEIGHT), end)
+        width = max(float(capsule.height), end)
         shift = (width - end) / 2
-        return Content(width, tuple(Spot(spot.part, spot.x + shift, spot.width) for spot in spots))
-    width = max(float(HEIGHT), end, detail.width)
+        return Content(width, tuple(Spot(spot.part, spot.x + shift, spot.width) for spot in spots), capsule.height)
+    width = max(float(capsule.height), end, detail.width)
     trailing = len(spots) - next((index for index, spot in enumerate(reversed(spots)) if not isinstance(spot.part, Control)), len(spots))
     moved = tuple(Spot(spot.part, spot.x + (width - end if index >= trailing else 0), spot.width) for index, spot in enumerate(spots))
     lines = tuple(
-        row for paragraph in detail.paragraphs for row in wrap(paragraph, width - 2 * TEXT_PAD, detail.rows, lambda text: measure(Text(text)))
+        row for paragraph in detail.paragraphs for row in wrap(paragraph, width - 2 * capsule.text_pad, detail.rows, lambda text: measure(Text(text)))
     )
-    return Content(width, moved, LINES_TOP + LINE * len(lines) + LINES_BOTTOM if lines else HEIGHT, lines)
+    return Content(width, moved, lined.top + lined.line * len(lines) + lined.bottom if lines else capsule.height, lines)
 
 
 def wrap(text: str, width: float, rows: int, measure: Callable[[str], float]) -> tuple[str, ...]:
@@ -217,9 +197,12 @@ class Framed:
 
 @dataclass(frozen=True, slots=True)
 class Metrics:
+    """The screen's width and the bar's own spacing (`ui_spec.Bar`)."""
+
     width: float
-    top: float = 8
-    gap: float = 6
+    top: float
+    gap: float
+    edge: float
 
 
 def present(value: float) -> float:
@@ -244,7 +227,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics) -> tuple[Framed, ...]:
         return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
 
     right: tuple[Framed, ...] = ()
-    edge = max(0.0, metrics.width - 12)
+    edge = max(0.0, metrics.width - metrics.edge)
     for capsule in reversed(zone(Zone.RIGHT)):
         width = shown(capsule)
         if width > edge:
