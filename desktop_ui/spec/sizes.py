@@ -1,4 +1,4 @@
-"""The island bar's geometry, in device-independent pixels.
+"""The island bar's geometry, in device-independent pixels (DIPs).
 
 Every size the bar lays out and paints is here, so a change applies everywhere
 the value is used.
