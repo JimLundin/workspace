@@ -18,6 +18,7 @@ lazy from PySide6.QtTest import QTest
 
 from assistant.meeting_detection import AutomaticStatus
 from assistant.recording_state import RecordingState
+from desktop_ui import shell_surface
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
@@ -28,8 +29,9 @@ from desktop_ui.island_surface import SHADOW, TOP, ControlButton, MenuCell
 from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
+from desktop_ui.shell_items import PinnedApp
 from desktop_ui.vector_icons import symbol
-from desktop_ui.window_layout import EDGE, TERMINAL
+from desktop_ui.window_layout import EDGE, TERMINAL, WorkspaceView
 from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
@@ -686,6 +688,27 @@ def test_pager_offers_each_desktop_directly() -> None:
         ]
         QTest.mouseClick(buttons[1], QtCore.Qt.MouseButton.LeftButton)
         assert chosen == [PagerClick(1, Source.PAGER)]
+    finally:
+        closed(app, bar)
+
+
+def test_pager_draws_each_desktops_apps_as_one_widening_stack_and_an_empty_one_by_number() -> None:
+    # Defects: a desktop of three apps draws only one icon in a single-icon
+    # button, an empty desktop shows nothing, or a held chord's letter loses to
+    # the icons.
+    app = application()
+    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    try:
+        sections = bar.window.shell_sections
+        sections.desktops(pager(((WorkspaceView.CANVAS,), (PinnedApp.OUTLOOK, PinnedApp.TEAMS, TERMINAL), ()), 0, chord=False), lambda _: None)
+        one, three, empty = sections.pager.buttons
+        glyph = shell_surface.Glyph
+        assert one.target.face == shell_surface.Stack((glyph("canvas"),))
+        assert three.target.face == shell_surface.Stack((glyph("mail.fill"), glyph("chat.fill"), glyph("window")))
+        assert three.width() == one.width() + 2 * shell_surface.STACK_STEP
+        assert empty.target.face == "3"
+        sections.desktops(pager(((WorkspaceView.CANVAS,), (), ()), 0, chord=True), lambda _: None)
+        assert [button.target.face for button in sections.pager.buttons] == ["J", "L", "U"]
     finally:
         closed(app, bar)
 

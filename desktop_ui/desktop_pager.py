@@ -1,8 +1,9 @@
 """The bar's desktop pager: a pure view of the observer's desktops.
 
-The pager shows one number per desktop with the current one marked; a click goes
-straight to that desktop. Desktops are reached directly, never cycled. Its names
-list the applications placed on each desktop. While either keyboard holds
+The pager shows each desktop as its applications' icons, overlapping left to
+right as they sit on screen, with the current one marked; an empty desktop shows
+its number. A click goes straight to that desktop. Desktops are reached directly,
+never cycled. Its names list the applications placed on each desktop. While either keyboard holds
 its Apps key, each desktop carries its letter, read from the chord table.
 """
 
@@ -34,6 +35,8 @@ class PagerDesktop:
     name: str
     """Its accessible name and tooltip: the desktop and the applications placed there."""
     current: bool = field(kw_only=True)
+    apps: tuple[App, ...] = field(default=(), kw_only=True)
+    """Its applications left to right, as the face draws them."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +66,7 @@ def pager(placed: Sequence[Sequence[App]], current: int, *, chord: bool) -> Page
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:
         listed = ", ".join(label(app) for app in apps) or "No placed apps"
         here = " (current)" if index == current else ""
-        return PagerDesktop(str(index + 1), f"Desktop {index + 1}{here} · {listed}", current=index == current)
+        return PagerDesktop(str(index + 1), f"Desktop {index + 1}{here} · {listed}", current=index == current, apps=tuple(apps))
 
     desktops = tuple(desktop(index, apps) for index, apps in enumerate(placed))
     if not chord:

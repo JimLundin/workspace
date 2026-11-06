@@ -38,6 +38,7 @@ from desktop_ui.window_layout import (
     groups,
     managed,
     place,
+    reading_order,
     screens,
 )
 from winapi import app_user_model, screen, windows
@@ -358,8 +359,7 @@ class Worker:
         world = self.world
         if world is None:
             return tuple(() for _ in range(desktops))
-        apps = tuple((app, frozenset(self.placement[h].desktop for h in handles if h in self.placement)) for app, handles in world.windows.items())
-        return tuple(tuple(app for app, on in apps if index in on) for index in range(desktops))
+        return tuple(reading_order(world.windows, self.placement, index) for index in range(desktops))
 
     def publish(self, grouped: Shelf, state: Desktops | None) -> None:
         stop = self.observer.stop

@@ -13,7 +13,7 @@ neighbours' pixel edges are computed from the same value and meet without
 overlapping.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
@@ -249,6 +249,16 @@ def place(where: Screens, apps: Sequence[Group], previous: Placement) -> Placeme
             yield handle, Target(last.desktop, rect)
 
     return frozendict(pair for group in apps for pair in targets(group))
+
+
+def reading_order(windows: Mapping[App, Sequence[int]], placement: Placement, desktop: int) -> tuple[App, ...]:
+    """The desktop's apps as they read on screen: by their leftmost window, then its top."""
+    corners = (
+        (min(corners), order, app)
+        for order, (app, handles) in enumerate(windows.items())
+        if (corners := [(t.rect.left, t.rect.top) for h in handles if (t := placement.get(h)) is not None and t.desktop == desktop])
+    )
+    return tuple(app for _, _, app in sorted(corners))
 
 
 def overflow(apps: Sequence[Group], previous: Placement, first: int) -> frozendict[App, int]:

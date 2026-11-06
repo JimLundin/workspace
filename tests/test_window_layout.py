@@ -17,6 +17,7 @@ from desktop_ui.window_layout import (
     groups,
     managed,
     place,
+    reading_order,
     screens,
 )
 from winapi.screen import Monitor
@@ -188,3 +189,16 @@ def test_resizable_windows_of_other_programs_are_managed_even_when_minimized() -
     assert not managed(window, resizable=True, own=True)
     assert managed(Window(1, "Editor", "code.exe", minimized=True), resizable=True, own=False)
     assert not managed(Window(1, "Elevated", "", minimized=False), resizable=True, own=False)
+
+
+def test_a_desktops_apps_read_left_to_right_then_top_to_bottom() -> None:
+    # Defects: the pager orders a desktop's icons by when the apps started
+    # rather than where they sit, or lists an app placed on another desktop.
+    work = screens((LAPTOP, ABOVE, SIDE))
+    assert work is not None
+    apps = (Group(EDGE, (5,)), Group(CODE, (4,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(PinnedApp.TEAMS, (1,)))
+    placement = place(work, (Group(WorkspaceView.CANVAS, (6,)), *apps), NOWHERE)
+    windows = frozendict((group.app, group.windows) for group in apps)
+    # SIDE is leftmost (Teams above Outlook), then ABOVE's Terminal, then the laptop's Edge, then ABOVE's Code.
+    assert reading_order(windows, placement, 1) == (PinnedApp.TEAMS, PinnedApp.OUTLOOK, TERMINAL, EDGE, CODE)
+    assert reading_order(windows, placement, 0) == ()

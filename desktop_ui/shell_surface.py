@@ -5,7 +5,7 @@ controls are, so no stylesheet can pad, re-font or restyle it.
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Final, assert_never, override
@@ -17,11 +17,12 @@ from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components import typeface
 from desktop_ui.components.appearance import GlassLook, Look, SolidLook
 from desktop_ui.components.text import color
-from desktop_ui.desktop_pager import PagerView
+from desktop_ui.desktop_pager import PagerDesktop, PagerView
 from desktop_ui.island_layout import CONTROL, HEIGHT, ICON, PART_GAP
 from desktop_ui.navigation import Navigation, PagerClick, Source
-from desktop_ui.shell_items import WEB_APPS, Application, Item, Pinned, Shelf
+from desktop_ui.shell_items import WEB_APPS, Application, Item, Pinned, PinnedApp, Shelf
 from desktop_ui.vector_icons import icon
+from desktop_ui.window_layout import App, Program, WorkspaceView
 from winapi.icon_pixels import Pixels
 from winapi.tray_host import Click
 
@@ -53,8 +54,21 @@ class Glyph:
     name: str
 
 
-type Face = Glyph | Pixels | str
-"""A Fluent symbol in the bar's ink, an application's own icon, or text such as a desktop number or keycap."""
+type Icon = Glyph | Pixels
+
+
+@dataclass(frozen=True, slots=True)
+class Stack:
+    """Several icons overlapping left to right: a desktop's applications."""
+
+    icons: tuple[Icon, ...]
+
+
+STACK_STEP: Final = 12
+"""Pixels between stacked icons' left edges; each 16 px icon overlaps the next by a quarter."""
+
+type Face = Icon | Stack | str
+"""A Fluent symbol in the bar's ink, an application's own icon, a stack of them, or text such as a desktop number or keycap."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,12 +89,16 @@ class ShellButton(KeyboardFocus):
         self.section = section
         self.target = target
         self.picture: QtGui.QPixmap | None = None
+        self.pictures: tuple[QtGui.QPixmap | None, ...] = ()
         width = CONTROL
         match target.face:
             case Glyph():
                 pass
             case Pixels() as image:
                 self.picture = pixmap(image)
+            case Stack(icons=icons):
+                self.pictures = tuple(pixmap(each) if isinstance(each, Pixels) else None for each in icons)
+                width = CONTROL + STACK_STEP * (len(icons) - 1)
             case str() as text:
                 width = max(CONTROL, math.ceil(QtGui.QFontMetricsF(page_font()).horizontalAdvance(text)) + 2 * FACE_INSET)
             case _:
@@ -109,6 +127,15 @@ class ShellButton(KeyboardFocus):
         else:
             super().mouseDoubleClickEvent(event)
 
+    def paint_glyph(self, painter: QtGui.QPainter, name: str, face: QtCore.QRectF) -> None:
+        appearance = self.section.appearance
+        if appearance is None:
+            return
+        ink = appearance.lettering.ink
+        painter.setOpacity(ink.opacity)
+        symbol = icon(name, ink.color).pixmap(QtCore.QSize(ICON, ICON), self.devicePixelRatioF())
+        painter.drawPixmap(face, symbol, QtCore.QRectF(symbol.rect()))
+
     def snapped(self) -> QtCore.QPointF:
         """The 16 px face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
         scale = self.devicePixelRatioF()
@@ -129,13 +156,26 @@ class ShellButton(KeyboardFocus):
         face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(ICON, ICON))
         match self.target.face:
             case Glyph(name=name):
-                painter.setOpacity(ink.opacity)
-                symbol = icon(name, ink.color).pixmap(QtCore.QSize(ICON, ICON), self.devicePixelRatioF())
-                painter.drawPixmap(face, symbol, QtCore.QRectF(symbol.rect()))
+                self.paint_glyph(painter, name, face)
             case Pixels():
                 if self.picture is not None:
                     painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
                     painter.drawPixmap(face, self.picture, QtCore.QRectF(self.picture.rect()))
+            case Stack(icons=icons):
+                painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+                first = face.translated(-STACK_STEP * (len(icons) - 1) / 2, 0)
+                # Later icons draw over earlier ones, so the row reads left to right.
+                for index, (each, picture) in enumerate(zip(icons, self.pictures, strict=True)):
+                    spot = first.translated(STACK_STEP * index, 0)
+                    match each:
+                        case Glyph(name=name):
+                            self.paint_glyph(painter, name, spot)
+                        case Pixels():
+                            if picture is not None:
+                                painter.setOpacity(1)
+                                painter.drawPixmap(spot, picture, QtCore.QRectF(picture.rect()))
+                        case _:
+                            assert_never(each)
             case str() as text:
                 painter.setFont(page_font())
                 painter.setPen(color(ink))
@@ -245,6 +285,20 @@ def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
     return invoke
 
 
+def app_icon(app: App, images: Mapping[str, Pixels | None]) -> Icon:
+    """The icon the bar shows an app by: a web app's or the canvas's symbol, else the program's own icon."""
+    match app:
+        case PinnedApp():
+            return Glyph(WEB_APPS[app].glyph + ".fill")
+        case WorkspaceView.CANVAS:
+            return Glyph("canvas")
+        case Program(exe=exe):
+            image = images.get(exe)
+            return Glyph("window") if image is None else image
+        case _:
+            assert_never(app)
+
+
 def canvas_target(open_canvas: Callable[[], None]) -> Target:
     """Canvas opens on a left click; it has no menu, and a double-click's second press doesn't open it again."""
 
@@ -273,33 +327,37 @@ class ShellSections:
         self.pager = Section(parent)
         self.apps = Section(parent)
         self.app_snapshot: tuple[Shelf, int] | None = None
-        self.pager_view: PagerView | None = None
+        self.pager_view: tuple[PagerView, Mapping[str, Pixels | None]] | None = None
 
     def sections(self) -> tuple[Section, Section, Section]:
         return self.pinned, self.pager, self.apps
 
     def desktops(self, view: PagerView, invoke: Callable[[Navigation], None]) -> None:
-        """Each desktop, reached directly; a pager of one desktop stays hidden."""
-        if view == self.pager_view:
+        """Each desktop, reached directly; a pager of one desktop stays hidden.
+
+        Programs' icons come from the running apps, so a newly read icon redraws the pager too.
+        """
+        images = frozendict((app.identity, app.image) for app in self.app_snapshot[0].running) if self.app_snapshot is not None else frozendict()
+        if (view, images) == self.pager_view:
             return
         hints = view.hints
 
         def jump(index: int) -> Callable[[Click], None]:
             return pager_click(lambda: invoke(PagerClick(index, Source.PAGER)))
 
+        def face(index: int, desktop: PagerDesktop) -> Face:
+            """The held chord's letter, else the desktop's apps, else its number."""
+            if (hint := hints.desktops[index] if index < len(hints.desktops) else None) is not None:
+                return hint
+            return Stack(tuple(app_icon(app, images) for app in desktop.apps)) if desktop.apps else desktop.label
+
         def pages() -> tuple[Target, ...]:
             return tuple(
-                Target(
-                    desktop.name,
-                    (hints.desktops[index] if index < len(hints.desktops) else None) or desktop.label,
-                    jump(index),
-                    active=desktop.current,
-                )
-                for index, desktop in enumerate(view.desktops)
+                Target(desktop.name, face(index, desktop), jump(index), active=desktop.current) for index, desktop in enumerate(view.desktops)
             )
 
         self.pager.show_targets(pages() if len(view.desktops) > 1 else ())
-        self.pager_view = view
+        self.pager_view = (view, images)
 
     def applications(self, snapshot: tuple[Shelf, int], invoke: Callable[[Item, Click], None]) -> None:
         if snapshot == self.app_snapshot:
