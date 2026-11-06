@@ -9,10 +9,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Annotated, Final, Literal, Protocol, assert_never
+
+from pydantic import BeforeValidator, ConfigDict, TypeAdapter
 
 import protocol
 from components import LAYOUT
+from desktop_ui import ui_spec
 from desktop_ui.keymap import shortcut, shortcut_hint
 from miryoku.layout import Scancode
 from protocol import App, LayoutState, Request, Tool
@@ -47,31 +50,113 @@ class MenuState:
     capturing: bool
 
 
-def menu_items(state: MenuState) -> tuple[MenuItem, ...]:
-    status = {None: "not running", LayoutState.ON: "on", LayoutState.OFF: "off", LayoutState.QUIT: "not running"}[state.layout]
+# ---- the tray menu as data: `desktop_ui/spec/tray.toml` --------------------------------
+
+
+def _by_name(value: object) -> object:
+    """The spec names an action in lowercase (`stop_agent`); its id is the menu's own."""
+    match value:
+        case str() if value.upper() in Menu.__members__:
+            return Menu[value.upper()]
+        case _:
+            return value
+
+
+_SPEC = ConfigDict(extra="forbid")
+
+
+@dataclass(frozen=True, slots=True)
+class TrayAction:
+    action: Annotated[Menu, BeforeValidator(_by_name)]
+    label: str = ""
+    """Its words; the layout and meeting items word their state themselves."""
+    key: str = ""
+    """A key hint at the trailing edge; the agent's come from the key map."""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class Separator:
+    separator: Literal[True]
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class TraySpec:
+    """`tray.toml`: the tray menu's items, top to bottom."""
+
+    items: tuple[TrayAction | Separator, ...]
+    __pydantic_config__ = _SPEC
+
+
+_TRAY = TypeAdapter(TraySpec)
+TRAY_FILE: Final = "tray.toml"
+
+
+def stated(action: Menu) -> bool:
+    """Items whose words follow state, so the spec gives them none."""
+    return action in (Menu.TOGGLE_LAYOUT, Menu.RESTART_LAYOUT, Menu.MEETING)
+
+
+def tray_spec(folder: Path = ui_spec.SHIPPED) -> TraySpec:
+    path = folder / TRAY_FILE
+    loaded = ui_spec.load(path, _TRAY)
+    actions = [item.action for item in loaded.items if isinstance(item, TrayAction)]
+    for item in loaded.items:
+        match item:
+            case TrayAction(action=action, label=label) if stated(action) == bool(label):
+                need = "takes no label: its words follow state" if label else "needs a label"
+                raise ui_spec.SpecError(f"{path.name}: {action.name.lower()} {need}")
+            case TrayAction() | Separator():
+                pass
+            case _:
+                assert_never(item)
+    if repeated := sorted({action.name.lower() for action in actions if actions.count(action) > 1}):
+        raise ui_spec.SpecError(f"{path.name}: {', '.join(repeated)} appears more than once")
+    return loaded
+
+
+def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
+    """One item as it reads in `state`: its words, hint, and whether it's enabled or checked."""
     running = state.layout in (LayoutState.ON, LayoutState.OFF)
-    return (
-        MenuItem(
-            Menu.TOGGLE_LAYOUT.value, f"Layout: {status}" + ("\tTap §" if running else ""), enabled=running, checked=state.layout is LayoutState.ON
-        ),
-        MenuItem(Menu.RESTART_LAYOUT.value, "Restart layout" if running else "Start layout"),
-        MenuItem(Menu.OVERLAY.value, "Keyboard overlay", checked=state.overlay_enabled),
-        MenuItem(Menu.KEYMAP.value, "Key map"),
-        MenuItem(0),
-        MenuItem(Menu.AGENT.value, "Agent session\t" + shortcut_hint(shortcut(Tool.AGENT_TYPED))),
-        MenuItem(Menu.WORK.value, "Work…"),
-        MenuItem(Menu.TASKBAR.value, "Toggle Windows taskbar\tWindows key"),
-        MenuItem(Menu.STOP_AGENT.value, "Stop agent\t" + shortcut_hint(shortcut(Tool.STOP)), enabled=state.agent_running),
-        MenuItem(Menu.MEETING.value, "Stop recording" if state.capturing else "Record a meeting"),
-        MenuItem(Menu.TRANSCRIPTS.value, "Open meeting transcripts"),
-        MenuItem(0),
-        MenuItem(Menu.UNDO.value, "Undo the last update"),
-        MenuItem(Menu.USAGE.value, "Usage report"),
-        MenuItem(Menu.LOGS.value, "Open logs folder"),
-        MenuItem(0),
-        MenuItem(Menu.RESTART_ASSISTANT.value, "Restart assistant"),
-        MenuItem(Menu.QUIT.value, "Quit Workspace"),
-    )
+    hint = f"\t{item.key}" if item.key else ""
+    match item.action:
+        case Menu.TOGGLE_LAYOUT:
+            status = "on" if state.layout is LayoutState.ON else "off" if state.layout is LayoutState.OFF else "not running"
+            text = f"Layout: {status}" + ("\tTap §" if running else "")
+            return MenuItem(item.action.value, text, enabled=running, checked=state.layout is LayoutState.ON)
+        case Menu.RESTART_LAYOUT:
+            return MenuItem(item.action.value, "Restart layout" if running else "Start layout")
+        case Menu.MEETING:
+            return MenuItem(item.action.value, "Stop recording" if state.capturing else "Record a meeting")
+        case Menu.OVERLAY:
+            return MenuItem(item.action.value, item.label + hint, checked=state.overlay_enabled)
+        case Menu.AGENT:
+            return MenuItem(item.action.value, f"{item.label}\t{shortcut_hint(shortcut(Tool.AGENT_TYPED))}")
+        case Menu.STOP_AGENT:
+            return MenuItem(item.action.value, f"{item.label}\t{shortcut_hint(shortcut(Tool.STOP))}", enabled=state.agent_running)
+        case Menu.KEYMAP | Menu.WORK | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.UNDO | Menu.USAGE | Menu.LOGS | Menu.RESTART_ASSISTANT | Menu.QUIT:
+            return MenuItem(item.action.value, item.label + hint)
+        case _:
+            assert_never(item.action)
+
+
+def tray(folder: Path = ui_spec.SHIPPED, kept: Path = ui_spec.KEPT) -> tuple[TraySpec, ui_spec.SpecError | None]:
+    """The tray spec as it is now, read each time the menu opens, or its kept copy with why."""
+    return ui_spec.or_kept(tray_spec, (TRAY_FILE,), folder, kept)
+
+
+def menu_items(state: MenuState, spec: TraySpec) -> tuple[MenuItem, ...]:
+    def shown(item: TrayAction | Separator) -> MenuItem:
+        match item:
+            case TrayAction():
+                return tray_item(item, state)
+            case Separator():
+                return MenuItem(0)
+            case _:
+                assert_never(item)
+
+    return tuple(shown(item) for item in spec.items)
 
 
 class LayoutTransport(Protocol):

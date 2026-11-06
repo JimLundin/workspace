@@ -871,7 +871,7 @@ class DesktopBar:
         self.specs = specs
         self.window.use(specs.sizes)
         with suppress(OSError):
-            ui_spec.keep(self.observations.specs, self.observations.kept_specs)
+            ui_spec.keep(self.observations.specs, ui_spec.BAR_FILES, self.observations.kept_specs)
         self.render()
 
     def close(self) -> None:

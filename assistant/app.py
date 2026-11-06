@@ -706,7 +706,10 @@ class AssistantApp:
         state = control_policy.MenuState(
             layout=self.layout, overlay_enabled=self.overlay.enabled, agent_running=self.agent.running(), capturing=self.meetings.snapshot().capturing
         )
-        items = control_policy.menu_items(state)
+        spec, invalid = control_policy.tray()
+        if invalid is not None:
+            self.problem(f"The tray menu used its last good spec: {invalid}")
+        items = control_policy.menu_items(state, spec)
         match shell.show_menu(self.window.handle, items):
             case control_policy.Menu.TOGGLE_LAYOUT.value:
                 if not control_policy.toggle_layout(self.startup_effects):

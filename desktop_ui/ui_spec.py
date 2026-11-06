@@ -8,6 +8,7 @@ field, and the caller keeps the spec it already has.
 
 import contextlib
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Final
@@ -127,12 +128,21 @@ def _invalid(path: Path, error: ValidationError) -> SpecError:
     return SpecError(f"{path.name}: {field}: {first['msg']}")
 
 
-def sizes(folder: Path = SHIPPED) -> Sizes:
-    path = folder / "tokens.toml"
+def load[T](path: Path, adapter: TypeAdapter[T]) -> T:
+    """One spec file validated into its shape; `SpecError` names the file and the field."""
     try:
-        loaded = _SIZES.validate_python(_table(path))
+        return adapter.validate_python(_table(path))
     except ValidationError as error:
         raise _invalid(path, error) from error
+
+
+BAR_FILES: Final = ("tokens.toml", "controls.toml")
+"""The files the bar reads, which reload together."""
+
+
+def sizes(folder: Path = SHIPPED) -> Sizes:
+    path = folder / "tokens.toml"
+    loaded = load(path, _SIZES)
     if loaded.capsule.control > loaded.capsule.height:
         raise SpecError(f"{path.name}: capsule.control: a control must fit its capsule's height")
     return loaded
@@ -140,10 +150,7 @@ def sizes(folder: Path = SHIPPED) -> Sizes:
 
 def controls(folder: Path = SHIPPED) -> ControlsSpec:
     path = folder / "controls.toml"
-    try:
-        loaded = _CONTROLS.validate_python(_table(path))
-    except ValidationError as error:
-        raise _invalid(path, error) from error
+    loaded = load(path, _CONTROLS)
     if found := problems(loaded):
         raise SpecError(f"{path.name}: {found[0]}")
     return loaded
@@ -153,25 +160,31 @@ def specs(folder: Path = SHIPPED) -> Specs:
     return Specs(sizes(folder), controls(folder))
 
 
-def keep(folder: Path, kept: Path = KEPT) -> None:
-    """Copy specs that just validated, so a later broken edit can't stop the desktop starting."""
+def keep(folder: Path, names: tuple[str, ...], kept: Path = KEPT) -> None:
+    """Copy spec files that just validated, so a later broken edit can't stop their reader."""
     kept.mkdir(parents=True, exist_ok=True)
-    for path in folder.glob("*.toml"):
-        partial = kept / (path.name + ".partial")
-        partial.write_bytes(path.read_bytes())
-        partial.replace(kept / path.name)
+    for name in names:
+        partial = kept / (name + ".partial")
+        partial.write_bytes((folder / name).read_bytes())
+        partial.replace(kept / name)
 
 
-def starting_specs(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[Specs, SpecError | None]:
-    """The specs to start with and, when the folder's don't validate, why the kept copy is used."""
+def or_kept[T](read: Callable[[Path], T], names: tuple[str, ...], folder: Path, kept: Path) -> tuple[T, SpecError | None]:
+    """`read` from the folder and keep a copy of `names`; when they don't validate,
+    from the kept copy, with why."""
     try:
-        loaded = specs(folder)
+        loaded = read(folder)
     except SpecError as error:
         try:
-            return specs(kept), error
+            return read(kept), error
         except SpecError:
             raise error from None
     # The kept copy is a fallback; a data folder that can't be written costs only that.
     with contextlib.suppress(OSError):
-        keep(folder, kept)
+        keep(folder, names, kept)
     return loaded, None
+
+
+def starting_specs(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[Specs, SpecError | None]:
+    """The bar's specs to start with and, when the folder's don't validate, why the kept copy is used."""
+    return or_kept(specs, BAR_FILES, folder, kept)

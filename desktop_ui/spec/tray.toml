@@ -1,0 +1,79 @@
+# The tray icon's menu, top to bottom.
+#
+# Workspace reads this file each time the menu opens, so an edit shows on the
+# next click. A file that doesn't validate is reported and the menu uses its
+# last good copy.
+#
+# Each [[items]] names an action and its label, with an optional key hint, or is
+# a separator (separator = true). toggle_layout, restart_layout and meeting word
+# their own state and take no label; the agent and stop_agent hints come from
+# the key map. Actions: toggle_layout, restart_layout, overlay, keymap, agent,
+# work, taskbar, stop_agent, meeting, transcripts, undo, usage, logs,
+# restart_assistant, quit.
+
+[[items]]
+action = "toggle_layout"
+
+[[items]]
+action = "restart_layout"
+
+[[items]]
+action = "overlay"
+label = "Keyboard overlay"
+
+[[items]]
+action = "keymap"
+label = "Key map"
+
+[[items]]
+separator = true
+
+[[items]]
+action = "agent"
+label = "Agent session"
+
+[[items]]
+action = "work"
+label = "Work…"
+
+[[items]]
+action = "taskbar"
+label = "Toggle Windows taskbar"
+key = "Windows key"
+
+[[items]]
+action = "stop_agent"
+label = "Stop agent"
+
+[[items]]
+action = "meeting"
+
+[[items]]
+action = "transcripts"
+label = "Open meeting transcripts"
+
+[[items]]
+separator = true
+
+[[items]]
+action = "undo"
+label = "Undo the last update"
+
+[[items]]
+action = "usage"
+label = "Usage report"
+
+[[items]]
+action = "logs"
+label = "Open logs folder"
+
+[[items]]
+separator = true
+
+[[items]]
+action = "restart_assistant"
+label = "Restart assistant"
+
+[[items]]
+action = "quit"
+label = "Quit Workspace"
