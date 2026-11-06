@@ -10,13 +10,13 @@ windows or starting it, and so to its desktop; a right click lists its windows.
 Canvas is desktop 1's icon. The current desktop is marked, an empty desktop
 shows its number only while it is current, and holding the Apps key shows each
 desktop's letter. One fixed capsule on
-the right holds processor and memory use, a keyboard icon while the keyboard
-types plainly (the layout is off, or the Charybdis is connected), volume,
-Wi-Fi, and the clock with the battery. Activity never moves the fixed controls.
+the right holds a keyboard icon while the keyboard types plainly (the layout
+is off, or the Charybdis is connected), volume, Wi-Fi, the clock with the
+battery, and processor and memory use. Activity never moves the fixed controls.
 
 The resource readings are a processor and a memory symbol, each followed by
-its percentage, in their own slot at the capsule's left, so the speaker and Wi-Fi glyphs part them from the
-battery's percentage. Each reserves "100%" so a changing value never moves the
+its percentage, right after the battery's, so the machine's readings sit
+together at the capsule's right end. Each reserves "100%" so a changing value never moves the
 cluster, and an unread value shows "—" rather than 0%. The status worker reads
 them every 2 s; CPU is the busy share of processor time since the previous
 reading. Disk, network and GPU are left out: on this laptop they are idle or

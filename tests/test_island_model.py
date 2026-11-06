@@ -45,12 +45,19 @@ def test_idle_has_only_device_status_and_clock_power_on_right() -> None:
     assert tuple(each.key for each in views) == (Key.STATUS,)
     assert tuple(each.zone for each in views) == (Zone.RIGHT,)
     assert views[-1].slots == (
-        (Glyph("cpu"), Text("—", reserve="100%"), Glyph("memory"), Text("—", reserve="100%")),
         (
             Glyph("speaker-unknown"),
             Glyph("wifi-unknown"),
         ),
-        (Text("10:22", reserve="00:00"), Glyph("battery"), Text("73%", reserve="100%")),
+        (
+            Text("10:22", reserve="00:00"),
+            Glyph("battery"),
+            Text("73%", reserve="100%"),
+            Glyph("cpu"),
+            Text("—", reserve="100%"),
+            Glyph("memory"),
+            Text("—", reserve="100%"),
+        ),
     )
 
 
@@ -58,9 +65,9 @@ def test_a_plain_keyboard_is_a_reading_beside_the_speaker_and_wifi() -> None:
     # Defects: the keyboard shows while the layout remaps, or it becomes a
     # control in its own slot, spaced apart from the speaker and Wi-Fi.
     plain = view(replace(RESTING, plain_keyboard=True), Key.STATUS)
-    assert plain.slots[1] == (Glyph("keyboard"), Glyph("speaker-unknown"), Glyph("wifi-unknown"))
+    assert plain.slots[0] == (Glyph("keyboard"), Glyph("speaker-unknown"), Glyph("wifi-unknown"))
     assert len(plain.slots) == len(view(RESTING, Key.STATUS).slots)
-    assert Glyph("keyboard") not in view(RESTING, Key.STATUS).slots[1]
+    assert Glyph("keyboard") not in view(RESTING, Key.STATUS).slots[0]
 
 
 def test_processor_and_memory_are_plain_readings_that_reserve_their_widest_value() -> None:
@@ -70,7 +77,7 @@ def test_processor_and_memory_are_plain_readings_that_reserve_their_widest_value
     # capsule's accessible name omits the readings.
     for cpu, memory, shown in ((23, 61, ("23%", "61%")), (100, 9, ("100%", "9%")), (None, None, ("—", "—"))):
         status = view(replace(RESTING, system=SystemStatus(cpu=cpu, memory=memory)), Key.STATUS)
-        assert status.slots[0] == (Glyph("cpu"), Text(shown[0], reserve="100%"), Glyph("memory"), Text(shown[1], reserve="100%"))
+        assert status.slots[-1][-4:] == (Glyph("cpu"), Text(shown[0], reserve="100%"), Glyph("memory"), Text(shown[1], reserve="100%"))
         assert not any(isinstance(part, Control) for slot in status.slots for part in slot)
     label = view(replace(RESTING, system=SystemStatus(cpu=23, memory=61)), Key.STATUS).label
     assert label.startswith("CPU 23%, memory 61%. ")
@@ -102,11 +109,14 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
             assert baseline.system.wifi_description in status.label
 
 
-def test_charger_and_low_battery_stay_in_far_right_readings() -> None:
+def test_charger_and_low_battery_lead_the_machine_readings_at_the_right() -> None:
+    # Defects: a low battery loses its tone, the charger glyph is wrong, or the
+    # processor and memory readings no longer follow the battery's percentage.
     low = replace(RESTING, ambient=Ambient("09:41", Battery(15, powered=False, charging=False)))
-    assert view(low, Key.STATUS).slots[-1] == (Text("09:41", reserve="00:00"), Glyph("battery"), Text("15%", Tone.LOW, reserve="100%"))
+    assert view(low, Key.STATUS).slots[-1][:3] == (Text("09:41", reserve="00:00"), Glyph("battery"), Text("15%", Tone.LOW, reserve="100%"))
     full = replace(RESTING, ambient=Ambient("09:41", Battery(99, powered=True, charging=False)))
-    assert view(full, Key.STATUS).slots[-1] == (Text("09:41", reserve="00:00"), Glyph("charger"), Text("99%", reserve="100%"))
+    assert view(full, Key.STATUS).slots[-1][:3] == (Text("09:41", reserve="00:00"), Glyph("charger"), Text("99%", reserve="100%"))
+    assert view(full, Key.STATUS).slots[-1][3] == Glyph("cpu")
 
 
 def test_concurrent_activity_has_distinct_indicators_and_stable_agent_stop() -> None:

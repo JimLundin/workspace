@@ -298,10 +298,10 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
     # A plain keyboard shows as one more reading, beside the speaker and Wi-Fi.
     # Processor and memory lead, so the device glyphs part their percentages from the battery's.
     keyboard = (Glyph("keyboard"),) if observed.plain_keyboard else ()
+    # The machine's readings sit together: the battery's percentage, then the processor's and memory's.
     readings: tuple[Slot, ...] = (
-        resources(observed.system),
         (*keyboard, Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
-        facts(observed.ambient),
+        (*facts(observed.ambient), *resources(observed.system)),
     )
     persistent = (
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)

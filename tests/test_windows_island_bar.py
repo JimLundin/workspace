@@ -151,7 +151,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
                 bar.render()
                 capsule = bar.window.capsules[Key.STATUS]
                 assert capsule.view is not None
-                assert capsule.view.slots[1] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
+                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
                 assert not capsule.controls
                 assert capsule.isVisibleTo(bar.window)
                 for name, label in (
