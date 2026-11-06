@@ -23,7 +23,7 @@ from scripts.check import (
     windows_only,
     worker_result,
 )
-from scripts.check_results import Failure, Results, Selection
+from scripts.check_results import Failure, Results, Selection, raised
 
 
 def tree(root: Path) -> dict[str, str]:
@@ -244,3 +244,18 @@ def test_the_sdk_is_imported_before_timing_only_for_tests_that_reach_it(tmp_path
         (tmp_path / name).write_text(text, encoding="utf-8")
     assert sdk_packages(("tests/test_model.py::test_one", "tests/test_pure.py"), tmp_path) == ("openai",)
     assert sdk_packages(("tests/test_pure.py",), tmp_path) == ()
+
+
+def test_a_failure_summary_says_where_in_the_source_it_was_raised() -> None:
+    # Defect: the retained record keeps only "TimeoutError", so a flaky failure
+    # seen once under load can't be located after its console is gone.
+    def wait() -> None:
+        raise TimeoutError
+
+    try:
+        wait()
+    except TimeoutError as error:
+        failure = raised("tests/test_x.py::test_y", error)
+    else:
+        raise AssertionError("wait() returned")
+    assert failure.summary.startswith("TimeoutError at tests/test_edit_checks.py:"), failure.summary

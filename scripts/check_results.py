@@ -6,6 +6,7 @@ scripts.check_native.
 
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,12 +39,25 @@ class Results:
     durations: tuple[tuple[float, str], ...]
 
 
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def raised_at(error: BaseException) -> str:
+    """Where in Workspace's source the error was raised, innermost: `path:line`, or "" outside it.
+
+    The retained record keeps only the summary; without this a flaky failure
+    (a bare TimeoutError) can't be located once the console is gone."""
+    inside = (frame for frame in reversed(traceback.extract_tb(error.__traceback__)) if Path(frame.filename).resolve().is_relative_to(ROOT))
+    return next((f"{Path(frame.filename).resolve().relative_to(ROOT).as_posix()}:{frame.lineno}" for frame in inside), "")
+
+
 def raised(node: str, error: BaseException, output: str = "") -> Failure:
-    """Report an exception with the stderr its step wrote before failing."""
+    """Report an exception with the stderr its step wrote before failing, and where it was raised."""
     name = type(error).__qualname__
     message = str(error)
     captured = f"\nCaptured stderr:\n{output}" if output else ""
-    return Failure(node, f"{name}: {message}" if message else name, f"{node}\n{''.join(traceback.format_exception(error))}{captured}")
+    where = f" at {at}" if (at := raised_at(error)) else ""
+    return Failure(node, (f"{name}: {message}" if message else name) + where, f"{node}\n{''.join(traceback.format_exception(error))}{captured}")
 
 
 def reported(node: str, report: str) -> Failure:
