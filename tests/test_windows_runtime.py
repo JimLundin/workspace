@@ -193,6 +193,12 @@ def test_the_assistant_runs_reports_ready_and_quits_with_no_desktop(tmp_path: Pa
         import sys
         from assistant import app
         from assistant.llm import Missing
+        from assistant.state_store import windows_store
+        from contracts.meeting_detection import PREFERENCE, AutomaticPreference
+        from usage import DIRECTORY
+
+        # Meeting detection's browser host outlives the assistant by design; this run checks only start and quit.
+        windows_store(DIRECTORY / "automatic-meetings.bin", PREFERENCE).write(AutomaticPreference(enabled=False))
 
         assert app.run(Missing(()), window=Window(title, None), lock_name="Local" + chr(92) + title) is app.Exit.QUIT
         assert not any(name.startswith(("desktop_ui", "desktop.", "PySide6")) for name in sys.modules), "the assistant loaded the desktop"
