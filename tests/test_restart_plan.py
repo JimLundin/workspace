@@ -52,7 +52,7 @@ def test_restart_plan_tracks_shared_removed_lazy_and_package_dependencies(tmp_pa
         ({"miryoku/__init__.py": "value = 2\n"}, (), RestartChildren(("layout",))),
         ({"keeper_control.py": "value = 2\n"}, (), Relaunch.KEEPER),
         ({"supervisor_support.py": "value = 2\n"}, (), Relaunch.KEEPER),
-        ({"pyproject.toml": "after\n"}, (), RestartChildren(("layout", "assistant"))),
+        ({"pyproject.toml": "after\n"}, (), RestartChildren(("gateway", "layout", "assistant"))),
         ({"docs/note.md": "after\n"}, (), RestartChildren(())),
         # Detect a live-reloaded spec restarting its reader, a package's data file
         # restarting children that never import the package, and a root asset
@@ -60,7 +60,7 @@ def test_restart_plan_tracks_shared_removed_lazy_and_package_dependencies(tmp_pa
         ({"desktop_ui/spec/tokens.toml": "after\n"}, (), RestartChildren(())),
         ({"desktop_ui/fonts/face.ttf": "after\n"}, (), RestartChildren(("assistant",))),
         ({"scripts/tool.ps1": "after\n"}, (), RestartChildren(())),
-        ({"requirements/lock": "after\n"}, (), RestartChildren(("layout", "assistant"))),
+        ({"requirements/lock": "after\n"}, (), RestartChildren(("gateway", "layout", "assistant"))),
     )
     for index, (edits, removed, expected) in enumerate(cases):
         assert plan(tmp_path / str(index), edits, removed) == expected, edits

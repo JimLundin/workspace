@@ -12,11 +12,14 @@ for the agent. Tests pass concrete adapters for these.
 | Process | Entry | Owns |
 | --- | --- | --- |
 | Keeper | `workspace.pyw`, `keeper.py` | Starts and restarts the components, checks and installs changes, trials and undo |
+| AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway`, `components` and `runtime`, so other deploys leave it running |
 | Layout | `miryoku.pyw`, `miryoku/` | The keyboard hook and remapping. Standard library and `winapi/` only |
 | Assistant | `assistant/__main__.py` | Everything else, on one Qt event loop plus worker threads |
 
 The keeper and its helpers are protected: the agent can't change them, and a
-deploy that changes one relaunches the keeper.
+deploy that changes one relaunches the keeper. A changed data file restarts the
+programs that import its package; files under an entry's `live_assets` restart
+nothing, because their program reloads them.
 
 ## Top-level modules
 

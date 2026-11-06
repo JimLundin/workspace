@@ -17,11 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
-from protocol import WM_QUIT_LAYOUT
-
-type Component = Literal["layout", "assistant"]
+type Component = Literal["gateway", "layout", "assistant"]
 
 WM_CLOSE: Final = 0x0010
+WM_QUIT_LAYOUT: Final = 0x8000 + 3
+"""Keeper -> layout: release held keys, then exit cleanly. Here, not in `protocol`,
+so the AI connection's closure stays clear of the keyboard's wire contract."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,8 @@ class Entry:
         return state / f"ready-{self.name}"
 
 
+# The AI connection holds no state: it creates no window, so the keeper ends it at once.
+GATEWAY: Final = Entry(name="gateway", module="gateway", window=Window("workspace gateway", None), quit_message=WM_CLOSE, shutdown_s=0.0)
 # Assistant cleanup parks ongoing work, closes the agent's browser and joins
 # personal work: a bounded minute. The keyboard has nothing to drain, so a stuck
 # one is replaced quickly.
@@ -63,7 +66,7 @@ ASSISTANT: Final = Entry(
     live_assets=("desktop_ui/spec/",),
 )
 
-CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (LAYOUT, ASSISTANT)})
+CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (GATEWAY, LAYOUT, ASSISTANT)})
 """In startup order; shutdown reverses it."""
 
 BAR_WINDOW: Final = "Workspace floating bar"

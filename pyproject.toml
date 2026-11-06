@@ -238,7 +238,7 @@ ban-relative-imports = "all"
 py-modules = ["components", "config", "diagnostics", "keeper", "keeper_control", "keeper_ui", "protocol", "runtime", "selfcheck", "usage"]
 
 [tool.setuptools.packages.find]
-include = ["assistant*", "desktop_ui*", "automation*", "miryoku*", "winapi*"]
+include = ["assistant*", "desktop_ui*", "automation*", "gateway*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
 assistant = ["*.ps1", "*.yaml"]

@@ -7,6 +7,7 @@ import io
 import wave
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final, TypedDict, assert_never
 from urllib.parse import urlsplit
 
@@ -14,6 +15,7 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError
 lazy from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI, omit
 
 from automation.json_value import Json
+from gateway.endpoint import read
 from winapi.pcm import RATE
 
 MAX_SECONDS: Final = 300
@@ -44,6 +46,9 @@ class Settings:
     """The agent and every other model job."""
     agent_reasoning_effort: str = "low"
     """Reasoning effort for agent tasks; independent of the fast model."""
+    gateway: Path | None = None
+    """Where the AI connection publishes its endpoint; requests go through it once it
+    has. None calls `base_url` directly."""
 
     def __post_init__(self) -> None:
         if not self.fast_model.strip() or not self.agent_model.strip():
@@ -57,7 +62,7 @@ class Missing:
     names: tuple[str, ...]
 
 
-def settings_from(env: Mapping[str, str]) -> Settings | Missing:
+def settings_from(env: Mapping[str, str], gateway: Path | None = None) -> Settings | Missing:
     """Read from environment variables. The endpoint's are named as OpenAI's own tools name them."""
     required = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
     if missing := tuple(name for name in required if not env.get(name)):
@@ -70,6 +75,7 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
         fast_model=env.get("WORKSPACE_FAST_MODEL", FAST_MODEL),
         agent_model=env.get("WORKSPACE_AGENT_MODEL", AGENT_MODEL),
         agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
+        gateway=gateway,
     )
 
 
@@ -141,15 +147,25 @@ _TRANSCRIPTION = TypeAdapter(_Transcription)
 _ERROR_DETAIL = TypeAdapter(_ErrorDetail)
 
 
+def route(settings: Settings) -> tuple[str, str]:
+    """The base URL and key a client uses: the AI connection's, read afresh so a
+    restarted gateway is reached on the next request, else the provider's own."""
+    if settings.gateway is not None and (endpoint := read(settings.gateway)) is not None:
+        return endpoint.base_url, endpoint.token
+    return settings.base_url, settings.api_key
+
+
 def async_client(settings: Settings, *, timeout_s: float, max_retries: int = 0) -> AsyncOpenAI:
-    """The endpoint for every SDK model. The SDK's HTTP client uses the system's
-    proxy settings and certificate store, so company TLS inspection works."""
-    return AsyncOpenAI(base_url=settings.base_url, api_key=settings.api_key, timeout=timeout_s, max_retries=max_retries)
+    """The endpoint for every SDK model. The gateway's and the SDK's HTTP clients use
+    the system's proxy settings and certificate store, so company TLS inspection works."""
+    base_url, api_key = route(settings)
+    return AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=max_retries)
 
 
 def _client(settings: Settings, timeout_s: float) -> OpenAI:
     # A failed dictation is reported at once; the user or the meeting worker retries.
-    return OpenAI(base_url=settings.base_url, api_key=settings.api_key, timeout=timeout_s, max_retries=0)
+    base_url, api_key = route(settings)
+    return OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=0)
 
 
 def _failure(settings: Settings, error: APIStatusError | APIConnectionError) -> Failure:

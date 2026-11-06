@@ -8,6 +8,7 @@ import sys
 
 from assistant.lifecycle import Timings
 from assistant.llm import settings_from
+from components import endpoint
 from runtime import activate
 lazy from assistant.app import Exit, run, show_error
 
@@ -19,7 +20,7 @@ def main() -> None:
         sys.exit("Workspace only runs on Windows")
     timings = Timings("startup")
     timings.mark("application imports")
-    match run(settings_from(os.environ), timings=timings):
+    match run(settings_from(os.environ, endpoint("gateway")), timings=timings):
         case Exit.QUIT:
             pass
         case Exit.ALREADY_RUNNING:
