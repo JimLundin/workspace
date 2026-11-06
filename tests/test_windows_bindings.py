@@ -16,7 +16,7 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Windows bindings")
 
 from assistant.control_policy import initialize_controls, meeting_file_job
-from components import LAYOUT
+from components import LAYOUT, Window
 from config import APPS
 from desktop_ui.desktop_controls import (
     WM_TOOL_CHOSEN,
@@ -38,7 +38,7 @@ from keeper import WindowsUser32
 from miryoku import hook_watch
 from miryoku.engine import Indicator
 from miryoku.layout import ESCAPE, Key, Layer, Mod, Scancode
-from miryoku.win import Keyboard, WinHost, release_keyboard
+from miryoku.win import WINDOWS, Keyboard, WinHost, release_keyboard
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
@@ -52,8 +52,10 @@ from protocol import (
     WM_TOGGLE_LAYOUT,
     WM_WINDOWS_KEY_TAP,
     LayoutState,
+    Side,
     Tool,
     decode_indicator,
+    encode,
 )
 from tests.test_engine import Harness
 from usage import Detail
@@ -80,10 +82,13 @@ class KeyboardFixture:
         self.read_error: Exception | None = None
         self.send_error: Exception | None = None
         self.delivery_error: Exception | None = None
-        self.assistant_handle: int | None = 1
+        self.handles: dict[Side, int | None] = {Side.DESKTOP: 1, Side.ASSISTANT: 2}
+        """Each side's running window; None while that side is down."""
         self.sounds: list[int] = []
         self.reject_down: Key | Mod | None = None
         self.messages: list[tuple[int, int, int]] = []
+        self.routes: list[Side] = []
+        """The side each of `messages` reached."""
         self.output: list[tuple[Key | Mod, bool]] = []
         self.recoveries: list[tuple[tuple[str, Detail], ...]] = []
         self.usage: list[tuple[tuple[str, int], ...]] = []
@@ -115,17 +120,23 @@ class KeyboardFixture:
     def call_next_hook(self, code: int, wparam: int, lparam: int) -> int:
         return 7
 
-    def find_assistant(self) -> int | None:
-        return self.assistant_handle
+    def find_window(self, window: Window) -> int | None:
+        return next((self.handles[side] for side, known in WINDOWS.items() if known == window), None)
 
     # Keep the native delivery fields together in the concrete driver fixture.
     def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool:
         if self.delivery_error is not None:
             raise self.delivery_error
-        if hwnd != self.assistant_handle:
+        side = next((side for side, handle in self.handles.items() if handle == hwnd), None)
+        if side is None:
             return False
         self.messages.append((message, wparam, lparam))
+        self.routes.append(side)
         return True
+
+    def to(self, side: Side) -> list[tuple[int, int, int]]:
+        """What reached `side`'s window, in order."""
+        return [message for message, route in zip(self.messages, self.routes, strict=True) if route is side]
 
     def set_timer(self, ms: int) -> int:
         return 17
@@ -193,29 +204,51 @@ def test_assistant_outage_keeps_remapping_and_reconnects_without_replaying_short
     # recovery, or retaining the old HWND after a fresh assistant starts.
     driver = KeyboardFixture()
     keyboard = Keyboard(driver)
-    keyboard.host.assistant = 1
-    driver.assistant_handle = None
+    keyboard.host.found = frozendict({Side.ASSISTANT: 2})
+    driver.handles[Side.ASSISTANT] = None
     hold_apps(keyboard, at=5)
     assert hook_key(keyboard, driver, DICTATE_KEY, down=True, at=10) == 1
     assert hook_key(keyboard, driver, DICTATE_KEY, down=False, at=20) == 1
     assert hook_key(keyboard, driver, APPS_THUMB, down=False, at=25) == 1
     assert keyboard.engine.enabled and keyboard.fault is None
     assert driver.sounds == [system.MB_ICONHAND]
-    assert driver.messages == []
+    assert driver.to(Side.ASSISTANT) == []
     keyboard.swallow(inputs.KeyEvent(0x34, 0x05, 0, 30, 0), down=True)
     keyboard.swallow(inputs.KeyEvent(0x34, 0x05, 0, 40, 0), down=False)
     assert driver.output
-    driver.assistant_handle = 2
+    driver.handles[Side.ASSISTANT] = 3
     hold_apps(keyboard, at=45)
     keyboard.swallow(inputs.KeyEvent(0, DICTATE_KEY, 0, 50, 0), down=True)
     keyboard.swallow(inputs.KeyEvent(0, DICTATE_KEY, 0, 60, 0), down=False)
     keyboard.swallow(inputs.KeyEvent(0, APPS_THUMB, 0, 65, 0), down=False)
-    assert keyboard.host.assistant == 2
+    assert keyboard.host.found[Side.ASSISTANT] == 3
     assert [(wparam, lparam) for message, wparam, lparam in driver.messages if message == WM_REQUEST] == [
         (Tool.DICTATE.value, 1),
         (Tool.DICTATE.value, 0),
     ]
     assert keyboard.engine.enabled
+
+
+def test_each_message_reaches_the_side_that_owns_it() -> None:
+    # Defects: an app or window key waits on the assistant (failing while it
+    # restarts), dictation goes to the desktop, what the desktop shows (pressed
+    # keys, layer, chord) goes to the assistant, or one side misses the layout's state.
+    driver = KeyboardFixture()
+    keyboard = Keyboard(driver)
+    keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 1, 0), down=True)
+    keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 2, 0), down=False)
+    keyboard.on_message(WM_QUERY_LAYOUT_STATE)
+    for request in (Tool.DICTATE, Tool.OPEN_INBOX, Tool.DESKTOP_2, APPS[0]):
+        keyboard.host.request(request, down=True)
+    desktop, assistant = driver.to(Side.DESKTOP), driver.to(Side.ASSISTANT)
+    assert {message for message, _, _ in desktop} == {WM_KEY_STATE, WM_LAYOUT_STATE, WM_INDICATOR, WM_CHORD, WM_REQUEST}
+    assert {message for message, _, _ in assistant} == {WM_LAYOUT_STATE, WM_REQUEST}
+    assert [wparam for message, wparam, _ in desktop if message == WM_REQUEST] == [Tool.OPEN_INBOX.value, Tool.DESKTOP_2.value, encode(APPS[0], APPS)]
+    assert [wparam for message, wparam, _ in assistant if message == WM_REQUEST] == [Tool.DICTATE.value]
+    driver.handles[Side.DESKTOP] = None
+    keyboard.host.found = frozendict()
+    keyboard.host.request(Tool.DICTATE, down=True)
+    assert driver.to(Side.ASSISTANT)[-1] == (WM_REQUEST, Tool.DICTATE.value, 1) and not driver.sounds
 
 
 def test_generated_and_extended_input_does_not_light_physical_keys() -> None:
@@ -306,9 +339,9 @@ def test_layout_query_resets_then_replays_all_physically_held_keys() -> None:
             keyboard.swallow(inputs.KeyEvent(0, scancode, 0, 10, 0), down=True)
         messages.clear()
         keyboard.on_message(WM_QUERY_LAYOUT_STATE)
-        assert messages[0] == (WM_LAYOUT_STATE, LayoutState.ON.value, 0)
-        assert messages[1][0] == WM_INDICATOR
-        assert messages[2:] == [(WM_KEY_STATE, 0, 0), (WM_KEY_STATE, 0x10, 1), (WM_KEY_STATE, 0x32, 1), (WM_CHORD, 0, 0)]
+        assert messages[:2] == [(WM_LAYOUT_STATE, LayoutState.ON.value, 0)] * 2  # The desktop's, then the assistant's.
+        assert messages[2][0] == WM_INDICATOR
+        assert messages[3:] == [(WM_KEY_STATE, 0, 0), (WM_KEY_STATE, 0x10, 1), (WM_KEY_STATE, 0x32, 1), (WM_CHORD, 0, 0)]
 
 
 def test_toggle_and_input_failure_clear_held_keys() -> None:
@@ -323,9 +356,10 @@ def test_toggle_and_input_failure_clear_held_keys() -> None:
         assert messages == []
         keyboard.on_message(WM_TOGGLE_LAYOUT)
         keyboard.swallow(key, down=True)
+        sent = len(messages)
         keyboard.input_failed(OSError("Rejected input"))
         assert not keyboard.pressed
-        assert (WM_KEY_STATE, 0, 0) in messages[-3:]
+        assert (WM_KEY_STATE, 0, 0) in messages[sent:]
         assert not bool(keyboard.engine.enabled)
 
 
@@ -811,8 +845,9 @@ def test_layout_replies_to_queries_and_tray_toggles_without_key_injection() -> N
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     keyboard.on_message(WM_TOGGLE_LAYOUT)
-    states = [wparam for message, wparam, _ in driver.messages if message == WM_LAYOUT_STATE]
-    assert states == [LayoutState.ON.value, LayoutState.OFF.value, LayoutState.OFF.value, LayoutState.ON.value]
+    for side in Side:
+        states = [wparam for message, wparam, _ in driver.to(side) if message == WM_LAYOUT_STATE]
+        assert states == [LayoutState.ON.value, LayoutState.OFF.value, LayoutState.OFF.value, LayoutState.ON.value], side
     assert not keyboard.busy
 
 
