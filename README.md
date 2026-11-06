@@ -148,7 +148,7 @@ notices. See [the island bar](docs/toolbar-design.md) for the full policy.
 The tray dot is green when the layout is on, grey when it is off, red while
 listening, amber while working or waiting for you, and blue while the agent is
 on a task. Its menu has **Undo the last update**, **Usage report**, **Open logs
-folder**, **Restart assistant** and **Quit Workspace**. The tray menu's items and their order are in `desktop_ui/spec/tray.toml`;
+folder**, **Restart assistant** and **Quit Workspace**. The tray menu's items and their order are in `desktop_ui/spec/tray.py`;
 an edit shows the next time the menu opens.
 
 Workspace places each app's windows without overlap for the connected monitors

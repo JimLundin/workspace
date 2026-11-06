@@ -3,7 +3,6 @@
 from dataclasses import replace
 
 from assistant.recording_state import RecordingState
-from desktop_ui import ui_spec
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components.meaning import Tint, Tone
 from desktop_ui.island_model import (
@@ -27,9 +26,10 @@ from desktop_ui.island_model import (
     island,
 )
 from desktop_ui.island_moment import Notice
+from desktop_ui.spec.island import ISLAND
 from winapi.machine_status import Battery, Speakers, Wifi
 
-SPEC = ui_spec.island()
+SPEC = ISLAND
 RESTING = Observed(None, None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), SystemStatus(), 0, dictating=False)
 WORKING = Agent("Comparing both sheets", waiting=False)
 ASKING = Agent("Which sheet should the reply cover?", waiting=True)

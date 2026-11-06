@@ -8,10 +8,10 @@ from hypothesis import strategies
 from desktop_ui.island_layout import Content, Metrics, frame
 from desktop_ui.island_model import Action, CapsuleView, Key, Zone, order
 from desktop_ui.island_motion import IslandMotion, Shown, advance, placed, retarget, settled
-from desktop_ui.ui_spec import island
+from desktop_ui.spec.island import ISLAND
 from tests.properties.generation import cases, property_test
 
-ORDER = order(island())
+ORDER = order(ISLAND)
 
 ZONES = {Key.AGENT: Zone.LEAD, Key.JOB: Zone.LEAD, Key.ISLAND: Zone.ISLAND, Key.RECORDING: Zone.TRAIL, Key.INBOX: Zone.TRAIL}
 

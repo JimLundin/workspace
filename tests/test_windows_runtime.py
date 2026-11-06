@@ -124,7 +124,7 @@ def test_specs_validate_after_qt_loads_in_a_fresh_interpreter() -> None:
     script = (
         "from runtime import activate; activate(); "
         "import desktop_ui.components.canvas_chrome; from pydantic import Field; "
-        "import desktop_ui.ui_spec; desktop_ui.ui_spec.specs(); print('Qt then specs passed')"
+        "import desktop_ui.ui_spec; desktop_ui.ui_spec.bar_specs(); print('Qt then specs passed')"
     )
     checked = subprocess.run(
         [sys.executable, "-S", "-c", script],

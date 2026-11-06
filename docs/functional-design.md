@@ -81,4 +81,4 @@ See [the durable-work decision](adr/0001-durable-work.md).
 | `application_observer.py`, `window_layout.py`, `navigation.py`, `desktop_pager.py` | [Window placement](window-placement.md) and navigation |
 | `keymap*.py`, `overlay*.py`, `layer_indicator.py` | The key map, keyboard overlay and layer indicator |
 | `components/`, `fonts/` | Shared appearance, controls and type |
-| `ui_spec.py`, `ui_spec_watch.py`, `canvas_toolbar.py`, `spec/` | The desktop's declarative specs (the bar's composition in `island.toml`, sizes in `tokens.toml`, the controls menu in `controls.toml`, the tray menu in `tray.toml`, the canvas toolbar in `canvas.toml`), validated and reloaded while it runs |
+| `ui_spec.py`, `ui_spec_watch.py`, `canvas_toolbar.py`, `spec/` | The desktop's declarative specs (one frozen value per module: the bar's composition in `island.py`, sizes in `sizes.py`, the controls menu in `controls.py`, the tray menu in `tray.py`, the canvas toolbar in `canvas.py`), validated and reloaded while it runs |

@@ -1,62 +1,85 @@
-"""The desktop's declarative specs: `desktop_ui/spec/*.toml`, validated into values.
+"""The desktop's UI as data: the values in `desktop_ui/spec/`, and their checks.
 
-The files are data the desktop reloads while it runs (`ui_spec_watch`); the keeper
-restarts nothing when they change. Loading is all or nothing: a file that is
-missing, malformed or out of range raises `SpecError` naming the file and the
-field, and the caller keeps the spec it already has.
+Each spec module holds one frozen value built from typed dataclasses: the sizes
+here, the menus in `island_menu`, the bar's composition in `island_model`, the
+canvas toolbar in `canvas_toolbar` and the tray in `assistant.control_policy`.
+Pyright checks a spec's shape and names; each type checks its own ranges as it
+is built; the `problems` checks catch what a type can't say, such as an action
+placed twice.
+
+The keeper restarts nothing when a spec module changes. The bar re-imports its
+specs when their files change (`ui_spec_watch`); the tray and the canvas
+toolbar re-import theirs as they open. A spec that fails to import or check
+raises `SpecError` naming its file, and the reader keeps the spec it has.
 """
 
-import contextlib
-import tomllib
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Final
-
-from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
+from types import ModuleType
+from typing import Final
 
 from desktop_ui.canvas_toolbar import CanvasToolbarSpec, toolbar_problems
 from desktop_ui.island_menu import ControlsSpec, problems
 from desktop_ui.island_model import IslandSpec, island_problems
-from usage import DIRECTORY
+lazy from desktop_ui.spec import canvas, controls, island, sizes
 
-SHIPPED: Final = Path(__file__).resolve().parent / "spec"
-"""The specs installed with this copy of Workspace."""
-KEPT: Final = DIRECTORY / "specs"
-"""A copy of the last specs that validated: what the desktop starts with when an
-edited spec no longer does."""
+FOLDER: Final = Path(__file__).resolve().parent / "spec"
+"""The spec modules installed with this copy of Workspace."""
 
-type Pixels = Annotated[float, Field(gt=0, le=4096)]
-type Space = Annotated[float, Field(ge=0, le=4096)]
-type Count = Annotated[int, Field(ge=1, le=256)]
 
-_SPEC = ConfigDict(extra="forbid")
+class SpecError(Exception):
+    """A spec that can't be used; the message names its file."""
+
+
+def at_least(owner: str, floor: float, **values: float) -> None:
+    """Refuse a size below `floor`, naming it, as the spec's value is built."""
+    if low := [name for name, value in values.items() if value < floor]:
+        raise ValueError(f"{owner}: {', '.join(low)} must be at least {floor:g}")
 
 
 @dataclass(frozen=True, slots=True)
 class Bar:
-    top: Space
-    edge: Space
-    gap: Space
-    radius: Space
-    shadow: Space
-    __pydantic_config__ = _SPEC
+    top: float
+    """From the screen's top edge to the capsules."""
+    edge: float
+    """From the screen's right edge to the right capsule."""
+    gap: float
+    """Between neighbouring capsules."""
+    radius: float
+    shadow: float
+    """Room below and beside the capsules for their shadow."""
+
+    def __post_init__(self) -> None:
+        at_least("bar", 0, top=self.top, edge=self.edge, gap=self.gap, radius=self.radius, shadow=self.shadow)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Capsule:
-    height: Pixels
-    control: Pixels
-    icon: Pixels
-    spinner: Pixels
-    dot: Pixels
-    dots: Pixels
-    wave_bars: Count
-    part_gap: Space
-    slot_gap: Space
-    text_pad: Space
-    icon_pad: Space
-    __pydantic_config__ = _SPEC
+    height: float
+    control: float
+    """A concentric control: (height - control) / 2 from the capsule's edge."""
+    icon: float
+    spinner: float
+    dot: float
+    """The recording dot."""
+    dots: float
+    """Transcription's three dots."""
+    wave_bars: int
+    part_gap: float
+    """Between the parts of one fact, such as a symbol and its reading."""
+    slot_gap: float
+    """Between separate facts."""
+    text_pad: float
+    """A capsule's ends when it holds text..."""
+    icon_pad: float
+    """...and when it holds only symbols."""
+
+    def __post_init__(self) -> None:
+        at_least("capsule", 1, height=self.height, control=self.control, icon=self.icon, spinner=self.spinner, dot=self.dot, dots=self.dots)
+        at_least("capsule", 1, wave_bars=self.wave_bars)
+        at_least("capsule", 0, part_gap=self.part_gap, slot_gap=self.slot_gap, text_pad=self.text_pad, icon_pad=self.icon_pad)
+        if self.control > self.height:
+            raise ValueError("capsule: a control must fit its capsule's height")
 
     @property
     def inset(self) -> float:
@@ -69,149 +92,91 @@ class Capsule:
         return self.wave_bars * 4 - 2
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class MenuGrid:
-    width: Pixels
-    radius: Space
-    pad: Space
-    head: Pixels
-    track: Pixels
-    gutter: Space
-    __pydantic_config__ = _SPEC
+    """The controls menu: a grid of tiles below the capsule's own row."""
+
+    width: float
+    radius: float
+    pad: float
+    head: float
+    """The capsule's own row, above the grid."""
+    track: float
+    """One grid row; a tile spans whole tracks."""
+    gutter: float
+    """Between tiles; each tile keeps half on every side."""
+
+    def __post_init__(self) -> None:
+        at_least("menu", 1, width=self.width, head=self.head, track=self.track)
+        at_least("menu", 0, radius=self.radius, pad=self.pad, gutter=self.gutter)
 
 
 @dataclass(frozen=True, slots=True)
 class Detail:
-    line: Pixels
-    top: Space
-    bottom: Space
-    __pydantic_config__ = _SPEC
+    """Lines of detail under a capsule's row."""
+
+    line: float
+    top: float
+    """The first line, tucked into the row's lower padding."""
+    bottom: float
+
+    def __post_init__(self) -> None:
+        at_least("detail", 1, line=self.line)
+        at_least("detail", 0, top=self.top, bottom=self.bottom)
 
 
 @dataclass(frozen=True, slots=True)
 class Sizes:
-    """`tokens.toml`: every size the island bar lays out and paints."""
+    """`spec/sizes.py`: every size the island bar lays out and paints."""
 
     bar: Bar
     capsule: Capsule
     menu: MenuGrid
     detail: Detail
-    __pydantic_config__ = _SPEC
-
-
-class SpecError(Exception):
-    """A spec file that can't be used; the message names the file and the field."""
 
 
 @dataclass(frozen=True, slots=True)
 class Specs:
-    """Every spec the bar reads, loaded together so a reload applies all or none."""
+    """Every spec the bar reads, re-imported together so a reload applies all or none."""
 
     sizes: Sizes
     controls: ControlsSpec
     island: IslandSpec
 
 
-_SIZES = TypeAdapter(Sizes)
-_CONTROLS = TypeAdapter(ControlsSpec)
-_ISLAND = TypeAdapter(IslandSpec)
-_CANVAS = TypeAdapter(CanvasToolbarSpec)
-CANVAS_FILE: Final = "canvas.toml"
-
-
-def _table(path: Path) -> dict[str, object]:
+def fresh(module: ModuleType) -> None:
+    """Run a spec module again from its file; any failure is its edit's."""
+    found = module.__spec__
+    if found is None or found.loader is None:
+        raise SpecError(f"{module.__name__}: not loaded from a file")
     try:
-        return tomllib.loads(path.read_text(encoding="utf-8"))
-    except OSError as error:
-        raise SpecError(f"{path.name}: {error.strerror or error}") from error
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
-        raise SpecError(f"{path.name}: {error}") from error
+        # Running the module's loader again re-reads its file into the same module,
+        # as reload does, without depending on how the module was found.
+        found.loader.exec_module(module)
+    except Exception as error:
+        raise SpecError(f"{module.__name__.rsplit('.', 1)[-1]}.py: {error}") from error
 
 
-def _invalid(path: Path, error: ValidationError) -> SpecError:
-    first = error.errors()[0]
-    field = ".".join(str(part) for part in first["loc"])
-    return SpecError(f"{path.name}: {field}: {first['msg']}")
+def checked[T](name: str, value: T, found: tuple[str, ...]) -> T:
+    if found:
+        raise SpecError(f"{name}: {found[0]}")
+    return value
 
 
-def load[T](path: Path, adapter: TypeAdapter[T]) -> T:
-    """One spec file validated into its shape; `SpecError` names the file and the field."""
-    try:
-        return adapter.validate_python(_table(path))
-    except ValidationError as error:
-        raise _invalid(path, error) from error
+def bar_specs(*, reload: bool = True) -> Specs:
+    """The bar's specs as their modules say now; `reload` runs them again from their files first."""
+    if reload:
+        for module in (sizes, controls, island):
+            fresh(module)
+    return Specs(
+        sizes.SIZES,
+        checked("controls.py", controls.CONTROLS, problems(controls.CONTROLS)),
+        checked("island.py", island.ISLAND, island_problems(island.ISLAND)),
+    )
 
 
-BAR_FILES: Final = ("tokens.toml", "controls.toml", "island.toml")
-"""The files the bar reads, which reload together."""
-
-
-def sizes(folder: Path = SHIPPED) -> Sizes:
-    path = folder / "tokens.toml"
-    loaded = load(path, _SIZES)
-    if loaded.capsule.control > loaded.capsule.height:
-        raise SpecError(f"{path.name}: capsule.control: a control must fit its capsule's height")
-    return loaded
-
-
-def controls(folder: Path = SHIPPED) -> ControlsSpec:
-    path = folder / "controls.toml"
-    loaded = load(path, _CONTROLS)
-    if found := problems(loaded):
-        raise SpecError(f"{path.name}: {found[0]}")
-    return loaded
-
-
-def island(folder: Path = SHIPPED) -> IslandSpec:
-    path = folder / "island.toml"
-    loaded = load(path, _ISLAND)
-    if found := island_problems(loaded):
-        raise SpecError(f"{path.name}: {found[0]}")
-    return loaded
-
-
-def canvas_toolbar(folder: Path = SHIPPED) -> CanvasToolbarSpec:
-    path = folder / CANVAS_FILE
-    loaded = load(path, _CANVAS)
-    if found := toolbar_problems(loaded):
-        raise SpecError(f"{path.name}: {found[0]}")
-    return loaded
-
-
-def canvas(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[CanvasToolbarSpec, SpecError | None]:
-    """The canvas toolbar's spec as it is now, read as the toolbar shows, or the kept copy with why."""
-    return or_kept(canvas_toolbar, (CANVAS_FILE,), folder, kept)
-
-
-def specs(folder: Path = SHIPPED) -> Specs:
-    return Specs(sizes(folder), controls(folder), island(folder))
-
-
-def keep(folder: Path, names: tuple[str, ...], kept: Path = KEPT) -> None:
-    """Copy spec files that just validated, so a later broken edit can't stop their reader."""
-    kept.mkdir(parents=True, exist_ok=True)
-    for name in names:
-        partial = kept / (name + ".partial")
-        partial.write_bytes((folder / name).read_bytes())
-        partial.replace(kept / name)
-
-
-def or_kept[T](read: Callable[[Path], T], names: tuple[str, ...], folder: Path, kept: Path) -> tuple[T, SpecError | None]:
-    """`read` from the folder and keep a copy of `names`; when they don't validate,
-    from the kept copy, with why."""
-    try:
-        loaded = read(folder)
-    except SpecError as error:
-        try:
-            return read(kept), error
-        except SpecError:
-            raise error from None
-    # The kept copy is a fallback; a data folder that can't be written costs only that.
-    with contextlib.suppress(OSError):
-        keep(folder, names, kept)
-    return loaded, None
-
-
-def starting_specs(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[Specs, SpecError | None]:
-    """The bar's specs to start with and, when the folder's don't validate, why the kept copy is used."""
-    return or_kept(specs, BAR_FILES, folder, kept)
+def canvas_toolbar(*, reload: bool = True) -> CanvasToolbarSpec:
+    """The canvas toolbar's spec as its module says now."""
+    if reload:
+        fresh(canvas)
+    return checked("canvas.py", canvas.CANVAS, toolbar_problems(canvas.CANVAS))

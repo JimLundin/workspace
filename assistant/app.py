@@ -85,6 +85,7 @@ lazy from desktop_ui.navigation import Source, SwitcherPick
 lazy from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 lazy from desktop_ui.tray import Tray
 lazy from desktop_ui.ui import Ui
+lazy from desktop_ui.ui_spec import SpecError
 lazy from miryoku.layout import Layer
 lazy from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_REQUEST, WM_WINDOWS_KEY_TAP, LayoutState, Tool, decode_indicator
 lazy from winapi import audio, recording, screen, shell, system, windows
@@ -196,6 +197,7 @@ class AssistantApp:
         "startup_effects",
         "timings",
         "tray",
+        "tray_spec",
         "triage",
         "ui",
         "window",
@@ -217,6 +219,7 @@ class AssistantApp:
         self.jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
         self.window = shell.AppWindow(components.ASSISTANT.window.title, self.on_message)
         self.tray = Tray(self.window.handle, WM_TRAY)
+        self.tray_spec: control_policy.TraySpec = control_policy.tray(reload=False)
         self.automatic_attention = AutomaticAttention(self.ui.desktop_automatic, self.warn_automatic_recording)
         self.mic_event = system.create_event()
         mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
@@ -706,10 +709,11 @@ class AssistantApp:
         state = control_policy.MenuState(
             layout=self.layout, overlay_enabled=self.overlay.enabled, agent_running=self.agent.running(), capturing=self.meetings.snapshot().capturing
         )
-        spec, invalid = control_policy.tray()
-        if invalid is not None:
-            self.problem(f"The tray menu used its last good spec: {invalid}")
-        items = control_policy.menu_items(state, spec)
+        try:
+            self.tray_spec = control_policy.tray()
+        except SpecError as error:
+            self.problem(f"The tray menu kept its last good spec: {error}")
+        items = control_policy.menu_items(state, self.tray_spec)
         match shell.show_menu(self.window.handle, items):
             case control_policy.Menu.TOGGLE_LAYOUT.value:
                 if not control_policy.toggle_layout(self.startup_effects):

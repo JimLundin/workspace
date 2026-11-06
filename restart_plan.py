@@ -142,23 +142,20 @@ def _packages(tree: Tree) -> frozenset[str]:
 def restart_plan(before: Tree, after: Tree, protected: frozenset[str]) -> RestartPlan:
     """Relaunch for protected files or the keeper's closure.
 
-    Data files a child reloads itself (`Entry.live_assets`) restart nothing. A data
-    file inside a package restarts the children that import that package; any other
-    (the lock, `pyproject.toml`) restarts every child.
+    Files a child reloads itself (`Entry.live_assets`, data or Python spec modules)
+    restart nothing. A data file inside a package restarts the children that import
+    that package; any other (the lock, `pyproject.toml`) restarts every child.
     """
     names = changed(before, after)
     if names & protected:
         return Relaunch.KEEPER
+    live = tuple(prefix for entry in CATALOGUE.values() for prefix in entry.live_assets)
+    names = frozenset(name for name in names if not name.startswith(live))
     graphs = (_graph(before), _graph(after))
     affected = {module_name(name) for name in names if name.endswith((".py", ".pyw"))}
     if any(affected & closure("keeper", graph) for graph in graphs):
         return Relaunch.KEEPER
-    live = tuple(prefix for entry in CATALOGUE.values() for prefix in entry.live_assets)
-    assets = tuple(
-        name
-        for name in names
-        if not name.endswith((".py", ".pyw")) and not name.startswith(DOCUMENTATION) and name not in NOTES and not name.startswith(live)
-    )
+    assets = tuple(name for name in names if not name.endswith((".py", ".pyw")) and not name.startswith(DOCUMENTATION) and name not in NOTES)
     packages = _packages(before) | _packages(after)
     if any(name.split("/")[0] not in packages for name in assets):
         return RestartChildren(tuple(CATALOGUE))

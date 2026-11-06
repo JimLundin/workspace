@@ -1,4 +1,4 @@
-"""The canvas toolbar's actions as data: `desktop_ui/spec/canvas.toml`.
+"""The canvas toolbar's actions as data: `desktop_ui/spec/canvas.py`.
 
 Everything the canvas does is reached from its toolbar, as the island bar's
 controls are from its status capsule. The toolbar's row holds pinned actions, and
@@ -16,13 +16,9 @@ spec each time it shows, so an edit shows on the next selection or expansion.
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Final, Literal, assert_never
-
-from pydantic import ConfigDict
+from typing import Final, assert_never
 
 from desktop_ui.fluent_icons import REGULAR
-
-_SPEC = ConfigDict(extra="forbid")
 
 
 class CanvasTool(StrEnum):
@@ -77,7 +73,6 @@ class CanvasItem:
     label: str = ""
     """Its words; `contents` words the canvas's mode itself."""
     icon: str = ""
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +80,6 @@ class BubbleItem:
     action: BubbleAction
     label: str = ""
     icon: str = ""
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +87,6 @@ class RelationItem:
     action: RelationAction
     label: str = ""
     icon: str = ""
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,43 +96,34 @@ class Row:
     canvas: tuple[CanvasItem, ...]
     bubble: tuple[BubbleItem, ...]
     """Shown after the canvas's while a bubble is selected."""
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
 class CanvasSection:
-    kind: Literal["canvas"]
     title: str
     items: tuple[CanvasItem, ...]
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
 class BubbleSection:
     """The selected bubble's actions, titled with its name; only while one is selected."""
 
-    kind: Literal["bubble"]
     items: tuple[BubbleItem, ...]
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
 class RelationSection:
     """A right-clicked relationship's actions, titled with its reason."""
 
-    kind: Literal["relationship"]
     items: tuple[RelationItem, ...]
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
 class DismissedSection:
     """A tile to restore each dismissed work thread, while there are any."""
 
-    kind: Literal["dismissed"]
     title: str
     icon: str
-    __pydantic_config__ = _SPEC
 
 
 type Section = CanvasSection | BubbleSection | RelationSection | DismissedSection
@@ -147,11 +131,10 @@ type Section = CanvasSection | BubbleSection | RelationSection | DismissedSectio
 
 @dataclass(frozen=True, slots=True)
 class CanvasToolbarSpec:
-    """`canvas.toml`: the toolbar's row and its expanded sections, top to bottom."""
+    """`spec/canvas.py`: the toolbar's row and its expanded sections, top to bottom."""
 
     row: Row
     sections: tuple[Section, ...]
-    __pydantic_config__ = _SPEC
 
 
 def toolbar_problems(spec: CanvasToolbarSpec) -> tuple[str, ...]:
@@ -177,8 +160,9 @@ def toolbar_problems(spec: CanvasToolbarSpec) -> tuple[str, ...]:
         for section in spec.sections
         if isinstance(section, DismissedSection) and section.icon not in REGULAR
     )
-    kinds = [section.kind for section in spec.sections]
-    found.extend(f"sections: more than one {kind} section" for kind in ("bubble", "relationship", "dismissed") if kinds.count(kind) > 1)
+    for kind in (BubbleSection, RelationSection, DismissedSection):
+        if sum(isinstance(section, kind) for section in spec.sections) > 1:
+            found.append(f"sections: more than one {kind.__name__}")
     return tuple(found)
 
 

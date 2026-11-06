@@ -30,7 +30,7 @@ BADGE: Final = 22  # the kit's small app badge, 7 px corners
 BADGE_STEP: Final = 16  # stacked badges overlap, each ringed in its card's surface
 CONTROL: Final = 28  # a concentric control inside a 34 px capsule
 CAPSULE: Final = 34
-PANEL_RADIUS: Final = 21  # the toolbar grown into its sections, as the island bar's menu (tokens.toml menu.radius)
+PANEL_RADIUS: Final = 21  # the toolbar grown into its sections, as the island bar's menu (spec/sizes.py menu.radius)
 # The glass capsule's widget keeps room for its shadow, so painting stays inside Qt's bounds.
 SHADOW: Final = QtCore.QMargins(10, 4, 10, 12)
 

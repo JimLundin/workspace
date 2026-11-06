@@ -30,7 +30,7 @@ from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
 from desktop_ui.shell_items import PinnedApp
-from desktop_ui.ui_spec import sizes
+from desktop_ui.spec.sizes import SIZES
 from desktop_ui.vector_icons import symbol
 from desktop_ui.window_layout import EDGE, TERMINAL, App, WorkspaceView
 from protocol import Tool
@@ -40,8 +40,8 @@ from winapi._core import fn, user32
 from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 from winapi.tray_host import Click, Entry
 
-TOP = round(sizes().bar.top)
-SHADOW = round(sizes().bar.shadow)
+TOP = round(SIZES.bar.top)
+SHADOW = round(SIZES.bar.shadow)
 
 prepare()
 

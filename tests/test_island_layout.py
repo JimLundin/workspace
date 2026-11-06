@@ -2,10 +2,10 @@
 
 from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap, wrap
 from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Spinner, Text, Zone, order
-from desktop_ui.ui_spec import island, sizes
+from desktop_ui.spec.island import ISLAND
+from desktop_ui.spec.sizes import SIZES
 
-SIZES = sizes()
-ORDER = order(island())
+ORDER = order(ISLAND)
 
 
 def metrics(width: float) -> Metrics:

@@ -20,9 +20,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
-from typing import Annotated, Final, assert_never
-
-from pydantic import ConfigDict, Field
+from typing import Final, assert_never
 
 from assistant.recording_state import RecordingState
 from desktop_ui.ambient import Ambient, SystemStatus
@@ -198,7 +196,7 @@ def capture(recording: RecordingState) -> Capture | None:
             assert_never(recording.phase)
 
 
-# ---- the bar's composition as data: `desktop_ui/spec/island.toml` ----------------------
+# ---- the bar's composition as data: `desktop_ui/spec/island.py` -----------------------
 
 
 class Reading(StrEnum):
@@ -223,14 +221,10 @@ class Activity(StrEnum):
     INBOX = auto()
 
 
-_SPEC = ConfigDict(extra="forbid")
-
-
 @dataclass(frozen=True, slots=True)
 class StatusSpec:
     groups: tuple[tuple[Reading, ...], ...]
     """Left to right; readings in a group sit a part gap apart, groups a slot gap."""
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,27 +233,28 @@ class ActivitiesSpec:
     """Left of the island, left to right."""
     trail: tuple[Activity, ...]
     """Right of the island, left to right."""
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
 class TextSpec:
-    phase: Annotated[int, Field(ge=4, le=200)]
+    phase: int
     """The agent's phase, in characters, before it elides."""
-    title: Annotated[int, Field(ge=4, le=200)]
+    title: int
     """A notice's title, in characters, before it elides."""
-    notice_width: Annotated[int, Field(gt=0, le=2000)]
-    __pydantic_config__ = _SPEC
+    notice_width: int
+
+    def __post_init__(self) -> None:
+        if not (4 <= self.phase <= 200 and 4 <= self.title <= 200 and 1 <= self.notice_width <= 2000):
+            raise ValueError("text: phase and title are 4 to 200 characters; notice_width 1 to 2000 pixels")
 
 
 @dataclass(frozen=True, slots=True)
 class IslandSpec:
-    """`island.toml`: what the status capsule shows and where activities step aside to."""
+    """`spec/island.py`: what the status capsule shows and where activities step aside to."""
 
     status: StatusSpec
     activities: ActivitiesSpec
     text: TextSpec
-    __pydantic_config__ = _SPEC
 
 
 def island_problems(spec: IslandSpec) -> tuple[str, ...]:

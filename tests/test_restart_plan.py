@@ -18,9 +18,10 @@ SOURCE = {
     "automation/__init__.py": "",
     "automation/worker.py": "value = 1\n",
     "desktop_ui/__init__.py": "",
-    "desktop_ui/ui.py": "value = 1\n",
+    "desktop_ui/ui.py": "from desktop_ui.spec import sizes\n",
     "desktop_ui/fonts/face.ttf": "before\n",
-    "desktop_ui/spec/tokens.toml": "before\n",
+    "desktop_ui/spec/__init__.py": "",
+    "desktop_ui/spec/sizes.py": "value = 1\n",
     "scripts/__init__.py": "",
     "scripts/tool.ps1": "before\n",
     "protocol.py": "value = 1\n",
@@ -54,10 +55,10 @@ def test_restart_plan_tracks_shared_removed_lazy_and_package_dependencies(tmp_pa
         ({"supervisor_support.py": "value = 2\n"}, (), Relaunch.KEEPER),
         ({"pyproject.toml": "after\n"}, (), RestartChildren(("gateway", "layout", "assistant"))),
         ({"docs/note.md": "after\n"}, (), RestartChildren(())),
-        # Detect a live-reloaded spec restarting its reader, a package's data file
-        # restarting children that never import the package, and a root asset
-        # (the dependency lock) no longer restarting every child.
-        ({"desktop_ui/spec/tokens.toml": "after\n"}, (), RestartChildren(())),
+        # Detect a live-reloaded spec module restarting the child that imports it,
+        # a package's data file restarting children that never import the package,
+        # and a root asset (the dependency lock) no longer restarting every child.
+        ({"desktop_ui/spec/sizes.py": "value = 2\n"}, (), RestartChildren(())),
         ({"desktop_ui/fonts/face.ttf": "after\n"}, (), RestartChildren(("assistant",))),
         ({"scripts/tool.ps1": "after\n"}, (), RestartChildren(())),
         ({"requirements/lock": "after\n"}, (), RestartChildren(("gateway", "layout", "assistant"))),

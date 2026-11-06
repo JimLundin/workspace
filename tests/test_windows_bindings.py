@@ -30,11 +30,11 @@ from assistant.control_policy import (
     meeting_file_job,
     menu_items,
     toggle_layout,
-    tray_spec,
 )
 from components import LAYOUT
 from config import APPS
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
+from desktop_ui.spec.tray import TRAY
 from keeper import WindowsUser32
 from miryoku import hook_watch
 from miryoku.engine import Indicator
@@ -886,7 +886,7 @@ class OverlayFixture:
 def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:
     for layout in (LayoutState.ON, LayoutState.OFF):
         state = MenuState(layout=layout, overlay_enabled=True, agent_running=False, capturing=False)
-        item = menu_items(state, tray_spec())[0]
+        item = menu_items(state, TRAY)[0]
         assert item.id == Menu.TOGGLE_LAYOUT.value
         assert item.text == f"Layout: {layout.name.lower()}\tTap §"
         assert item.enabled and item.checked == (layout is LayoutState.ON)
@@ -898,7 +898,7 @@ def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:
 def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None:
     for layout in (None, LayoutState.QUIT):
         state = MenuState(layout=layout, overlay_enabled=True, agent_running=False, capturing=False)
-        items = menu_items(state, tray_spec())
+        items = menu_items(state, TRAY)
         assert items[0].text == "Layout: not running"
         assert not items[0].enabled and not items[0].checked
         assert items[1].id == Menu.RESTART_LAYOUT.value and items[1].text == "Start layout" and items[1].enabled
@@ -909,7 +909,7 @@ def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None
 def test_tray_agent_advertises_the_layout_shortcut_in_readme_notation() -> None:
     # Defect: the tray diverges from the shared physical-key formatter.
     state = MenuState(layout=LayoutState.ON, overlay_enabled=True, agent_running=False, capturing=False)
-    agent = next(item for item in menu_items(state, tray_spec()) if item.id == Menu.AGENT.value)
+    agent = next(item for item in menu_items(state, TRAY) if item.id == Menu.AGENT.value)
     assert agent.text == "Agent session\tHold X + Ö"
 
 
@@ -918,7 +918,7 @@ def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle(
     # only way to browse saved meetings that are not on the canvas.
     for capturing in (False, True):
         state = MenuState(layout=LayoutState.ON, overlay_enabled=True, agent_running=False, capturing=capturing)
-        item = next(item for item in menu_items(state, tray_spec()) if item.id == Menu.TRANSCRIPTS.value)
+        item = next(item for item in menu_items(state, TRAY) if item.id == Menu.TRANSCRIPTS.value)
         assert (item.text, item.enabled) == ("Open meeting transcripts", True)
 
 
@@ -928,7 +928,7 @@ def test_tray_overlay_toggle_updates_and_remembers_the_preference(tmp_path: Path
         assert change_overlay(OverlayChange(enabled=enabled), effects) is None
         assert load_enabled(effects.path) is enabled
         state = MenuState(layout=LayoutState.ON, overlay_enabled=enabled, agent_running=False, capturing=False)
-        item = next(item for item in menu_items(state, tray_spec()) if item.id == Menu.OVERLAY.value)
+        item = next(item for item in menu_items(state, TRAY) if item.id == Menu.OVERLAY.value)
         assert item.checked is enabled
     assert effects.shown == (False, True)
 

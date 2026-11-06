@@ -242,7 +242,7 @@ include = ["assistant*", "desktop_ui*", "automation*", "gateway*", "miryoku*", "
 
 [tool.setuptools.package-data]
 assistant = ["*.ps1", "*.yaml"]
-desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt", "spec/*.toml"]
+desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 
 [tool.workspace.architecture]
 headless = [

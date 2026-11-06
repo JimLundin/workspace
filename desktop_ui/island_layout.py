@@ -17,7 +17,7 @@ from desktop_ui import ui_spec
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
 from desktop_ui.island_model import Badge, Control, Detail, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
 
-# Every size comes from `ui_spec.Sizes` (`desktop_ui/spec/tokens.toml`), which the
+# Every size comes from `ui_spec.Sizes` (`desktop_ui/spec/sizes.py`), which the
 # desktop reloads while it runs; nothing here keeps a size of its own.
 
 

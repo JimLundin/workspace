@@ -26,7 +26,7 @@ class SpecWatch[T]:
     def __init__(
         self,
         folder: Path,
-        load: Callable[[Path], T],
+        load: Callable[[], T],
         current: T,
         apply: Callable[[T], None],
         problem: Callable[[str], None],
@@ -43,7 +43,7 @@ class SpecWatch[T]:
         self._watch()
 
     def _watch(self) -> None:
-        paths = [str(self._folder), *(str(path) for path in sorted(self._folder.glob("*.toml")))]
+        paths = [str(self._folder), *(str(path) for path in sorted(self._folder.glob("*.py")))]
         watched = set(self._watcher.files()) | set(self._watcher.directories())
         if missing := [path for path in paths if path not in watched]:
             self._watcher.addPaths(missing)
@@ -54,7 +54,7 @@ class SpecWatch[T]:
     def reload(self) -> None:
         self._watch()
         try:
-            loaded = self._load(self._folder)
+            loaded = self._load()
         except SpecError as error:
             self._problem(f"The bar kept its last good spec: {error}")
             return

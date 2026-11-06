@@ -9,9 +9,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Final, Literal, Protocol, assert_never
-
-from pydantic import BeforeValidator, ConfigDict, TypeAdapter
+from typing import Final, Protocol, assert_never
 
 import protocol
 from components import LAYOUT
@@ -19,6 +17,7 @@ from desktop_ui import ui_spec
 from desktop_ui.keymap import shortcut, shortcut_hint
 from miryoku.layout import Scancode
 from protocol import App, LayoutState, Request, Tool
+lazy import desktop_ui.spec.tray
 lazy from winapi.shell import MenuItem
 
 
@@ -50,47 +49,28 @@ class MenuState:
     capturing: bool
 
 
-# ---- the tray menu as data: `desktop_ui/spec/tray.toml` --------------------------------
-
-
-def _by_name(value: object) -> object:
-    """The spec names an action in lowercase (`stop_agent`); its id is the menu's own."""
-    match value:
-        case str() if value.upper() in Menu.__members__:
-            return Menu[value.upper()]
-        case _:
-            return value
-
-
-_SPEC = ConfigDict(extra="forbid")
+# ---- the tray menu as data: `desktop_ui/spec/tray.py` ----------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class TrayAction:
-    action: Annotated[Menu, BeforeValidator(_by_name)]
+    action: Menu
     label: str = ""
     """Its words; the layout and meeting items word their state themselves."""
     key: str = ""
     """A key hint at the trailing edge; the agent's come from the key map."""
-    __pydantic_config__ = _SPEC
 
 
 @dataclass(frozen=True, slots=True)
 class Separator:
-    separator: Literal[True]
-    __pydantic_config__ = _SPEC
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class TraySpec:
-    """`tray.toml`: the tray menu's items, top to bottom."""
+    """`spec/tray.py`: the tray menu's items, top to bottom."""
 
     items: tuple[TrayAction | Separator, ...]
-    __pydantic_config__ = _SPEC
-
-
-_TRAY = TypeAdapter(TraySpec)
-TRAY_FILE: Final = "tray.toml"
 
 
 def stated(action: Menu) -> bool:
@@ -98,22 +78,25 @@ def stated(action: Menu) -> bool:
     return action in (Menu.TOGGLE_LAYOUT, Menu.RESTART_LAYOUT, Menu.MEETING)
 
 
-def tray_spec(folder: Path = ui_spec.SHIPPED) -> TraySpec:
-    path = folder / TRAY_FILE
-    loaded = ui_spec.load(path, _TRAY)
-    actions = [item.action for item in loaded.items if isinstance(item, TrayAction)]
-    for item in loaded.items:
-        match item:
-            case TrayAction(action=action, label=label) if stated(action) == bool(label):
-                need = "takes no label: its words follow state" if label else "needs a label"
-                raise ui_spec.SpecError(f"{path.name}: {action.name.lower()} {need}")
-            case TrayAction() | Separator():
-                pass
-            case _:
-                assert_never(item)
-    if repeated := sorted({action.name.lower() for action in actions if actions.count(action) > 1}):
-        raise ui_spec.SpecError(f"{path.name}: {', '.join(repeated)} appears more than once")
-    return loaded
+def tray_problems(spec: TraySpec) -> tuple[str, ...]:
+    """A label where the item words its state, none where it needs one, or an item listed twice."""
+    actions = [item.action for item in spec.items if isinstance(item, TrayAction)]
+    worded = tuple(
+        f"{item.action.name.lower()} {'takes no label: its words follow state' if item.label else 'needs a label'}"
+        for item in spec.items
+        if isinstance(item, TrayAction) and stated(item.action) == bool(item.label)
+    )
+    repeated = tuple(
+        f"{action.name.lower()} appears more than once" for action in sorted(set(actions), key=lambda each: each.value) if actions.count(action) > 1
+    )
+    return (*worded, *repeated)
+
+
+def tray(*, reload: bool = True) -> TraySpec:
+    """The tray spec as its module says now, run again from its file as the menu opens."""
+    if reload:
+        ui_spec.fresh(desktop_ui.spec.tray)
+    return ui_spec.checked("tray.py", desktop_ui.spec.tray.TRAY, tray_problems(desktop_ui.spec.tray.TRAY))
 
 
 def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
@@ -139,11 +122,6 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
             return MenuItem(item.action.value, item.label + hint)
         case _:
             assert_never(item.action)
-
-
-def tray(folder: Path = ui_spec.SHIPPED, kept: Path = ui_spec.KEPT) -> tuple[TraySpec, ui_spec.SpecError | None]:
-    """The tray spec as it is now, read each time the menu opens, or its kept copy with why."""
-    return ui_spec.or_kept(tray_spec, (TRAY_FILE,), folder, kept)
 
 
 def menu_items(state: MenuState, spec: TraySpec) -> tuple[MenuItem, ...]:

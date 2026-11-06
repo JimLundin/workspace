@@ -190,7 +190,8 @@ class CanvasPanel:
         self.update_voice_context()
 
     def create_context_controls(self) -> None:
-        """Everything the canvas does is reached from its toolbar, built from `canvas.toml`."""
+        """Everything the canvas does is reached from its toolbar, built from `spec/canvas.py`."""
+        self.last_spec: CanvasToolbarSpec = ui_spec.canvas_toolbar(reload=False)
         self.subject: Subject = None
         """What the expanded toolbar is about; None while it's collapsed or about the canvas."""
         self.expanded: bool = False
@@ -198,10 +199,12 @@ class CanvasPanel:
         self.tiles: tuple[QtWidgets.QToolButton, ...] = ()
 
     def toolbar_spec(self) -> CanvasToolbarSpec:
-        spec, invalid = ui_spec.canvas()
-        if invalid is not None:
-            self.work.problem(f"The canvas toolbar used its last good spec: {invalid}")
-        return spec
+        """The toolbar's spec as its module says now; a broken edit keeps the last good one."""
+        try:
+            self.last_spec = ui_spec.canvas_toolbar()
+        except ui_spec.SpecError as error:
+            self.work.problem(f"The canvas toolbar kept its last good spec: {error}")
+        return self.last_spec
 
     def bubble_subject(self, identity: str | None) -> Bubble | None:
         current = next((each for each in containers(self.view.catalog, self.document) if each.id == identity), None)

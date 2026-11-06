@@ -13,9 +13,7 @@ its application.
 
 from dataclasses import dataclass, field, replace
 from enum import Enum, StrEnum, auto
-from typing import Annotated, Final, Literal, assert_never
-
-from pydantic import ConfigDict, Field
+from typing import Final, assert_never
 
 from assistant.meeting_detection import AutomaticStatus
 from desktop_ui.keymap import shortcut, shortcut_hint
@@ -115,7 +113,7 @@ type Entry = Item | Live | Toggle | Slider | TrayIcon
 
 
 class Face(StrEnum):
-    """How a cell presents its entry; `controls.toml` names it in lowercase."""
+    """How a cell presents its entry."""
 
     CARD = auto()  # An ongoing activity across the grid, with its Stop.
     TOGGLE = auto()  # A round switch with the setting and its state.
@@ -174,7 +172,7 @@ class Controls:
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
 
-# ---- the menu as data: `desktop_ui/spec/controls.toml` ---------------------------------
+# ---- the menu as data: `desktop_ui/spec/controls.py` ------------------------------------
 
 
 class EntryId(StrEnum):
@@ -197,20 +195,25 @@ class EntryId(StrEnum):
     ALL_CONTROLS = auto()
 
 
-_SPEC = ConfigDict(extra="forbid")
+def tall(tracks: int) -> None:
+    if not 1 <= tracks <= 64:
+        raise ValueError(f"a row is 1 to 64 tracks tall, not {tracks}")
 
 
 @dataclass(frozen=True, slots=True)
 class CellSpec:
     entry: EntryId
     face: Face
-    span: Annotated[int, Field(ge=1, le=COLUMNS)]
+    span: int
     label: str = ""
     """The accessible name; the sound slider takes Windows' own."""
     icon: str = ""
     caption: str = ""
     """A tile's short name under its symbol."""
-    __pydantic_config__ = _SPEC
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.span <= COLUMNS:
+            raise ValueError(f"{self.entry}: a cell spans 1 to {COLUMNS} columns, not {self.span}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,39 +221,41 @@ class CellsRow:
     """Cells left to right; one whose entry is absent now (Record while recording)
     gives its place to the next, and a row with none takes no space."""
 
-    kind: Literal["cells"]
-    tracks: Annotated[int, Field(ge=1, le=64)]
+    tracks: int
     cells: tuple[CellSpec, ...]
-    __pydantic_config__ = _SPEC
+
+    def __post_init__(self) -> None:
+        tall(self.tracks)
 
 
 @dataclass(frozen=True, slots=True)
 class ActivitiesRow:
     """A full-width card for each running activity, `tracks` tall each."""
 
-    kind: Literal["activities"]
-    tracks: Annotated[int, Field(ge=1, le=64)]
-    __pydantic_config__ = _SPEC
+    tracks: int
+
+    def __post_init__(self) -> None:
+        tall(self.tracks)
 
 
 @dataclass(frozen=True, slots=True)
 class TrayRow:
     """The system tray's icons, a column each, wrapping onto lines `tracks` tall."""
 
-    kind: Literal["tray"]
-    tracks: Annotated[int, Field(ge=1, le=64)]
-    __pydantic_config__ = _SPEC
+    tracks: int
+
+    def __post_init__(self) -> None:
+        tall(self.tracks)
 
 
-type RowSpec = Annotated[CellsRow | ActivitiesRow | TrayRow, Field(discriminator="kind")]
+type RowSpec = CellsRow | ActivitiesRow | TrayRow
 
 
 @dataclass(frozen=True, slots=True)
 class ControlsSpec:
-    """`controls.toml`: the menu's rows, top to bottom."""
+    """`spec/controls.py`: the menu's rows, top to bottom."""
 
     rows: tuple[RowSpec, ...]
-    __pydantic_config__ = _SPEC
 
 
 def faces(entry: EntryId) -> frozenset[Face]:
@@ -279,8 +284,9 @@ def problems(spec: ControlsSpec) -> tuple[str, ...]:
     """What makes a spec unusable, beyond its shape: each named by its row."""
     found: list[str] = []
     seen: set[EntryId] = set()
-    kinds = [row.kind for row in spec.rows]
-    found.extend(f"rows: more than one {kind} row" for kind in ("activities", "tray") if kinds.count(kind) > 1)
+    for kind in (ActivitiesRow, TrayRow):
+        if sum(isinstance(row, kind) for row in spec.rows) > 1:
+            found.append(f"rows: more than one {kind.__name__}")
     for index, row in enumerate(spec.rows):
         match row:
             case CellsRow(cells=cells):

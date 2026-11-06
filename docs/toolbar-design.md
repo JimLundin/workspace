@@ -71,18 +71,19 @@ running activity, toggles (Auto-record Teams, keyboard overlay, Windows
 taskbar, window placement, dark when away), the Canvas tile, **Record a
 meeting**, a volume slider, small tools (switch windows, copy transcript, key
 map), the system tray icons, and links to Windows notification settings and the
-tray menu. `desktop_ui/spec/controls.toml` is the source of truth: its rows, their order, each cell's span, label and symbol. It reloads live like `tokens.toml`. Arrows move between
+tray menu. `desktop_ui/spec/controls.py` is the source of truth: its rows, their order, each cell's span, label and symbol. It reloads live like the other specs. Arrows move between
 cells, Enter chooses, and Escape closes.
 
 ## Code
 
 What the status capsule shows and in what order, and which side of the
-island each activity steps aside to, are in `desktop_ui/spec/island.toml`.
-Every size the bar lays out and paints is in `desktop_ui/spec/tokens.toml`,
-validated by `ui_spec`. The running bar reloads the file when it changes
-(`ui_spec_watch`) and re-lays itself out, without a restart. A file that
-doesn't validate is reported and the bar keeps its last good sizes; a copy of
-those starts the bar if an edit is still broken at the next start.
+island each activity steps aside to, are in `desktop_ui/spec/island.py`.
+Every size the bar lays out and paints is in `desktop_ui/spec/sizes.py`.
+Each spec is one frozen value that Pyright checks; the types in `ui_spec` and
+beside their users check ranges and rules. The running bar re-imports its specs
+when their files change (`ui_spec_watch`) and re-lays itself out, without a
+restart. A spec that doesn't import or check is reported and the bar keeps its
+last good one.
 
 `island_moment`, `island_agent`, `island_model`, `island_menu`,
 `island_layout`, `island_motion` and `plain_text` in `desktop_ui/` are pure

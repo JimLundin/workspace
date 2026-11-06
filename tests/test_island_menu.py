@@ -3,7 +3,6 @@
 from dataclasses import replace
 
 from assistant.meeting_detection import AutomaticStatus
-from desktop_ui import ui_spec
 from desktop_ui.island_layout import tiles
 from desktop_ui.island_menu import (
     COLUMNS,
@@ -30,10 +29,11 @@ from desktop_ui.island_menu import (
     press,
     restores_focus,
 )
+from desktop_ui.spec.controls import CONTROLS
+from desktop_ui.spec.sizes import SIZES
 from protocol import Tool
 
-SIZES = ui_spec.sizes()
-SPEC = ui_spec.controls()
+SPEC = CONTROLS
 
 RESTING = Controls(None, None, sound=Slider("Sound", 0.4, muted=False))
 

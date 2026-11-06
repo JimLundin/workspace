@@ -27,8 +27,8 @@ from desktop_ui.island_motion import settled
 from desktop_ui.island_surface import Capsule
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
+from desktop_ui.spec.sizes import SIZES
 from desktop_ui.ui import Ui, Views
-from desktop_ui.ui_spec import sizes
 from desktop_ui.work_canvas_window import CanvasWindow
 from desktop_ui.work_window import WorkWindow
 from tests.agent_requests import asked
@@ -37,7 +37,7 @@ from tests.test_communications_service import LocalCipher
 from tests.test_work_canvas import local_canvas
 from winapi.system_notices import Notice, NoticeKey, Observed
 
-TOP = round(sizes().bar.top)
+TOP = round(SIZES.bar.top)
 
 prepare()
 

@@ -104,9 +104,8 @@ class BarObservations:
     material: Callable[[], appearance.Preference] = appearance.preference
     motion: Callable[[], bool] = appearance.animations_enabled
     local_time: Callable[[], datetime] = datetime.now
-    specs: Path = ui_spec.SHIPPED
-    """The spec folder the bar lays itself out from and reloads while it runs."""
-    kept_specs: Path = ui_spec.KEPT
+    spec_folder: Path = ui_spec.FOLDER
+    """The spec modules the bar watches and re-imports while it runs."""
 
 
 def level(value: float | None) -> float:
@@ -226,9 +225,9 @@ class DesktopBar:
         self.sampled_at: float | None = None
         self.preference: appearance.Preference = self.observations.material()
         self.frost = appearance.Frost.SMOKED
-        self.specs = self.starting_specs()
+        self.specs = ui_spec.bar_specs(reload=False)
         self.window = BarWindow(self.loop, self, self.specs.sizes)
-        self.spec_watch = SpecWatch(self.observations.specs, ui_spec.specs, self.specs, self.respec, self.errors.put)
+        self.spec_watch = SpecWatch(self.observations.spec_folder, ui_spec.bar_specs, self.specs, self.respec, self.errors.put)
         self.notification_service: NotificationObserver | None = None
         self.notification_access = system_notices.Access.UNAVAILABLE
         self.notification_observation: system_notices.Observed | None = None
@@ -862,19 +861,10 @@ class DesktopBar:
             if capsule is not None and any(Marker.WAVE in slot for view in self.views for slot in view.slots):
                 capsule.update_indicators()
 
-    def starting_specs(self) -> ui_spec.Specs:
-        """The spec folder's specs, or the kept copy's when an edit no longer validates."""
-        started, invalid = ui_spec.starting_specs(self.observations.specs, self.observations.kept_specs)
-        if invalid is not None:
-            self.errors.put(f"The bar started with its last good spec: {invalid}")
-        return started
-
     def respec(self, specs: ui_spec.Specs) -> None:
-        """An edited spec validated: lay the bar out again with it, and keep it as the last good one."""
+        """An edited spec checked: lay the bar out again with it."""
         self.specs = specs
         self.window.use(specs.sizes)
-        with suppress(OSError):
-            ui_spec.keep(self.observations.specs, ui_spec.BAR_FILES, self.observations.kept_specs)
         self.render()
 
     def close(self) -> None:

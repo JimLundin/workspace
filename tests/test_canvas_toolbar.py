@@ -1,12 +1,12 @@
-"""The canvas toolbar: what its row and its expanded sections offer, from canvas.toml."""
+"""The canvas toolbar: what its row and its expanded sections offer, from spec/canvas.py."""
 
-from pathlib import Path
+from dataclasses import replace
 
-from desktop_ui import ui_spec
 from desktop_ui.canvas_toolbar import (
     Bubble,
     BubbleAction,
     BubbleSection,
+    CanvasItem,
     CanvasSection,
     CanvasTool,
     Dismissed,
@@ -21,11 +21,11 @@ from desktop_ui.canvas_toolbar import (
     Restore,
     row,
     sections,
+    toolbar_problems,
 )
-from desktop_ui.ui_spec import SHIPPED, SpecError
+from desktop_ui.spec.canvas import CANVAS
 
-SPEC = ui_spec.canvas_toolbar()
-TEXT = (SHIPPED / ui_spec.CANVAS_FILE).read_text(encoding="utf-8")
+SPEC = CANVAS
 WORK = Bubble("work-1", "Budget review", Kind.WORK)
 GROUP = Bubble("group-1", "Q3", Kind.GROUP)
 
@@ -35,7 +35,7 @@ def acts(subject: Bubble | Relationship | None, relationships: tuple[Relationshi
 
 
 def test_every_canvas_action_is_reachable_from_the_shipped_toolbar() -> None:
-    # Defect: an edit to canvas.toml drops an action, so the canvas can no longer do it.
+    # Defect: an edit to the canvas spec drops an action, so the canvas can no longer do it.
     canvas = {item.action for section in SPEC.sections if isinstance(section, CanvasSection) for item in section.items}
     bubble = {item.action for section in SPEC.sections if isinstance(section, BubbleSection) for item in section.items}
     relation = {item.action for section in SPEC.sections if isinstance(section, RelationSection) for item in section.items}
@@ -77,27 +77,18 @@ def test_the_row_pins_the_selected_bubbles_actions_and_the_mode_toggle_words_its
     assert contents == ["Show group contents"]
 
 
-def refused(tmp_path: Path, edited: str) -> str:
-    tmp_path.mkdir(parents=True)
-    (tmp_path / ui_spec.CANVAS_FILE).write_text(edited, encoding="utf-8")
-    try:
-        ui_spec.canvas_toolbar(tmp_path)
-    except SpecError as error:
-        return str(error)
-    raise AssertionError("The canvas toolbar spec was accepted.")
+def added(*items: CanvasItem) -> tuple[str, ...]:
+    """The problems with the shipped toolbar plus one more section of `items`."""
+    return toolbar_problems(replace(SPEC, sections=(*SPEC.sections, CanvasSection("Extra", items))))
 
 
-def test_toolbar_edits_that_repeat_misword_or_misname_a_tile_are_refused(tmp_path: Path) -> None:
+def test_toolbar_edits_that_repeat_misword_or_misname_a_tile_are_refused() -> None:
     # Defect: an action placed twice runs twice, a tile shows no words, the mode
     # toggle's label hides its state, or an unknown symbol draws a placeholder.
-    twice = TEXT.replace('{ action = "new_group", label = "Group", icon = "grid" }', '{ action = "note", label = "Group", icon = "grid" }')
-    assert "note appears more than once" in refused(tmp_path / "twice", twice)
-    assert "center needs a label" in refused(
-        tmp_path / "bare", TEXT.replace('{ action = "center", label = "Center", icon = "center" }', '{ action = "center", icon = "center" }')
-    )
-    assert "contents takes no label" in refused(
-        tmp_path / "stated", TEXT.replace('{ action = "contents", icon = "layers" }', '{ action = "contents", label = "Contents", icon = "layers" }')
-    )
-    assert "not 'sparkle'" in refused(
-        tmp_path / "symbol", TEXT.replace('label = "Add a note", icon = "plus"', 'label = "Add a note", icon = "sparkle"')
-    )
+    assert "sections: note appears more than once" in added(CanvasItem(CanvasTool.NOTE, "Note", "doc"))
+    bare = replace(SPEC, row=replace(SPEC.row, canvas=(CanvasItem(CanvasTool.CENTER, icon="center"),)))
+    assert "row: center needs a label" in toolbar_problems(bare)
+    stated = replace(SPEC, row=replace(SPEC.row, canvas=(CanvasItem(CanvasTool.CONTENTS, "Contents", "layers"),)))
+    assert any("contents takes no label" in each for each in toolbar_problems(stated))
+    symbol = replace(SPEC, row=replace(SPEC.row, canvas=(CanvasItem(CanvasTool.NOTE, "Add a note", "sparkle"),)))
+    assert any("not 'sparkle'" in each for each in toolbar_problems(symbol))
