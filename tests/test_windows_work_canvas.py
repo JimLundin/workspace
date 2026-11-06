@@ -63,7 +63,7 @@ from contracts.work_canvas_model import (
     save_note,
     view_state,
 )
-from contracts.work_commands import AnswerTask, WorkViewCommand
+from contracts.work_commands import AnswerTask, ReadMeeting, WorkViewCommand
 from contracts.work_documents import WebDocument
 from contracts.work_snapshot import ReplyProblem, WorkSnapshot
 from desktop_ui.components.canvas_look import surface_fill
@@ -79,6 +79,7 @@ from desktop_ui.work_canvas_window import CanvasWindow
 from desktop_ui.work_window import WorkOpening, WorkView, WorkWindow
 from tests.agent_requests import asked
 from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
+from tests.local_assistant import LocalAssistant
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
 from tests.test_meetings import SPEECH
@@ -99,10 +100,20 @@ class NativeCanvas:
         self.store = WorkCanvas(store.path, queue_nothing, self.show_publication, autonomous=False)
         self.commands: list[WorkViewCommand] = []
         self.view: CanvasWindow
-        self.work = WorkWindow(self.commands.append, post=self.jobs.append, create_view=self.build)
+        self.work = WorkWindow(self.command, post=self.jobs.append, create_view=self.build)
         self.work.show(focus=False)
         self.pump()
         assert not self.work.state.status, self.work.state.status
+
+    def command(self, command: WorkViewCommand) -> None:
+        """Keep each command; answer a meeting page as the assistant does."""
+        self.commands.append(command)
+        match command:
+            case ReadMeeting(transcript_path=path, offset=offset):
+                page = MeetingStore(Path(path).parent).conversation(offset)
+                self.jobs.append(lambda: self.view.meeting_page(path, page))
+            case _:
+                pass
 
     def build(self, work: WorkWindow) -> CanvasWindow:
         self.view = CanvasWindow(self.root, work, self.store)
@@ -187,6 +198,7 @@ def test_native_meeting_detail_reads_its_conversation_and_opens_the_same_event(t
         view = panel.view.panel
         assert view.card(evidence.id) is not None
         view.inspect(evidence.id)
+        panel.pump()  # The assistant's answer to the detail's ReadMeeting.
         detail = view.detail(evidence.id)
         assert isinstance(detail, SourceDetail)
         text = detail.text.toPlainText()
@@ -355,18 +367,13 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
     # Defect: preparing the initial viewport shows a native window, changes
     # focus, or throws away prepared bubbles when the toolbar opens the canvas.
     data, document = nested_bubbles()
-    ui = InboxUi()
-    store = local_canvas(tmp_path, ui.publish_canvas)
+    assistant = LocalAssistant(tmp_path)
+    ui = InboxUi(assistant)
+    assistant.attach(ui)
+    store = assistant.canvas
     seeded(store, document)
     try:
-        ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
-        # Defect: retrieval chooses an unwired command owner, configuration can
-        # silently replace it, or retrieving the controller opens native views.
-        with unittest.TestCase().assertRaisesRegex(RuntimeError, "command owner is configured"):
-            ui.work_window()
-        ui.configure_work(lambda _command: None)
-        with unittest.TestCase().assertRaisesRegex(RuntimeError, "already configured"):
-            ui.configure_work(lambda _command: None)
+        # Defect: retrieving the controller opens native views.
         work = ui.work_window()
         ui.pump()
         assert ui.current_canvas is None and ui.work_window() is work
@@ -699,7 +706,6 @@ def test_shared_connections_move_highlight_and_disappear_with_their_reference(tm
 def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for_retry(tmp_path: Path) -> None:
     # Defect: speech routes to a stale selection, a failed handoff loses the
     # pending direction, or a hidden canvas swallows the conversation input.
-    ui = InboxUi()
     tasks = TaskStore(tmp_path / "tasks.sqlite3")
     attempts: list[CanvasRun] = []
 
@@ -709,23 +715,23 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
             raise OSError("Queue unavailable")
         tasks.submit(run.task_id, "Canvas instruction", run_prompt(run, run.work_id), contracts.task.RequestSource("canvas"), at=20)
 
-    store = WorkCanvas(tmp_path / "canvas.sqlite3", queue, ui.publish_canvas, autonomous=False)
-    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
-    ui.configure_work(lambda _command: None)
+    assistant = LocalAssistant(tmp_path, queue=queue)
+    ui = InboxUi(assistant)
+    assistant.attach(ui)
+    store = assistant.canvas
     work = ui.work_window()
     work.show(focus=False)
     ui.pump()
     try:
         canvas = ui.canvas_view.panel
         instruction = "Find the deployment plan\nand compare the two document versions."
-        fallback: list[str] = []
-        ui.voice_agent(instruction, fallback.append)
+        ui.route_speech(instruction)
         ui.pump()
         assert canvas.instruction_run is not None and "Queue unavailable" in canvas.status.text()
-        ui.voice_agent(instruction, fallback.append)
+        ui.route_speech(instruction)
         ui.pump()
         canvas = ui.canvas_view.panel  # A fresh observation after the retry, not the narrowed earlier one.
-        assert canvas.instruction_run is None and attempts[0] == attempts[1] and not fallback
+        assert canvas.instruction_run is None and attempts[0] == attempts[1] and not assistant.spoken
         run = attempts[-1]
         assert run.intent == CanvasInstruction(instruction) and run.work_id == ROOT_CONTEXT
         task = tasks.get(run.task_id)
@@ -733,15 +739,15 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         finding = CanvasNote("note:versions", "Deployment plans", "Two versions found")
         assert canvas.commit(SaveNote(finding))
         canvas.select(finding.id)
-        ui.voice_agent("Explain the differences", fallback.append)
+        ui.route_speech("Explain the differences")
         ui.pump()
         assert attempts[-1].work_id == finding.id and store.read().notes == (finding,)
         canvas.clear_context.click()
         assert canvas.selected is None and "whole canvas" in canvas.voice_hint.toolTip()
         ui.canvas_view.window.hide()
-        ui.voice_agent("Work in the background", fallback.append)
+        ui.route_speech("Work in the background")
         ui.pump()
-        assert fallback == ["Work in the background"]
+        assert assistant.spoken == ("Work in the background",)
     finally:
         ui.dispose()
 
@@ -909,11 +915,12 @@ def pump_until(ui: InboxUi, ready: Callable[[], bool]) -> None:
 def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_revealing(tmp_path: Path) -> None:
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
-    ui = InboxUi()
+    assistant = LocalAssistant(tmp_path)
+    ui = InboxUi(assistant)
+    assistant.attach(ui)
     # Windows an earlier test in this process left open are not this test's reveal.
     shown_before = {id(widget) for widget in ui.root.topLevelWidgets() if widget.isVisible()}
-    store = local_canvas(tmp_path, ui.publish_canvas)
-    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
+    store = assistant.canvas
     store.observe_catalog(nested_bubbles()[0])
     ui.pump()
     request = owner_request(WorkOwners(feed_unavailable, no_personal_work, store.command))
@@ -974,12 +981,11 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     # Defect: opening during speech misses the held state, background work
     # clears it, release leaves it pressed during transcription, or dictation
     # incorrectly lights the agent key. Feedback must not resize the toolbar.
-    ui = InboxUi()
-    store = local_canvas(tmp_path, ui.publish_canvas)
-    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
+    assistant = LocalAssistant(tmp_path)
+    ui = InboxUi(assistant)
+    assistant.attach(ui)
     ui.desktop_state(State.LISTENING, agent_speaking=True)
     ui.pump()
-    ui.configure_work(lambda _: None)
     work = ui.work_window()
     work.show(focus=False)
     ui.pump()
@@ -1018,13 +1024,13 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
 def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_path: Path) -> None:
     # Defect: the redirect opens the wrong bubble, reserves empty editor space,
     # or spoken context fails to resume the exact existing waiting worker.
-    ui = InboxUi()
-    store = local_canvas(tmp_path, ui.publish_canvas)
-    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
-    ui.configure_work(lambda _command: None)
-    work = ui.work_window()
-    agent = ui.agent(lambda: None, on_work=lambda: work.show(focus=False), reveal=False)
-    ui.desktop(show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None)
+    assistant = LocalAssistant(tmp_path)
+    ui = InboxUi(assistant)
+    assistant.attach(ui)
+    store = assistant.canvas
+    agent = assistant.session
+    assert agent is not None
+    ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
     ui.pump()
     resumed: list[TextAnswer] = []
 
@@ -1048,7 +1054,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         assert not detail.frame.findChildren(QtWidgets.QPlainTextEdit) and detail.frame.height() <= 152
         assert detail.status.text() == "Hold X + K to reply · release to send"
         fallback: list[str] = []
-        ui.voice_agent("Contoso owns the handoff.", fallback.append)
+        ui.route_speech("Contoso owns the handoff.")
         pump_until(ui, lambda: bool(resumed))
         assert resumed == [TextAnswer("Contoso owns the handoff.")]
         ui.pump()
@@ -1065,12 +1071,11 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
 def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bound_to_work(tmp_path: Path) -> None:
     # Defect: task replies route to a different request, failed persistence loses
     # user text, or starting research loses the work-to-run connection on reopen.
-    ui = InboxUi()
-    commands: list[WorkViewCommand] = []
     runs: list[CanvasRun] = []
-    store = WorkCanvas(tmp_path / "canvas.sqlite3", runs.append, ui.publish_canvas, autonomous=False)
-    ui.configure_canvas(store, lambda _title, _target: None, observe_session=store.observe_session)
-    ui.configure_work(commands.append)
+    assistant = LocalAssistant(tmp_path, queue=runs.append)
+    ui = InboxUi(assistant)
+    assistant.attach(ui)
+    store = assistant.canvas
     work = ui.work_window()
     work.show(focus=False)
     task = work_task(contracts.task.Waiting(contracts.task.Question("request", "Which owner?", "Confirm the handoff.")))
@@ -1088,13 +1093,12 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         question = canvas.detail("question:request")
         assert isinstance(question, QuestionDetail)
         assert not ui.answer_canvas(TaskRequest(task.id, "request"), "x" * 16001)
-        fallback: list[str] = []
-        ui.voice_agent("x" * 16001, fallback.append)
+        ui.route_speech("x" * 16001)
         ui.pump()
-        assert not fallback and "could not be sent" in canvas.status.text()
-        ui.voice_agent("Use Contoso", fallback.append)
+        assert not assistant.spoken and "could not be sent" in canvas.status.text()
+        ui.route_speech("Use Contoso")
         ui.pump()
-        assert commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Contoso"))
+        assert assistant.work_commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Contoso"))
         rejected = replace(
             snapshot, reply_problems=(ReplyProblem(task_id=task.id, request_id="request", receipt_id="receipt", reason="Disk unavailable"),)
         )
@@ -1102,13 +1106,16 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         store.observe_work(rejected)
         ui.pump()
         assert "Use Contoso" in question.response.text() and question.status.text() == "Hold X + K to reply · release to send"
-        ui.voice_agent("Use Fabrikam instead", fallback.append)
+        ui.route_speech("Use Fabrikam instead")
         ui.pump()
-        assert commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Fabrikam instead")) and not fallback
+        assert (
+            assistant.work_commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Fabrikam instead")) and not assistant.spoken
+        )
         canvas.inspect(saved.work.id)
         work_detail = canvas.detail(saved.work.id)
         assert isinstance(work_detail, WorkDetail)
         next(control for control in work_detail.frame.findChildren(QtWidgets.QToolButton) if control.text() == "Continue with agent").click()
+        ui.pump()
         assert not runs and "already has an investigation" in canvas.status.text()
         assert len(canvas.group_frames) == 1
         bounds = tuple(card.sceneBoundingRect() for card in canvas.cards)
@@ -1117,11 +1124,12 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         ui.dispose()
 
 
-def check_late_agent_canvas_replay(ui: InboxUi, store: WorkCanvas) -> None:
+def check_late_agent_canvas_replay(ui: InboxUi, assistant: LocalAssistant) -> None:
     """Exercise late-agent replay before canvas layout can republish and mask stale attention."""
+    store = assistant.canvas
     bridge = UpdateCanvas(revision(store.read()), (MoveBubble("question:current", "group:archive"),))
     assert isinstance(store.command(bridge), CanvasUpdated)
-    agent = ui.agent(lambda: None, reveal=False)
+    agent = assistant.open_session()
     agent.notify_canvas("Current question", "question:current")
     ui.pump()
     assert waiting(ui.bar) is None
@@ -1135,8 +1143,10 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
     # Defect: the bell counts or opens a dismissed question, a hidden canvas
     # misses its result notice, a late view repeats a notice or replays stale
     # attention over a queued bridge change, or a notice redirects elsewhere.
-    ui = InboxUi()
-    store = local_canvas(tmp_path, ui.publish_canvas)
+    assistant = LocalAssistant(tmp_path)
+    ui = InboxUi(assistant)
+    assistant.connect(ui)
+    store = assistant.canvas
     dismissed = WorkThread("work:dismissed", 0, WorkDefinition("Not mine", "Other responsibility"), (), 10, 10)
     active = replace(dismissed, id="work:active", definition=WorkDefinition("Mine", "My responsibility"))
     data = Catalog(works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),))
@@ -1151,24 +1161,17 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
             runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id), CanvasRun(research.id, active.id)),
         ),
     )
-    notices: list[tuple[str, str]] = []
-
-    def notify(title: str, target: str) -> None:
-        notices.append((title, target))
-
     try:
-        ui.configure_canvas(store, notify, observe_session=store.observe_session)
         snapshot = WorkSnapshot(personal=PersonalView(data), tasks=(old, current, research))
         store.observe_catalog(data)
         store.observe_work(snapshot)
         ui.pump()
-        assert notices == [("Current question", "question:current")]
-        ui.desktop(show_work=lambda: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None, on_problem=lambda _: None)
+        assert assistant.noticed == (("Current question", "question:current"),)
+        ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
         ui.pump()
-        assert notices == [("Current question", "question:current")]
-        check_late_agent_canvas_replay(ui, store)
+        assert assistant.noticed == (("Current question", "question:current"),)
+        check_late_agent_canvas_replay(ui, assistant)
         assert "1 clarification needs" in ui.bar.window.capsules[Key.INBOX].accessibleName()
-        ui.configure_work(lambda _command: None)
         work = ui.work_window()
         work.publish(snapshot)
         work.prepare()
@@ -1186,11 +1189,11 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         work.publish(completed)
         store.observe_work(completed)
         ui.pump()
-        ui.open_canvas_at(notices[-1][1])
+        ui.open_canvas_at(assistant.noticed[-1][1])
         ui.pump()
         assert ui.canvas_view.panel.selected == "result:" + research.id
         assert ui.canvas_view.panel.document == store.read()
-        assert notices == [("Current question", "question:current"), (research.title, "result:" + research.id)]
+        assert assistant.noticed == (("Current question", "question:current"), (research.title, "result:" + research.id))
     finally:
         ui.dispose()
 

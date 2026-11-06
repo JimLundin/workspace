@@ -35,6 +35,7 @@ from desktop_ui.shell_surface import STACK_STEP, ShellSections, page_font
 from desktop_ui.spec.sizes import SIZES
 from desktop_ui.ui import Ui
 from desktop_ui.window_layout import EDGE, TERMINAL, App, Program, WorkspaceView
+from tests.desktop_fixture import Unreachable
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import Pixels, pixels
 from winapi.shapes import Rect, Window
@@ -285,7 +286,7 @@ def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_work
     # Defects: a stylesheet squeezes a pager digit, an application's bitmap in
     # a desktop's stack paints larger than the bar's 16 px symbols, or the first
     # control loses its concentric 3 px inset.
-    ui = Ui()
+    ui = Ui(Unreachable())
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(1200, 50)

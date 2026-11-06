@@ -15,7 +15,10 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bindings")
 
-from assistant.control_policy import (
+from assistant.control_policy import initialize_controls, meeting_file_job
+from components import LAYOUT
+from config import APPS
+from desktop_ui.desktop_controls import (
     WM_TOOL_CHOSEN,
     ChosenTool,
     FeatureRequest,
@@ -26,13 +29,9 @@ from assistant.control_policy import (
     WindowInput,
     change_overlay,
     control_event,
-    initialize_controls,
-    meeting_file_job,
     menu_items,
     toggle_layout,
 )
-from components import LAYOUT
-from config import APPS
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.spec.tray import TRAY
 from keeper import WindowsUser32

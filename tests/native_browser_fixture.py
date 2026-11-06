@@ -9,9 +9,10 @@ from contextlib import contextmanager
 
 from assistant.browser import Browser
 from assistant.browser_host import ConnectRequest, Host, HostedConnection, Server
-from assistant.browser_session import Attached, BrowserSession, NativeSessions, Product, Source, edge_path
+from assistant.browser_session import Attached, BrowserSession, NativeSessions, Product, Source
 from contracts.json_value import Json
 from tests.test_browser import command, decoded
+from winapi.processes import edge_path
 
 
 def request(browser: Browser, operation: str, **args: Json) -> dict[str, Json]:

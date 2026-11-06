@@ -5,6 +5,9 @@ from collections.abc import Callable
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from contracts.canvas_activity import CanvasRun
+from contracts.desktop_attention import CanvasFocus
+from contracts.meetings import MeetingConversation
 from contracts.work_canvas_contracts import CanvasEdits
 from contracts.work_canvas_model import CanvasDocument
 from contracts.work_snapshot import WorkSnapshot
@@ -13,7 +16,6 @@ from desktop_ui.components.canvas_chrome import CanvasFrame
 from desktop_ui.components.canvas_look import Role, face
 from desktop_ui.components.paint_ready import PaintReady
 from desktop_ui.components.widgets import column, show_window
-from desktop_ui.desktop_attention import CanvasFocus
 from desktop_ui.work_canvas_panel import CanvasPanel, WindowControls
 from desktop_ui.work_window import WorkWindow
 
@@ -53,6 +55,15 @@ class CanvasWindow:
 
     def reply_failed(self) -> None:
         self.panel.status.setText("This reply could not be sent. Your transcript is available with Copy latest transcript.")
+
+    def canvas_status(self, text: str) -> None:
+        self.panel.status.setText(text)
+
+    def run_refused(self, run: CanvasRun, reason: str) -> None:
+        self.panel.run_refused(run, reason)
+
+    def meeting_page(self, transcript_path: str, page: MeetingConversation | None) -> None:
+        self.panel.meeting_page(transcript_path, page)
 
     def show_document(self, document: CanvasDocument) -> None:
         self.panel.show_document(document)

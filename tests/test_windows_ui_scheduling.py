@@ -10,12 +10,13 @@ if sys.platform != "win32":
 lazy from PySide6 import QtWidgets
 
 from desktop_ui.ui import Ui
+from tests.desktop_fixture import Unreachable
 
 
 def test_ui_queue_yields_before_a_batch_consumes_the_frame_budget() -> None:
     # Defect: a count-only queue limit runs dozens of individually short jobs
     # consecutively, blocking every window's animation and input delivery.
-    ui = Ui()
+    ui = Ui(Unreachable())
     delivered: tuple[int, ...] = ()
 
     def observe(root: QtWidgets.QApplication) -> None:
@@ -39,7 +40,7 @@ def test_ui_queue_yields_before_a_batch_consumes_the_frame_budget() -> None:
 def test_nested_event_delivery_cannot_enter_another_queued_job() -> None:
     # Defect: a job pumps native events and a nested queue drain enters the next
     # job before the first finishes publishing its state.
-    ui = Ui()
+    ui = Ui(Unreachable())
     delivered: tuple[str, ...] = ()
 
     def first(root: QtWidgets.QApplication) -> None:

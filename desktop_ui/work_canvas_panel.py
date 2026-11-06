@@ -15,6 +15,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from contracts.canvas_activity import ROOT_CONTEXT, Attention, CanvasAction, CanvasInstruction, CanvasQuestion, CanvasRun, CanvasUpdate
+from contracts.meetings import MeetingConversation
 from contracts.personal_work import (
     AddDocument,
     AddWebPage,
@@ -494,6 +495,18 @@ class CanvasPanel:
         self.canvas.setTransform(QtGui.QTransform().scale(0.9, 0.9))
         self.canvas.centerOn(left + self.canvas.viewport().width() / 1.8 - 42, top + self.canvas.viewport().height() / 1.8 - 110)
         self.positioned = True
+
+    def run_refused(self, run: CanvasRun, reason: str) -> None:
+        """The assistant saved this instruction but couldn't queue it: keep it for a retry."""
+        if isinstance(run.intent, CanvasInstruction):
+            self.instruction_run = run
+            self.status.setText("Could not queue the instruction: " + reason)
+
+    def meeting_page(self, transcript_path: str, page: MeetingConversation | None) -> None:
+        """A meeting's conversation page the assistant read, for the detail that asked."""
+        for _, detail in self.details:
+            if isinstance(detail, SourceDetail):
+                detail.show_page(transcript_path, page)
 
     def show_document(self, document: CanvasDocument) -> None:
         """Render a document the canvas owner committed or observed."""

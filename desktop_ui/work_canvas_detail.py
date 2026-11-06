@@ -1,15 +1,12 @@
 """In-place native card details and revision-bound drafts, owned by Qt."""
 
-import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
-from pathlib import Path
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from assistant.meeting_store import MeetingStore
 from contracts.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from contracts.meeting_presentation import meeting_text
 from contracts.meetings import MeetingConversation
@@ -30,6 +27,7 @@ from contracts.personal_work import (
 from contracts.task import TextAnswer
 from contracts.work_canvas_context import context_path
 from contracts.work_canvas_model import CanvasDocument, CanvasNote
+from contracts.work_commands import ReadMeeting
 from desktop_ui.components.controls import button, label
 from desktop_ui.components.widgets import Editor, column, replace_text, row
 from desktop_ui.keymap import AGENT_HOLD
@@ -293,16 +291,24 @@ class SourceDetail:
     def read_conversation(self, offset: int) -> None:
         match self.current:
             case MeetingSource(meeting=meeting):
-                try:
-                    page = MeetingStore(Path(meeting.transcript_path).parent).conversation(offset)
-                except OSError, ValueError, sqlite3.Error:
+                # The assistant owns the meeting's journal; its page arrives in `show_page`.
+                if not self.work.send(ReadMeeting(meeting.transcript_path, offset)):
+                    self.show_page(meeting.transcript_path, None)
+            case WorkSource():
+                pass
+
+    def show_page(self, transcript_path: str, page: MeetingConversation | None) -> None:
+        """The assistant's answer to `read_conversation`, if it is still this detail's meeting."""
+        match self.current:
+            case MeetingSource(meeting=meeting) if meeting.transcript_path == transcript_path:
+                if page is None:
                     replace_text(self.text, "This meeting's conversation could not be read. Check access to its saved folder and try again.")
                     self.more.setVisible(False)
                     return
                 self.conversation = page
                 replace_text(self.text, meeting_text(page))
                 self.more.setVisible(page.next_offset is not None)
-            case WorkSource():
+            case _:
                 pass
 
     def read_more(self) -> None:

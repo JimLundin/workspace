@@ -7,7 +7,7 @@ listed once.
 
 from typing import Final
 
-from assistant.control_policy import Menu, Separator, TrayAction, TraySpec
+from desktop_ui.desktop_controls import Menu, Separator, TrayAction, TraySpec
 
 TRAY: Final = TraySpec(
     (

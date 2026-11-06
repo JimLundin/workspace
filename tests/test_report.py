@@ -1,6 +1,6 @@
 """The usage report knows every feature, so it can list the ones never used."""
 
-from assistant.report import known_features
+from desktop_ui.report import known_features
 
 
 def test_known_features_cover_both_programs() -> None:

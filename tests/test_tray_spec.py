@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from assistant.control_policy import Menu, MenuState, TrayAction, menu_items, tray_problems
+from desktop_ui.desktop_controls import Menu, MenuState, TrayAction, menu_items, tray_problems
 from desktop_ui.spec.tray import TRAY
 from protocol import LayoutState
 
