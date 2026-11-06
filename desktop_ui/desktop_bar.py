@@ -133,6 +133,7 @@ class DesktopBar:
         "inbox",
         "job",
         "last_frame",
+        "layout_enabled",
         "loop",
         "materials",
         "menu_target",
@@ -188,6 +189,7 @@ class DesktopBar:
         self.agent: Agent | None = None
         self.recording = RecordingState()
         self.chord_held = False  # Either keyboard is holding its Apps key.
+        self.layout_enabled = True
         self.hints: KeyHintOverlay | None = None
         self.inbox = self.menu_target = 0
         self.notices = Notices()
@@ -593,6 +595,11 @@ class DesktopBar:
             self.automatic_recording = status
             self.render()
 
+    def layout(self, *, enabled: bool) -> None:
+        if enabled != self.layout_enabled:
+            self.layout_enabled = enabled
+            self.render()
+
     def chord(self, *, held: bool) -> None:
         self.chord_held = held
         self.show_hints()
@@ -617,6 +624,7 @@ class DesktopBar:
             self.ambient,
             self.system,
             self.inbox,
+            plain_keyboard=not self.layout_enabled,
             dictating=self.dictating,
             unread=island_moment.unread(self.notices),
             notice=moment if isinstance(moment, Notice) else None,

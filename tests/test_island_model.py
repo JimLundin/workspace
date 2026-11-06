@@ -53,6 +53,15 @@ def test_idle_has_only_device_status_and_clock_power_on_right() -> None:
     )
 
 
+def test_a_plain_keyboard_is_a_reading_beside_the_speaker_and_wifi() -> None:
+    # Defects: the keyboard shows while the layout remaps, or it becomes a
+    # control in its own slot, spaced apart from the speaker and Wi-Fi.
+    plain = view(replace(RESTING, plain_keyboard=True), Key.STATUS)
+    assert plain.slots[0] == (Glyph("keyboard"), Glyph("speaker-unknown"), Glyph("wifi-unknown"))
+    assert len(plain.slots) == len(view(RESTING, Key.STATUS).slots)
+    assert Glyph("keyboard") not in view(RESTING, Key.STATUS).slots[0]
+
+
 def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
     # Defect: moments hide status, or status becomes a central activity.
     for speakers in Speakers:

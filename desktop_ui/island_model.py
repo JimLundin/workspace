@@ -11,7 +11,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Activities alone join the centre; at idle it is empty. During a moment
   they detach beside it as compact capsules, phase and all.
 - Canvas leads the pinned web apps at the far left (the shell sections own that capsule).
-  One fixed capsule anchors right: volume, Wi-Fi, clock and power. The system tray is in the controls menu.
+  One fixed capsule anchors right: the keyboard while it types plainly, volume, Wi-Fi, clock and power. The system tray is in the controls menu.
 - That capsule expands into the controls menu; a question or the bell's list expands the centre island.
 - Under the pointer, agent work reveals its recent steps below its phase, at the same width.
 - Agent work keeps Stop visible; other stoppable activities reveal it under the pointer.
@@ -157,6 +157,8 @@ class Observed:
     ambient: Ambient
     system: SystemStatus
     inbox: int  # Waiting questions.
+    plain_keyboard: bool = field(default=False, kw_only=True)
+    """The layout is off (switched off, or the firmware keyboard is connected): the keyboard types plainly."""
     dictating: bool = field(kw_only=True)
     unread: int = field(default=0, kw_only=True)  # Notices that collapsed into the bell.
     notice: Notice | None = field(default=None, kw_only=True)  # The notice holding the island; `island_moment` decides.
@@ -281,8 +283,10 @@ def island(observed: Observed, *, hovered: Key | None = None, expanded: Expansio
         slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
         trail += (CapsuleView(Key.RECORDING, Zone.TRAIL, (slot,), f"{recorded.title} · Open canvas", Action.OPEN_CANVAS, tint),)
     # The readings stay the top row while their capsule expands into the menu.
+    # A plain keyboard shows as one more reading, beside the speaker and Wi-Fi.
+    keyboard = (Glyph("keyboard"),) if observed.plain_keyboard else ()
     readings: tuple[Slot, ...] = (
-        (Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
+        (*keyboard, Glyph(observed.system.speaker_icon), Glyph(observed.system.wifi_icon)),
         facts(observed.ambient),
     )
     persistent = (

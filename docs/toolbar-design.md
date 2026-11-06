@@ -4,7 +4,8 @@ The bar is a row of glass capsules 8 px below the top of the primary screen.
 Its centre holds only live activity and is empty at rest. Left of it, one
 capsule holds Canvas, then the Outlook and Teams web-app slots; the desktop
 pager and the running apps follow in their own capsules. One fixed capsule on
-the right holds volume, Wi-Fi, and the clock with the battery. Activity never
+the right holds a keyboard icon while the keyboard types plainly (the layout is
+off, or the Charybdis is connected), volume, Wi-Fi, and the clock with the battery. Activity never
 moves the fixed controls.
 
 The right capsule is anchored to the screen's right edge. Canvas lives in the
