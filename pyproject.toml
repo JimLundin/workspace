@@ -247,13 +247,6 @@ desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 [tool.workspace.architecture]
 
 [[tool.workspace.architecture.exceptions]]
-rule = "explicit-attributes"
-module = "selfcheck"
-declaration = "run_module"
-expression = "getattr(test, '__module__', None)"
-reason = "The protected runner inspects discovered test callables to verify their defining module."
-
-[[tool.workspace.architecture.exceptions]]
 rule = "immutable-data"
 module = "miryoku.engine"
 declaration = "Engine"

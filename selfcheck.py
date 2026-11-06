@@ -42,6 +42,7 @@ from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from types import FunctionType
 from typing import Final, Protocol
 
 import runtime
@@ -337,8 +338,7 @@ def run_module(path: Path) -> Outcome:
     members: dict[str, object] = vars(module)
     for attribute, test in sorted(members.items()):
         if attribute.startswith("test_") and callable(test):
-            origin: object = getattr(test, "__module__", None)
-            if origin != name:
+            if not isinstance(test, FunctionType) or test.__module__ != name:  # Defined here, not imported.
                 continue
             invoke: Test = test
             started = time.perf_counter()

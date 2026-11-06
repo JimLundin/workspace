@@ -18,7 +18,7 @@ SCRIPTS = ROOT / "scripts"
 def check_scripts(entries: Iterable[str]) -> frozenset[str]:
     """Source file names, relative to the root, reachable from the scripts/ entry file names.
 
-    Every scripts/ import is followed, and eager imports of top-level modules."""
+    Every scripts/ import is followed, and module-level imports of top-level modules."""
     found: set[str] = set()
     pending = [f"scripts/{name}" for name in entries]
     while pending:
@@ -32,22 +32,24 @@ def check_scripts(entries: Iterable[str]) -> frozenset[str]:
                     pending.append(f"scripts/{child}.py")
                 case _:
                     pass
-        pending.extend(f"{top}.py" for top in eager_roots((ROOT / name).read_text(encoding="utf-8")) if (ROOT / f"{top}.py").is_file())
+        pending.extend(f"{top}.py" for top in top_level_roots((ROOT / name).read_text(encoding="utf-8")) if (ROOT / f"{top}.py").is_file())
     return frozenset(found)
 
 
-def eager_roots(text: str) -> frozenset[str]:
-    """Top-level modules a file imports when it loads; lazily imported ones are left out, as before."""
-    roots: set[str] = set()
-    for node in ast.parse(text).body:
-        match node:
-            case ast.Import(names=names, is_lazy=0):
-                roots.update(alias.name.split(".")[0] for alias in names)
-            case ast.ImportFrom(module=str() as module, level=0, is_lazy=0):
-                roots.add(module.split(".")[0])
-            case _:
-                pass
-    return frozenset(roots)
+def top_level_roots(text: str) -> frozenset[str]:
+    """Top-level modules a file imports at module level, lazily or not: a lazy import
+    loads on first use, which a check reaches (`scripts.check` uses `selfcheck` so)."""
+    return frozenset(
+        root
+        for node in ast.parse(text).body
+        for root in (
+            (alias.name.split(".")[0] for alias in node.names)
+            if isinstance(node, ast.Import)
+            else (node.module.split(".")[0],)
+            if isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0
+            else ()
+        )
+    )
 
 
 def copy_check_scripts(root: Path, entries: Iterable[str]) -> None:
