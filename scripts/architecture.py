@@ -181,9 +181,9 @@ def ui_isolation(graph: Mapping[str, frozenset[str]], entries: Iterable[str]) ->
                 yield Finding("ui-isolation", entry, "", "", 0, " → ".join(route))
 
 
-CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm"})
+CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm", "winapi.system_notices"})
 """Beyond the standard library, pydantic and each other, all a contract may import:
-the wire protocol and the two plain-Python winapi value modules."""
+the wire protocol and the plain-Python winapi value modules."""
 
 
 def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:

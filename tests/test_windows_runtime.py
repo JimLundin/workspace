@@ -71,7 +71,7 @@ def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path:
     def ignore_bytecode(_folder: str, names: list[str]) -> set[str]:
         return set(names) & {"__pycache__"}
 
-    for package in ("assistant", "contracts", "desktop_ui", "automation", "gateway", "miryoku", "winapi"):
+    for package in ("assistant", "contracts", "desktop_ui", "automation", "gateway", "link", "miryoku", "winapi"):
         shutil.copytree(ROOT / package, source / package, ignore=ignore_bytecode)
     for module in ROOT.glob("*.py"):
         shutil.copyfile(module, source / module.name)

@@ -9,10 +9,10 @@ from pathlib import Path
 import httpx
 
 from assistant.llm import Failure, Settings, transcribe, wav
-from gateway.endpoint import Endpoint, publish
 from gateway.proxy import Gateway
 from gateway.upstream import Unconfigured, Upstream
 from keeper import LIVE, source_tree
+from link.endpoint import Endpoint, publish
 from restart_plan import closure, imports, module_name
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
 from winapi.pcm import RATE
@@ -118,7 +118,7 @@ def test_the_gateway_restarts_only_for_its_own_code() -> None:
         return frozenset() if name is None else imports(name, ast.parse((LIVE / name).read_bytes(), name))
 
     ours = {module for module in closure("gateway.__main__", graph) if module in modules}
-    assert {module for module in ours if module.split(".")[0] != "gateway"} == {"components", "runtime"}
+    assert {module for module in ours if module.split(".")[0] != "gateway"} == {"components", "runtime", "link", "link.endpoint"}
 
 
 def test_settings_without_a_published_gateway_call_the_provider(tmp_path: Path) -> None:

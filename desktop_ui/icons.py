@@ -1,6 +1,30 @@
 """The tray icon: a coloured dot whose colour says what the assistant is doing."""
 
 import math
+from typing import assert_never
+
+from contracts.status import State
+
+
+def colour(state: State) -> tuple[int, int, int]:
+    """The tray dot's colour (red, green, blue) for what the assistant is doing."""
+    match state:
+        case State.READY:
+            return (46, 160, 120)
+        case State.LAYOUT_OFF:
+            return (140, 140, 140)
+        case State.LISTENING:
+            return (220, 50, 50)
+        case State.RECORDING:
+            return (230, 64, 85)
+        case State.WORKING:
+            return (235, 160, 30)
+        case State.AGENT:
+            return (60, 120, 230)
+        case State.NEEDS_INPUT:
+            return (230, 185, 75)
+        case _:
+            assert_never(state)
 
 
 def dot(size: int, rgb: tuple[int, int, int]) -> bytes:

@@ -3,7 +3,7 @@
 import threading
 
 from contracts.status import State
-from desktop_ui.icons import dot
+from desktop_ui.icons import colour, dot
 lazy from winapi import shell
 
 
@@ -18,7 +18,7 @@ class Tray:
     __slots__ = ("_icon", "_icons", "_lock")
 
     def __init__(self, window: int, message: int) -> None:
-        self._icons = frozendict((state, shell.Icon(32, dot(32, state.value))) for state in State)
+        self._icons = frozendict((state, shell.Icon(32, dot(32, colour(state)))) for state in State)
         self._lock = threading.Lock()
         self._icon = shell.TrayIcon(window, message, self._icons[State.READY], "Workspace")
 

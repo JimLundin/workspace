@@ -15,7 +15,7 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError
 lazy from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI, omit
 
 from contracts.json_value import Json
-from gateway.endpoint import read
+from link.endpoint import read
 from winapi.pcm import RATE
 
 MAX_SECONDS: Final = 300

@@ -4,19 +4,19 @@ from enum import Enum, auto
 
 
 class State(Enum):
-    """What the tray icon shows. The value is its colour (red, green, blue)."""
+    """What the tray icon shows; its colour is the desktop's (`desktop_ui.icons.colour`)."""
 
-    READY = (46, 160, 120)
+    READY = auto()
     """Layout on; nothing running."""
-    LAYOUT_OFF = (140, 140, 140)
+    LAYOUT_OFF = auto()
     """The layout is switched off or not running; tools still work from the tray."""
-    LISTENING = (220, 50, 50)
-    RECORDING = (230, 64, 85)
+    LISTENING = auto()
+    RECORDING = auto()
     """A meeting is being recorded, including while the agent does other work."""
-    WORKING = (235, 160, 30)
-    AGENT = (60, 120, 230)
+    WORKING = auto()
+    AGENT = auto()
     """The agent is working on a task."""
-    NEEDS_INPUT = (230, 185, 75)
+    NEEDS_INPUT = auto()
     """A question is waiting in the agent panel."""
 
 
