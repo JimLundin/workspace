@@ -44,6 +44,27 @@ def test_contracts_reach_no_effect_owner_service_or_qt(tmp_path: Path) -> None:
     assert {"assistant.store", "PySide6", "winapi.windows"} <= reached
 
 
+def test_the_desktop_and_the_assistant_reach_each_other_only_through_contracts(tmp_path: Path) -> None:
+    # Defect: a desktop module imports an assistant owner (or the assistant imports
+    # Qt or a view), even through a third module, so one program can no longer run
+    # or restart without the other.
+    write_tree(
+        tmp_path,
+        {
+            "contracts/__init__.py": "",
+            "contracts/values.py": "",
+            "desktop_ui/__init__.py": "",
+            "desktop_ui/view.py": "from contracts import values\nimport helper\n",
+            "helper.py": "lazy import assistant.store\n",
+            "assistant/__init__.py": "",
+            "assistant/store.py": "",
+            "assistant/owner.py": "from contracts import values\nlazy import PySide6\n",
+        },
+    )
+    found = {failure.module for failure in review(tmp_path).failures if failure.rule == "process-isolation"}
+    assert found == {"desktop_ui.view", "assistant.owner"}
+
+
 def exception(root: Path, *, reason: str = "Read the optional native error code.") -> None:
     with (root / "pyproject.toml").open("a", encoding="utf-8") as output:
         output.write(
@@ -95,53 +116,6 @@ def test_keyboard_rejection_follows_lazy_imports_and_package_initializers(tmp_pa
     assert report.failures and all(finding.rule == "keyboard-isolation" for finding in report.failures)
     assert any("miryoku.engine → helper → desktop_ui" in finding.detail for finding in report.failures)
     (tmp_path / "helper/__init__.py").write_text("")
-    assert not review(tmp_path).failures
-
-
-def test_headless_owners_reject_indirect_ui_and_native_qt_imports(tmp_path: Path) -> None:
-    # Defect: a controller gains a view dependency through a shared contract or
-    # a lazy native import, while process isolation still permits that route.
-    write_tree(
-        tmp_path,
-        {
-            "assistant/__init__.py": "",
-            "assistant/owner.py": "lazy import assistant.contract\n",
-            "assistant/contract.py": "lazy from desktop_ui.view import View\n",
-            "desktop_ui/__init__.py": "",
-            "desktop_ui/view.py": "class View: pass\n",
-        },
-    )
-    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
-        output.write('headless = ["assistant.owner"]\n')
-    failures = review(tmp_path).failures
-    assert failures and all(failure.rule == "ui-isolation" for failure in failures)
-    assert any("assistant.owner → assistant.contract → desktop_ui.view" in failure.detail for failure in failures)
-    contract = tmp_path / "assistant/contract.py"
-    contract.write_text("lazy from PySide6.QtWidgets import QWidget\n", encoding="utf-8")
-    assert any("PySide6.QtWidgets" in failure.detail for failure in review(tmp_path).failures)
-    contract.write_text("", encoding="utf-8")
-    assert not review(tmp_path).failures
-
-
-def test_presentation_cannot_import_concrete_logic_owners_through_contracts(tmp_path: Path) -> None:
-    # Defect: a view starts importing a concrete controller through a shared
-    # contract, recreating lifecycle coupling despite the headless-owner rule.
-    write_tree(
-        tmp_path,
-        {
-            "assistant/__init__.py": "",
-            "assistant/owner.py": "",
-            "assistant/contract.py": "lazy import assistant.owner\n",
-            "desktop_ui/__init__.py": "",
-            "desktop_ui/view.py": "lazy import assistant.contract\n",
-        },
-    )
-    with (tmp_path / "pyproject.toml").open("a", encoding="utf-8") as output:
-        output.write('ui_private = ["assistant.owner"]\n')
-    (failure,) = review(tmp_path).failures
-    assert failure.rule == "presentation-isolation"
-    assert failure.detail == "desktop_ui.view → assistant.contract → assistant.owner"
-    (tmp_path / "assistant/contract.py").write_text("", encoding="utf-8")
     assert not review(tmp_path).failures
 
 

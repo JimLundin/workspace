@@ -51,8 +51,9 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Boolean parameters are keyword-only. Functions take at most five inputs; Ruff
   blocks more. Where a wider signature is genuinely needed, add
   `# noqa: PLR0913 - <reason>` on the `def` line. Never suppress a whole file.
-- Modules listed under `tool.workspace.architecture.headless` in
-  `pyproject.toml` must not import `desktop_ui` or Qt, even indirectly.
+- The desktop (`desktop_ui`, `desktop`) and the assistant (`assistant`, `automation`)
+  never import each other, even indirectly; they share only `contracts`, and talk
+  over `link` (`contracts.desktop_link`). The architecture review enforces it.
 - Before writing general-purpose code, check for a small focused dependency and
   prefer it when its footprint and integration cost are reasonable.
 - Pyright (strict) is the only type checker. The

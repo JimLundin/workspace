@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, Protocol
 
-type Component = Literal["gateway", "layout", "assistant"]
+type Component = Literal["gateway", "layout", "assistant", "desktop"]
 
 WM_CLOSE: Final = 0x0010
 WM_QUIT_LAYOUT: Final = 0x8000 + 3
@@ -63,14 +63,22 @@ ASSISTANT: Final = Entry(
     window=Window("workspace assistant", "workspace assistant class"),
     quit_message=WM_CLOSE,
     shutdown_s=60.0,
+)
+# The desktop holds no work of its own: it closes its windows and the tray icon.
+DESKTOP: Final = Entry(
+    name="desktop",
+    module="desktop",
+    window=Window("workspace desktop", "workspace desktop class"),
+    quit_message=WM_CLOSE,
+    shutdown_s=15.0,
     live_assets=("desktop_ui/spec/",),
 )
 
-CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (GATEWAY, LAYOUT, ASSISTANT)})
+CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (GATEWAY, LAYOUT, ASSISTANT, DESKTOP)})
 """In startup order; shutdown reverses it."""
 
 BAR_WINDOW: Final = "Workspace floating bar"
-"""The assistant's visible surface."""
+"""The desktop's visible surface."""
 
 
 @dataclass(frozen=True, slots=True)

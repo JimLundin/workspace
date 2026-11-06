@@ -163,7 +163,7 @@ def test_starts_the_layout_then_the_assistant() -> None:
     keeper.start(now=0)
     world.come_up()
     keeper.tick(now=1)
-    assert world.take() == ["start gateway", "start layout", "start assistant"]
+    assert world.take() == ["start gateway", "start layout", "start assistant", "start desktop"]
     assert keeper.stage is Stage.RUNNING
 
 
@@ -203,12 +203,13 @@ def test_quitting_the_layout_on_purpose_leaves_it_stopped_until_asked() -> None:
     assert world.take() == ["start layout"]
 
 
-def test_quitting_the_assistant_quits_everything() -> None:
+def test_quitting_the_desktop_quits_everything() -> None:
+    # Defect: Quit Workspace in the desktop's tray leaves the other programs running.
     world = World()
     keeper = running(world)
-    world.children["assistant"].code = 0  # Quit in the tray menu
+    world.children["desktop"].code = 0  # Quit in the tray menu
     keeper.tick(now=5)
-    assert world.take() == ["stop layout", "stop gateway"]
+    assert world.take() == ["stop assistant", "stop layout", "stop gateway"]
     assert keeper.done
 
 
@@ -216,7 +217,7 @@ def test_shutdown_stops_the_assistant_before_the_keyboard() -> None:
     world = World()
     keeper = running(world)
     keeper.stop_all()
-    assert world.take() == ["stop assistant", "stop layout", "stop gateway"]
+    assert world.take() == ["stop desktop", "stop assistant", "stop layout", "stop gateway"]
     keeper.stop_all()
     assert world.take() == []
 
@@ -276,7 +277,16 @@ def test_a_protected_change_relaunches_the_keeper_which_tries_it(tmp_path: Path)
     keeper.request(Install("keeper fix", "digest", "digest", "C:/stage"), now=10)
     world.check.outcome = (True, "ok")
     keeper.tick(now=20)
-    assert world.take() == ["check after fast check digest", "snapshot v1", "stop assistant", "stop layout", "stop gateway", "install", "relaunch"]
+    assert world.take() == [
+        "check after fast check digest",
+        "snapshot v1",
+        "stop desktop",
+        "stop assistant",
+        "stop layout",
+        "stop gateway",
+        "install",
+        "relaunch",
+    ]
     assert keeper.done
     started = InstallStarted("digest", "keeper fix", "v1")
     assert recovery.read() == Trial("v1", started)
@@ -321,6 +331,7 @@ def test_a_change_that_doesnt_come_up_is_undone() -> None:
     world.take()
     keeper.tick(now=20 + 31)  # never ready
     assert world.take() == [
+        "stop desktop",
         "stop assistant",
         "stop layout",
         "stop gateway",
@@ -328,6 +339,7 @@ def test_a_change_that_doesnt_come_up_is_undone() -> None:
         "start gateway",
         "start layout",
         "start assistant",
+        "start desktop",
         "note Update undone: it didn't start.",
     ]
     assert world.results[-1] == InstallRefused("digest", "Update undone: it didn't start.")
@@ -341,12 +353,14 @@ def test_a_crash_during_the_trial_undoes_the_change_and_restarts_what_stopped() 
     world.children["layout"].code = 1
     keeper.tick(now=100)
     assert world.take() == [
+        "stop desktop",
         "stop assistant",
         "stop gateway",
         "restore v1",
         "start gateway",
         "start layout",
         "start assistant",
+        "start desktop",
         "note Update undone: it crashed during its trial.",
     ]
 
@@ -396,7 +410,15 @@ def test_undoing_a_keeper_change_relaunches_the_restored_keeper() -> None:
     keeper.tick(now=21 + 601)
     world.take()
     keeper.request(Undo(), now=640)
-    assert world.take() == ["stop assistant", "stop layout", "stop gateway", "restore v1", "relaunch", "note Update undone: you undid it."]
+    assert world.take() == [
+        "stop desktop",
+        "stop assistant",
+        "stop layout",
+        "stop gateway",
+        "restore v1",
+        "relaunch",
+        "note Update undone: you undid it.",
+    ]
     assert keeper.done
 
 

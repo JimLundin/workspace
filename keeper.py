@@ -632,11 +632,11 @@ class Keeper:
                 continue
             del self.children[name]
             if not unexpected_exit(code):
-                if name == "assistant":  # Quit in the tray menu: everything stops
+                if name == "desktop":  # Quit in the tray menu: everything stops
                     self.stop_all()
                     self.done = True
                     return
-                continue  # the layout quit on purpose: it stays stopped until asked
+                continue  # another program quit on purpose: it stays stopped until asked
             self.crashes = [t for t in self.crashes if now - t < CRASH_WINDOW_S] + [now]
             if len(self.crashes) > MAX_CRASHES:
                 if self.undoable is not None:

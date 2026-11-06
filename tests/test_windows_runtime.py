@@ -138,124 +138,96 @@ def test_specs_validate_after_qt_loads_in_a_fresh_interpreter() -> None:
     assert b"Qt then specs passed" in checked.stdout
 
 
-def test_native_controller_messages_and_qt_share_a_clean_process_lifetime(tmp_path: Path) -> None:
-    script = textwrap.dedent("""\
-        import faulthandler
-        import threading
-        import uuid
-        from runtime import activate
-        activate()
-        from assistant import app
-        from assistant.llm import Missing
-        from desktop_ui.qt_runtime import prepare
-        prepare()
-        from PySide6.QtWidgets import QApplication
-        from desktop_ui.ui import Ui, Views
-        from assistant.work_canvas import WorkCanvas
-        from desktop_ui.work_canvas_window import CanvasWindow
-        from usage import DIRECTORY
-        from winapi import shell, system
-
-        faulthandler.enable()
-        title = "Workspace controller lifetime " + uuid.uuid4().hex
-        observed = []
-
-        def offscreen_canvas(root, work, canvas):
-            view = CanvasWindow(root, work, canvas)
-            view.window.move(-4000, -3000)
-            return view
-
-        def offscreen_ui():
-            return Ui(views=Views(canvas=offscreen_canvas))
-
-        class Controller:
-            __slots__ = ("owner", "ui", "window")
-
-            def __init__(self, settings, ui):
-                self.owner = threading.get_ident()
-                assert self.owner != threading.main_thread().ident
-                self.ui = ui
-                self.window = shell.AppWindow(title, self.message)
-
-            def run(self):
-                self.ui.agent(lambda: None, reveal=False)
-                canvas = WorkCanvas(DIRECTORY / "work" / "canvas.sqlite3", lambda run: None, self.ui.publish_canvas, autonomous=False)
-                self.ui.configure_canvas(canvas, lambda title, target: None, observe_session=canvas.observe_session)
-                self.ui.configure_work(lambda command: None)
-                self.ui.work_window().show(focus=False)
-                self.ui.post(self.ready)
-                system.run_message_loop()
-
-            def ready(self, root):
-                observed.append(("qt", threading.current_thread() is threading.main_thread()))
-                assert system.post_message(self.window.handle, system.WM_CLOSE, 0, 0)
-
-            def message(self, hwnd, message, wparam, lparam):
-                if message == system.WM_CLOSE:
-                    observed.append(("control", threading.get_ident() == self.owner))
-                    self.ui.close_desktop()
-                    self.ui.close_windows()
-                    self.ui.close()
-                    self.window.destroy()
-                    system.post_quit()
-                    return 0
-                return None
-
-        runtime = app.Runtime(title, "Local" + chr(92) + title, offscreen_ui, Controller)
-        assert app.run(Missing(()), runtime=runtime) is app.Exit.QUIT
-        assert observed == [("qt", True), ("control", True)], observed
-        assert QApplication.instance() is None
-        assert not any(thread.name == "assistant control" for thread in threading.enumerate())
-        print("Native controller and Qt closed")
-        """)
+def run_alone(tmp_path: Path, *parts: str) -> str:
+    """Run one side's `run` in a fresh interpreter, with a keeper state folder the other side never wrote to."""
+    state = tmp_path / "state"
+    state.mkdir()
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script],
+        [sys.executable, "-S", "-c", "".join(textwrap.dedent(part) for part in parts)],
         cwd=ROOT,
-        env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
+        env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path), WORKSPACE_STATE=str(state), WORKSPACE_READY=str(state / "ready")),
         capture_output=True,
-        timeout=60,
+        timeout=90,
         check=False,
     )
     output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
     assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
-    assert "Native controller and Qt closed" in output
+    assert (state / "ready").exists(), output
+    return output
 
 
-def test_controller_initialization_failure_closes_qt_and_propagates(tmp_path: Path) -> None:
-    script = textwrap.dedent("""\
-        import threading
-        import uuid
+CLOSE_WHEN_FOUND = """\
+    import threading
+    import time
+    import uuid
+    from components import Window
+    from winapi import system, windows
+
+    title = "Workspace alone " + uuid.uuid4().hex
+
+    def close_when_found():
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if handle := windows.find(title):
+                time.sleep(1.0)
+                system.post_message(handle, system.WM_CLOSE, 0, 0)
+                return
+            time.sleep(0.05)
+
+    threading.Thread(target=close_when_found, daemon=True).start()
+"""
+
+
+def test_the_assistant_runs_reports_ready_and_quits_with_no_desktop(tmp_path: Path) -> None:
+    # Defect: the assistant needs the desktop to start (it waits for, imports or
+    # builds UI), never reports ready to the keeper, or hangs on the keeper's close
+    # while no desktop ever connected.
+    output = run_alone(
+        tmp_path,
+        """\
         from runtime import activate
         activate()
+        """,
+        CLOSE_WHEN_FOUND,
+        """\
+        import sys
         from assistant import app
         from assistant.llm import Missing
-        from desktop_ui.qt_runtime import prepare
-        prepare()
+
+        assert app.run(Missing(()), window=Window(title, None), lock_name="Local" + chr(92) + title) is app.Exit.QUIT
+        assert not any(name.startswith(("desktop_ui", "desktop.", "PySide6")) for name in sys.modules), "the assistant loaded the desktop"
+        print("Assistant ran alone")
+        """,
+    )
+    assert "Assistant ran alone" in output
+
+
+def test_the_desktop_runs_reports_ready_and_quits_with_no_assistant(tmp_path: Path) -> None:
+    # Defect: the desktop needs the assistant to start (it blocks on the link or
+    # builds assistant owners), never reports ready to the keeper, or leaves Qt
+    # running after the keeper's close.
+    output = run_alone(
+        tmp_path,
+        """\
+        from runtime import activate
+        activate()
+        """,
+        CLOSE_WHEN_FOUND,
+        """\
+        import sys
+        from desktop_ui import desktop_app
+        from desktop_ui.desktop_bar import DesktopBar
+        from desktop_ui.ui import Views
         from PySide6.QtWidgets import QApplication
 
-        title = "Workspace startup failure " + uuid.uuid4().hex
-        def fail(settings, ui):
-            raise RuntimeError("Fixture startup failed")
+        def headless_bar(actions, *, audio_level=None):
+            # The real bar hosts the notification area; a second one would take its icons.
+            return DesktopBar(actions, native_shell=False, audio_level=audio_level)
 
-        runtime = app.Runtime(title=title, lock_name="Local" + chr(92) + title, controller=fail)
-        try:
-            app.run(Missing(()), runtime=runtime)
-        except RuntimeError as error:
-            assert str(error) == "Fixture startup failed"
-        else:
-            raise AssertionError("The controller startup failure was lost")
+        desktop_app.run(window=Window(title, None), lock_name="Local" + chr(92) + title, views=Views(desktop=headless_bar))
         assert QApplication.instance() is None
-        assert not any(thread.name == "assistant control" for thread in threading.enumerate())
-        print("Controller failure closed Qt")
-        """)
-    checked = subprocess.run(
-        [sys.executable, "-S", "-c", script],
-        cwd=ROOT,
-        env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path)),
-        capture_output=True,
-        timeout=60,
-        check=False,
+        assert not any(name.startswith(("assistant", "automation")) for name in sys.modules), "the desktop loaded the assistant"
+        print("Desktop ran alone")
+        """,
     )
-    output = (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert checked.returncode == 0, f"Native exit {checked.returncode & 0xFFFFFFFF:#x}: {output}"
-    assert "Controller failure closed Qt" in output
+    assert "Desktop ran alone" in output

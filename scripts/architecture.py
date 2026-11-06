@@ -84,10 +84,6 @@ class Configuration:
     """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
 
     exceptions: tuple[ExceptionSpec, ...] = ()
-    headless: tuple[Text, ...] = ()
-    """Application logic that cannot import presentation modules or Qt."""
-    ui_private: tuple[Text, ...] = ()
-    """Effect owners that presentation must access through client contracts."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,17 +166,6 @@ def _routes(graph: Mapping[str, frozenset[str]], entry: str) -> Iterator[tuple[s
         pending.extend((*route, target) for target in sorted(graph.get(module, frozenset())) if target not in visited)
 
 
-def ui_isolation(graph: Mapping[str, frozenset[str]], entries: Iterable[str]) -> Iterator[Finding]:
-    """Headless owners stay independent even through lazy, indirect imports."""
-    for entry in entries:
-        if entry not in graph:
-            yield Finding("ui-isolation", entry, "", "", 0, "Declared headless owner is absent; update its declaration.")
-            continue
-        for route in _routes(graph, entry):
-            if any(_within(route[-1], package) for package in ("desktop_ui", "PySide6", "PyQt6")):
-                yield Finding("ui-isolation", entry, "", "", 0, " → ".join(route))
-
-
 CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm", "winapi.system_notices"})
 """Beyond the standard library, pydantic and each other, all a contract may import:
 the wire protocol and the plain-Python winapi value modules."""
@@ -202,15 +187,31 @@ def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Fi
             yield Finding("contract-isolation", module, "", "", 0, f"{module} → {target}")
 
 
-def presentation_isolation(graph: Mapping[str, frozenset[str]], owners: Iterable[str]) -> Iterator[Finding]:
-    """Views consume contracts without importing their concrete effect owners."""
-    restricted = frozenset(owners)
-    for owner in sorted(restricted - graph.keys()):
-        yield Finding("presentation-isolation", owner, "", "", 0, "Declared UI-private owner is absent; update its declaration.")
-    for entry in sorted(module for module in graph if _within(module, "desktop_ui")):
-        for route in _routes(graph, entry):
-            if route[-1] in restricted:
-                yield Finding("presentation-isolation", entry, "", "", 0, " → ".join(route))
+PROCESSES: Final = frozendict(
+    {
+        ("desktop_ui", "desktop"): ("assistant", "automation"),
+        ("assistant", "automation"): ("desktop_ui", "desktop", "PySide6", "PyQt6"),
+    }
+)
+"""Each program's packages, and what none of them may reach even through others: the desktop
+and the assistant run without each other and share only `contracts`."""
+
+
+KEEPER_PROGRAM_EDGES: Final = frozenset({("keeper", "keeper_ui")})
+"""Imports made only when that module runs as its own program: `keeper.main` opens the
+keeper's dialog. The assistant uses the keeper's install helpers, never its program."""
+
+
+def process_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:
+    graph = frozendict(
+        (module, frozenset(target for target in targets if (module, target) not in KEEPER_PROGRAM_EDGES)) for module, targets in imported_by.items()
+    )
+    for packages, forbidden in PROCESSES.items():
+        for entry in sorted(module for module in graph if any(_within(module, package) for package in packages)):
+            for route in _routes(graph, entry):
+                if any(_within(route[-1], package) for package in forbidden):
+                    yield Finding("process-isolation", entry, "", "", 0, " → ".join(route))
+                    break
 
 
 def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str]:
@@ -429,9 +430,8 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             continue
         findings.extend(observations[module].dynamic_imports)
         pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
-    findings.extend(ui_isolation(imported_by, configuration.headless))
     findings.extend(contract_isolation(imported_by))
-    findings.extend(presentation_isolation(graph, configuration.ui_private))
+    findings.extend(process_isolation(imported_by))
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]
     failures.extend(
