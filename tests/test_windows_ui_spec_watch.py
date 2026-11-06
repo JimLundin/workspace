@@ -20,10 +20,21 @@ TOKENS = (SHIPPED / "tokens.toml").read_text(encoding="utf-8")
 
 
 def install(folder: Path, text: str) -> None:
-    """Replace the file whole, as the keeper's install does, which drops a watch on the file."""
+    """Replace the file whole, as the keeper's install does, which drops a watch on the file.
+
+    A scanner may hold a just-written file in Temp for a moment, so the replace retries briefly.
+    """
     partial = folder / "tokens.toml.partial"
     partial.write_text(text, encoding="utf-8")
-    partial.replace(folder / "tokens.toml")
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            partial.replace(folder / "tokens.toml")
+            return
+        except PermissionError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
 
 
 def until(condition: Callable[[], bool], seconds: float = 5.0) -> bool:
