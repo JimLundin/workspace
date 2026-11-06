@@ -21,7 +21,7 @@ TAPPING_TERM_MS: Final = 200
 STREAK_MS: Final = 150
 """Typing streak: a home row mod pressed this soon after a typed character is a
 plain letter, sent on press. 0 turns it off."""
-QUICK_TAP_MS: Final = 150
+QUICK_TAP_MS: Final = 200
 """Quick tap: tap a tap-hold key, then press it again within this long, and it
 is that key held down (so it repeats), not its modifier or layer."""
 QUIT_HOLD_MS: Final = 2000
