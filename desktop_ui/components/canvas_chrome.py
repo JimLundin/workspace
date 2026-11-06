@@ -175,27 +175,29 @@ class CanvasToolbar(GlassCapsule):
             if taken is not None and (widget := taken.widget()) is not None:
                 widget.hide()
                 widget.deleteLater()
-        tiles: list[QtWidgets.QToolButton] = []
-        for group in groups:
-            heading = QtWidgets.QLabel(group.title, self.expansion)
-            heading.setObjectName("tileHeading")
-            self.sections.addWidget(heading)
-            grid = QtWidgets.QWidget(self.expansion)
-            cells = QtWidgets.QGridLayout(grid)
-            cells.setContentsMargins(0, 0, 0, 0)
-            cells.setSpacing(2)
-            # Every section keeps the same columns, so a short one lines up with those above it.
-            cells.setColumnStretch(TILE_COLUMNS, 1)
-            for index, tile in enumerate(group.tiles):
-                control = self.tile(grid, tile, perform)
-                cells.addWidget(control, index // TILE_COLUMNS, index % TILE_COLUMNS)
-                tiles.append(control)
-            self.sections.addWidget(grid)
+        tiles = tuple(control for group in groups for control in self.section(group, perform))
         self.sections.activate()
         wanted = self.expansion.sizeHint()
         self.scroller.setFixedSize(wanted.width() + self.scroller.verticalScrollBar().sizeHint().width(), max(0, min(wanted.height(), room)))
         self.scroller.setVisible(bool(groups))
-        return tuple(tiles)
+        return tiles
+
+    def section(self, group: Group, perform: Callable[[Act], None]) -> tuple[QtWidgets.QToolButton, ...]:
+        """Add one group below the others, its heading over its grid of tiles; its tiles."""
+        heading = QtWidgets.QLabel(group.title, self.expansion)
+        heading.setObjectName("tileHeading")
+        self.sections.addWidget(heading)
+        grid = QtWidgets.QWidget(self.expansion)
+        cells = QtWidgets.QGridLayout(grid)
+        cells.setContentsMargins(0, 0, 0, 0)
+        cells.setSpacing(2)
+        # Every section keeps the same columns, so a short one lines up with those above it.
+        cells.setColumnStretch(TILE_COLUMNS, 1)
+        controls = tuple(self.tile(grid, tile, perform) for tile in group.tiles)
+        for index, control in enumerate(controls):
+            cells.addWidget(control, index // TILE_COLUMNS, index % TILE_COLUMNS)
+        self.sections.addWidget(grid)
+        return controls
 
     def tile(self, parent: QtWidgets.QWidget, tile: Tile, perform: Callable[[Act], None]) -> QtWidgets.QToolButton:
         control = QtWidgets.QToolButton(parent)
