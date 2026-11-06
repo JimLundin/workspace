@@ -370,10 +370,10 @@ APPS_LAYER: Final[Board[Action]] = Board(
     # Hold the Delete thumb. The only Workspace layer: apps on the left; desktops, focus and voice on the right.
     # The firmware keyboard reaches each request with its Apps thumb and the base key at its place (`miryoku.firmware.CHORDS`).
     top=      Row((_APP[0],         _APP[1],               _APP[2],              _APP[3],         _APP[4]      ),
-                  (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.STOP    )),
+                  (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.DESKTOP_5)),
     home=     Row((_APP[5],         _APP[6],               _APP[7],              _APP[8],         _APP[9]      ),
                   (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
-    bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  XX           ),
+    bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  Tool.STOP    ),
                   (Tool.AGENT_VOICE, Tool.DICTATE,         Tool.AGENT_TYPED,     Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
     thumbs=Thumbs((Tool.OPEN_INBOX, Tool.MEETING_TOGGLE,   Tool.AGENT_VOICE_TOGGLE), (XX, XX, XX)),
 )

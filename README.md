@@ -63,11 +63,11 @@ cycled.
 | Hold **.** and press | Does |
 |---|---|
 | **2 3 4 5 6**, **Q W E R T** | The ten apps in `APPS` |
-| **8 9 0 +** | Desktops 1 to 4 |
-| **´** | Stop the agent |
+| **8 9 0 + ´** | Desktops 1 to 5 |
 | **I** | Zoom |
 | **O P Å ¨** | Focus ← ↓ ↑ → |
 | **A S D** | Pause placement, switch windows, re-place |
+| **F** | Stop the agent |
 | **K** | Hold to speak to the agent; release to send |
 | **L** | Hold to dictate; the text is typed at the cursor on release |
 | **Ö** | Type a task for the agent |
@@ -96,7 +96,7 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **L** | Desk 2 |
 | Apps **U** | Desk 3 |
 | Apps **Y** | Desk 4 |
-| Apps **'** | Stop |
+| Apps **'** | Desk 5 |
 | Apps **A** | Code |
 | Apps **R** | Notepad |
 | Apps **S** | Excel |
@@ -110,6 +110,7 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **X** | Pause place |
 | Apps **C** | Windows |
 | Apps **D** | Re-place |
+| Apps **V** | Stop |
 | Apps **K** | Agent talk |
 | Apps **H** | Talk |
 | Apps **,** | Agent |

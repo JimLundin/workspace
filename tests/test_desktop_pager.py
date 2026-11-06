@@ -17,6 +17,6 @@ def test_pager_names_each_desktops_apps_and_marks_the_current_one() -> None:
 
 def test_pager_hints_are_the_chord_letters_while_ctrl_alt_shift_is_held() -> None:
     # Defects: hints show without the chord, or a desktop past the direct keys gets one.
-    placed = ((), (), (), (), ())
-    assert pager(placed, 0, chord=True).hints == Hints(("J", "L", "U", "Y", None))
+    placed = ((), (), (), (), (), ())
+    assert pager(placed, 0, chord=True).hints == Hints(("J", "L", "U", "Y", "'", None))
     assert pager(placed, 0, chord=False).hints == NO_HINTS

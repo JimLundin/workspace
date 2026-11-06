@@ -40,6 +40,7 @@ def route(tool: Tool) -> Route:
             | Tool.DESKTOP_2
             | Tool.DESKTOP_3
             | Tool.DESKTOP_4
+            | Tool.DESKTOP_5
             | Tool.PLACEMENT_PAUSE
             | Tool.PLACE_NOW
         ):

@@ -81,6 +81,7 @@ class Tool(Enum):
     DESKTOP_2 = 61
     DESKTOP_3 = 62
     DESKTOP_4 = 63
+    DESKTOP_5 = 64
 
 
 @dataclass(frozen=True, slots=True)
