@@ -9,7 +9,7 @@ ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
 
 
 def settings(url: str, vocabulary: str = "") -> Settings:
-    return Settings(url, "secret", "gpt-transcribe", vocabulary, fast_model="chat-model")
+    return Settings(url, "secret", "gpt-4o-transcribe", vocabulary, fast_model="chat-model")
 
 
 # ---- settings --------------------------------------------------------------------------
@@ -23,7 +23,7 @@ def test_settings_need_the_endpoint_and_key() -> None:
 def test_settings_defaults() -> None:
     # Defect: the fast or agent model defaults to the wrong provider model.
     result = settings_from(ENV)
-    assert result == Settings("https://ai.example/v1", "k", "gpt-transcribe", "", "gpt-6-luna", "gpt-6-astra", "low")
+    assert result == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "", "gpt-6-luna", "gpt-6-astra", "low")
 
 
 def test_settings_overrides() -> None:
@@ -62,7 +62,7 @@ def test_transcribe_posts_the_audio_and_returns_the_text() -> None:
         r = endpoint.last
         assert r.path == "/v1/audio/transcriptions"
         assert r.authorization == "Bearer secret"
-        assert b'name="model"\r\n\r\ngpt-transcribe\r\n' in r.body
+        assert b'name="model"\r\n\r\ngpt-4o-transcribe\r\n' in r.body
         assert b'name="response_format"\r\n\r\njson\r\n' in r.body
         assert b'filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n' + audio + b"\r\n" in r.body
         assert b'name="prompt"' not in r.body

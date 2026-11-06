@@ -65,7 +65,7 @@ def settings_from(env: Mapping[str, str]) -> Settings | Missing:
     return Settings(
         base_url=env["OPENAI_BASE_URL"].rstrip("/"),
         api_key=env["OPENAI_API_KEY"],
-        transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-transcribe"),
+        transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
         vocabulary=env.get("WORKSPACE_VOCABULARY", ""),
         fast_model=env.get("WORKSPACE_FAST_MODEL", FAST_MODEL),
         agent_model=env.get("WORKSPACE_AGENT_MODEL", AGENT_MODEL),

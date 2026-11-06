@@ -32,7 +32,7 @@ installed Python 3.15 and needs no admin rights. It runs three processes:
 | `WORKSPACE_FAST_MODEL` | `gpt-6-luna` | Tidied dictation, dictated commands, notification screening |
 | `WORKSPACE_AGENT_MODEL` | `gpt-6-astra` | The agent and every other model job |
 | `WORKSPACE_AGENT_REASONING_EFFORT` | `low` | Reasoning effort for agent tasks |
-| `WORKSPACE_TRANSCRIBE_MODEL` | `gpt-transcribe` | Speech to text |
+| `WORKSPACE_TRANSCRIBE_MODEL` | `gpt-4o-transcribe` | Speech to text (the Foundry proxy serves no `gpt-transcribe`) |
 | `WORKSPACE_VOCABULARY` | empty | Names and jargon to expect in dictation |
 | `WORKSPACE_AGENT_CONTEXT` | `recent` | `off` stops sending recent windows and a screenshot with each request |
 | `WORKSPACE_COLEMAK_LAYOUT` | your Colemak entry | The Windows layout ID used while the layout is off |
