@@ -14,7 +14,7 @@ from desktop_ui.components.canvas_look import Role, face
 from desktop_ui.components.paint_ready import PaintReady
 from desktop_ui.components.widgets import column, show_window
 from desktop_ui.desktop_attention import CanvasFocus
-from desktop_ui.work_canvas_panel import CanvasPanel, rounded
+from desktop_ui.work_canvas_panel import CanvasPanel, WindowControls
 from desktop_ui.work_window import WorkWindow
 
 
@@ -29,19 +29,14 @@ class CanvasWindow:
         # visible source preview must not pay that setup cost on a user click.
         QtGui.QFontMetricsF(face(Role.BODY)).horizontalAdvance("Workspace")
         self.window.setWindowState(Qt.WindowState.WindowMaximized)
-        self.panel: CanvasPanel = CanvasPanel(self.window, work, canvas)
+        # Window controls are the toolbar's Window section; the toolbar carries no duplicate Close.
+        self.panel: CanvasPanel = CanvasPanel(self.window, work, canvas, WindowControls(self.maximize, self.hide))
         self.panel.position_chrome()
         layout = column(self.window)
         self.layout: QtWidgets.QVBoxLayout = layout
         layout.setSpacing(0)
         layout.addWidget(self.panel.frame)
         self.grip: QtWidgets.QSizeGrip = QtWidgets.QSizeGrip(self.panel.frame)
-        self.panel.menu.addSeparator()
-        # Window controls live in the options menu; the island carries no duplicate Close.
-        window_menu = rounded(self.panel.menu.addMenu("Window"))
-        window_menu.addAction("Maximize or restore canvas").triggered.connect(self.maximize)
-        self.close_action: QtGui.QAction = window_menu.addAction("Close canvas")
-        self.close_action.triggered.connect(self.hide)
         self.panel.frame.resized.connect(self.position_controls)
         self.position_controls()
 

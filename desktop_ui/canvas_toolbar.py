@@ -1,0 +1,338 @@
+"""The canvas toolbar's actions as data: `desktop_ui/spec/canvas.toml`.
+
+Everything the canvas does is reached from its toolbar, as the island bar's
+controls are from its status capsule. The toolbar's row holds pinned actions, and
+the selected bubble's pinned actions while one is selected. "More", or a right
+click, expands the toolbar in place into titled sections of tiles about its
+subject: the canvas, a bubble, or a relationship. There are no popup menus.
+
+The spec orders the row and the sections and gives each tile its words and
+symbol. What an action does, when it applies (work-thread actions on a work
+thread, Rename on a group, Relationships while a bubble has any) and wording that
+follows state stay typed here and in the canvas panel. The toolbar reads the
+spec each time it shows, so an edit shows on the next selection or expansion.
+"""
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum, auto
+from typing import Final, Literal, assert_never
+
+from pydantic import ConfigDict
+
+from desktop_ui.fluent_icons import REGULAR
+
+_SPEC = ConfigDict(extra="forbid")
+
+
+class CanvasTool(StrEnum):
+    """What the canvas as a whole does."""
+
+    CENTER = auto()
+    CONTENTS = auto()  # Collapse containers or show group contents, by the current mode.
+    ARRANGE_THREADS = auto()
+    ARRANGE_ALL = auto()
+    REFRESH = auto()
+    NEW_CONTEXT = auto()
+    NEW_GROUP = auto()
+    NOTE = auto()
+    DOCUMENT = auto()
+    DOCUMENT_LINK = auto()
+    WEB_REFERENCE = auto()
+    CONNECT_SOURCE = auto()
+    CHOOSE_GROUP = auto()
+    MAXIMIZE = auto()  # The canvas window's own.
+    CLOSE = auto()
+
+
+class BubbleAction(StrEnum):
+    """What a selected bubble does."""
+
+    FOCUS = auto()
+    CONTENTS = auto()
+    CONNECT = auto()
+    CONTINUE = auto()  # Work threads only, like the three after it.
+    EDIT_WORK = auto()
+    DISMISS = auto()
+    NOT_MINE = auto()
+    RENAME_GROUP = auto()  # Groups only.
+    PUT_INSIDE = auto()
+    MOVE_TO_CANVAS = auto()
+    RELATIONSHIPS = auto()  # A tile per relationship, while the bubble has any.
+
+
+class RelationAction(StrEnum):
+    """What a right-clicked relationship does."""
+
+    EDIT = auto()
+    REMOVE = auto()
+
+
+WORK_ONLY: Final = frozenset({BubbleAction.CONTINUE, BubbleAction.EDIT_WORK, BubbleAction.DISMISS, BubbleAction.NOT_MINE})
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasItem:
+    action: CanvasTool
+    label: str = ""
+    """Its words; `contents` words the canvas's mode itself."""
+    icon: str = ""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class BubbleItem:
+    action: BubbleAction
+    label: str = ""
+    icon: str = ""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class RelationItem:
+    action: RelationAction
+    label: str = ""
+    icon: str = ""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class Row:
+    """The toolbar's row, between the voice hint and Find."""
+
+    canvas: tuple[CanvasItem, ...]
+    bubble: tuple[BubbleItem, ...]
+    """Shown after the canvas's while a bubble is selected."""
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasSection:
+    kind: Literal["canvas"]
+    title: str
+    items: tuple[CanvasItem, ...]
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class BubbleSection:
+    """The selected bubble's actions, titled with its name; only while one is selected."""
+
+    kind: Literal["bubble"]
+    items: tuple[BubbleItem, ...]
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class RelationSection:
+    """A right-clicked relationship's actions, titled with its reason."""
+
+    kind: Literal["relationship"]
+    items: tuple[RelationItem, ...]
+    __pydantic_config__ = _SPEC
+
+
+@dataclass(frozen=True, slots=True)
+class DismissedSection:
+    """A tile to restore each dismissed work thread, while there are any."""
+
+    kind: Literal["dismissed"]
+    title: str
+    icon: str
+    __pydantic_config__ = _SPEC
+
+
+type Section = CanvasSection | BubbleSection | RelationSection | DismissedSection
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasToolbarSpec:
+    """`canvas.toml`: the toolbar's row and its expanded sections, top to bottom."""
+
+    row: Row
+    sections: tuple[Section, ...]
+    __pydantic_config__ = _SPEC
+
+
+def toolbar_problems(spec: CanvasToolbarSpec) -> tuple[str, ...]:
+    """What makes the spec unusable beyond its shape, each named by where it is."""
+    found: list[str] = []
+    expanded = [item for section in spec.sections if not isinstance(section, DismissedSection) for item in section.items]
+    # Canvas, bubble and relationship actions share names (`contents`), so each kind counts its own.
+    actions = [(type(item).__name__, str(item.action)) for item in expanded]
+    found.extend(f"sections: {action} appears more than once" for kind, action in sorted(set(actions)) if actions.count((kind, action)) > 1)
+    for place, items in (("row", (*spec.row.canvas, *spec.row.bubble)), ("sections", expanded)):
+        for item in items:
+            stated = (isinstance(item, CanvasItem) and item.action is CanvasTool.CONTENTS) or (
+                isinstance(item, BubbleItem) and item.action is BubbleAction.RELATIONSHIPS
+            )
+            if not stated and not item.label:
+                found.append(f"{place}: {item.action} needs a label")
+            if stated and item.label:
+                found.append(f"{place}: {item.action} takes no label: its words follow what it shows")
+            if item.icon not in REGULAR:
+                found.append(f"{place}: {item.action} needs an icon from the symbol set, not {item.icon!r}")
+    found.extend(
+        f"sections: {section.title} needs an icon from the symbol set"
+        for section in spec.sections
+        if isinstance(section, DismissedSection) and section.icon not in REGULAR
+    )
+    kinds = [section.kind for section in spec.sections]
+    found.extend(f"sections: more than one {kind} section" for kind in ("bubble", "relationship", "dismissed") if kinds.count(kind) > 1)
+    return tuple(found)
+
+
+# ---- what the toolbar shows ------------------------------------------------------------
+
+
+class Kind(StrEnum):
+    WORK = auto()
+    GROUP = auto()
+    OTHER = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class Bubble:
+    """A selected bubble, as far as its actions depend on it."""
+
+    identity: str
+    title: str
+    kind: Kind
+
+
+@dataclass(frozen=True, slots=True)
+class Relationship:
+    index: int
+    """Its place among the canvas's relationships."""
+    reason: str
+
+
+type Subject = Bubble | Relationship | None
+"""What the toolbar is about: a bubble, a relationship, or the whole canvas."""
+
+
+@dataclass(frozen=True, slots=True)
+class OnCanvas:
+    action: CanvasTool
+
+
+@dataclass(frozen=True, slots=True)
+class OnBubble:
+    action: BubbleAction
+    identity: str
+
+
+@dataclass(frozen=True, slots=True)
+class OnRelationship:
+    action: RelationAction
+    index: int
+
+
+@dataclass(frozen=True, slots=True)
+class Restore:
+    work: str
+
+
+@dataclass(frozen=True, slots=True)
+class Open:
+    """A relationship's tile in its bubble's section: the toolbar turns to that relationship."""
+
+    relationship: Relationship
+
+
+type Act = OnCanvas | OnBubble | OnRelationship | Restore | Open
+
+
+@dataclass(frozen=True, slots=True)
+class Tile:
+    label: str
+    icon: str
+    act: Act
+
+
+@dataclass(frozen=True, slots=True)
+class Group:
+    title: str
+    tiles: tuple[Tile, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Dismissed:
+    work: str
+    title: str
+
+
+def contents_label(*, collapsed: bool) -> str:
+    return "Show group contents" if collapsed else "Collapse containers"
+
+
+def canvas_tile(item: CanvasItem, *, collapsed: bool) -> Tile:
+    label = contents_label(collapsed=collapsed) if item.action is CanvasTool.CONTENTS else item.label
+    return Tile(label, item.icon, OnCanvas(item.action))
+
+
+def applies(action: BubbleAction, bubble: Bubble, *, related: bool) -> bool:
+    match action:
+        case BubbleAction.CONTINUE | BubbleAction.EDIT_WORK | BubbleAction.DISMISS | BubbleAction.NOT_MINE:
+            return bubble.kind is Kind.WORK
+        case BubbleAction.RENAME_GROUP:
+            return bubble.kind is Kind.GROUP
+        case BubbleAction.RELATIONSHIPS:
+            return related
+        case BubbleAction.FOCUS | BubbleAction.CONTENTS | BubbleAction.CONNECT | BubbleAction.PUT_INSIDE | BubbleAction.MOVE_TO_CANVAS:
+            return True
+        case _:
+            assert_never(action)
+
+
+def bubble_tiles(items: Sequence[BubbleItem], bubble: Bubble, relationships: Sequence[Relationship]) -> tuple[Tile, ...]:
+    """The bubble's tiles; Relationships becomes a tile per relationship."""
+    tiles: list[Tile] = []
+    for item in items:
+        if not applies(item.action, bubble, related=bool(relationships)):
+            continue
+        if item.action is BubbleAction.RELATIONSHIPS:
+            tiles.extend(Tile(each.reason, item.icon, Open(each)) for each in relationships)
+        else:
+            tiles.append(Tile(item.label, item.icon, OnBubble(item.action, bubble.identity)))
+    return tuple(tiles)
+
+
+def row(spec: CanvasToolbarSpec, subject: Subject, relationships: Sequence[Relationship], *, collapsed: bool) -> tuple[Tile, ...]:
+    """The pinned tiles in the toolbar's row now; `relationships` are the selected bubble's."""
+    canvas = tuple(canvas_tile(item, collapsed=collapsed) for item in spec.row.canvas)
+    match subject:
+        case Bubble():
+            return (*canvas, *bubble_tiles(spec.row.bubble, subject, relationships))
+        case Relationship() | None:
+            return canvas
+        case _:
+            assert_never(subject)
+
+
+def sections(
+    spec: CanvasToolbarSpec,
+    subject: Subject,
+    relationships: Sequence[Relationship],
+    dismissed: Sequence[Dismissed],
+    *,
+    collapsed: bool,
+) -> tuple[Group, ...]:
+    """The expanded toolbar's groups now, top to bottom; a group with no tiles is left out.
+    `relationships` are the selected bubble's."""
+    groups: list[Group] = []
+    for section in spec.sections:
+        match section:
+            case CanvasSection(title=title, items=items):
+                groups.append(Group(title, tuple(canvas_tile(item, collapsed=collapsed) for item in items)))
+            case BubbleSection(items=items) if isinstance(subject, Bubble):
+                groups.append(Group(subject.title, bubble_tiles(items, subject, relationships)))
+            case RelationSection(items=items) if isinstance(subject, Relationship):
+                groups.append(Group(subject.reason, tuple(Tile(item.label, item.icon, OnRelationship(item.action, subject.index)) for item in items)))
+            case DismissedSection(title=title, icon=symbol):
+                groups.append(Group(title, tuple(Tile("Restore · " + each.title, symbol, Restore(each.work)) for each in dismissed)))
+            case BubbleSection() | RelationSection():
+                pass  # Not about this subject.
+            case _:
+                assert_never(section)
+    return tuple(group for group in groups if group.tiles)

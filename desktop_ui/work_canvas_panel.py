@@ -6,7 +6,7 @@ positions and notes have their own local document, outside agent model input.
 
 import sqlite3
 from collections.abc import Callable, Iterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import assert_never
 from uuid import uuid4
@@ -75,7 +75,25 @@ from automation.personal_work import (
 from automation.task import Control
 from automation.work_documents import LocalDocument, WebDocument, document_identity
 from desktop_ui import ui_spec
-from desktop_ui.canvas_menu import BackgroundAction, BackgroundItem, BackgroundMenu, BubbleAction, BubbleItem, BubbleMenu, CanvasMenus, Separator
+from desktop_ui.canvas_toolbar import (
+    Act,
+    Bubble,
+    BubbleAction,
+    CanvasTool,
+    CanvasToolbarSpec,
+    Dismissed,
+    Kind,
+    OnBubble,
+    OnCanvas,
+    OnRelationship,
+    Open,
+    RelationAction,
+    Relationship,
+    Restore,
+    Subject,
+    row,
+    sections,
+)
 from desktop_ui.components.appearance import GLASS_ACCENT, Tokens
 from desktop_ui.components.canvas_bubble import CanvasBubble
 from desktop_ui.components.canvas_chrome import CanvasFrame, CanvasSurface, CanvasToolbar, GlassCapsule, ScrollEdge, content_style
@@ -115,8 +133,17 @@ from desktop_ui.work_window import WorkWindow
 lazy from desktop_ui.work_canvas_detail import CardDetail, NoteDetail, QuestionDetail, SourceDetail, UpdateDetail, WorkDetail
 
 
+@dataclass(frozen=True, slots=True)
+class WindowControls:
+    """The canvas window's own actions, offered in its toolbar."""
+
+    maximize: Callable[[], None]
+    close: Callable[[], None]
+
+
 class CanvasPanel:
-    def __init__(self, parent: CanvasFrame, work: WorkWindow, canvas: CanvasEdits) -> None:
+    def __init__(self, parent: CanvasFrame, work: WorkWindow, canvas: CanvasEdits, window: WindowControls) -> None:
+        self.window_controls: WindowControls = window
         # One scheme for the canvas's lifetime, so every bubble, detail and menu agree.
         self.theme: Tokens = parent.theme
         self.style: str = content_style(parent.theme)
@@ -163,93 +190,145 @@ class CanvasPanel:
         self.update_voice_context()
 
     def create_context_controls(self) -> None:
-        """Both right-click menus are built from `canvas.toml` as they open."""
-        self.menu: QtWidgets.QMenu = rounded(QtWidgets.QMenu(self.frame))
-        self.submenus: tuple[QtWidgets.QMenu, ...] = ()
-        self.contents_action: QtGui.QAction | None = None
-        self.dismissed_menu: QtWidgets.QMenu | None = None
-        self.build_background()
-        self.menu.aboutToShow.connect(self.build_background)
-        self.context_popup: QtWidgets.QMenu = rounded(QtWidgets.QMenu(self.frame))
+        """Everything the canvas does is reached from its toolbar, built from `canvas.toml`."""
+        self.subject: Subject = None
+        """What the expanded toolbar is about; None while it's collapsed or about the canvas."""
+        self.expanded: bool = False
+        self.pinned: tuple[QtWidgets.QToolButton, ...] = ()
+        self.tiles: tuple[QtWidgets.QToolButton, ...] = ()
 
-    def canvas_menus(self) -> CanvasMenus:
-        menus, invalid = ui_spec.canvas()
+    def toolbar_spec(self) -> CanvasToolbarSpec:
+        spec, invalid = ui_spec.canvas()
         if invalid is not None:
-            self.work.problem(f"The canvas menus used their last good spec: {invalid}")
-        return menus
+            self.work.problem(f"The canvas toolbar used its last good spec: {invalid}")
+        return spec
 
-    def submenu(self, parent: QtWidgets.QMenu, title: str) -> QtWidgets.QMenu:
-        """A submenu that lives until its menu is next rebuilt."""
-        menu = rounded(parent.addMenu(title))
-        self.submenus = (*self.submenus, menu)
-        return menu
-
-    def clear_menu(self, menu: QtWidgets.QMenu) -> None:
-        kept = tuple(each for each in self.submenus if each.parent() is not menu)
-        for each in self.submenus:
-            if each.parent() is menu:
-                each.deleteLater()
-        self.submenus = kept
-        menu.clear()
-
-    def contents_label(self) -> str:
-        return "Show group contents" if self.scope.mode is CanvasMode.CONTEXTS else "Collapse containers"
-
-    def build_background(self) -> None:
-        self.clear_menu(self.menu)
-        self.contents_action, self.dismissed_menu = None, None
-        for item in self.canvas_menus().background:
-            match item:
-                case BackgroundItem():
-                    self.add_background(self.menu, item)
-                case BackgroundMenu(menu=title, items=inner):
-                    menu = self.submenu(self.menu, title)
-                    for each in inner:
-                        match each:
-                            case BackgroundItem():
-                                self.add_background(menu, each)
-                            case Separator():
-                                menu.addSeparator()
-                            case _:
-                                assert_never(each)
-                case Separator():
-                    self.menu.addSeparator()
-                case _:
-                    assert_never(item)
-
-    def add_background(self, menu: QtWidgets.QMenu, item: BackgroundItem) -> None:
-        match item.action:
-            case BackgroundAction.CENTER:
-                menu.addAction(item.label, self.fit)
-            case BackgroundAction.CONTENTS:
-                self.contents_action = menu.addAction(self.contents_label(), self.toggle_contents)
-            case BackgroundAction.ARRANGE_THREADS:
-                menu.addAction(item.label, self.reflow)
-            case BackgroundAction.ARRANGE_ALL:
-                menu.addAction(item.label, self.release_positions)
-            case BackgroundAction.REFRESH:
-                menu.addAction(item.label, self.refresh)
-            case BackgroundAction.NEW_CONTEXT:
-                menu.addAction(item.label, self.create)
-            case BackgroundAction.NEW_GROUP:
-                menu.addAction(item.label, self.create_group)
-            case BackgroundAction.NOTE:
-                menu.addAction(item.label, self.create_note)
-            case BackgroundAction.DOCUMENT:
-                menu.addAction(item.label, self.create_document)
-            case BackgroundAction.DOCUMENT_LINK:
-                menu.addAction(item.label, self.create_document_link)
-            case BackgroundAction.WEB_REFERENCE:
-                menu.addAction(item.label, self.create_web_reference)
-            case BackgroundAction.DISMISSED:
-                self.dismissed_menu = self.submenu(menu, item.label)
-                self.refresh_dismissed()
-            case BackgroundAction.CONNECT_SOURCE:
-                menu.addAction(item.label, self.start_connection)
-            case BackgroundAction.CHOOSE_GROUP:
-                menu.addAction(item.label, self.choose_group)
+    def bubble_subject(self, identity: str | None) -> Bubble | None:
+        current = next((each for each in containers(self.view.catalog, self.document) if each.id == identity), None)
+        match current:
+            case None:
+                return None
+            case WorkThread():
+                return Bubble(current.id, container_title(current), Kind.WORK)
+            case CanvasCollection():
+                return Bubble(current.id, container_title(current), Kind.GROUP)
             case _:
-                assert_never(item.action)
+                return Bubble(current.id, container_title(current), Kind.OTHER)
+
+    def related(self, subject: Subject) -> tuple[Relationship, ...]:
+        """The selected bubble's relationships, by their place among the canvas's."""
+        match subject:
+            case Bubble(identity=identity):
+                relations = self.document.relations
+                return tuple(Relationship(index, each.reason) for index, each in enumerate(relations) if identity in (each.start, each.end))
+            case Relationship() | None:
+                return ()
+            case _:
+                assert_never(subject)
+
+    def refresh_toolbar(self) -> None:
+        """Rebuild the row's pinned tiles and, while expanded, its sections, from the spec as it is now."""
+        spec = self.toolbar_spec()
+        collapsed = self.scope.mode is CanvasMode.CONTEXTS
+        selected = self.bubble_subject(self.selected)
+        for each in self.pinned:
+            each.hide()
+            each.deleteLater()
+        place = self.toolbar_layout.indexOf(self.search_button)
+        self.pinned = tuple(self.toolbar.tile_button(tile, self.perform) for tile in row(spec, selected, self.related(selected), collapsed=collapsed))
+        for offset, each in enumerate(self.pinned):
+            self.toolbar_layout.insertWidget(place + offset, each)
+        subject = self.subject if self.subject is not None else selected
+        groups = sections(spec, subject, self.related(subject), self.dismissed(), collapsed=collapsed) if self.expanded else ()
+        # The expanded toolbar keeps the window's top margin and the status line above it.
+        room = self.frame.height() - 14 - 120
+        self.tiles = self.toolbar.show_sections(groups, self.perform, room)
+        self.menu_button.setChecked(self.expanded)
+        self.position_chrome()
+
+    def dismissed(self) -> tuple[Dismissed, ...]:
+        return tuple(Dismissed(each.work.id, each.work.definition.title) for each in self.view.catalog.dismissed)
+
+    def expand(self, subject: Subject) -> None:
+        """Open the toolbar in place on `subject`'s actions, then the canvas's."""
+        self.subject, self.expanded = subject, True
+        self.refresh_toolbar()
+        if self.tiles:
+            self.tiles[0].setFocus()
+
+    def collapse(self) -> None:
+        self.subject, self.expanded = None, False
+        self.refresh_toolbar()
+
+    def toggle_expanded(self) -> None:
+        if self.expanded:
+            self.collapse()
+        else:
+            self.expand(None)
+
+    def perform(self, act: Act) -> None:
+        """A tile was pressed: act, then collapse, unless it opened a relationship's own tiles."""
+        match act:
+            case Open(relationship=relationship):
+                self.expand(relationship)
+                return
+            case OnCanvas(action=action):
+                self.collapse()
+                self.canvas_action(action)
+            case OnBubble(action=action, identity=identity):
+                self.collapse()
+                self.bubble_action(action, identity)
+            case OnRelationship(action=action, index=index):
+                self.collapse()
+                if index < len(self.document.relations):
+                    relation = self.document.relations[index]
+                    match action:
+                        case RelationAction.EDIT:
+                            self.edit_relation(relation)
+                        case RelationAction.REMOVE:
+                            self.remove_relation(relation)
+                        case _:
+                            assert_never(action)
+            case Restore(work=work):
+                self.collapse()
+                self.work.send(RestoreWork(work))
+            case _:
+                assert_never(act)
+
+    def canvas_action(self, action: CanvasTool) -> None:
+        match action:
+            case CanvasTool.CENTER:
+                self.fit()
+            case CanvasTool.CONTENTS:
+                self.toggle_contents()
+            case CanvasTool.ARRANGE_THREADS:
+                self.reflow()
+            case CanvasTool.ARRANGE_ALL:
+                self.release_positions()
+            case CanvasTool.REFRESH:
+                self.refresh()
+            case CanvasTool.NEW_CONTEXT:
+                self.create()
+            case CanvasTool.NEW_GROUP:
+                self.create_group()
+            case CanvasTool.NOTE:
+                self.create_note()
+            case CanvasTool.DOCUMENT:
+                self.create_document()
+            case CanvasTool.DOCUMENT_LINK:
+                self.create_document_link()
+            case CanvasTool.WEB_REFERENCE:
+                self.create_web_reference()
+            case CanvasTool.CONNECT_SOURCE:
+                self.start_connection()
+            case CanvasTool.CHOOSE_GROUP:
+                self.choose_group()
+            case CanvasTool.MAXIMIZE:
+                self.window_controls.maximize()
+            case CanvasTool.CLOSE:
+                self.window_controls.close()
+            case _:
+                assert_never(action)
 
     def create_toolbar(self) -> None:
         # The island bar's rule at the window's foot: one island at rest (speak, search, more);
@@ -273,7 +352,8 @@ class CanvasPanel:
         heading.addWidget(self.search)
         self.find_shortcut: QtGui.QShortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, self.frame)
         self.find_shortcut.activated.connect(self.show_search)
-        self.menu_button: QtWidgets.QToolButton = self.toolbar.button("more", "Canvas options", self.open_menu)
+        self.menu_button: QtWidgets.QToolButton = self.toolbar.button("more", "Canvas actions", self.toggle_expanded)
+        self.menu_button.setCheckable(True)
         heading.addWidget(self.menu_button)
         self.recenter: GlassCapsule = GlassCapsule(self.frame, self.theme, Tint.NONE)
         self.center_button: QtWidgets.QToolButton = self.recenter.button("center", "Center this canvas", self.fit)
@@ -341,8 +421,6 @@ class CanvasPanel:
                 return True
 
     def position_chrome(self) -> None:
-        if self.contents_action is not None:
-            self.contents_action.setText(self.contents_label())
         # Searching turns the island into its field; speaking and options return afterwards.
         searching = not self.search.isHidden()
         self.voice_hint.setVisible(not searching)
@@ -373,9 +451,6 @@ class CanvasPanel:
         away = bool(bubbles) and not any(bubble.sceneBoundingRect().intersects(visible) for bubble in bubbles)
         if away != self.recenter.isVisible():
             self.recenter.setVisible(away)
-
-    def open_menu(self) -> None:
-        self.menu.popup(self.menu_button.mapToGlobal(self.menu_button.rect().topLeft()) - QtCore.QPoint(0, self.menu.sizeHint().height()))
 
     def toggle_search(self) -> None:
         if self.search.isHidden():
@@ -469,6 +544,8 @@ class CanvasPanel:
             return
         self.interaction.cancel()
         self.view = view
+        if self.expanded:
+            self.refresh_toolbar()
         indexed = topology(view.catalog, self.document)
         retained = frozenset(indexed.by_id)
         if self.selected not in retained:
@@ -698,17 +775,11 @@ class CanvasPanel:
         self.draw_connections()
         self.status.setText("")
 
-    def relation_action(self, relation: CanvasRelation) -> Callable[[], None]:
-        def show() -> None:
-            self.relation_menu(relation)
-
-        return show
-
     def relation_menu(self, relation: CanvasRelation) -> None:
-        self.context_popup.clear()
-        self.context_popup.addAction("Edit relationship…", lambda: self.edit_relation(relation))
-        self.context_popup.addAction("Remove relationship", lambda: self.remove_relation(relation))
-        self.context_popup.popup(QtGui.QCursor.pos())
+        """A right-clicked relationship opens the toolbar on its actions."""
+        index = next((index for index, each in enumerate(self.document.relations) if each == relation), None)
+        if index is not None:
+            self.expand(Relationship(index, relation.reason))
 
     def edit_relation(self, relation: CanvasRelation) -> None:
         reason, accepted = QtWidgets.QInputDialog.getText(self.frame, "Relationship", "Relationship", text=relation.reason)
@@ -797,6 +868,9 @@ class CanvasPanel:
     def escape(self) -> bool:
         if self.interaction.cancel():
             return True
+        if self.expanded:
+            self.collapse()
+            return True
         if not self.search.isHidden():
             self.hide_search()
             return True
@@ -841,63 +915,37 @@ class CanvasPanel:
         self.home()
 
     def context_menu(self, identity: str) -> None:
+        """A right-clicked bubble is selected and opens the toolbar on its actions."""
         self.select(identity)
-        self.clear_menu(self.context_popup)
-        for item in self.canvas_menus().bubble:
-            match item:
-                case BubbleItem():
-                    self.add_bubble(self.context_popup, item, identity)
-                case BubbleMenu(menu=title, items=inner):
-                    menu = self.submenu(self.context_popup, title)
-                    for each in inner:
-                        match each:
-                            case BubbleItem():
-                                self.add_bubble(menu, each, identity)
-                            case Separator():
-                                menu.addSeparator()
-                            case _:
-                                assert_never(each)
-                case Separator():
-                    self.context_popup.addSeparator()
-                case _:
-                    assert_never(item)
-        self.context_popup.popup(QtGui.QCursor.pos())
+        self.expand(self.bubble_subject(identity))
 
-    def add_bubble(self, menu: QtWidgets.QMenu, item: BubbleItem, identity: str) -> None:
-        """Work-thread actions apply to work threads, Rename to groups, Relationships while there are any."""
-        current = next((each for each in containers(self.view.catalog, self.document) if each.id == identity), None)
-        work = isinstance(current, WorkThread)
-        match item.action:
+    def bubble_action(self, action: BubbleAction, identity: str) -> None:
+        """The tiles offered only what applies; Relationships became a tile per relationship."""
+        match action:
             case BubbleAction.FOCUS:
-                menu.addAction(item.label, lambda: self.open_context(identity))
+                self.open_context(identity)
             case BubbleAction.CONTENTS:
-                menu.addAction(item.label, lambda: self.toggle_bubble(identity))
+                self.toggle_bubble(identity)
             case BubbleAction.CONNECT:
-                menu.addAction(item.label, lambda: self.interaction.start_relation(identity))
-            case BubbleAction.CONTINUE if work:
-                menu.addAction(item.label, lambda: self.study_work(identity))
-            case BubbleAction.EDIT_WORK if work:
-                menu.addAction(item.label, lambda: self.inspect(identity))
-            case BubbleAction.DISMISS if work:
-                menu.addAction(item.label, lambda: self.dismiss_work(identity, "Dismissed by the user."))
-            case BubbleAction.NOT_MINE if work:
-                menu.addAction(item.label, lambda: self.dismiss_work(identity, "This is not my responsibility."))
-            case BubbleAction.RENAME_GROUP if isinstance(current, CanvasCollection):
-                menu.addAction(item.label, lambda: self.rename_group(identity))
+                self.interaction.start_relation(identity)
+            case BubbleAction.CONTINUE:
+                self.study_work(identity)
+            case BubbleAction.EDIT_WORK:
+                self.inspect(identity)
+            case BubbleAction.DISMISS:
+                self.dismiss_work(identity, "Dismissed by the user.")
+            case BubbleAction.NOT_MINE:
+                self.dismiss_work(identity, "This is not my responsibility.")
+            case BubbleAction.RENAME_GROUP:
+                self.rename_group(identity)
             case BubbleAction.PUT_INSIDE:
-                menu.addAction(item.label, self.choose_group)
+                self.choose_group()
             case BubbleAction.MOVE_TO_CANVAS:
-                menu.addAction(item.label, lambda: self.add_to_group(None, identity))
+                self.add_to_group(None, identity)
             case BubbleAction.RELATIONSHIPS:
-                related = tuple(relation for relation in self.document.relations if identity in (relation.start, relation.end))
-                if related:
-                    relationships = self.submenu(menu, item.label)
-                    for relation in related:
-                        relationships.addAction(relation.reason, self.relation_action(relation))
-            case BubbleAction.CONTINUE | BubbleAction.EDIT_WORK | BubbleAction.DISMISS | BubbleAction.NOT_MINE | BubbleAction.RENAME_GROUP:
-                pass  # Not for this kind of bubble.
+                pass  # Its tiles open each relationship.
             case _:
-                assert_never(item.action)
+                assert_never(action)
 
     def create_group(self) -> None:
         title, accepted = QtWidgets.QInputDialog.getText(self.frame, "New canvas group", "Group name")
@@ -1112,23 +1160,6 @@ class CanvasPanel:
         if work is not None:
             self.work.send(DismissWork(work.id, work.revision, reason))
 
-    def refresh_dismissed(self) -> None:
-        menu = self.dismissed_menu
-        if menu is None:
-            return
-        menu.clear()
-        menu.setEnabled(bool(self.view.catalog.dismissed))
-        for dismissed in self.view.catalog.dismissed:
-            action = menu.addAction("Restore · " + dismissed.work.definition.title)
-            action.setToolTip(dismissed.reason)
-            action.triggered.connect(self.restore_work(dismissed.work.id))
-
-    def restore_work(self, identity: str) -> Callable[[], None]:
-        def restore() -> None:
-            self.work.send(RestoreWork(identity))
-
-        return restore
-
     def add_document(self, command: AddDocument | AddWebPage) -> None:
         work_id = next(
             (
@@ -1146,14 +1177,6 @@ class CanvasPanel:
                     kind = SourceKind.DOCUMENT
             identity = source_id(kind, document_identity(command.reference.url))
             self.commit(PutInside(identity, self.selected, frozenset()))
-
-
-def rounded(menu: QtWidgets.QMenu) -> QtWidgets.QMenu:
-    """Qt menus are top-level windows; a translucent background lets their stylesheet corners show."""
-    menu.setWindowFlag(Qt.WindowType.FramelessWindowHint)
-    menu.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint)
-    menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-    return menu
 
 
 # Qt owns pointer capture and previews; immutable decisions own the gestures.

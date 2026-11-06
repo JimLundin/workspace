@@ -30,6 +30,7 @@ BADGE: Final = 22  # the kit's small app badge, 7 px corners
 BADGE_STEP: Final = 16  # stacked badges overlap, each ringed in its card's surface
 CONTROL: Final = 28  # a concentric control inside a 34 px capsule
 CAPSULE: Final = 34
+PANEL_RADIUS: Final = 21  # the toolbar grown into its sections, as the island bar's menu (tokens.toml menu.radius)
 # The glass capsule's widget keeps room for its shadow, so painting stays inside Qt's bounds.
 SHADOW: Final = QtCore.QMargins(10, 4, 10, 12)
 
@@ -191,7 +192,8 @@ def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: CanvasG
     """
     painter.save()
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-    corner = bounds.height() / 2
+    # A row is a pill; the toolbar grown into its sections keeps the island menu's corner.
+    corner = min(bounds.height() / 2, PANEL_RADIUS)
     dark = surface.scheme is Scheme.DARK
     for spread, drop, alpha in ((6, 6, 0.10 if dark else 0.05), (2, 2, 0.22 if dark else 0.07)):
         painter.fillPath(

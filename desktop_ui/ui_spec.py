@@ -15,7 +15,7 @@ from typing import Annotated, Final
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
 
-from desktop_ui.canvas_menu import CanvasMenus, menu_problems
+from desktop_ui.canvas_toolbar import CanvasToolbarSpec, toolbar_problems
 from desktop_ui.island_menu import ControlsSpec, problems
 from desktop_ui.island_model import IslandSpec, island_problems
 from usage import DIRECTORY
@@ -115,7 +115,7 @@ class Specs:
 _SIZES = TypeAdapter(Sizes)
 _CONTROLS = TypeAdapter(ControlsSpec)
 _ISLAND = TypeAdapter(IslandSpec)
-_CANVAS = TypeAdapter(CanvasMenus)
+_CANVAS = TypeAdapter(CanvasToolbarSpec)
 CANVAS_FILE: Final = "canvas.toml"
 
 
@@ -170,17 +170,17 @@ def island(folder: Path = SHIPPED) -> IslandSpec:
     return loaded
 
 
-def canvas_menus(folder: Path = SHIPPED) -> CanvasMenus:
+def canvas_toolbar(folder: Path = SHIPPED) -> CanvasToolbarSpec:
     path = folder / CANVAS_FILE
     loaded = load(path, _CANVAS)
-    if found := menu_problems(loaded):
+    if found := toolbar_problems(loaded):
         raise SpecError(f"{path.name}: {found[0]}")
     return loaded
 
 
-def canvas(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[CanvasMenus, SpecError | None]:
-    """The canvas's menus as they are now, read as a menu opens, or the kept copy with why."""
-    return or_kept(canvas_menus, (CANVAS_FILE,), folder, kept)
+def canvas(folder: Path = SHIPPED, kept: Path = KEPT) -> tuple[CanvasToolbarSpec, SpecError | None]:
+    """The canvas toolbar's spec as it is now, read as the toolbar shows, or the kept copy with why."""
+    return or_kept(canvas_toolbar, (CANVAS_FILE,), folder, kept)
 
 
 def specs(folder: Path = SHIPPED) -> Specs:

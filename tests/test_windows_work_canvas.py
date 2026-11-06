@@ -131,6 +131,11 @@ class NativeCanvas:
         self.pump()
 
 
+def press(canvas: CanvasPanel, label: str) -> None:
+    """Press the toolbar tile named `label`, pinned in the row or in its expanded sections."""
+    next(tile for tile in (*canvas.pinned, *canvas.tiles) if tile.accessibleName() == label).click()
+
+
 @contextmanager
 def native_canvas(store: WorkCanvas) -> Generator[NativeCanvas]:
     panel = NativeCanvas(store)
@@ -331,15 +336,14 @@ def test_work_dismissal_and_restore_controls_change_the_local_canvas(tmp_path: P
         native.publish(WorkSnapshot(personal=PersonalView(personal.read())))
         canvas = native.view.panel
         canvas.context_menu(saved.work.id)
-        next(action for action in canvas.context_popup.actions() if action.text() == "This isn't my work").trigger()
+        press(canvas, "This isn't my work")
         command = native.last_command()
         assert isinstance(command, DismissWork) and "not my responsibility" in command.reason
         personal.handle(command, 11)
         native.publish(WorkSnapshot(personal=PersonalView(personal.read())))
         assert all(frame.context.id != saved.work.id for frame in canvas.group_frames)
-        canvas.build_background()
-        assert canvas.dismissed_menu is not None
-        canvas.dismissed_menu.actions()[0].trigger()
+        canvas.expand(None)
+        press(canvas, "Restore · Atlas")
         command = native.last_command()
         assert isinstance(command, RestoreWork)
         personal.handle(command, 12)
@@ -604,21 +608,24 @@ def test_canvas_opens_maximized_and_retains_a_deliberate_restore(tmp_path: Path)
     # or subsequent redirects override a user's deliberate restored window.
     with native_canvas(local_canvas(tmp_path)) as panel:
         window = panel.view.window
-        window_menu = next(action.menu() for action in panel.view.panel.menu.actions() if action.text() == "Window")
-        assert isinstance(window_menu, QtWidgets.QMenu)
-        maximize = next(action for action in window_menu.actions() if action.text() == "Maximize or restore canvas")
+
+        def maximize() -> None:
+            panel.view.panel.expand(None)
+            press(panel.view.panel, "Maximize or restore")
+
         assert window.isMaximized()
         assert window.geometry().contains(window.screen().availableGeometry())
-        maximize.trigger()
+        maximize()
         window.resize(900, 640)
         panel.view.hide()
         panel.view.show(focus=False)
         panel.pump()
         assert not window.isMaximized() and window.size() == QtCore.QSize(900, 640)
-        maximize.trigger()
+        maximize()
         panel.pump()
         assert window.isMaximized()
-        next(action for action in window_menu.actions() if action.text() == "Close canvas").trigger()
+        panel.view.panel.expand(None)
+        press(panel.view.panel, "Close canvas")
         panel.pump()
         assert not window.isVisible()
 
@@ -664,7 +671,8 @@ def test_escape_unwinds_bubbles_and_search_keeps_drafts_then_exits(tmp_path: Pat
         assert not native.view.window.isVisible()
         native.view.show(focus=False)
         assert detail.text.toPlainText() == "Unsent context"
-        native.view.close_action.trigger()
+        native.view.panel.expand(None)
+        press(native.view.panel, "Close canvas")
         assert not native.view.window.isVisible()
 
 
@@ -769,7 +777,7 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
         assert canvas.selected == personal.catalog.sources[0].id
         assert not canvas.search.isVisible() and not canvas.search_button.isChecked()
         island = (canvas.voice_hint, canvas.clear_context, canvas.search_button, canvas.menu_button)
-        assert all(control.isVisible() and toolbar.glass().contains(QtCore.QRectF(control.geometry())) for control in island)
+        assert all(control.isVisible() and toolbar.glass().contains(on_toolbar(toolbar, control)) for control in island)
         assert all(not first.geometry().intersects(second.geometry()) for first, second in pairwise(island))
         # Only temporary things sit beside the island: the Questions pill while questions wait, with their
         # count, and Recenter only once the view leaves the work.
@@ -789,11 +797,7 @@ def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp
         bottom = canvas.canvas.mapFromScene(canvas.scene.itemsBoundingRect().bottomRight())
         assert canvas.canvas.viewport().mapTo(canvas.frame, bottom).y() < canvas.toolbar.y()
         assert store.read() == before
-        canvas.menu_button.click()
-        native.pump()
-        assert canvas.menu.isVisible() and canvas.contents_action is not None
-        assert canvas.menu.geometry().contains(canvas.menu.actionGeometry(canvas.contents_action).translated(canvas.menu.pos()))
-        canvas.menu.close()
+        assert_expands_in_place(native)
 
 
 def test_canvas_gestures_pan_and_zoom_without_moving_saved_bubbles(tmp_path: Path) -> None:
@@ -1242,8 +1246,8 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
         editor = canvas.detail(question.id)
         assert isinstance(editor, QuestionDetail)
         clarification = editor.question.text()
-        assert canvas.contents_action is not None
-        canvas.contents_action.trigger()
+        canvas.expand(None)
+        press(canvas, "Collapse containers")
         assert canvas.scope.mode is CanvasMode.CONTEXTS and not canvas.visible_cards
         next(frame for frame in canvas.group_frames if frame.context.id == group.id).contents.open_canvas.click()
         panel.pump()
@@ -1266,6 +1270,25 @@ def test_nested_bubbles_reveal_on_one_canvas_and_retain_reading_and_pins(tmp_pat
         assert canvas.selected == question.id and editor.question.text() == clarification
 
 
+def on_toolbar(toolbar: QtWidgets.QWidget, control: QtWidgets.QWidget) -> QtCore.QRectF:
+    """A control's rectangle in the toolbar's coordinates; the row sits in its own widget."""
+    return QtCore.QRectF(QtCore.QPointF(control.mapTo(toolbar, QtCore.QPoint(0, 0))), QtCore.QSizeF(control.size()))
+
+
+def assert_expands_in_place(native: NativeCanvas) -> None:
+    """More grows the toolbar upward in place into its sections, keeping its foot; no menu pops up."""
+    canvas, toolbar = native.view.panel, native.view.panel.toolbar
+    foot = toolbar.y() + toolbar.height()
+    canvas.menu_button.click()
+    native.pump()
+    contents = next(tile for tile in canvas.tiles if tile.accessibleName() == "Collapse containers")
+    assert canvas.expanded and contents.isVisible() and toolbar.y() + toolbar.height() == foot
+    assert toolbar.glass().contains(on_toolbar(toolbar, contents))
+    canvas.menu_button.click()
+    native.pump()
+    assert not canvas.expanded and not canvas.tiles
+
+
 def assert_searching_island(canvas: CanvasPanel) -> None:
     # Defect: the island leaves its fixed place at the window's foot, or search
     # crowds the speak and options symbols instead of taking the island over.
@@ -1276,9 +1299,9 @@ def assert_searching_island(canvas: CanvasPanel) -> None:
     assert canvas.frame.height() - (toolbar.y() + toolbar.glass().bottom()) == 14
     assert not canvas.voice_hint.isVisible() and not canvas.clear_context.isVisible() and not canvas.menu_button.isVisible()
     controls = (canvas.search_button, canvas.search)
-    assert all(toolbar.glass().contains(QtCore.QRectF(control.geometry())) for control in controls)
+    assert all(toolbar.glass().contains(on_toolbar(toolbar, control)) for control in controls)
     assert all(not first.geometry().intersects(second.geometry()) for first, second in pairwise(controls))
-    assert all(abs(control.geometry().center().y() - toolbar.glass().center().y()) <= 1 for control in controls)
+    assert all(abs(on_toolbar(toolbar, control).center().y() - toolbar.glass().center().y()) <= 1 for control in controls)
 
 
 def assert_context_header(frame: CanvasGroup) -> None:
@@ -1402,16 +1425,16 @@ def test_native_connector_relationships_and_menus_work_for_cards_and_containers(
             point = canvas.canvas.mapFromScene(bubble.mapToScene(QtCore.QPointF(120, 25)))
             event = QtGui.QContextMenuEvent(QtGui.QContextMenuEvent.Reason.Mouse, point, canvas.canvas.viewport().mapToGlobal(point))
             QtCore.QCoreApplication.sendEvent(canvas.canvas.viewport(), event)
-            assert canvas.context_popup.isVisible()
-            labels = tuple(action.text() for action in canvas.context_popup.actions())
-            assert "Focus bubble" in labels and "Connect to another bubble…" in labels and "Move to canvas" in labels
-            canvas.context_popup.hide()
+            assert canvas.expanded
+            labels = tuple(tile.accessibleName() for tile in canvas.tiles)
+            assert "Focus" in labels and "Connect…" in labels and "Move to canvas" in labels
+            canvas.collapse()
         canvas.inspect(note.id)
         assert card.detail_proxy is not None
         point = canvas.canvas.mapFromScene(card.detail_proxy.mapToScene(QtCore.QPointF(30, 30)))
         event = QtGui.QContextMenuEvent(QtGui.QContextMenuEvent.Reason.Mouse, point, canvas.canvas.viewport().mapToGlobal(point))
         QtCore.QCoreApplication.sendEvent(canvas.canvas.viewport(), event)
-        assert canvas.context_popup.isVisible() and canvas.selected == note.id
-        canvas.context_popup.hide()
+        assert canvas.expanded and canvas.selected == note.id
+        canvas.collapse()
         canvas.remove_relation(store.read().relations[0])
         assert not store.read().relations and not canvas.connection_paths
