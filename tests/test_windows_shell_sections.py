@@ -14,12 +14,12 @@ lazy from PySide6.QtTest import QTest
 from desktop_ui.components.appearance import Capsule, look
 from desktop_ui.components.meaning import Tint
 from desktop_ui.desktop_pager import pager
+from desktop_ui.navigation import Navigation
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.shell_items import (
     EMPTY_SHELF,
     Application,
-    Item,
     Launches,
     Pinned,
     PinnedApp,
@@ -31,8 +31,9 @@ from desktop_ui.shell_items import (
     outstanding,
     shelf,
 )
-from desktop_ui.shell_surface import ShellSections, page_font
+from desktop_ui.shell_surface import STACK_STEP, ShellSections, page_font
 from desktop_ui.ui import Ui
+from desktop_ui.window_layout import EDGE, TERMINAL, App, Program, WorkspaceView
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import Pixels, pixels
 from winapi.shapes import Rect, Window
@@ -191,39 +192,51 @@ def test_tray_updates_respect_field_flags_and_version_changes_preserve_registrat
     assert update((original,), replace(observed, operation=2), None) == ()
 
 
-def test_toolbar_shell_icons_route_actions_and_keep_overflow_reachable() -> None:
-    # Defect: buttons lose their app identity, Canvas leaves the pinned capsule or
-    # opens on a right click, or excess icons disappear instead of remaining scrollable.
+def click_icon(button: QtWidgets.QWidget, index: int, count: int, which: QtCore.Qt.MouseButton) -> None:
+    """Click the stacked icon at `index` of `count`, at its centre."""
+    first = (button.width() - STACK_STEP * (count - 1)) / 2
+    QTest.mouseClick(button, which, QtCore.Qt.KeyboardModifier.NoModifier, QtCore.QPoint(round(first + STACK_STEP * index), button.height() // 2))
+
+
+def test_pager_icons_route_clicks_to_their_app_and_keep_overflow_reachable() -> None:
+    # Defects: a click on a stacked icon reaches its neighbour's app, a right
+    # click loses its kind, an empty desktop other than the current one still
+    # takes room, or excess desktops disappear instead of remaining scrollable.
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
-    opened: list[str] = []
-    sections = ShellSections(parent, lambda: opened.append("canvas"))
-    invoked: list[tuple[Item, Click]] = []
-    apps = tuple(Application(str(index), (Window(index + 1, "Window", "app.exe", minimized=False),)) for index in range(12))
-    sections.applications((Shelf(EMPTY_SHELF.pinned, apps), 1), lambda item, click: invoked.append((item, click)))
+    sections = ShellSections(parent)
+    clicked: list[tuple[App, Click]] = []
+    jumped: list[Navigation] = []
+    many = tuple((Program(f"app{index}.exe"),) for index in range(14))
+    view = pager(((WorkspaceView.CANVAS,), (PinnedApp.OUTLOOK, PinnedApp.TEAMS, TERMINAL), (), *many), 0, chord=False)
+    sections.desktops(view, jumped.append, lambda each, click: clicked.append((each, click)))
     sections.place(250, 600)
     parent.show()
     app.processEvents()
     try:
-        QTest.mouseClick(sections.apps.buttons[0], QtCore.Qt.MouseButton.LeftButton)
-        QTest.mouseClick(sections.apps.buttons[1], QtCore.Qt.MouseButton.RightButton)
-        QTest.mouseClick(sections.pinned.buttons[2], QtCore.Qt.MouseButton.LeftButton)
-        QTest.mouseClick(sections.pinned.buttons[0], QtCore.Qt.MouseButton.RightButton)
-        QTest.mouseClick(sections.pinned.buttons[0], QtCore.Qt.MouseButton.LeftButton)
-        assert invoked == [(apps[0], Click.LEFT), (apps[1], Click.RIGHT), (EMPTY_SHELF.pinned[1], Click.LEFT)]
-        assert opened == ["canvas"]
-        # Canvas, Outlook and Teams share one capsule, in that order.
-        assert [button.accessibleName().split(" · ")[0] for button in sections.pinned.buttons] == ["Canvas", "Outlook", "Teams"]
-        assert sections.pinned.geometry().right() < sections.apps.geometry().left()
-        assert sections.apps.overflow.horizontalScrollBar().maximum() > 0
-        sections.apps.overflow.horizontalScrollBar().setValue(sections.apps.overflow.horizontalScrollBar().maximum())
+        canvas, apps = sections.pager.buttons[0], sections.pager.buttons[1]
+        click_icon(canvas, 0, 1, QtCore.Qt.MouseButton.LeftButton)
+        click_icon(apps, 0, 3, QtCore.Qt.MouseButton.LeftButton)
+        click_icon(apps, 2, 3, QtCore.Qt.MouseButton.RightButton)
+        click_icon(apps, 1, 3, QtCore.Qt.MouseButton.LeftButton)
+        assert clicked == [
+            (WorkspaceView.CANVAS, Click.LEFT),
+            (PinnedApp.OUTLOOK, Click.LEFT),
+            (TERMINAL, Click.RIGHT),
+            (PinnedApp.TEAMS, Click.LEFT),
+        ]
+        assert not jumped
+        # The empty third desktop isn't the current one, so it's left out.
+        assert len(sections.pager.buttons) == 2 + len(many)
+        assert sections.pager.overflow.horizontalScrollBar().maximum() > 0
+        sections.pager.overflow.horizontalScrollBar().setValue(sections.pager.overflow.horizontalScrollBar().maximum())
         app.processEvents()
         assert (
-            sections.apps.buttons[-1].geometry().right() - sections.apps.overflow.horizontalScrollBar().value()
-            < sections.apps.overflow.viewport().width()
+            sections.pager.buttons[-1].geometry().right() - sections.pager.overflow.horizontalScrollBar().value()
+            < sections.pager.overflow.viewport().width()
         )
-        assert sections.apps.geometry().right() < 250
+        assert sections.pager.geometry().right() < 250
     finally:
         parent.close()
         parent.deleteLater()
@@ -237,18 +250,17 @@ def test_shell_sections_leave_glass_transparent_and_use_the_shared_solid_surface
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(600, 50)
-    sections = ShellSections(parent, lambda: None)
-    item = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
-    sections.applications((Shelf(EMPTY_SHELF.pinned, (item,)), 0), lambda item, click: None)
+    sections = ShellSections(parent)
+    sections.desktops(pager(((WorkspaceView.CANVAS,), (TERMINAL,)), 0, chord=False), lambda _: None, lambda _app, _click: None)
     sections.place(250, 600)
-    sections.apps.apply_look(look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE))
+    sections.pager.apply_look(look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE))
     parent.show()
     app.processEvents()
     try:
-        assert sections.apps.grab().toImage().pixelColor(3, 17).alpha() <= 1
-        sections.apps.apply_look(look(appearance.Contrast("#ffffff", "#000000"), Capsule(appearance.Frost.SMOKED), Tint.NONE))
+        assert sections.pager.grab().toImage().pixelColor(3, 17).alpha() <= 1
+        sections.pager.apply_look(look(appearance.Contrast("#ffffff", "#000000"), Capsule(appearance.Frost.SMOKED), Tint.NONE))
         app.processEvents()
-        pixel = sections.apps.grab().toImage().pixelColor(3, 17)
+        pixel = sections.pager.grab().toImage().pixelColor(3, 17)
         assert (pixel.red(), pixel.green(), pixel.blue(), pixel.alpha()) == (255, 255, 255, 255)
     finally:
         parent.close()
@@ -269,18 +281,18 @@ def face(button: QtWidgets.QWidget) -> QtGui.QImage:
 
 
 def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_workspace_process() -> None:
-    # Defects: a stylesheet squeezes a pager digit, an application's
-    # bitmap or a slot symbol paints larger than the bar's 16 px symbols, or the
-    # first control loses its concentric 3 px inset.
+    # Defects: a stylesheet squeezes a pager digit, an application's bitmap in
+    # a desktop's stack paints larger than the bar's 16 px symbols, or the first
+    # control loses its concentric 3 px inset.
     ui = Ui()
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(1200, 50)
-    sections = ShellSections(parent, lambda: None)
+    sections = ShellSections(parent)
     chosen = look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE)
     editor = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),), image=Pixels(40, bytes((80, 160, 240, 255)) * 1600))
-    sections.applications((Shelf(EMPTY_SHELF.pinned, (editor,)), 0), lambda item, click: None)
-    sections.desktops(pager(((), (), ()), 0, chord=False), lambda _: None)
+    sections.applications((Shelf(EMPTY_SHELF.pinned, (editor,)), 0))
+    sections.desktops(pager(((Program("editor.exe"),), (), ()), 2, chord=False), lambda _: None, lambda _app, _click: None)
     sections.place(800, 1200)
     for section in sections.sections():
         section.apply_look(chosen)
@@ -298,14 +310,11 @@ def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_work
         painter.setPen(ink_colour)
         painter.drawText(QtCore.QRectF(0, 0, 32, 32), QtCore.Qt.AlignmentFlag.AlignCenter, "3")
         painter.end()
-        three = sections.pager.buttons[2]
-        for (width, height), (expected_width, expected_height) in (
-            (ink(face(three)), ink(digit)),
-            (ink(face(sections.apps.buttons[0])), (side, side)),
-        ):
+        # The editor's desktop, then the current, empty third desktop by its number.
+        editor_desktop, three = sections.pager.buttons
+        for (width, height), (expected_width, expected_height) in ((ink(face(three)), ink(digit)), (ink(face(editor_desktop)), (side, side))):
             assert abs(width - expected_width) <= 1 and abs(height - expected_height) <= 1, (width, height, expected_width, expected_height)
-        assert max(ink(face(sections.pinned.buttons[0]))) <= side + 1
-        assert [section.buttons[0].mapTo(section, QtCore.QPoint(0, 0)) for section in sections.sections()] == [QtCore.QPoint(3, 3)] * 3
+        assert [section.buttons[0].mapTo(section, QtCore.QPoint(0, 0)) for section in sections.sections()] == [QtCore.QPoint(3, 3)]
     finally:
         parent.close()
         parent.deleteLater()
@@ -319,9 +328,9 @@ def test_a_pager_of_one_desktop_leaves_no_targets_behind() -> None:
     app = application()
     parent = QtWidgets.QWidget()
     parent.resize(600, 50)
-    sections = ShellSections(parent, lambda: None)
-    sections.desktops(pager(((),), 0, chord=False), lambda _: None)
-    sections.desktops(pager(((), (), ()), 0, chord=False), lambda _: None)
+    sections = ShellSections(parent)
+    sections.desktops(pager(((),), 0, chord=False), lambda _: None, lambda _app, _click: None)
+    sections.desktops(pager(((TERMINAL,), (EDGE,), ()), 0, chord=False), lambda _: None, lambda _app, _click: None)
     sections.place(12, 600)
     parent.show()
     app.processEvents()

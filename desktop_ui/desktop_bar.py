@@ -25,7 +25,7 @@ lazy import usage
 lazy import winapi.ambient
 lazy from assistant.meeting_detection import AutomaticStatus
 lazy from assistant.recording_state import RecordingAction, RecordingState
-lazy from config import DARK_WHEN_IDLE_MINUTES
+lazy from config import APPS, DARK_WHEN_IDLE_MINUTES
 lazy from desktop_ui import island_menu, island_moment
 lazy from desktop_ui.agent_progress import Phase, coalesced, hint, stable_phases
 lazy from desktop_ui.ambient import Ambient, SystemStatus
@@ -57,14 +57,14 @@ lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, 
 lazy from desktop_ui.island_surface import TOP, BarWindow, Drawn, Presented
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
-lazy from desktop_ui.navigation import CycleApp, Order, Placing, ShowWindow, Source
+lazy from desktop_ui.navigation import AppKey, CycleApp, Order, Placing, ShowWindow, Source
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TaskbarControl
-lazy from desktop_ui.shell_items import EMPTY_SHELF, Application, Item, Pinned, Shelf
-lazy from desktop_ui.window_layout import Program
-lazy from protocol import Tool
+lazy from desktop_ui.shell_items import EMPTY_SHELF, Application, Item, Pinned, PinnedApp, Shelf
+lazy from desktop_ui.window_layout import App, Program, WorkspaceView
+lazy from protocol import Installed, Tool
 lazy from usage import Detail
 lazy from winapi import appearance, inputs, session, shell, system_notices, windows
 lazy from winapi.machine_status import Power, PowerUnavailable, Speakers
@@ -297,15 +297,36 @@ class DesktopBar:
             with suppress(queue.Empty):
                 self.arrangement = self.application_service.results.get_nowait()
                 self.applications = self.arrangement.shelf
-        self.window.shell_sections.applications((self.applications, self.observations.foreground()), self.application_click)
+        self.window.shell_sections.applications((self.applications, self.observations.foreground()))
         arrangement = self.arrangement
-        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, chord=self.chord_held), self.navigate)
+        self.window.shell_sections.desktops(pager(arrangement.placed, arrangement.current, chord=self.chord_held), self.navigate, self.app_click)
         # Changed apps or pager targets must also publish section geometry when the island is still,
         # or a pager that loses its hints keeps its wider capsule.
         if previous != (sections.app_snapshot, sections.pager_view):
             self.window.presentation = None
         if self.chord_held:
             self.show_hints()
+
+    def app_click(self, app: App, click: Click) -> None:
+        """A pager icon: go to the app, cycling its windows or starting it; right-click lists its windows."""
+        match app:
+            case WorkspaceView.CANVAS:
+                if click is Click.LEFT:
+                    self.close_menu(restore=False)
+                    self.actions.work()
+            case PinnedApp():
+                self.application_click(next((slot for slot in self.applications.pinned if slot.app is app), Pinned(app, ())), click)
+            case Program(exe=exe):
+                running = next((each for each in self.applications.running if each.identity == exe), None)
+                if running is not None and click is Click.RIGHT:
+                    self.application_click(running, click)
+                elif click is not Click.RIGHT:
+                    self.close_menu(restore=False)
+                    # A configured app key also starts the app when it isn't running.
+                    key = next((each for each in APPS if isinstance(each.target, Installed) and each.target.exe.lower() == exe), None)
+                    self.navigate(AppKey(key, Source.TOOLBAR) if key is not None else CycleApp(app, Source.TOOLBAR))
+            case _:
+                assert_never(app)
 
     def application_click(self, item: Item, click: Click) -> None:
         self.close_menu(restore=False)

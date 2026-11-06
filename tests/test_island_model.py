@@ -45,7 +45,7 @@ def test_idle_has_only_device_status_and_clock_power_on_right() -> None:
     assert tuple(each.key for each in views) == (Key.STATUS,)
     assert tuple(each.zone for each in views) == (Zone.RIGHT,)
     assert views[-1].slots == (
-        (Text("CPU —", reserve="CPU 100%"), Text("RAM —", reserve="RAM 100%")),
+        (Glyph("cpu"), Text("—", reserve="100%"), Glyph("memory"), Text("—", reserve="100%")),
         (
             Glyph("speaker-unknown"),
             Glyph("wifi-unknown"),
@@ -65,12 +65,12 @@ def test_a_plain_keyboard_is_a_reading_beside_the_speaker_and_wifi() -> None:
 
 def test_processor_and_memory_are_plain_readings_that_reserve_their_widest_value() -> None:
     # Defects: a reading becomes a control, a value from 9% to 100% resizes the
-    # fixed capsule because its reserve follows the value, CPU and memory swap,
-    # an unread value shows as 0% (a healthy-looking lie), or the capsule's
-    # accessible name omits the readings.
-    for cpu, memory, shown in ((23, 61, ("CPU 23%", "RAM 61%")), (100, 9, ("CPU 100%", "RAM 9%")), (None, None, ("CPU —", "RAM —"))):
+    # fixed capsule because its reserve follows the value, CPU and memory swap
+    # symbols, an unread value shows as 0% (a healthy-looking lie), or the
+    # capsule's accessible name omits the readings.
+    for cpu, memory, shown in ((23, 61, ("23%", "61%")), (100, 9, ("100%", "9%")), (None, None, ("—", "—"))):
         status = view(replace(RESTING, system=SystemStatus(cpu=cpu, memory=memory)), Key.STATUS)
-        assert status.slots[0] == (Text(shown[0], reserve="CPU 100%"), Text(shown[1], reserve="RAM 100%"))
+        assert status.slots[0] == (Glyph("cpu"), Text(shown[0], reserve="100%"), Glyph("memory"), Text(shown[1], reserve="100%"))
         assert not any(isinstance(part, Control) for slot in status.slots for part in slot)
     label = view(replace(RESTING, system=SystemStatus(cpu=23, memory=61)), Key.STATUS).label
     assert label.startswith("CPU 23%, memory 61%. ")

@@ -20,7 +20,7 @@ from desktop_ui.components.text import color
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
 from desktop_ui.island_layout import CONTROL, HEIGHT, ICON, PART_GAP
 from desktop_ui.navigation import Navigation, PagerClick, Source
-from desktop_ui.shell_items import WEB_APPS, Application, Item, Pinned, PinnedApp, Shelf
+from desktop_ui.shell_items import WEB_APPS, PinnedApp, Shelf
 from desktop_ui.vector_icons import icon
 from desktop_ui.window_layout import App, Program, WorkspaceView
 from winapi.icon_pixels import Pixels
@@ -79,6 +79,8 @@ class Target:
     face: Face
     invoke: Callable[[Click], None]
     active: bool = field(default=False, kw_only=True)
+    pick: Callable[[int, Click], None] | None = field(default=None, kw_only=True)
+    """For a stack: a click on its icon at that index, instead of `invoke`."""
 
 
 class ShellButton(KeyboardFocus):
@@ -109,12 +111,34 @@ class ShellButton(KeyboardFocus):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)  # Qt repaints it as the pointer enters and leaves.
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.clicked.connect(lambda: self.target.invoke(Click.LEFT))
+        self.pressed_at = 0.0
+        """Where the last press landed, which picks a stack's icon."""
+        self.clicked.connect(lambda: self.choose(Click.LEFT))
+
+    def icon_at(self, x: float) -> int:
+        """The stacked icon under `x`: the one whose centre is nearest, as later icons cover earlier ones' right edges."""
+        match self.target.face:
+            case Stack(icons=icons) if icons:
+                first = (self.width() - STACK_STEP * (len(icons) - 1)) / 2
+                return max(0, min(len(icons) - 1, round((x - first) / STACK_STEP)))
+            case _:
+                return 0
+
+    def choose(self, click: Click) -> None:
+        if self.target.pick is not None:
+            self.target.pick(self.icon_at(self.pressed_at), click)
+        else:
+            self.target.invoke(click)
+
+    @override
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        self.pressed_at = event.position().x()
+        super().mousePressEvent(event)
 
     @override
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() is Qt.MouseButton.RightButton:
-            self.target.invoke(Click.RIGHT)
+            self.choose(Click.RIGHT)
             event.accept()
         else:
             super().mouseReleaseEvent(event)
@@ -122,7 +146,7 @@ class ShellButton(KeyboardFocus):
     @override
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() is Qt.MouseButton.LeftButton:
-            self.target.invoke(Click.DOUBLE)
+            self.choose(Click.DOUBLE)
             event.accept()
         else:
             super().mouseDoubleClickEvent(event)
@@ -299,45 +323,29 @@ def app_icon(app: App, images: Mapping[str, Pixels | None]) -> Icon:
             assert_never(app)
 
 
-def canvas_target(open_canvas: Callable[[], None]) -> Target:
-    """Canvas opens on a left click; it has no menu, and a double-click's second press doesn't open it again."""
-
-    def invoke(click: Click) -> None:
-        match click:
-            case Click.LEFT:
-                open_canvas()
-            case Click.RIGHT | Click.DOUBLE:
-                pass
-            case _:
-                assert_never(click)
-
-    return Target("Canvas · Open your work canvas", Glyph("canvas"), invoke)
-
-
 class ShellSections:
     """The surface keeps native buttons only for the current immutable snapshot.
 
-    Canvas leads the pinned web-app slots in one capsule; it shows even before the shell reports applications.
+    The pager is the bar's only toolbar: every desktop with its apps, each app a click target.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget, open_canvas: Callable[[], None]) -> None:
-        self.canvas = canvas_target(open_canvas)
-        self.pinned = Section(parent)
-        self.pinned.show_targets((self.canvas,))
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
         self.pager = Section(parent)
-        self.apps = Section(parent)
         self.app_snapshot: tuple[Shelf, int] | None = None
         self.pager_view: tuple[PagerView, Mapping[str, Pixels | None]] | None = None
+        self.icons: dict[str, Pixels] = {}
+        """Each program's icon as last read, so an app that isn't running keeps its own face."""
 
-    def sections(self) -> tuple[Section, Section, Section]:
-        return self.pinned, self.pager, self.apps
+    def sections(self) -> tuple[Section]:
+        return (self.pager,)
 
-    def desktops(self, view: PagerView, invoke: Callable[[Navigation], None]) -> None:
-        """Each desktop, reached directly; a pager of one desktop stays hidden.
+    def desktops(self, view: PagerView, invoke: Callable[[Navigation], None], on_app: Callable[[App, Click], None]) -> None:
+        """Each desktop with its apps; a click on an app goes to it (and so to its desktop).
 
-        Programs' icons come from the running apps, so a newly read icon redraws the pager too.
+        An empty desktop other than the current one is left out. Programs' icons come from
+        the running apps, so a newly read icon redraws the pager too.
         """
-        images = frozendict((app.identity, app.image) for app in self.app_snapshot[0].running) if self.app_snapshot is not None else frozendict()
+        images: Mapping[str, Pixels | None] = frozendict(self.icons)
         if (view, images) == self.pager_view:
             return
         hints = view.hints
@@ -351,47 +359,28 @@ class ShellSections:
                 return hint
             return Stack(tuple(app_icon(app, images) for app in desktop.apps)) if desktop.apps else desktop.label
 
+        def pick(apps: tuple[App, ...]) -> Callable[[int, Click], None] | None:
+            if not apps:
+                return None
+            return lambda index, click: on_app(apps[index], click)
+
         def pages() -> tuple[Target, ...]:
             return tuple(
-                Target(desktop.name, face(index, desktop), jump(index), active=desktop.current) for index, desktop in enumerate(view.desktops)
+                Target(desktop.name, face(index, desktop), jump(index), active=desktop.current, pick=pick(desktop.apps))
+                for index, desktop in enumerate(view.desktops)
+                if desktop.apps or desktop.current
             )
 
         self.pager.show_targets(pages() if len(view.desktops) > 1 else ())
         self.pager_view = (view, images)
 
-    def applications(self, snapshot: tuple[Shelf, int], invoke: Callable[[Item, Click], None]) -> None:
+    def applications(self, snapshot: tuple[Shelf, int]) -> None:
+        """Remember the running apps' windows and icons; the pager draws them."""
         if snapshot == self.app_snapshot:
             return
-        current, foreground = snapshot
-
-        def target(item: Item) -> Target:
-            active = any(window.handle == foreground for window in item.windows)
-
-            def chosen(click: Click) -> None:
-                invoke(item, click)
-
-            match item:
-                case Pinned(app=app, windows=()):
-                    web = WEB_APPS[app]
-                    return Target(f"{web.label} · Open {web.label} on the web", Glyph(web.glyph), chosen, active=active)
-                case Pinned(app=app, windows=windows):
-                    # The filled symbol marks a running slot, as active states fill elsewhere.
-                    web = WEB_APPS[app]
-                    return Target(f"{web.label} · {windows_label(len(windows))}", Glyph(web.glyph + ".fill"), chosen, active=active)
-                case Application(identity=identity, windows=windows, image=image):
-                    face = Glyph("window") if image is None else image
-                    return Target(f"{identity.removesuffix('.exe')} · {windows_label(len(windows))}", face, chosen, active=active)
-                case _:
-                    assert_never(item)
-
-        self.pinned.show_targets((self.canvas, *(target(item) for item in current.pinned)))
-        self.apps.show_targets(tuple(target(item) for item in current.running))
+        self.icons.update((app.identity, app.image) for app in snapshot[0].running if app.image is not None)
         self.app_snapshot = snapshot
 
     def place(self, left: int, width: int) -> None:
-        """Canvas and the pinned slots from the screen's edge, then the pager and running apps, stopping before the leftmost capsule at `left`."""
-        self.pinned.place(12, left - 12)
-        after = 12 if self.pinned.isHidden() else 12 + self.pinned.width() + 6
-        self.pager.place(after, left - 12)
-        after = after if self.pager.isHidden() else after + self.pager.width() + 6
-        self.apps.place(after, max(after, min(left - 12, width // 3)))
+        """The pager from the screen's edge, stopping before the leftmost capsule at `left`."""
+        self.pager.place(12, left - 12)

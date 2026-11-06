@@ -31,13 +31,13 @@ from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.vector_icons import symbol
-from desktop_ui.window_layout import EDGE, TERMINAL, WorkspaceView
+from desktop_ui.window_layout import EDGE, TERMINAL, App, WorkspaceView
 from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
 from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
-from winapi.tray_host import Entry
+from winapi.tray_host import Click, Entry
 
 prepare()
 
@@ -134,15 +134,17 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         bar.timer.stop()
-        pinned = bar.window.shell_sections.pinned
+        sections = bar.window.shell_sections
+        sections.desktops(pager(((WorkspaceView.CANVAS,), (TERMINAL,)), 0, chord=False), lambda _: None, lambda _app, _click: None)
+        bar.window.presentation = None  # As the shell poll does when the pager changes.
+        bar.render()
 
         def geometries() -> tuple[QtCore.QRect, ...]:
-            return (pinned.geometry(), bar.window.capsules[Key.STATUS].geometry())
+            return (sections.pager.geometry(), bar.window.capsules[Key.STATUS].geometry())
 
         before = geometries()
         assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
         assert before[0].left() == 12
-        assert bar.window.shell_sections.apps.x() >= before[0].right() + 6
         for speakers in Speakers:
             for wifi in Wifi:
                 bar.system = SystemStatus(speakers, wifi)
@@ -196,18 +198,22 @@ def test_status_icons_open_the_controls_menu_like_the_rest_of_the_capsule() -> N
         closed(app, bar)
 
 
-def test_canvas_leads_the_leftmost_capsule_keeps_its_label_and_opens_the_canvas() -> None:
-    # Defects: Canvas navigation disappears until the shell reports applications,
-    # loses its label, or its press runs another function.
+def test_the_pager_is_the_only_toolbar_and_its_canvas_icon_opens_the_canvas() -> None:
+    # Defects: the removed web-app or running-app strips come back, the pager
+    # leaves the screen's edge, or the canvas icon runs another function.
     app = application()
     invoked: list[str] = []
     bar = DesktopBar(recorded(invoked), native_shell=False)
     try:
         assert shown(bar) == FIXED
-        pinned = bar.window.shell_sections.pinned
-        assert pinned.isVisibleTo(bar.window) and pinned.x() == 12
-        canvas = pinned.buttons[0]
-        assert canvas.accessibleName() == "Canvas · Open your work canvas"
+        sections = bar.window.shell_sections
+        assert sections.sections() == (sections.pager,)
+        sections.desktops(pager(((WorkspaceView.CANVAS,), (TERMINAL,)), 1, chord=False), bar.navigate, bar.app_click)
+        bar.window.presentation = None  # As the shell poll does when the pager changes.
+        bar.render()
+        assert sections.pager.isVisibleTo(bar.window) and sections.pager.x() == 12
+        canvas = sections.pager.buttons[0]
+        assert canvas.accessibleName() == "Desktop 1 · Canvas"
         QTest.mouseClick(canvas, QtCore.Qt.MouseButton.LeftButton)
         assert invoked == ["canvas"]
     finally:
@@ -278,9 +284,7 @@ def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
         # Edges snap to device pixels, so a logical edge can sit a pixel off at fractional scales.
         assert abs(island.left() + island.width() / 2 - area.width() / 2) <= 1
         assert island.top() == 0 and island.height() == TOP + 34
-        canvas = bar.window.shell_sections.pinned.geometry()
         assert abs(inbox.left() - (island.left() + island.width()) - 6) <= 1
-        assert canvas.left() == 12 and canvas.right() < island.left()
         stop = stop_button(bar, Key.ISLAND).geometry()
         assert (stop.width(), stop.height(), stop.top() - TOP) == (28, 28, 3)
         assert abs(island.width() - (stop.left() + stop.width()) - 3) <= 1
@@ -680,20 +684,26 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
 
 
 def test_pager_offers_each_desktop_directly() -> None:
-    # Defects: the pager loses a desktop or its accessible names, or a click goes
-    # to another desktop.
+    # Defects: the pager loses a desktop or its accessible names, a click on an
+    # app reaches another one, or the current empty desktop can't be reached.
     app = application()
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     chosen: list[Navigation] = []
+    picked: list[tuple[App, Click]] = []
     try:
-        bar.window.shell_sections.desktops(pager(((TERMINAL,), (EDGE,)), 0, chord=False), chosen.append)
+        bar.window.shell_sections.desktops(
+            pager(((TERMINAL,), (EDGE,), ()), 2, chord=False), chosen.append, lambda each, click: picked.append((each, click))
+        )
         buttons = bar.window.shell_sections.pager.buttons
         assert [button.accessibleName() for button in buttons] == [
-            "Desktop 1 (current) · windowsterminal",
+            "Desktop 1 · windowsterminal",
             "Desktop 2 · msedge",
+            "Desktop 3 (current) · No placed apps",
         ]
         QTest.mouseClick(buttons[1], QtCore.Qt.MouseButton.LeftButton)
-        assert chosen == [PagerClick(1, Source.PAGER)]
+        QTest.mouseClick(buttons[2], QtCore.Qt.MouseButton.LeftButton)
+        assert picked == [(EDGE, Click.LEFT)]
+        assert chosen == [PagerClick(2, Source.PAGER)]
     finally:
         closed(app, bar)
 
@@ -706,14 +716,18 @@ def test_pager_draws_each_desktops_apps_as_one_widening_stack_and_an_empty_one_b
     bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         sections = bar.window.shell_sections
-        sections.desktops(pager(((WorkspaceView.CANVAS,), (PinnedApp.OUTLOOK, PinnedApp.TEAMS, TERMINAL), ()), 0, chord=False), lambda _: None)
+        sections.desktops(
+            pager(((WorkspaceView.CANVAS,), (PinnedApp.OUTLOOK, PinnedApp.TEAMS, TERMINAL), ()), 2, chord=False),
+            lambda _: None,
+            lambda _app, _click: None,
+        )
         one, three, empty = sections.pager.buttons
         glyph = shell_surface.Glyph
         assert one.target.face == shell_surface.Stack((glyph("canvas"),))
         assert three.target.face == shell_surface.Stack((glyph("mail.fill"), glyph("chat.fill"), glyph("window")))
         assert three.width() == one.width() + 2 * shell_surface.STACK_STEP
         assert empty.target.face == "3"
-        sections.desktops(pager(((WorkspaceView.CANVAS,), (), ()), 0, chord=True), lambda _: None)
+        sections.desktops(pager(((WorkspaceView.CANVAS,), (TERMINAL,), ()), 2, chord=True), lambda _: None, lambda _app, _click: None)
         assert [button.target.face for button in sections.pager.buttons] == ["J", "L", "U"]
     finally:
         closed(app, bar)

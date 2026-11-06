@@ -820,7 +820,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: tuple[Presented, tuple[int, int, int, int], float] | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
-        self.shell_sections = ShellSections(self, lambda: owner.press(Action.OPEN_CANVAS))
+        self.shell_sections = ShellSections(self)
         # The bar's latest tray snapshot and Qt copies of its images, for the menu's tray cells.
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()
@@ -952,11 +952,7 @@ class BarWindow(QtWidgets.QWidget):
                             1,
                             _veil(shell_look, presented.frost),
                         )
-                        for key, section in (
-                            ("pinned applications", self.shell_sections.pinned),
-                            ("desktops", self.shell_sections.pager),
-                            ("applications", self.shell_sections.apps),
-                        )
+                        for key, section in (("desktops", self.shell_sections.pager),)
                         if section.isVisibleTo(self)
                     ),
                 )

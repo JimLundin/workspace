@@ -191,14 +191,19 @@ def test_resizable_windows_of_other_programs_are_managed_even_when_minimized() -
     assert not managed(Window(1, "Elevated", "", minimized=False), resizable=True, own=False)
 
 
-def test_a_desktops_apps_read_left_to_right_then_top_to_bottom() -> None:
+def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() -> None:
     # Defects: the pager orders a desktop's icons by when the apps started
-    # rather than where they sit, or lists an app placed on another desktop.
+    # rather than where they sit, lists an app placed on another desktop, or
+    # leaves out an app the layout puts there because it isn't running.
     work = screens((LAPTOP, ABOVE, SIDE))
     assert work is not None
     apps = (Group(EDGE, (5,)), Group(CODE, (4,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(PinnedApp.TEAMS, (1,)))
     placement = place(work, (Group(WorkspaceView.CANVAS, (6,)), *apps), NOWHERE)
     windows = frozendict((group.app, group.windows) for group in apps)
     # SIDE is leftmost (Teams above Outlook), then ABOVE's Terminal, then the laptop's Edge, then ABOVE's Code.
-    assert reading_order(windows, placement, 1) == (PinnedApp.TEAMS, PinnedApp.OUTLOOK, TERMINAL, EDGE, CODE)
-    assert reading_order(windows, placement, 0) == ()
+    assert reading_order(work, windows, placement, 1) == (PinnedApp.TEAMS, PinnedApp.OUTLOOK, TERMINAL, EDGE, CODE)
+    assert reading_order(work, windows, placement, 0) == (WorkspaceView.CANVAS,)
+    alone = screens((LAPTOP,))
+    assert reading_order(alone, frozendict(), NOWHERE, 3) == (TERMINAL, CODE)
+    assert reading_order(alone, frozendict(), NOWHERE, 5) == ()
+    assert reading_order(None, windows, placement, 0) == ()

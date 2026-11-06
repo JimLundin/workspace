@@ -132,9 +132,10 @@ open Start, and tap it again to hide it.
 The floating bar sits at the top of the main screen. Its centre shows only live
 activity: dictation, transcription, agent work with **Stop**, a meeting
 recording, a question waiting for you, or a short notice of the agent's news.
-On the left, one capsule holds the **Canvas** button and the Outlook and Teams
-web apps, followed by the desktop pager and the running apps. One capsule on the
-right holds CPU and memory use, a keyboard icon while the keyboard types plainly
+On the left, the desktop pager is the only toolbar: each desktop as its apps'
+icons, left to right as they sit on screen, running or not. Click an icon to go
+to that app (Canvas is desktop 1's icon); right-click lists its windows. One
+capsule on the right holds CPU and memory use, a keyboard icon while the keyboard types plainly
 (layout off or the Charybdis connected), volume, Wi-Fi, the clock and the
 battery. Click the clock or battery to open the controls menu. The bell lists pending questions and recent
 notices. See [the island bar](docs/toolbar-design.md) for the full policy.

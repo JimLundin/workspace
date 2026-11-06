@@ -32,6 +32,7 @@ from desktop_ui.window_layout import (
     Group,
     Placement,
     Program,
+    Screens,
     Setup,
     Target,
     WorkspaceView,
@@ -250,6 +251,7 @@ class Worker:
         "recent",
         "setup",
         "tracker",
+        "where",
         "world",
         "zoomed",
     )
@@ -266,6 +268,7 @@ class Worker:
         self.launches: Launches = frozendict()
         self.world: World | None = None
         self.setup: Setup | None = None
+        self.where: Screens | None = None
         self.tracker: Tracker = START
         self.arrival: Foreground | None = None
         """A foreground change waiting for the next poll to identify its window."""
@@ -325,6 +328,7 @@ class Worker:
         state = observed.state
         where = screens(screen.monitors())
         self.setup = where.setup if where is not None else None
+        self.where = where
         if where is not None and state is not None:
             eligible = frozenset(
                 window.handle
@@ -359,7 +363,7 @@ class Worker:
         world = self.world
         if world is None:
             return tuple(() for _ in range(desktops))
-        return tuple(reading_order(world.windows, self.placement, index) for index in range(desktops))
+        return tuple(reading_order(self.where, world.windows, self.placement, index) for index in range(desktops))
 
     def publish(self, grouped: Shelf, state: Desktops | None) -> None:
         stop = self.observer.stop

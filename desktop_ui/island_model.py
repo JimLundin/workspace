@@ -234,13 +234,14 @@ def facts(ambient: Ambient) -> Slot:
     return (Text(ambient.clock, reserve="00:00"), power, battery)
 
 
-def usage(name: str, percent: int | None) -> Text:
-    """One resource reading, reserving its widest form so a changing value never shifts the cluster."""
-    return Text(f"{name} {'—' if percent is None else f'{percent}%'}", reserve=f"{name} 100%")
+def usage(percent: int | None) -> Text:
+    """One resource's value, reserving its widest form so a changing value never shifts the cluster."""
+    return Text("—" if percent is None else f"{percent}%", reserve="100%")
 
 
 def resources(system: SystemStatus) -> Slot:
-    return (usage("CPU", system.cpu), usage("RAM", system.memory))
+    """The processor and memory, each its symbol then its value."""
+    return (Glyph("cpu"), usage(system.cpu), Glyph("memory"), usage(system.memory))
 
 
 def describe(ambient: Ambient) -> str:

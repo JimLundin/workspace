@@ -16,12 +16,26 @@ prepare()
 
 # A small rounded square reads as Stop at toolbar size, as SF Symbols' stop.fill does.
 _STOP = '<rect x="4.25" y="4.25" width="7.5" height="7.5" rx="1.8"/>'
+# A chip with two pins a side reads as the processor; a module with its chips and contacts as memory.
+_CPU = (
+    '<path fill-rule="evenodd" d="M4.5 4h7a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-7a.5.5 0 0 1 .5-.5zM5 5v6h6V5z"/>'
+    '<rect x="6.5" y="6.5" width="3" height="3" rx=".5"/>'
+    '<path d="M6 2h1v2H6zM9 2h1v2H9zM6 12h1v2H6zM9 12h1v2H9zM2 6h2v1H2zM2 9h2v1H2zM12 6h2v1h-2zM12 9h2v1h-2z"/>'
+)
+_MEMORY = (
+    '<path fill-rule="evenodd" d="M2 4h12a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 1v5h12V5z"/>'
+    '<path d="M3.5 6h2v3h-2zM7 6h2v3H7zM10.5 6h2v3h-2zM3 11h1v2H3zM5 11h1v2H5zM7 11h1v2H7zM9 11h1v2H9zM11 11h1v2h-1z"/>'
+)
 
 
 def symbol(name: str) -> str:
     """The SVG body for a symbol name; unknown names fall back to the document symbol."""
     if name in ("stop", "stop.fill"):
         return _STOP
+    if name == "cpu":
+        return _CPU
+    if name == "memory":
+        return _MEMORY
     # Unavailable is not muted or disconnected: a question badge retains the
     # device identity without asserting a state Windows could not observe.
     if name in ("speaker-unknown", "wifi-unknown", "wifi-absent"):

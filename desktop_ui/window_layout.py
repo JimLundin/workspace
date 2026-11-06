@@ -251,14 +251,23 @@ def place(where: Screens, apps: Sequence[Group], previous: Placement) -> Placeme
     return frozendict(pair for group in apps for pair in targets(group))
 
 
-def reading_order(windows: Mapping[App, Sequence[int]], placement: Placement, desktop: int) -> tuple[App, ...]:
-    """The desktop's apps as they read on screen: by their leftmost window, then its top."""
-    corners = (
-        (min(corners), order, app)
-        for order, (app, handles) in enumerate(windows.items())
-        if (corners := [(t.rect.left, t.rect.top) for h in handles if (t := placement.get(h)) is not None and t.desktop == desktop])
-    )
-    return tuple(app for _, _, app in sorted(corners))
+def reading_order(where: Screens | None, windows: Mapping[App, Sequence[int]], placement: Placement, desktop: int) -> tuple[App, ...]:
+    """The desktop's apps as they read on screen, by their leftmost window and then its top.
+
+    An app the setup declares on the desktop is listed even when it isn't running,
+    at its first place there, so every desktop shows what belongs on it.
+    """
+    corners: dict[App, tuple[int, int]] = {}
+    for app, handles in windows.items():
+        placed = [(t.rect.left, t.rect.top) for h in handles if (t := placement.get(h)) is not None and t.desktop == desktop]
+        if placed:
+            corners[app] = min(placed)
+    if where is not None:
+        for app, places in LAYOUTS[where.setup].items():
+            declared = [(r.left, r.top) for p in places if p.desktop == desktop for r in (pixels(where.roles[p.role], p.region),)]
+            if declared and app not in corners:
+                corners[app] = min(declared)
+    return tuple(app for app, _ in sorted(corners.items(), key=lambda item: item[1]))
 
 
 def overflow(apps: Sequence[Group], previous: Placement, first: int) -> frozendict[App, int]:
