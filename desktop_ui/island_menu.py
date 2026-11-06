@@ -13,6 +13,7 @@ its application.
 
 from dataclasses import dataclass, field, replace
 from enum import Enum, StrEnum, auto
+from itertools import accumulate, chain
 from typing import Final, assert_never
 
 from contracts.meeting_detection import AutomaticStatus
@@ -282,29 +283,26 @@ def faces(entry: EntryId) -> frozenset[Face]:
 
 def problems(spec: ControlsSpec) -> tuple[str, ...]:
     """What makes a spec unusable, beyond its shape: each named by its row."""
-    found: list[str] = []
-    seen: set[EntryId] = set()
-    for kind in (ActivitiesRow, TrayRow):
-        if sum(isinstance(row, kind) for row in spec.rows) > 1:
-            found.append(f"rows: more than one {kind.__name__}")
-    for index, row in enumerate(spec.rows):
-        match row:
-            case CellsRow(cells=cells):
-                if (width := sum(cell.span for cell in cells)) > COLUMNS:
-                    found.append(f"rows.{index}: its cells span {width} of the menu's {COLUMNS} columns")
-                for cell in cells:
-                    if cell.entry in seen:
-                        found.append(f"rows.{index}: {cell.entry} is already placed")
-                    seen.add(cell.entry)
-                    if cell.face not in faces(cell.entry):
-                        found.append(f"rows.{index}: {cell.entry} can't show as {cell.face}")
-                    if cell.entry is not EntryId.SOUND and not (cell.label and cell.icon):
-                        found.append(f"rows.{index}: {cell.entry} needs a label and an icon")
-            case ActivitiesRow() | TrayRow():
-                pass
-            case _:
-                assert_never(row)
-    return tuple(found)
+    placed = tuple((index, cell) for index, row in enumerate(spec.rows) if isinstance(row, CellsRow) for cell in row.cells)
+    return (
+        *(f"rows: more than one {kind.__name__}" for kind in (ActivitiesRow, TrayRow) if sum(isinstance(row, kind) for row in spec.rows) > 1),
+        *(
+            f"rows.{index}: its cells span {width} of the menu's {COLUMNS} columns"
+            for index, row in enumerate(spec.rows)
+            if isinstance(row, CellsRow) and (width := sum(cell.span for cell in row.cells)) > COLUMNS
+        ),
+        *(
+            f"rows.{index}: {cell.entry} is already placed"
+            for place, (index, cell) in enumerate(placed)
+            if any(earlier.entry is cell.entry for _, earlier in placed[:place])
+        ),
+        *(f"rows.{index}: {cell.entry} can't show as {cell.face}" for index, cell in placed if cell.face not in faces(cell.entry)),
+        *(
+            f"rows.{index}: {cell.entry} needs a label and an icon"
+            for index, cell in placed
+            if cell.entry is not EntryId.SOUND and not (cell.label and cell.icon)
+        ),
+    )
 
 
 def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
@@ -354,33 +352,50 @@ def activities(controls: Controls) -> tuple[Live, ...]:
     )
 
 
+def present_cells(controls: Controls, specs: tuple[CellSpec, ...]) -> tuple[tuple[CellSpec, Entry], ...]:
+    """A row's cells that show now, in order: a cell whose entry is absent leaves no gap."""
+    return tuple((each, present) for each in specs if (present := entry(each, controls)) is not None)
+
+
+def height(row: RowSpec, controls: Controls) -> int:
+    """The tracks `row` takes now: an empty row takes none."""
+    match row:
+        case ActivitiesRow(tracks=tracks):
+            return tracks * len(activities(controls))
+        case TrayRow(tracks=tracks):
+            return tracks * ((len(controls.tray) + COLUMNS - 1) // COLUMNS)
+        case CellsRow(tracks=tracks, cells=specs):
+            return tracks if present_cells(controls, specs) else 0
+        case _:
+            assert_never(row)
+
+
+def row_cells(row: RowSpec, controls: Controls, top: int) -> tuple[Cell, ...]:
+    """`row`'s cells from `top`, each following the one before it."""
+    match row:
+        case ActivitiesRow(tracks=tracks):
+            return tuple(Cell(activity, Face.CARD, 0, COLUMNS, top + tracks * index, tracks) for index, activity in enumerate(activities(controls)))
+        case TrayRow(tracks=tracks):
+            return tuple(
+                Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
+                for slot, name in enumerate(controls.tray)
+            )
+        case CellsRow(tracks=tracks, cells=specs):
+            shown = present_cells(controls, specs)
+            columns = accumulate((each.span for each, _ in shown), initial=0)
+            return tuple(
+                Cell(present, each.face, column, each.span, top, tracks, each.caption)
+                for (each, present), column in zip(shown, columns, strict=False)
+            )
+        case _:
+            assert_never(row)
+
+
 def entries(controls: Controls, spec: ControlsSpec) -> tuple[Cell, ...]:
-    """The grid for what's happening now, flowed from the spec's rows: each cell
-    follows the one before it, so no two overlap. Tracks include the gutters."""
-    cells: list[Cell] = []
-    top = 0
-    for row in spec.rows:
-        match row:
-            case ActivitiesRow(tracks=tracks):
-                for activity in activities(controls):
-                    cells.append(Cell(activity, Face.CARD, 0, COLUMNS, top, tracks))
-                    top += tracks
-            case TrayRow(tracks=tracks):
-                cells.extend(
-                    Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
-                    for slot, name in enumerate(controls.tray)
-                )
-                top += tracks * ((len(controls.tray) + COLUMNS - 1) // COLUMNS)
-            case CellsRow(tracks=tracks, cells=specs):
-                column = 0
-                for each in specs:
-                    if (present := entry(each, controls)) is not None:
-                        cells.append(Cell(present, each.face, column, each.span, top, tracks, each.caption))
-                        column += each.span
-                top += tracks if column else 0
-            case _:
-                assert_never(row)
-    return tuple(cells)
+    """The grid for what's happening now, flowed from the spec's rows: each row
+    starts below the one before it, so no two cells overlap. Tracks include the gutters."""
+    tops = accumulate((height(row, controls) for row in spec.rows), initial=0)
+    return tuple(chain.from_iterable(row_cells(row, controls, top) for row, top in zip(spec.rows, tops, strict=False)))
 
 
 @dataclass(frozen=True, slots=True)
