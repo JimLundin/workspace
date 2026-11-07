@@ -63,6 +63,10 @@ their tests. Legacy data and backwards compatibility are not requirements.
   read as `role.value`. Members that would share a value collapse into aliases,
   so keep a table for those and for values another layer owns (UI labels for a
   `winapi` enum).
+- Don't reach into a sequence by position (`row[0]`, `pair[1]`, `items[-1]`):
+  that value deserves a name. Unpack it, read a named field, or model the record
+  (a typed row adapter instead of SQLite tuples). Looking up a key in a table
+  (`COLOURS[state]`) is fine, and so is a slice that bounds a length.
 - Use domain types with their bounds, not bare tuples: `desktop_ui.colour.Rgb`,
   `winapi.shapes.Point` and `Size`, not `tuple[int, int, int]`. The architecture
   review rejects a fixed tuple of only ints and floats.
