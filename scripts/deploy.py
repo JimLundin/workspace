@@ -5,8 +5,10 @@ python -m scripts.deploy
 The Git-listed source files are staged in Temp and the running keeper checks
 and installs them as it installs the agent's changes, restarting only the
 programs they affect. With no keeper running, the same version store takes the
-files and the copy stays stopped. Rebuild the bundle with scripts/bundle.py
-instead when a runtime pin changes.
+files and the copy stays stopped. A changed dependency lock is installed like any
+change: the keeper builds the lock's environment from PyPI and checks the change
+in it. A changed Python version (`.python-version`) is refused: install that
+Python by hand, then start Workspace again.
 """
 
 import argparse
@@ -21,7 +23,7 @@ from pathlib import Path
 import keeper
 from keeper_control import INSTALL_RESULT_FILE, Install, InstallChecking, InstallRefused, InstallStarted, ask, install_result
 from scripts.check import source_files
-from scripts.deploy_files import PINS, checked_sources, sha
+from scripts.deploy_files import INTERPRETER, checked_sources, sha
 from scripts.development_paths import LIVE, TEMP
 
 WORKSPACE = Path(__file__).resolve().parent.parent
@@ -41,9 +43,10 @@ def stage_source(stage: Path, *, checkout: Path = WORKSPACE) -> dict[str, str]:
     return wanted
 
 
-def changed_pins(wanted: Mapping[str, str], live: Path) -> tuple[str, ...]:
-    """Runtime pins the installed bundle doesn't match: its dependencies would be wrong."""
-    return tuple(name for name in PINS if not (live / name).is_file() or hashlib.sha256((live / name).read_bytes()).hexdigest() != wanted[name])
+def changed_interpreter(wanted: Mapping[str, str], live: Path) -> bool:
+    """Whether the staged source wants another Python than the installed copy runs; no install can change that."""
+    pin = live / INTERPRETER
+    return not pin.is_file() or hashlib.sha256(pin.read_bytes()).hexdigest() != wanted[INTERPRETER]
 
 
 def summary(checkout: Path) -> str:
@@ -84,8 +87,8 @@ def deploy(live: Path) -> None:
     stage = TEMP / f"workspace-source-{time.time_ns()}"
     try:
         wanted = stage_source(stage)
-        if changed := changed_pins(wanted, live):
-            raise SystemExit("A runtime pin changed (" + ", ".join(changed) + "); rebuild the bundle with scripts/bundle.py.")
+        if changed_interpreter(wanted, live):
+            raise SystemExit(f"The Python version changed ({INTERPRETER}): install that Python by hand, then start Workspace again.")
         digest, title = keeper.source_digest(stage), summary(WORKSPACE)
         with keeper.exclusive(keeper.STATE) as stopped:
             if stopped:

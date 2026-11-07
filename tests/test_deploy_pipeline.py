@@ -9,7 +9,7 @@ from pathlib import Path
 
 from keeper_control import InstallRefused, InstallStarted, record_install
 from scripts import deploy
-from scripts.deploy_files import PINS, file_at, member, names, sha, source_map
+from scripts.deploy_files import INTERPRETER, PINS, file_at, member, names, sha, source_map
 from tests.git_fixture import initialized
 
 
@@ -33,16 +33,18 @@ def test_staging_copies_exactly_the_working_tree_bytes(tmp_path: Path) -> None:
     assert {name: sha(stage / name) for name in wanted} == wanted
 
 
-def test_a_changed_runtime_pin_is_named_before_anything_is_installed(tmp_path: Path) -> None:
-    # Defect: a deploy installs code that needs dependencies the installed bundle lacks.
+def test_only_a_changed_python_version_is_refused_before_anything_is_installed(tmp_path: Path) -> None:
+    # Defects: a deploy installs code for a Python the installed copy doesn't run,
+    # or still refuses a dependency lock change, which the keeper now installs.
     live = tmp_path / "live"
     for name in PINS:
         (live / name).parent.mkdir(parents=True, exist_ok=True)
         (live / name).write_bytes(b"installed\n")
     wanted = {name: sha(live / name) for name in PINS}
-    assert deploy.changed_pins(wanted, live) == ()
-    (live / PINS[1]).write_bytes(b"newer\n")
-    assert deploy.changed_pins(wanted, live) == (PINS[1],)
+    (live / PINS[1]).write_bytes(b"newer lock\n")
+    assert not deploy.changed_interpreter(wanted, live)
+    (live / INTERPRETER).write_bytes(b"3.16\n")
+    assert deploy.changed_interpreter(wanted, live)
 
 
 def test_a_retried_deploy_waits_for_a_result_newer_than_its_request(tmp_path: Path) -> None:
