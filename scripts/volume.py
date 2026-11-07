@@ -9,7 +9,9 @@ import argparse
 import ast
 import subprocess
 from collections import Counter
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,30 +24,32 @@ class Measure:
     nodes: int
 
 
-def docstrings(tree: ast.Module) -> set[ast.AST]:
-    owners = [tree, *(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef))]
-    found: set[ast.AST] = set()
-    for owner in owners:
-        match owner.body:
-            case [ast.Expr(value=ast.Constant(value=str())) as first, *_]:
-                found.add(first)
-            case _:
-                pass
-    return found
+def docstrings(tree: ast.Module) -> frozenset[ast.AST]:
+    owners = (tree, *(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef)))
+    return frozenset(first for owner in owners if (first := _docstring(owner.body)) is not None)
+
+
+def _docstring(body: Sequence[ast.stmt]) -> ast.Expr | None:
+    match body:
+        case [ast.Expr(value=ast.Constant(value=str())) as first, *_]:
+            return first
+        case _:
+            return None
+
+
+def _levels(tree: ast.AST, skipped: frozenset[ast.AST]) -> Iterator[tuple[ast.AST, ...]]:
+    """The counted nodes one depth at a time; a skipped node hides its whole subtree."""
+    level: tuple[ast.AST, ...] = (tree,)
+    while level:
+        yield level
+        level = tuple(
+            child for node in level for child in ast.iter_child_nodes(node) if child not in skipped and not isinstance(child, ast.expr_context)
+        )
 
 
 def nodes(text: str) -> int:
     tree = ast.parse(text)
-    skipped = docstrings(tree)
-    pending: list[ast.AST] = [tree]
-    count = 0
-    while pending:
-        node = pending.pop()
-        if node in skipped or isinstance(node, ast.expr_context):
-            continue
-        count += 1
-        pending.extend(ast.iter_child_nodes(node))
-    return count
+    return sum(len(level) for level in _levels(tree, docstrings(tree)))
 
 
 def area(path: str) -> str:
@@ -59,9 +63,10 @@ def tracked(root: Path) -> list[str]:
 
 
 def report(measures: list[Measure], top: int) -> str:
-    totals: Counter[str] = Counter()
-    for measure in measures:
-        totals[area(measure.path)] += measure.nodes
+    by_area = sorted(measures, key=lambda m: area(m.path))
+    sums = frozendict((name, sum(m.nodes for m in group)) for name, group in groupby(by_area, key=lambda m: area(m.path)))
+    # In first-seen order, so most_common breaks ties as it always has.
+    totals = Counter({name: sums[name] for name in dict.fromkeys(area(m.path) for m in measures)})
     product = sum(n for name, n in totals.items() if name not in SUPPORT)
     support = sum(n for name, n in totals.items() if name in SUPPORT)
     rows = [f"{name:<14}{count:>9,}" for name, count in totals.most_common()]

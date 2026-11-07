@@ -14,7 +14,7 @@ import statistics
 import sys
 import tracemalloc
 from array import array
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
@@ -175,8 +175,6 @@ def measure_latencies(
     events: Sequence[tuple[Scancode, bool, int]],
     rounds: int,
 ) -> tuple[tuple[frozendict[str, float], ...], tuple[int, ...], tuple[int, ...]]:
-    count = len(events)
-    latencies = array("Q", [0]) * count
     collections: list[int] = []
     pauses: list[int] = []
     gc_started = 0
@@ -198,7 +196,19 @@ def measure_latencies(
         else:
             warm.timeout(host, 1)
     del warm
-    measurements: list[dict[str, float]] = []
+    measurements = tuple(round_latencies(host, events, rounds, observe_gc))
+    return measurements, tuple(collections), tuple(pauses)
+
+
+def round_latencies(
+    host: Host,
+    events: Sequence[tuple[Scancode, bool, int]],
+    rounds: int,
+    observe_gc: Callable[[str, dict[str, int]], None],
+) -> Iterator[frozendict[str, float]]:
+    """Each round's latency percentiles, measured on a fresh engine with observe_gc watching collections."""
+    # One preallocated buffer, written in place, so the timed loop never allocates a sample.
+    latencies = array("Q", [0]) * len(events)
     for _ in range(rounds):
         engine = Engine()
         gc.collect()
@@ -214,7 +224,7 @@ def measure_latencies(
         finally:
             gc.callbacks.remove(observe_gc)
         values = sorted(latencies)
-        measurements.append(
+        yield frozendict(
             {
                 "p50_us": percentile(values, 0.5),
                 "p95_us": percentile(values, 0.95),
@@ -223,7 +233,6 @@ def measure_latencies(
                 "max_us": max(values) / 1000,
             }
         )
-    return tuple(frozendict(row) for row in measurements), tuple(collections), tuple(pauses)
 
 
 def play(engine: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> None:

@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -107,16 +108,20 @@ def changes(pending: queue.SimpleQueue[Path], *, debounce: float = 0.25) -> froz
         first = pending.get(timeout=0.25)
     except queue.Empty:
         return frozenset()
-    # The batch is private to this drain; unioning a new frozen set for every OS
-    # event would repeatedly copy the batch during editor save storms.
-    batch = {first}
+    # One frozen set from the whole burst, never a copy per OS event during editor save storms.
+    return frozenset((first, *_arrivals(pending, debounce)))
+
+
+def _arrivals(pending: queue.SimpleQueue[Path], debounce: float) -> Iterator[Path]:
+    """Paths that keep arriving, each within `debounce` of the one before."""
     deadline = time.monotonic() + debounce
     while True:
         try:
-            batch.add(pending.get(timeout=max(0, deadline - time.monotonic())))
-            deadline = time.monotonic() + debounce
+            path = pending.get(timeout=max(0, deadline - time.monotonic()))
         except queue.Empty:
-            return frozenset(batch)
+            return
+        deadline = time.monotonic() + debounce
+        yield path
 
 
 def check_command(settings: Settings, receipt: Path) -> tuple[str, ...]:

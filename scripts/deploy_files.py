@@ -85,15 +85,20 @@ def member(name: str) -> str:
     return name
 
 
+def _prefixes(name: str) -> tuple[str, ...]:
+    parts = PurePosixPath(name).parts
+    return tuple("/".join(parts[:length]) for length in range(1, len(parts) + 1))
+
+
 def names(values: Iterable[str]) -> None:
-    folded: dict[str, str] = {}
-    for name in values:
+    listed = tuple(values)
+    prefixes = tuple(_prefixes(name) for name in listed)
+    # Each case-folded path keeps its first spelling: the last write of the reversed walk.
+    first = frozendict((prefix.casefold(), prefix) for group in reversed(prefixes) for prefix in reversed(group))
+    for name, group in zip(listed, prefixes, strict=True):
         member(name)
-        parts = PurePosixPath(name).parts
-        for length in range(1, len(parts) + 1):
-            prefix = "/".join(parts[:length])
-            if folded.setdefault(prefix.casefold(), prefix) != prefix:
-                raise ValueError("Release paths collide on Windows.")
+        if any(first[prefix.casefold()] != prefix for prefix in group):
+            raise ValueError("Release paths collide on Windows.")
 
 
 def bytecode(name: str) -> bool:

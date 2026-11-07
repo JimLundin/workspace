@@ -42,6 +42,18 @@ class Result:
     loop_stopped_at_rest: bool
 
 
+class Clock:
+    """The controlled time the bar reads; the benchmark owns it and steps it one frame at a time."""
+
+    __slots__ = ("now",)
+
+    def __init__(self, now: float) -> None:
+        self.now = now
+
+    def read(self) -> float:
+        return self.now
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rounds", type=int, default=5)
@@ -84,13 +96,13 @@ def transitions(bar: DesktopBar) -> tuple[Callable[[], None], ...]:
 
 def run(rounds: int) -> Result:
     app = application()
-    now = [1000.0]
+    clock = Clock(1000.0)
 
     def inert(*_: object) -> None:
         return None
 
     actions = BarActions(inert, inert, inert, inert, inert, inert, inert, inbox=inert, open_item=inert)
-    observations = BarObservations(clock=lambda: now[0], motion=lambda: True, material=lambda: appearance.Material.GLASS)
+    observations = BarObservations(clock=clock.read, motion=lambda: True, material=lambda: appearance.Material.GLASS)
     bar = DesktopBar(actions, native_shell=False, observations=observations)
     bar.timer.stop()  # The benchmark owns every frame.
     bar.visible = True
@@ -109,7 +121,7 @@ def run(rounds: int) -> Result:
                 for step in steps:
                     step()
                     for _ in range(90):  # 1.5 s: every transition settles within it.
-                        now[0] += FRAME
+                        clock.now += FRAME
                         if traced:
                             tracemalloc.reset_peak()
                             before = tracemalloc.get_traced_memory()[0]

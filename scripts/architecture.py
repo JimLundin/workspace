@@ -3,18 +3,19 @@
 The same inventory works in a Git checkout and a deployed source copy. Callers
 may supply Git-listed names to bind the review to their checked source snapshot.
 
-Parsing uses private mutable ASTs and traversal worklists: copying the growing
-graph at every step would add substantial algorithmic overhead. Only immutable
-policy reports leave this owner.
+Parsing uses private mutable ASTs. Traversals are generators over immutable
+breadth-first levels: each level is one tuple and the visited set grows by one
+union per level, not per module, so the walks stay linear in the graph. Only
+immutable policy reports leave this owner.
 """
 
 import ast
 import os
 import sys
 import tomllib
-from collections import deque
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
+from functools import reduce
 from pathlib import Path
 from typing import Annotated, Final, Literal
 
@@ -26,6 +27,8 @@ from scripts.source_analysis import Cache, Source, parse
 type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
 
 REFLECTION = frozenset({"getattr", "hasattr", "setattr", "delattr"})
+REFLECTION_CALLS = REFLECTION | {"builtins." + name for name in REFLECTION}
+DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})
 MUTABLE_TYPES = frozenset(
     {
         "list",
@@ -98,13 +101,16 @@ DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
 FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 
 
+def _walked(root: Path) -> Iterator[str]:
+    """Every file under root, pruning hidden and cache directories as os.walk descends."""
+    for folder, directories, files in os.walk(root):
+        directories[:] = sorted(name for name in directories if not name.startswith((".", "__pycache__")))
+        yield from ((Path(folder) / name).relative_to(root).as_posix() for name in files)
+
+
 def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str, ...]:
     if names is None:
-        found: list[str] = []
-        for folder, directories, files in os.walk(root):
-            directories[:] = sorted(name for name in directories if not name.startswith((".", "__pycache__")))
-            found.extend((Path(folder) / name).relative_to(root).as_posix() for name in files)
-        names = found
+        names = _walked(root)
     return tuple(
         sorted(
             {
@@ -152,18 +158,33 @@ def _within(module: str, package: str) -> bool:
 APPLICATION_LAYERS: Final = ("assistant", "desktop_ui")
 
 
-def _routes(graph: Mapping[str, frozenset[str]], entry: str) -> Iterator[tuple[str, ...]]:
-    """One shortest static import route per module, including package initializers."""
-    pending: deque[tuple[str, ...]] = deque([(entry,)])
-    visited: set[str] = set()
-    while pending:
-        route = pending.popleft()
-        module = route[-1]
-        if module in visited:
-            continue
-        visited.add(module)
-        yield route
-        pending.extend((*route, target) for target in sorted(graph.get(module, frozenset())) if target not in visited)
+def _keyboard(module: str) -> bool:
+    """Whether the keyboard process may load module: anything outside the application layers."""
+    return not any(_within(module, layer) for layer in (*APPLICATION_LAYERS, "automation"))
+
+
+def _onward(_: str) -> bool:
+    return True
+
+
+def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward: Callable[[str], bool] = _onward) -> Iterator[tuple[str, ...]]:
+    """One shortest static import route per module, including package initializers, in breadth-first order.
+
+    A route continues past its last module only where `onward` holds. Each level keeps
+    the first route to each module it reaches, in the order the routes were found.
+    """
+    frontier: tuple[tuple[str, ...], ...] = tuple((entry,) for entry in entries)
+    visited: frozenset[str] = frozenset()
+    while frontier:
+        first = frozendict((route[-1], index) for index, route in reversed(tuple(enumerate(frontier))))
+        level: tuple[tuple[str, ...], ...] = tuple(
+            route for index, route in enumerate(frontier) if first[route[-1]] == index and route[-1] not in visited
+        )
+        yield from level
+        visited = visited.union(first)
+        frontier = tuple(
+            (*route, target) for route in level if onward(route[-1]) for target in sorted(graph.get(route[-1], frozenset())) if target not in visited
+        )
 
 
 CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm", "winapi.system_notices"})
@@ -208,38 +229,45 @@ def process_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Fin
     )
     for packages, forbidden in PROCESSES.items():
         for entry in sorted(module for module in graph if any(_within(module, package) for package in packages)):
-            for route in _routes(graph, entry):
+            for route in _routes(graph, (entry,)):
                 if any(_within(route[-1], package) for package in forbidden):
                     yield Finding("process-isolation", entry, "", "", 0, " → ".join(route))
                     break
 
 
-def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> dict[str, str]:
-    local = dict(inherited)
-    pending = list(ast.iter_child_nodes(tree))
-    while pending:
-        node = pending.pop()
+def _scope_nodes(tree: ast.AST) -> Iterator[ast.AST]:
+    """The nodes of tree's own scope, depth first from its last child, skipping nested classes and functions."""
+    for node in reversed(tuple(ast.iter_child_nodes(tree))):
         match node:
             case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
-                continue
-            case ast.Import(names=names):
-                local.update({alias.asname or alias.name.split(".")[0]: alias.name if alias.asname else alias.name.split(".")[0] for alias in names})
-            case ast.ImportFrom(module=base, level=0, names=names) if base:
-                local.update({alias.asname or alias.name: base + "." + alias.name for alias in names})
-            case ast.Assign(targets=[ast.Name(id=name)], value=value):
-                resolved = call_name(value, local)
-                if resolved in REFLECTION or resolved in {"builtins." + item for item in REFLECTION}:
-                    local[name] = resolved
-            case _:
                 pass
-        pending.extend(ast.iter_child_nodes(node))
-    return local
+            case _:
+                yield node
+                yield from _scope_nodes(node)
+
+
+def _bound_alias(local: frozendict[str, str], node: ast.AST) -> frozendict[str, str]:
+    """The aliases after node: imports bind names, and so does assigning a reflection builtin."""
+    match node:
+        case ast.Import(names=names):
+            return local | {alias.asname or alias.name.split(".")[0]: alias.name if alias.asname else alias.name.split(".")[0] for alias in names}
+        case ast.ImportFrom(module=base, level=0, names=names) if base:
+            return local | {alias.asname or alias.name: base + "." + alias.name for alias in names}
+        case ast.Assign(targets=[ast.Name(id=name)], value=value) if (resolved := call_name(value, local)) in REFLECTION_CALLS:
+            return local | {name: resolved}
+        case _:
+            return local
+
+
+def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> frozendict[str, str]:
+    # Only an import statement or a reflection alias makes a new map; other nodes pass it on.
+    return reduce(_bound_alias, _scope_nodes(tree), frozendict(inherited))
 
 
 def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Mapping[str, str] | None = None) -> Iterator[Finding]:
     # Copy aliases once per lexical scope, not for every expression. Imports
     # inside conditional statements still belong to their enclosing scope.
-    local = aliases or {}
+    local = aliases or frozendict()
     match tree:
         case ast.Module() | ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
             local = _scope_aliases(tree, local)
@@ -394,6 +422,15 @@ def value_shapes(
         yield from value_shapes(child, module, declaration, function)
 
 
+def _static_import(call: ast.Call) -> bool:
+    """A dynamic import of a literal absolute module name, which the keyboard graph can follow."""
+    match call.args:
+        case [ast.Constant(value=str() as target), *_]:
+            return not target.startswith(".") and not any(keyword.arg == "level" for keyword in call.keywords)
+        case _:
+            return False
+
+
 def observation(source: Source, cache: Cache | None) -> Observation:
     key = cache.key("architecture", source) if cache is not None else ""
     if cache is not None and (saved := cache.read(key, OBSERVATION)) is not None:
@@ -401,33 +438,19 @@ def observation(source: Source, cache: Cache | None) -> Observation:
     tree = parse(source)
     module = module_name(source.name)
     aliases = import_aliases(tree)
-    dynamic: list[Finding] = []
-    for node in ast.walk(tree):
-        match node:
-            case ast.Call(func=function, args=args, keywords=keywords) if call_name(function, aliases) in (
-                "importlib.import_module",
-                "__import__",
-                "builtins.__import__",
-            ):
-                match args:
-                    case [ast.Constant(value=str() as target), *_] if not target.startswith(".") and not any(
-                        keyword.arg == "level" for keyword in keywords
-                    ):
-                        pass
-                    case _:
-                        dynamic.append(
-                            Finding(
-                                "keyboard-import",
-                                module,
-                                "",
-                                ast.unparse(node),
-                                node.lineno,
-                                "Keyboard dependencies require statically resolvable absolute import targets.",
-                            )
-                        )
-            case _:
-                pass
-    result = Observation((*_declarations(tree, module), *value_shapes(tree, module)), tuple(dynamic))
+    dynamic = tuple(
+        Finding(
+            "keyboard-import",
+            module,
+            "",
+            ast.unparse(node),
+            node.lineno,
+            "Keyboard dependencies require statically resolvable absolute import targets.",
+        )
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and call_name(node.func, aliases) in DYNAMIC_IMPORTS and not _static_import(node)
+    )
+    result = Observation((*_declarations(tree, module), *value_shapes(tree, module)), dynamic)
     if cache is not None:
         cache.write(key, result, OBSERVATION)
     return result
@@ -501,35 +524,37 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     observations = {module_name(source.name): observation(source, cache) for source in loaded}
     imported_by = {module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded}
     graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
-    findings = [finding for observed in observations.values() for finding in observed.declarations]
-    findings.extend(finding for source in all_source for finding in cached_testing_dependencies(source, cache))
-    pending: deque[tuple[str, ...]] = deque((module,) for module in sorted(graph) if module == "miryoku" or module.startswith("miryoku."))
-    visited: set[str] = set()
-    while pending:
-        route = pending.popleft()
-        module = route[-1]
-        if module in visited:
-            continue
-        visited.add(module)
-        if any(_within(module, layer) for layer in (*APPLICATION_LAYERS, "automation")):
-            findings.append(Finding("keyboard-isolation", route[0], "", "", 0, " → ".join(route)))
-            continue
-        findings.extend(observations[module].dynamic_imports)
-        pending.extend((*route, target) for target in sorted(graph[module]) if target not in visited)
-    findings.extend(contract_isolation(imported_by))
-    findings.extend(process_isolation(imported_by))
-    accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
-    failures = [finding for finding in findings if not any(exception.matches(finding) for exception in accepted)]
-    failures.extend(
-        Finding(
-            "stale-exception",
-            exception.module,
-            exception.declaration,
-            exception.expression,
-            0,
-            "Remove the exception: its exact expression no longer exists.",
-        )
-        for exception in exceptions
-        if exception not in accepted
+    # Keyboard routes stop at the first application module they reach.
+    keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "miryoku")), _keyboard)
+    findings = (
+        *(finding for observed in observations.values() for finding in observed.declarations),
+        *(finding for source in all_source for finding in cached_testing_dependencies(source, cache)),
+        *(
+            finding
+            for route in keyboard_routes
+            for finding in (
+                observations[route[-1]].dynamic_imports
+                if _keyboard(route[-1])
+                else (Finding("keyboard-isolation", route[0], "", "", 0, " → ".join(route)),)
+            )
+        ),
+        *contract_isolation(imported_by),
+        *process_isolation(imported_by),
     )
-    return Report(sources, tuple(failures), accepted)
+    accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
+    failures = (
+        *(finding for finding in findings if not any(exception.matches(finding) for exception in accepted)),
+        *(
+            Finding(
+                "stale-exception",
+                exception.module,
+                exception.declaration,
+                exception.expression,
+                0,
+                "Remove the exception: its exact expression no longer exists.",
+            )
+            for exception in exceptions
+            if exception not in accepted
+        ),
+    )
+    return Report(sources, failures, accepted)

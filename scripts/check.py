@@ -22,7 +22,7 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
-lazy from concurrent.futures import ProcessPoolExecutor
+lazy from concurrent.futures import Future, ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -301,22 +301,29 @@ def sdk_packages(tests: tuple[str, ...], root: Path) -> tuple[str, ...]:
     Only eager imports count: a module that reaches the SDK lazily (as `assistant.agent`
     does) loads it only when a test runs an agent, so most tests never pay its
     seconds-long import."""
-    pending = [module_name(selector.partition("::")[0]) for selector in tests]
-    seen: set[str] = set()
-    reached: set[str] = set()
-    while pending:
-        module = pending.pop()
-        if module in seen:
-            continue
-        seen.add(module)
-        base = root / module.replace(".", "/")
-        path = next((candidate for candidate in (base.with_suffix(".py"), base / "__init__.py") if candidate.is_file()), None)
-        if path is None:
-            continue
-        imported = eager_imports(path.read_text(encoding="utf-8"))
-        reached |= {name.partition(".")[0] for name in imported} & set(SDK_PACKAGES)
-        pending.extend(imported)
+    reached = frozenset(
+        name.partition(".")[0]
+        for imported in _eager_closure(frozenset(module_name(selector.partition("::")[0]) for selector in tests), root)
+        for name in imported
+    )
     return tuple(package for package in SDK_PACKAGES if package in reached)
+
+
+def _module_imports(module: str, root: Path) -> frozenset[str]:
+    """The eager imports of a Workspace module's source, or none for a module outside the tree."""
+    base = root / module.replace(".", "/")
+    path = next((candidate for candidate in (base.with_suffix(".py"), base / "__init__.py") if candidate.is_file()), None)
+    return frozenset() if path is None else eager_imports(path.read_text(encoding="utf-8"))
+
+
+def _eager_closure(modules: frozenset[str], root: Path) -> Iterator[frozenset[str]]:
+    """The eager imports of every module reachable from modules, one breadth-first level at a time."""
+    seen: frozenset[str] = frozenset()
+    while modules:
+        found = tuple(_module_imports(module, root) for module in sorted(modules))
+        yield from found
+        seen = seen | modules
+        modules = frozenset[str]().union(*found) - seen
 
 
 def prepare_worker(root: Path) -> None:
@@ -330,7 +337,6 @@ def execute_overlapped(tests: tuple[str, ...], root: Path, load: Callable[[str],
     if not plan.portable:
         return execute_tests(plan.sequential, root, load)
     phases: list[tuple[float, str]] = []
-    results: list[Results] = []
     # The coordinator owns futures and ledgers until all children exit. Only
     # immutable Results cross the stdlib pool boundary; no native module is
     # submitted to it. Each worker module keeps the ordinary executor, fixtures,
@@ -341,16 +347,19 @@ def execute_overlapped(tests: tuple[str, ...], root: Path, load: Callable[[str],
         with timed("phase:portable worker submission", phases):
             pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in plan.portable)
         with timed("phase:portable worker completion", phases):
-            for name, future in pending:
-                try:
-                    results.append(worker_result(future.result(timeout=240)))
-                except Exception as error:
-                    results.append(Results(0, 0, (raised(name, error),), ()))
+            completed = tuple(_completed(name, future) for name, future in pending)
     finally:
         with timed("phase:portable worker shutdown", phases):
             pool.shutdown(wait=True, cancel_futures=True)
-    results.append(execute_tests(plan.sequential, root, load))
-    return combined_results(tuple(results), tuple(phases))
+    return combined_results((*completed, execute_tests(plan.sequential, root, load)), tuple(phases))
+
+
+def _completed(name: str, future: Future[Results]) -> Results:
+    """One portable worker's results, or its failure to report them."""
+    try:
+        return worker_result(future.result(timeout=240))
+    except Exception as error:
+        return Results(0, 0, (raised(name, error),), ())
 
 
 @contextmanager
@@ -366,10 +375,12 @@ def scratch_directory() -> Generator[Path]:
 
 def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
     # Same small test-function protocol as selfcheck, sequential within its owner.
-    # Accumulators belong to this executor; only immutable observations leave it.
-    failures: list[Failure] = []
-    timings: list[tuple[float, str]] = []
-    passed = skipped = 0
+    # Each module import and test reports its own immutable Results; this combines them.
+    return combined_results(tuple(_test_results(tests, load)))
+
+
+def _test_results(tests: tuple[str, ...], load: Callable[[str], object]) -> Iterator[Results]:
+    """Import each selected module and run its tests in order, yielding each step's observation once it is timed."""
     for selector in tests:
         name, separator, requested_function = selector.partition("::")
         module = module_name(name)
@@ -377,44 +388,45 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
         try:
             loaded = load(module)
         except unittest.SkipTest:
-            skipped += 1
+            yield Results(0, 1, (), ((time.perf_counter() - import_started, "module:" + module),))
             continue
         except Exception as error:
-            if windows_only(error):
-                skipped += 1
-            else:
-                failures.append(raised(name, error))
+            skipped = windows_only(error)
+            failures = () if skipped else (raised(name, error),)
+            yield Results(0, int(skipped), failures, ((time.perf_counter() - import_started, "module:" + module),))
             continue
-        finally:
-            timings.append((time.perf_counter() - import_started, "module:" + module))
-        matched = False
-        for label, test in selected_tests(module, loaded, requested_function if separator else ""):
-            matched = True
-            sdk_loaded = "agents" in sys.modules
-            started = time.perf_counter()
-            # Expected diagnostics from passing tests, such as SDK warnings for a
-            # deliberately broken stream, would bury real failures in the console.
-            # This executor owns the buffer; only failing tests publish it.
-            output = io.StringIO()
-            try:
-                parameters = inspect.signature(test).parameters
-                if set(parameters) - {"tmp_path"}:
-                    raise TypeError("Only tmp_path fixtures are supported, as in selfcheck.")
-                with contextlib.redirect_stderr(output), scratch_directory() as scratch:
-                    test(**({"tmp_path": scratch} if parameters else {}))
-                passed += 1
-            except unittest.SkipTest:
-                skipped += 1
-            except Exception as error:
-                failures.append(raised(f"{name}::{label}", error, output.getvalue()))
-            finally:
-                # The first test to run an agent loads the SDK (seconds, cold); that load is
-                # a phase of this run, not the test's cost, so the budget never blames it.
-                first_load = not sdk_loaded and "agents" in sys.modules
-                timings.append((time.perf_counter() - started, f"phase:first SDK load in {module}.{label}" if first_load else module + "." + label))
-        if separator and not matched:
-            failures.append(Failure(selector, "No test function matched", f"No test function matched {selector}"))
-    return Results(passed, skipped, tuple(failures), tuple(timings))
+        yield Results(0, 0, (), ((time.perf_counter() - import_started, "module:" + module),))
+        ran = tuple(
+            _test_result(name, module, label, test) for label, test in selected_tests(module, loaded, requested_function if separator else "")
+        )
+        yield from ran
+        if separator and not ran:
+            yield Results(0, 0, (Failure(selector, "No test function matched", f"No test function matched {selector}"),), ())
+
+
+def _test_result(name: str, module: str, label: str, test: Test) -> Results:
+    sdk_loaded = "agents" in sys.modules
+    started = time.perf_counter()
+    # Expected diagnostics from passing tests, such as SDK warnings for a
+    # deliberately broken stream, would bury real failures in the console.
+    # This executor owns the buffer; only failing tests publish it.
+    output = io.StringIO()
+    try:
+        parameters = inspect.signature(test).parameters
+        if set(parameters) - {"tmp_path"}:
+            raise TypeError("Only tmp_path fixtures are supported, as in selfcheck.")
+        with contextlib.redirect_stderr(output), scratch_directory() as scratch:
+            test(**({"tmp_path": scratch} if parameters else {}))
+        passed, skipped, failures = 1, 0, ()
+    except unittest.SkipTest:
+        passed, skipped, failures = 0, 1, ()
+    except Exception as error:
+        passed, skipped, failures = 0, 0, (raised(f"{name}::{label}", error, output.getvalue()),)
+    # The first test to run an agent loads the SDK (seconds, cold); that load is
+    # a phase of this run, not the test's cost, so the budget never blames it.
+    first_load = not sdk_loaded and "agents" in sys.modules
+    elapsed = time.perf_counter() - started
+    return Results(passed, skipped, failures, ((elapsed, f"phase:first SDK load in {module}.{label}" if first_load else module + "." + label),))
 
 
 def check_architecture(root: Path, current: dict[str, str], cache: Cache) -> Report:
@@ -481,15 +493,16 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
 
 def choose(args: Options, current: Mapping[str, str], parser: argparse.ArgumentParser) -> Selection:
     baseline = args.baseline if args.baseline.is_file() else None
+    previous: Mapping[str, str]
     if baseline is not None:
         previous = source_map(read(baseline))
     else:
-        previous = {name: sha(path) for name in current if (path := args.baseline / name).is_file()}
-    # Include removed deployed Python modules so deletion propagates through imports.
-    if baseline is None and args.baseline.exists():
-        for name in python_sources(args.baseline):
-            if name not in current:
-                previous[name] = sha(args.baseline / name)
+        # Include removed deployed Python modules so deletion propagates through imports.
+        removed = python_sources(args.baseline) if args.baseline.exists() else ()
+        previous = {
+            **{name: sha(path) for name in current if (path := args.baseline / name).is_file()},
+            **{name: sha(args.baseline / name) for name in removed if name not in current},
+        }
     selection = select(ROOT, current, previous, full=args.full, native=args.native)
     if not args.native:
         selection = check_tiers.editing(selection, ROOT)

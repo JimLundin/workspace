@@ -11,6 +11,7 @@ import subprocess
 import sys
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -94,15 +95,11 @@ def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None 
         raise RuntimeError("Signature lint did not complete: " + result.stderr.strip())
     diagnostics = DIAGNOSTICS.validate_json(result.stdout)
     # Group once instead of comparing every diagnostic's Windows path to every
-    # source. This local accumulator prevents quadratic path construction.
-    grouped: dict[str, list[Diagnostic]] = {}
-    for item in diagnostics:
-        name = Path(item.filename).relative_to(root).as_posix()
-        grouped.setdefault(name, []).append(item)
+    # source; a stable sort keeps each source's diagnostics in Ruff's order.
+    named = sorted(((Path(item.filename).relative_to(root).as_posix(), item) for item in diagnostics), key=lambda pair: pair[0])
+    grouped = frozendict((name, tuple(item for _, item in group)) for name, group in groupby(named, key=lambda pair: pair[0]))
     return tuple(
-        finding
-        for name in sources
-        for finding in located(Source(name, (root / name).read_text(encoding="utf-8")), tuple(grouped.get(name, ())), cache)
+        finding for name in sources for finding in located(Source(name, (root / name).read_text(encoding="utf-8")), grouped.get(name, ()), cache)
     )
 
 
