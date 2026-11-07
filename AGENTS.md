@@ -88,7 +88,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
   a collection; return a `frozenset` or `frozendict` when callers look things up.
 - No function requires mutable data. Parameters take immutable types (tuples,
   `frozendict`, frozen dataclasses, or `Sequence`/`Mapping`/`Iterable`), never
-  `list`, `dict`, `set` or another mutable container.
+  `list`, `dict`, `set` or another mutable container. The architecture review
+  enforces it; an `@override` method's base owns its signature.
 - Define types as frozen, slotted dataclasses wherever possible; only an owner
   that genuinely holds changing state is a mutable class. Where a measured hot
   path needs cheaper construction, a `typing.NamedTuple` is the fallback: about

@@ -27,6 +27,15 @@ Left:
   - UIA (30 s);
   - managed Edge (26 s);
   - attached Edge (19 s).
+- **The full native tier dies** (2026-11-07): `Dev.cmd check --native` with no
+  native receipt (all 143 modules) fails after about 2.5 min with "The Windows
+  test process did not write its result". It fails the same way at `166cd28`,
+  so it predates the mutable-parameter work; small native selections pass.
+- **A narrow check blames a cold openai import on one test.** `assistant.llm`
+  imports openai lazily, so the check's SDK preload (`sdk_packages`, eager
+  imports only) skips it, and the first `test_features` test that transcribes
+  pays about 2–4 s (`test_a_second_talk_key_while_listening_is_ignored` fails
+  the editing budget whenever `assistant/features.py` changes).
 - **Move ruff and pyright to the dev group.** They sit in the runtime
   dependencies only because the agent's own checks needed them.
 
@@ -85,9 +94,13 @@ violations left, with no baseline of exceptions. Counted in production code on
    keeper and `scripts/selfcheck`'s 11 were rewritten once it stopped being protected. 11 remain in tests, which the rule doesn't cover.
    `island_layout.arrange` is about 6 µs slower per call (a frozen step per
    part), negligible beside its font measurement.
-4. **Mutable parameter types** (41 production, 26 tests): `list`/`dict`/`set`
-   and friends in a parameter annotation. Only dependency-dictated callbacks
-   (SDK hooks, `gc.callbacks`) are exempt.
+4. **Mutable parameter types**: done 2026-11-07. 44 production sites: read-only
+   ones take `Sequence`/`Mapping`/`Set`; the voice job notes its evidence on a
+   `features.Progress` owner; the check's source steps yield their problems and
+   a `check.Phases` owner times its phases. The review's `mutable-parameter`
+   rule rejects new ones; `@override` methods are exempt, and four
+   SDK/`gc.callbacks` signatures are exact exceptions. 18 remain in tests, which
+   the rule doesn't cover.
 5. **Plain classes that could be frozen dataclasses** (about 86 candidates): a
    class with no base that never assigns to `self` outside `__init__`. The check
    must also reject mutable attribute types, since some candidates mutate a held
