@@ -1,8 +1,9 @@
 """Every tool key's behavior, shared by dispatch and the visible key map."""
 
 from enum import Enum, auto
-from typing import assert_never
+from typing import Final
 
+from contracts.members import every_member
 from protocol import Tool
 
 
@@ -18,49 +19,56 @@ class Route(Enum):
     MEETING = auto()
 
 
+ROUTES: Final = every_member(
+    Tool,
+    {
+        Tool.DICTATE: Route.HOLD,
+        Tool.AGENT_VOICE: Route.HOLD,
+        Tool.DICTATE_TOGGLE: Route.TOGGLE,
+        Tool.AGENT_VOICE_TOGGLE: Route.TOGGLE,
+        Tool.STOP: Route.STOP,
+        Tool.AGENT_TYPED: Route.AGENT_SESSION,
+        Tool.COPY_TRANSCRIPT: Route.TRANSCRIPT,
+        Tool.ZOOM: Route.NAVIGATE,
+        Tool.FOCUS_LEFT: Route.NAVIGATE,
+        Tool.FOCUS_DOWN: Route.NAVIGATE,
+        Tool.FOCUS_UP: Route.NAVIGATE,
+        Tool.FOCUS_RIGHT: Route.NAVIGATE,
+        Tool.DESKTOP_1: Route.NAVIGATE,
+        Tool.DESKTOP_2: Route.NAVIGATE,
+        Tool.DESKTOP_3: Route.NAVIGATE,
+        Tool.DESKTOP_4: Route.NAVIGATE,
+        Tool.DESKTOP_5: Route.NAVIGATE,
+        Tool.PLACEMENT_PAUSE: Route.NAVIGATE,
+        Tool.PLACE_NOW: Route.NAVIGATE,
+        Tool.WINDOW_SWITCHER: Route.SWITCHER,
+        Tool.OPEN_INBOX: Route.INBOX,
+        Tool.MEETING_TOGGLE: Route.MEETING,
+    },
+)
+"""The route each tool key takes."""
+
+
 def route(tool: Tool) -> Route:
-    match tool:
-        case Tool.DICTATE | Tool.AGENT_VOICE:
-            return Route.HOLD
-        case Tool.DICTATE_TOGGLE | Tool.AGENT_VOICE_TOGGLE:
-            return Route.TOGGLE
-        case Tool.STOP:
-            return Route.STOP
-        case Tool.AGENT_TYPED:
-            return Route.AGENT_SESSION
-        case Tool.COPY_TRANSCRIPT:
-            return Route.TRANSCRIPT
-        case (
-            Tool.ZOOM
-            | Tool.FOCUS_LEFT
-            | Tool.FOCUS_DOWN
-            | Tool.FOCUS_UP
-            | Tool.FOCUS_RIGHT
-            | Tool.DESKTOP_1
-            | Tool.DESKTOP_2
-            | Tool.DESKTOP_3
-            | Tool.DESKTOP_4
-            | Tool.DESKTOP_5
-            | Tool.PLACEMENT_PAUSE
-            | Tool.PLACE_NOW
-        ):
-            return Route.NAVIGATE
-        case Tool.WINDOW_SWITCHER:
-            return Route.SWITCHER
-        case Tool.OPEN_INBOX:
-            return Route.INBOX
-        case Tool.MEETING_TOGGLE:
-            return Route.MEETING
-        case _:
-            assert_never(tool)
+    return ROUTES[tool]
+
+
+NEEDS_SETTINGS: Final = every_member(
+    Route,
+    {
+        Route.HOLD: True,
+        Route.TOGGLE: True,
+        Route.AGENT_SESSION: True,
+        Route.STOP: False,
+        Route.TRANSCRIPT: False,
+        Route.NAVIGATE: False,
+        Route.SWITCHER: False,
+        Route.INBOX: False,
+        Route.MEETING: False,
+    },
+)
 
 
 def needs_settings(kind: Route) -> bool:
     """Only model routes need AI settings; desktop controls remain available."""
-    match kind:
-        case Route.HOLD | Route.TOGGLE | Route.AGENT_SESSION:
-            return True
-        case Route.STOP | Route.TRANSCRIPT | Route.NAVIGATE | Route.SWITCHER | Route.INBOX | Route.MEETING:
-            return False
-        case _:
-            assert_never(kind)
+    return NEEDS_SETTINGS[kind]

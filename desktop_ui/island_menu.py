@@ -17,6 +17,7 @@ from itertools import accumulate, chain
 from typing import Final, assert_never
 
 from contracts.meeting_detection import AutomaticStatus
+from contracts.members import every_member
 from desktop_ui.keymap import shortcut, shortcut_hint
 from protocol import Tool
 
@@ -143,18 +144,19 @@ class Cell:
     caption: str = ""  # A tile's short name; its entry's label stays its accessible name.
 
 
+AUTOMATIC_DETAILS: Final = every_member(
+    AutomaticStatus,
+    {
+        AutomaticStatus.OFF: "Teams · Off",
+        AutomaticStatus.CHECKING: "Teams · Connecting…",
+        AutomaticStatus.READY: "Teams · On",
+        AutomaticStatus.UNAVAILABLE: "Teams · Check connection",
+    },
+)
+
+
 def automatic_detail(status: AutomaticStatus) -> str:
-    match status:
-        case AutomaticStatus.OFF:
-            return "Teams · Off"
-        case AutomaticStatus.CHECKING:
-            return "Teams · Connecting…"
-        case AutomaticStatus.READY:
-            return "Teams · On"
-        case AutomaticStatus.UNAVAILABLE:
-            return "Teams · Check connection"
-        case _:
-            assert_never(status)
+    return AUTOMATIC_DETAILS[status]
 
 
 @dataclass(frozen=True, slots=True)

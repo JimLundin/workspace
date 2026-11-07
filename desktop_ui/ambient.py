@@ -1,9 +1,28 @@
 """Validated observations for the toolbar's quiet resting presentation."""
 
 from dataclasses import dataclass
-from typing import assert_never
+from typing import Final, assert_never
 
+from contracts.members import every_member
 from winapi.machine_status import Battery, Power, PowerUnavailable, Speakers, Wifi
+
+SPEAKER_ICONS: Final = every_member(Speakers, {Speakers.AUDIBLE: "speaker-on", Speakers.MUTED: "speaker-muted", Speakers.UNKNOWN: "speaker-unknown"})
+SPEAKER_DESCRIPTIONS: Final = every_member(
+    Speakers,
+    {Speakers.AUDIBLE: "Speakers unmuted", Speakers.MUTED: "Speakers muted", Speakers.UNKNOWN: "Speaker status unavailable"},
+)
+WIFI_ICONS: Final = every_member(
+    Wifi, {Wifi.CONNECTED: "wifi", Wifi.DISCONNECTED: "wifi-off", Wifi.NO_ADAPTER: "wifi-absent", Wifi.UNKNOWN: "wifi-unknown"}
+)
+WIFI_DESCRIPTIONS: Final = every_member(
+    Wifi,
+    {
+        Wifi.CONNECTED: "Wi-Fi connected",
+        Wifi.DISCONNECTED: "Wi-Fi disconnected",
+        Wifi.NO_ADAPTER: "No Wi-Fi adapter",
+        Wifi.UNKNOWN: "Wi-Fi status unavailable",
+    },
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,55 +35,19 @@ class SystemStatus:
 
     @property
     def speaker_icon(self) -> str:
-        match self.speakers:
-            case Speakers.AUDIBLE:
-                return "speaker-on"
-            case Speakers.MUTED:
-                return "speaker-muted"
-            case Speakers.UNKNOWN:
-                return "speaker-unknown"
-            case _:
-                assert_never(self.speakers)
+        return SPEAKER_ICONS[self.speakers]
 
     @property
     def speaker_description(self) -> str:
-        match self.speakers:
-            case Speakers.AUDIBLE:
-                return "Speakers unmuted"
-            case Speakers.MUTED:
-                return "Speakers muted"
-            case Speakers.UNKNOWN:
-                return "Speaker status unavailable"
-            case _:
-                assert_never(self.speakers)
+        return SPEAKER_DESCRIPTIONS[self.speakers]
 
     @property
     def wifi_icon(self) -> str:
-        match self.wifi:
-            case Wifi.CONNECTED:
-                return "wifi"
-            case Wifi.DISCONNECTED:
-                return "wifi-off"
-            case Wifi.NO_ADAPTER:
-                return "wifi-absent"
-            case Wifi.UNKNOWN:
-                return "wifi-unknown"
-            case _:
-                assert_never(self.wifi)
+        return WIFI_ICONS[self.wifi]
 
     @property
     def wifi_description(self) -> str:
-        match self.wifi:
-            case Wifi.CONNECTED:
-                return "Wi-Fi connected"
-            case Wifi.DISCONNECTED:
-                return "Wi-Fi disconnected"
-            case Wifi.NO_ADAPTER:
-                return "No Wi-Fi adapter"
-            case Wifi.UNKNOWN:
-                return "Wi-Fi status unavailable"
-            case _:
-                assert_never(self.wifi)
+        return WIFI_DESCRIPTIONS[self.wifi]
 
     @property
     def description(self) -> str:

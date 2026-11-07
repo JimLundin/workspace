@@ -19,6 +19,7 @@ from typing import Final, Literal, assert_never
 
 from pydantic import TypeAdapter
 
+from contracts.members import every_member
 from desktop_ui.navigation import (
     AppKey,
     CycleApp,
@@ -214,16 +215,11 @@ def kind(navigation: Navigation) -> Kind:
             assert_never(navigation)
 
 
+CAUSES: Final[frozendict[Source, Cause]] = every_member(Source, {Source.KEY: "key", Source.PAGER: "pager", Source.TOOLBAR: "toolbar"})
+
+
 def cause(source: Source) -> Cause:
-    match source:
-        case Source.KEY:
-            return "key"
-        case Source.PAGER:
-            return "pager"
-        case Source.TOOLBAR:
-            return "toolbar"
-        case _:
-            assert_never(source)
+    return CAUSES[source]
 
 
 def dwell_ms(focused: Focused | None, at: float) -> int | None:

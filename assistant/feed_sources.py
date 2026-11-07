@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from itertools import chain
-from typing import assert_never
+from typing import Final, assert_never
 
 from pydantic import TypeAdapter
 
@@ -33,6 +33,7 @@ from assistant.communications import (
 )
 from assistant.notification_sources import Notices
 from contracts.feed_origin import App, Origin, application
+from contracts.members import every_member
 
 _CHAT_KEY = TypeAdapter(tuple[str, str])
 _TEAMS = Origin(App.TEAMS, App.TEAMS.value)
@@ -157,16 +158,22 @@ def attention(source: FeedSource) -> Attention:
             assert_never(source)
 
 
+DELIVERY_ATTENTION: Final = every_member(
+    Delivery,
+    {
+        Delivery.UNKNOWN: Attention.TRIAGE,
+        Delivery.FAILED: Attention.TRIAGE,
+        Delivery.QUEUED: Attention.SETTLING,
+        Delivery.SENDING: Attention.SETTLING,
+        Delivery.OBSERVED: Attention.RESOLVED,
+        Delivery.REVIEWED: Attention.RESOLVED,
+    },
+)
+"""How much attention a message needs, by its delivery state."""
+
+
 def _delivery(delivery: Delivery) -> Attention:
-    match delivery:
-        case Delivery.UNKNOWN | Delivery.FAILED:
-            return Attention.TRIAGE
-        case Delivery.QUEUED | Delivery.SENDING:
-            return Attention.SETTLING
-        case Delivery.OBSERVED | Delivery.REVIEWED:
-            return Attention.RESOLVED
-        case _:
-            assert_never(delivery)
+    return DELIVERY_ATTENTION[delivery]
 
 
 def key(source: FeedSource) -> SourceKey:
