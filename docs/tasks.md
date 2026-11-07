@@ -23,25 +23,30 @@ Measured on 2026-11-06:
 - a change to a protected file takes about 60 s to check, then relaunches
   everything.
 
+Test pass (2026-11-07): `--full` went from 291 s to 187 s. Each slow test now
+carries its reason in `scripts/check_tiers.py`, under caps, and a native test
+over 3 s fails by name.
+
 Left:
 
-- **Run native modules in parallel in the keeper's check.** They run one at a
-  time, after the portable workers. In a keeper-touching check, three of them
-  took 16, 13 and 11 s back to back. The developer check already runs native
-  lanes on private desktops (`scripts/check_native.py`); the keeper's
-  `selfcheck.py` needs the same, without importing `scripts/`.
-- **Speed up the slow end-to-end tests.**
-  `test_windows_browser::test_managed_browser_dom_teams_persistence_and_cancellation`
-  takes about 30 s against real Edge. It timed out once under the parallel
-  `--full` load and passed three times alone; its next failure will record
-  where it timed out. `test_windows_runtime`'s copied-bundle and keeper-cleanup
-  tests take 7 s and 6 s.
-- **Review what each test guards.** Remove tests whose defect can no longer
-  occur since the split, and merge tests that check the same thing at two levels.
-- **Close the selection gaps.** Tests that drive a subprocess select nothing
-  through their own imports. The run-alone module now imports what its
-  interpreters run; look for other such modules (`test_windows_self_change_e2e`,
-  `test_windows_development`).
+- **Fix `test_keyboard_light::test_an_unlock_without_a_darkening_leaves_the_keyboard_alone`.**
+  It has failed since it was added in f4ad991: an unlock with no lock before it
+  still writes an effect.
+- **Give the meeting service's 2 s publish pacing a seam.** It removes the
+  three meeting tests from the slow lists.
+- **Investigate the four largest native tests:**
+  - UIA (30 s);
+  - managed Edge (26 s);
+  - copied bundle (24 s), which changes anyway with the install-time
+    dependencies task below;
+  - attached Edge (19 s).
+- **Run native modules in parallel in the keeper's check.** The branch
+  `keeper-native-lanes` holds it, rebased locally. Two Edge tests failed beside
+  another lane; reproduce by running only those two modules side by side.
+- **Install dependencies at install time instead of bundling `.runtime`.** This
+  is the user's direction. It changes the keeper, runtime and selfcheck
+  (protected), the release ZIP, the README install steps and the dev `.venv`.
+  Plan it before coding.
 
 ## 2. Check that each side survives the other's restart, live
 
