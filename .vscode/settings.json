@@ -1,6 +1,5 @@
 {
   "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-  "python.analysis.extraPaths": ["C:/Users/Jim.Lundin/AppData/Local/Programs/workspace-sdk/workspace/.runtime"],
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true

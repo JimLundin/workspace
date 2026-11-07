@@ -1,9 +1,10 @@
 # Checking and deploying changes
 
 Run native commands from the checkout in PowerShell. `Dev.cmd` uses the Windows
-`.venv`, adds native Git to PATH and reuses Qt and the application dependencies
-from the installed `.runtime` through a local `.pth` file. The virtual
-environment uses the user-installed Python 3.15.1. Keep the installed client
+`.venv` and adds native Git to PATH. `Dev.cmd setup` creates that `.venv` from
+the user-installed Python 3.15 and installs exactly the hashed lock
+(`requirements/windows-py315.lock`) into it, as an install does, plus the
+dev-only tools; run it again after the lock changes. Keep the installed client
 (`%LOCALAPPDATA%\Programs\workspace-sdk\workspace`) separate so edits and tests never replace files in the running application.
 
 ```powershell
@@ -105,9 +106,10 @@ Generated tests live in `tests/properties/` and need the `test` extra
 ## Deployment
 
 Deploy with `Dev.cmd deploy`. It needs no prior check: the keeper checks the
-change itself. A changed runtime pin (`.python-version` or
-`requirements/windows-py315.lock`) is refused: rebuild the bundle with
-`scripts/bundle.py` instead.
+change itself. A changed dependency lock is installed like any change: the
+keeper builds the lock's environment from PyPI (`environments.py`), checks the
+change with that environment's interpreter, and relaunches into it. A changed
+`.python-version` is refused: install that Python by hand.
 
 Deploy copies the Git-listed source files to a fresh folder in Windows Temp and
 sends the running keeper the same install request the agent uses, naming that
@@ -118,5 +120,5 @@ the files and restarts only the programs the change affects. A change to a
 protected file relaunches the keeper. Deploy waits for the keeper's result and
 reports it; a refusal or undo fails the command. When no keeper is running,
 deploy takes the keeper's lock and installs the files through the same version
-store, and the copy stays stopped. The release ZIP changes only when
-`scripts/bundle.py` rebuilds it.
+store, and the copy stays stopped. `scripts/release.py` builds the release ZIP:
+the source alone, without dependencies.

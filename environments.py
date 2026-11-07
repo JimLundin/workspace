@@ -128,8 +128,10 @@ def main() -> None:
                 sys.stdout.write(f"{error}\n")
                 sys.exit(1)
             sys.stdout.write(f"Dependencies ready: {environment}\n")
+        case ["python", lock]:
+            sys.stdout.write(f"{python(location(Path(lock).read_bytes()))}\n")
         case _:
-            sys.exit("usage: python environments.py ensure LOCK")
+            sys.exit("usage: python environments.py ensure LOCK | python LOCK")
 
 
 def prune(keep: frozenset[Path], root: Path = ROOT) -> tuple[Path, ...]:

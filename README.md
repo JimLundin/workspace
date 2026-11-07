@@ -23,14 +23,19 @@ installed Python 3.15 and needs no admin rights. It runs five processes:
 ## Install and start
 
 1. Install Windows x64 Python 3.15 with the Python launcher.
-2. Extract `workspace-sdk-python315-win64.zip` into a folder you can write to.
-   Keep its `.runtime` folder beside `StartWorkspace.cmd`.
+2. Extract `workspace-python315-win64.zip` into a folder you can write to.
 3. Set the environment variables below for your account, then restart
    Workspace whenever you change one.
 4. Turn on **Let desktop apps access your microphone** in Windows privacy
    settings.
-5. Double-click `StartWorkspace.cmd`. To start Workspace at login, put a
+5. Double-click `StartWorkspace.cmd`. The first start installs the pinned
+   dependencies from PyPI into their own environment
+   (`%LOCALAPPDATA%\workspace\environments`), which takes a minute or two and
+   needs the network; later starts reuse it. To start Workspace at login, put a
    shortcut to it in `shell:startup`.
+
+An installed change to the dependency lock builds its own environment the same
+way before it is checked, and undoing it switches back to the previous one.
 
 `pyw -3.15 miryoku.pyw` runs the layout alone.
 
