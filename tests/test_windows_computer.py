@@ -15,6 +15,12 @@ from typing import cast
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows computer automation")
 
+import ctypes
+import os
+
+from win32more.Windows.Win32.System.StationsAndDesktops import GetThreadDesktop, GetUserObjectInformationW
+from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindowThreadProcessId
+
 from assistant import commands, uia
 from assistant.machine import CaptureSources, WinMachine
 from assistant.uia import Act, Inspect, UiRequest
@@ -35,6 +41,18 @@ def powershell_path(path: Path) -> str:
     return f"[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{encoded}'))"
 
 
+def desktop_name(thread: int) -> str:
+    handle = GetThreadDesktop(thread)
+    assert handle is not None
+    return object_name(handle)
+
+
+def object_name(handle: int) -> str:
+    buffer = ctypes.create_unicode_buffer(256)
+    assert GetUserObjectInformationW(handle, 2, ctypes.addressof(buffer), ctypes.sizeof(buffer), None)
+    return buffer.value
+
+
 @contextmanager
 def fixture(folder: Path) -> Generator[int]:
     cancelled = threading.Event()
@@ -50,6 +68,8 @@ def fixture(folder: Path) -> Generator[int]:
                 time.sleep(0.05)
             handle = decoded((folder / "window.json").read_text())["handle"]
             assert isinstance(handle, int)
+            # Defect: a PowerShell child escapes the private test desktop onto the user's.
+            assert desktop_name(GetWindowThreadProcessId(handle, None)) == os.environ["WORKSPACE_TEST_DESKTOP"]
             yield handle
         finally:
             (folder / "stop").touch()

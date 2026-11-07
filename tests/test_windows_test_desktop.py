@@ -1,6 +1,5 @@
 """Our fixture bootstrap must contain real Qt windows and native children."""
 
-import ctypes
 import os
 import subprocess
 import sys
@@ -13,36 +12,20 @@ from pydantic import TypeAdapter
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows test desktop ownership")
 
-from win32more.Windows.Win32.System.StationsAndDesktops import (
-    CloseDesktop,
-    GetThreadDesktop,
-    GetUserObjectInformationW,
-    OpenInputDesktop,
-)
+from win32more.Windows.Win32.System.StationsAndDesktops import CloseDesktop, OpenInputDesktop
 from win32more.Windows.Win32.System.Threading import GetCurrentThreadId
 from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindowThreadProcessId
 
 from desktop_ui.desktop_bar import BarActions, DesktopBar
 from desktop_ui.qt_ui import application
-from tests.test_windows_computer import fixture
+from tests.test_windows_computer import desktop_name, object_name
 from winapi import windows
 
 
-def desktop_name(thread: int) -> str:
-    handle = GetThreadDesktop(thread)
-    assert handle is not None
-    return object_name(handle)
-
-
-def object_name(handle: int) -> str:
-    buffer = ctypes.create_unicode_buffer(256)
-    assert GetUserObjectInformationW(handle, 2, ctypes.addressof(buffer), ctypes.sizeof(buffer), None)
-    return buffer.value
-
-
-def test_qt_and_accessibility_children_stay_off_the_input_desktop(tmp_path: Path) -> None:
-    # Defects: test package initialization attaches too late, a child escapes
-    # to the input desktop, or each Python child chooses a disconnected desktop.
+def test_qt_children_stay_off_the_input_desktop() -> None:
+    # Defects: test package initialization attaches too late, a Qt window escapes
+    # to the input desktop, or the tests switch the input desktop. (The UIA
+    # fixture checks its PowerShell child's desktop each time it starts one.)
     # Exercise our real fixture owners; no assertions about library algorithms.
     expected = os.environ["WORKSPACE_TEST_DESKTOP"]
     assert desktop_name(GetCurrentThreadId()) == expected
@@ -68,10 +51,9 @@ def test_qt_and_accessibility_children_stay_off_the_input_desktop(tmp_path: Path
             bar.visible = True
             bar.render()
             application().processEvents()
-            with fixture(tmp_path) as accessibility:
-                for handle in (int(bar.window.winId()), accessibility):
-                    assert windows.is_visible(handle), "Isolation hid the fixture instead of exercising native presentation"
-                    assert desktop_name(GetWindowThreadProcessId(handle, None)) == expected
+            handle = int(bar.window.winId())
+            assert windows.is_visible(handle), "Isolation hid the fixture instead of exercising native presentation"
+            assert desktop_name(GetWindowThreadProcessId(handle, None)) == expected
         finally:
             bar.close()
         assert object_name(input_desktop) == before, "Tests switched the input desktop"
