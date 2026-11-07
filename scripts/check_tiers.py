@@ -27,8 +27,6 @@ SLOW: Final = frozenset(
         "tests/test_agent.py::test_runtime_failure_returns_to_the_agent_to_fix_before_installing",
         "tests/test_architecture.py::test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt",
         "tests/test_computer_tools.py::test_automatic_and_explicit_screenshots_share_the_same_history_limit",
-        "tests/test_feed_dates.py::test_a_new_day_reconsiders_cached_work_without_a_new_notification",
-        "tests/test_feed_triage_service.py::test_only_reviewed_actionable_notifications_activate_work_with_retry",
         "tests/test_keeper.py::test_a_deploy_without_a_keeper_installs_a_version_undo_can_restore",
         "tests/test_keeper.py::test_versions_install_and_restore_exact_bytes_beside_an_untouched_runtime",
         "tests/test_meetings.py::test_recording_and_transcription_continue_while_the_markdown_file_is_locked",

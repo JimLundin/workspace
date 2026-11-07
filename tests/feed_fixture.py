@@ -61,7 +61,8 @@ class TriageFixture(Triage):
     ) -> None:
         # Preserve the real owner's dependency interface rather than hide it in options.
         self.delays: Queue[tuple[float, threading.Event]] = Queue()
-        super().__init__(store, model, submit=submit, wait=self.wait_for_stop, clock=clock, work=work)
+        # A short tick: day changes and refused retries surface without a real second's wait.
+        super().__init__(store, model, submit=submit, wait=self.wait_for_stop, clock=clock, work=work, tick_s=0.02)
 
     def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
         released = threading.Event()

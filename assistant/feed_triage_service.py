@@ -161,6 +161,7 @@ class Triage:
         "submit",
         "submitted",
         "thread",
+        "tick_s",
         "wait",
         "wake",
         "work",
@@ -176,6 +177,7 @@ class Triage:
         clock: Callable[[], float] = time.time,
         work: FeedWork | None = None,
         personal: PersonalWork | None = None,
+        tick_s: float = 1.0,
     ) -> None:
         # Compose the real storage, model, work-queue and context effects here.
         # Cancellable delays and the clock vary independently in native and
@@ -190,7 +192,9 @@ class Triage:
         self.submitted: set[str] = set()
         self.lock = threading.RLock()
         self.closed, self.wake = threading.Event(), threading.Event()
-        self.notifications = NotificationAgent(submit, self.closed)
+        self.tick_s = tick_s
+        """How often the loop rechecks for a new day or a retry without being woken."""
+        self.notifications = NotificationAgent(submit, self.closed, tick_s=tick_s)
         self.feed: PendingFeed = PendingFeed()
         self.candidates: tuple[Candidate, ...] = ()
         self.epoch = 0
@@ -404,7 +408,7 @@ class Triage:
     def run(self) -> None:
         retry_without: frozenset[str] = frozenset()
         while not self.closed.is_set():
-            self.wake.wait(1)
+            self.wake.wait(self.tick_s)
             with self.lock:
                 today = datetime.fromtimestamp(self.clock(), UTC).astimezone().date()
                 if not unassessed(self.board, self.candidates, today=today):

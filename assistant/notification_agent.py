@@ -51,9 +51,11 @@ class NotificationAgent:
     cancellation stops it with triage. Published sources and acceptance stay immutable.
     """
 
-    __slots__ = ("accepted", "candidates", "closed", "lock", "status", "submit", "thread", "wake")
+    __slots__ = ("accepted", "candidates", "closed", "lock", "status", "submit", "thread", "tick_s", "wake")
 
-    def __init__(self, submit: Callable[[str, str, Profile], None] | None, closed: threading.Event) -> None:
+    def __init__(self, submit: Callable[[str, str, Profile], None] | None, closed: threading.Event, *, tick_s: float = 1.0) -> None:
+        self.tick_s = tick_s
+        """How often a refused submission is retried without a new offer."""
         self.submit: Callable[[str, str, Profile], None] | None = submit
         self.closed: threading.Event = closed
         self.accepted: frozenset[str] = frozenset()
@@ -76,7 +78,7 @@ class NotificationAgent:
 
     def run(self) -> None:
         while not self.closed.is_set():
-            self.wake.wait(1)
+            self.wake.wait(self.tick_s)
             self.wake.clear()
             with self.lock:
                 candidates = self.candidates
