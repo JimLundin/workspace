@@ -88,7 +88,7 @@ class LocalAssistant:
 
     def open_session(self) -> AgentWindow:
         if self.session is None:
-            self.session = AgentWindow(
+            self.session = AgentWindow.open(
                 lambda: None,
                 post=self.jobs.append,
                 create_view=lambda _: SessionView(self.desktop, self.canvas.observe_session),

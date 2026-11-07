@@ -334,7 +334,7 @@ class AssistantApp:
 
     def session_window(self, runner: WorkAgent) -> AgentWindow:
         """The agent session: its snapshots go to the desktop and the canvas, from one view thread."""
-        window = AgentWindow(
+        window = AgentWindow.open(
             runner.stop,
             post=self.view_thread.post,
             create_view=lambda _: SessionView(self.desktop, self.canvas.observe_session),

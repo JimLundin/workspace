@@ -9,10 +9,11 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Protocol
 
+from cell import Cell
 from contracts.agent_session import (
     AgentRequest,
     Begin,
@@ -74,20 +75,33 @@ class _Callbacks:
     work: Callable[[], None] | None
 
 
-class AgentWindow:
-    __slots__ = (
-        "__weakref__",
-        "_callbacks",
-        "_input",
-        "_log",
-        "_started",
-        "lock",
-        "publication",
-        "state",
-    )
+@dataclass(frozen=True, slots=True)
+class _Conversation:
+    session: Session
+    input: _Projected | None = None
+    """The request shown in the view, until it is answered or cancelled."""
 
-    def __init__(  # noqa: PLR0913 - one callback per window event
-        self,
+
+def _new_session() -> Session:
+    return Session(identity=uuid.uuid4().hex)
+
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
+class AgentWindow:
+    # This conversation owns one view, request lifetime and snapshot stream.
+    # Its independent interaction callbacks are composed together here so a
+    # caller can connect the actual effect owners before the first render.
+    _callbacks: _Callbacks
+    publication: ViewPublication[View]
+    _log: Callable[[str], None]
+    _conversation: Cell[_Conversation] = field(default_factory=lambda: Cell(_Conversation(_new_session())), init=False, repr=False)
+    """Replaced whole under the lock."""
+    lock: threading.RLock = field(default_factory=threading.RLock, init=False)
+    _started: float = field(default_factory=time.monotonic, init=False)
+
+    @classmethod
+    def open(  # noqa: PLR0913 - one callback per window event
+        cls,
         stop: Callable[[], None],
         *,
         post: Post,
@@ -99,18 +113,27 @@ class AgentWindow:
         on_recording: Callable[[RecordingAction], None] | None = None,
         on_work: Callable[[], None] | None = None,
         log: Callable[[str], None],
-    ) -> None:
-        # This conversation owns one view, request lifetime and snapshot stream.
-        # Its independent interaction callbacks are composed together here so a
-        # caller can connect the actual effect owners before the first render.
-        self._callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording, on_work)
-        self._input: _Projected | None = None
-        self.state = Session(identity=uuid.uuid4().hex)
-        self.lock = threading.RLock()
-        self._started = time.monotonic()
-        self._log = log
-        self.publication: ViewPublication[View] = ViewPublication(post, lambda: create_view(self), self._render, log=log)
-        self.publication.post(self._prepare)
+    ) -> AgentWindow:
+        bound: Cell[AgentWindow | None] = Cell(None)
+
+        def create() -> View:
+            window = bound.get()
+            assert window is not None, "The view is created only through the window's own publication."
+            return create_view(window)
+
+        def render(view: View | None) -> None:
+            if (window := bound.get()) is not None:
+                window._render(view)
+
+        callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording, on_work)
+        window = cls(callbacks, ViewPublication(post, create, render, log=log), log)
+        bound.set(window)
+        window.publication.post(window._prepare)
+        return window
+
+    @property
+    def state(self) -> Session:
+        return self._conversation.get().session
 
     @property
     def waiting(self) -> bool:
@@ -155,7 +178,8 @@ class AgentWindow:
             if self.publication.closed:
                 return
             was_waiting = self.state.waiting
-            self.state = transition(self.state, event)
+            new_state = transition(self.state, event)
+            self._conversation.set(replace(self._conversation.get(), session=new_state))
             waiting = self.state.waiting
             self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
@@ -201,16 +225,20 @@ class AgentWindow:
         with self.lock:
             if self.publication.closed:
                 return
-            old = self._input
+            old = self._conversation.get().input
             if old is not None and old.message.id == message.id:
                 if old.state is not InputState.SUBMITTED:
-                    self._input = replace(old, reply=reply)
+                    new_input = replace(old, reply=reply)
+                    self._conversation.set(replace(self._conversation.get(), input=new_input))
                 return
-            self._input = _Projected(message, reply, InputState.SHOWN)
+            new_input = _Projected(message, reply, InputState.SHOWN)
+            self._conversation.set(replace(self._conversation.get(), input=new_input))
             was_waiting = self.state.waiting
             if old is not None:
-                self.state = transition(self.state, Resolution(old.message.id, Cancelled()))
-            self.state = transition(self.state, message)
+                new_state = transition(self.state, Resolution(old.message.id, Cancelled()))
+                self._conversation.set(replace(self._conversation.get(), session=new_state))
+            new_state = transition(self.state, message)
+            self._conversation.set(replace(self._conversation.get(), session=new_state))
             waiting = self.state.waiting
             self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
@@ -218,12 +246,13 @@ class AgentWindow:
     def withdraw_input(self) -> None:
         """Remove the projected request; durable state stays owned by work."""
         with self.lock:
-            request = self._input
+            request = self._conversation.get().input
             if request is None:
                 return
-            self._input = None
+            self._conversation.set(replace(self._conversation.get(), input=None))
             was_waiting = self.state.waiting
-            self.state = transition(self.state, Resolution(request.message.id, Cancelled()))
+            new_state = transition(self.state, Resolution(request.message.id, Cancelled()))
+            self._conversation.set(replace(self._conversation.get(), session=new_state))
             waiting = self.state.waiting
             self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
@@ -238,25 +267,27 @@ class AgentWindow:
         with self.lock:
             if expected_session is not None and self.state.identity != expected_session:
                 return False
-            request = self._input
+            request = self._conversation.get().input
             if self.publication.closed or request is None or request.message.id != identity or request.state is InputState.SUBMITTED:
                 return False
-            submitted = self._input = replace(request, state=InputState.SUBMITTED)
+            submitted = replace(request, state=InputState.SUBMITTED)
+            self._conversation.set(replace(self._conversation.get(), input=submitted))
         accepted = False
         try:
             accepted = request.reply(reply)
         finally:
             if not accepted:
                 with self.lock:
-                    if self._input is submitted:
-                        self._input = request
+                    if self._conversation.get().input is submitted:
+                        self._conversation.set(replace(self._conversation.get(), input=request))
         if not accepted:
             return False
         with self.lock:
-            if self._input is not submitted:
+            if self._conversation.get().input is not submitted:
                 return True
             was_waiting = self.state.waiting
-            self.state = transition(self.state, Resolution(identity, reply))
+            new_state = transition(self.state, Resolution(identity, reply))
+            self._conversation.set(replace(self._conversation.get(), session=new_state))
             waiting = self.state.waiting
             self.publication.changed()
         self._waiting_changed(before=was_waiting, after=waiting)
@@ -323,11 +354,13 @@ class AgentWindow:
 
     def reset(self) -> None:
         with self.lock:
-            self._input = None
+            self._conversation.set(replace(self._conversation.get(), input=None))
             recording = self.state.recording
-            self.state = Session(identity=uuid.uuid4().hex)
+            new_state = Session(identity=uuid.uuid4().hex)
+            self._conversation.set(replace(self._conversation.get(), session=new_state))
             if recording.phase not in ("idle", "saved", "interrupted"):
-                self.state = transition(self.state, RecordingUpdated(recording, time.time()))
+                new_state = transition(self.state, RecordingUpdated(recording, time.time()))
+                self._conversation.set(replace(self._conversation.get(), session=new_state))
             self.publication.changed()
 
     def stop_recording(self) -> None:
@@ -348,4 +381,4 @@ class AgentWindow:
     def close(self) -> None:
         self.publication.close()
         with self.lock:
-            self._input = None
+            self._conversation.set(replace(self._conversation.get(), input=None))

@@ -7,7 +7,7 @@ from assistant.agent_window import AgentWindow
 from contracts.agent_session import AgentRequest
 from contracts.task import TextAnswer
 from tests.agent_requests import asked
-from tests.test_agent_window import RecordingWindow
+from tests.test_agent_window import Recording
 
 
 def has_pending_input(panel: AgentWindow) -> bool:
@@ -23,7 +23,9 @@ def test_durable_questions_share_typed_voice_and_button_routing_without_waiting_
         replies.append(answer)
         return True
 
-    panel = RecordingWindow(lambda: None, on_submit=submitted.append, on_waiting=waiting.append)
+    rig = Recording.of(lambda: None, on_submit=submitted.append, on_waiting=waiting.append)
+
+    panel = rig.window
     assert not panel.reply_by_voice("Start a task")
     first = asked("first", "Which workbook?", "Choose the source.", 1.0)
     panel.request_input(first, accept)
@@ -49,12 +51,13 @@ def test_durable_questions_share_typed_voice_and_button_routing_without_waiting_
     # Defect: speech while stopping becomes a new task instead of being consumed.
     assert panel.reply_by_voice("Start another task") and submitted == ["Start a follow-up"]
     panel.close()
-    panel.paint()
+    rig.paint()
 
 
 def test_a_new_request_during_reply_submission_remains_pending() -> None:
     replies: list[tuple[str, TextAnswer]] = []
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+    panel = rig.window
     latest = asked("new", "Which year?", "", 2.0)
 
     def answer_new(answer: TextAnswer) -> bool:
@@ -73,12 +76,13 @@ def test_a_new_request_during_reply_submission_remains_pending() -> None:
     assert panel.submit("2026")
     assert replies == [("old", TextAnswer("Revenue")), ("new", TextAnswer("2026"))] and not has_pending_input(panel)
     panel.close()
-    panel.paint()
+    rig.paint()
 
 
 def test_a_restored_request_stays_pending_when_the_prior_submission_returns() -> None:
     replies: list[TextAnswer] = []
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+    panel = rig.window
     question = asked("retry", "Which workbook?", "The previous answer could not be saved.", 1.0)
 
     def retry(answer: TextAnswer) -> bool:
@@ -97,14 +101,15 @@ def test_a_restored_request_stays_pending_when_the_prior_submission_returns() ->
     assert panel.submit("The revenue workbook")
     assert replies == [TextAnswer("Revenue"), TextAnswer("The revenue workbook")] and not has_pending_input(panel)
     panel.close()
-    panel.paint()
+    rig.paint()
 
 
 def test_duplicate_polling_and_simultaneous_replies_cannot_submit_twice() -> None:
     entered, release = threading.Event(), threading.Event()
     replies: list[TextAnswer] = []
     accepted: list[bool] = []
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+    panel = rig.window
     question = asked("one", "Which workbook?", "", 1.0)
 
     def accept(answer: TextAnswer) -> bool:
@@ -128,12 +133,13 @@ def test_duplicate_polling_and_simultaneous_replies_cannot_submit_twice() -> Non
     assert not has_pending_input(panel) and not panel.respond("one", TextAnswer("Third answer"))
     assert replies == [TextAnswer("Revenue")]
     panel.close()
-    panel.paint()
+    rig.paint()
 
 
 def test_rejected_replies_can_retry_without_resolving_or_reopening_the_request() -> None:
     replies: list[TextAnswer] = []
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+    panel = rig.window
     request = asked("sheet", "Which sheet?", "", 1.0)
 
     def accept(answer: TextAnswer) -> bool:
@@ -152,4 +158,4 @@ def test_rejected_replies_can_retry_without_resolving_or_reopening_the_request()
     panel.request_input(request, accept)
     assert not has_pending_input(panel)
     panel.close()
-    panel.paint()
+    rig.paint()

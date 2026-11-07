@@ -3,6 +3,7 @@
 import threading
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from assistant.agent_window import AgentWindow, View
 from contracts.agent_session import Snapshot, pending
@@ -33,29 +34,31 @@ class RecordingView:
         self.closed = True
 
 
-class RecordingWindow(AgentWindow):
-    """Keep the real session controller; replace only the UI thread and widgets."""
+@dataclass(frozen=True, slots=True)
+class Recording:
+    """The real session controller, with its view thread and widgets replaced by a queue and a recorder."""
 
-    __slots__ = ("jobs", "view")
+    window: AgentWindow
+    view: RecordingView
+    jobs: deque[Callable[[], None]]
 
-    def __init__(  # noqa: PLR0913 - mirrors AgentWindow callbacks
-        self,
+    @classmethod
+    def of(  # noqa: PLR0913 - mirrors AgentWindow callbacks
+        cls,
         stop: Callable[[], None],
         *,
-        post: Callable[[Callable[[], None]], None] | None = None,
-        create_view: Callable[[AgentWindow], View] | None = None,
         on_problem: Callable[[str], None] | None = None,
         on_reset: Callable[[], bool] | None = None,
         on_submit: Callable[[str], None] | None = None,
         on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
-    ) -> None:
-        self.view = RecordingView()
-        self.jobs: deque[Callable[[], None]] = deque()
-        super().__init__(
+    ) -> Recording:
+        view = RecordingView()
+        jobs: deque[Callable[[], None]] = deque()
+        window = AgentWindow.open(
             stop,
-            post=self.jobs.append,
-            create_view=lambda agent: self.view,
+            post=jobs.append,
+            create_view=lambda _agent: view,
             log=lambda _text: None,
             on_problem=on_problem,
             on_reset=on_reset,
@@ -63,6 +66,7 @@ class RecordingWindow(AgentWindow):
             on_waiting=on_waiting,
             on_recording=on_recording,
         )
+        return cls(window, view, jobs)
 
     def paint(self) -> None:
         while self.jobs:
@@ -70,7 +74,8 @@ class RecordingWindow(AgentWindow):
 
 
 def test_background_activity_and_queued_turns_do_not_show_or_focus_the_panel() -> None:
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+    panel = rig.window
     panel.begin("Find the workbook")
     panel.step("Looking for files")
     panel.say("I found it.")
@@ -78,18 +83,18 @@ def test_background_activity_and_queued_turns_do_not_show_or_focus_the_panel() -
     panel.problem("The workbook is temporarily unavailable.")
     panel.done("Try again later.")
     panel.finish()
-    assert not panel.view.states, "Painting must wait for the UI thread."
-    panel.paint()
-    assert panel.view.states and not panel.view.shown
+    assert not rig.view.states, "Painting must wait for the UI thread."
+    rig.paint()
+    assert rig.view.states and not rig.view.shown
     assert "Find the workbook" in panel.all_text()
     assert "Try again later." in panel.all_text()
     panel.show()
     panel.show(focus=True)
-    panel.paint()
-    assert panel.view.shown == [False, True]
+    rig.paint()
+    assert rig.view.shown == [False, True]
     panel.close()
-    panel.paint()
-    assert panel.view.closed
+    rig.paint()
+    assert rig.view.closed
 
 
 def test_explicit_ui_actions_reach_the_existing_session_callbacks() -> None:
@@ -100,7 +105,9 @@ def test_explicit_ui_actions_reach_the_existing_session_callbacks() -> None:
         commands.append("new")
         return True
 
-    panel = RecordingWindow(lambda: commands.append("stop"), on_submit=submitted.append, on_reset=reset)
+    rig = Recording.of(lambda: commands.append("stop"), on_submit=submitted.append, on_reset=reset)
+
+    panel = rig.window
     assert panel.submit("Open my workbook\nwith the complete ending")
     assert not panel.submit("  ")
     panel.stop()
@@ -112,21 +119,22 @@ def test_explicit_ui_actions_reach_the_existing_session_callbacks() -> None:
     panel.stopping()
     assert not panel.submit("Keep this draft until stopping finishes")
     panel.close()
-    panel.paint()
+    rig.paint()
 
 
 def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() -> None:
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+    panel = rig.window
     panel.begin("First task")
     first = panel.updates()
     first(Answer("same-id", "First answer", 1, StreamState.COMPLETE))
     panel.finish()
     panel.begin("Next task")
     second = panel.updates()
-    panel.paint()
+    rig.paint()
     before = panel.snapshot()
     first(Answer("late", "This belongs to the first request", 2))
-    assert panel.snapshot() is before and not panel.jobs
+    assert panel.snapshot() is before and not rig.jobs
     second(Answer("second-answer", "Second answer", 3))
     assert body(panel.snapshot().messages[-1]) == "Second answer"
     panel.reset()
@@ -135,17 +143,18 @@ def test_live_publishers_cannot_update_a_later_turn_or_a_reset_conversation() ->
     second(Answer("late", "This belongs to the old conversation", 4))
     assert panel.snapshot() is before and len(panel.snapshot().messages) == 1
     panel.close()
-    panel.paint()
+    rig.paint()
 
 
 def test_quitting_during_ui_warmup_withdraws_requests_and_never_creates_a_late_window() -> None:
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+    panel = rig.window
     panel.show()
     panel.request_input(asked("open", "Open this?", "budget.xlsx", 1), lambda _reply: True)
     panel.close()
     assert not panel.respond("open", TextAnswer("Yes"))
-    panel.paint()
-    assert not panel.view.states and not panel.view.shown and not panel.publication.ready.is_set()
+    rig.paint()
+    assert not rig.view.states and not rig.view.shown and not panel.publication.ready.is_set()
 
 
 def test_captured_session_replies_cannot_enter_a_reprojected_request_with_the_same_id() -> None:
@@ -161,7 +170,9 @@ def test_captured_session_replies_cannot_enter_a_reprojected_request_with_the_sa
             case _:
                 return False
 
-    panel = RecordingWindow(lambda: None)
+    rig = Recording.of(lambda: None)
+
+    panel = rig.window
     try:
         panel.request_input(asked("same", "Which owner?", "", 1), accept)
         captured = panel.snapshot()
@@ -174,7 +185,7 @@ def test_captured_session_replies_cannot_enter_a_reprojected_request_with_the_sa
         assert delivered == [answer] and not panel.snapshot().waiting
     finally:
         panel.close()
-        panel.paint()
+        rig.paint()
 
 
 def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
@@ -190,7 +201,7 @@ def test_failed_widget_startup_reports_the_problem_and_can_be_retried() -> None:
             raise RuntimeError("Fixture: window initialization failed")
         return view
 
-    panel = AgentWindow(lambda: None, post=jobs.append, create_view=create, on_problem=problems.append, log=lambda _text: None)
+    panel = AgentWindow.open(lambda: None, post=jobs.append, create_view=create, on_problem=problems.append, log=lambda _text: None)
     while jobs:
         jobs.popleft()()
     assert len(problems) == 1 and not panel.publication.ready.is_set()
@@ -212,7 +223,7 @@ def test_snapshot_renders_follow_the_ui_queue_and_stop_after_close() -> None:
     def observed_counts() -> tuple[int, ...]:
         return tuple(sum(pending(message) for message in state.messages) for state in view.states)
 
-    panel = AgentWindow(lambda: None, post=jobs.append, create_view=lambda _: view, log=lambda _text: None)
+    panel = AgentWindow.open(lambda: None, post=jobs.append, create_view=lambda _: view, log=lambda _text: None)
     try:
         while jobs:
             jobs.popleft()()

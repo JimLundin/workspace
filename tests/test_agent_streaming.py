@@ -5,18 +5,20 @@ import queue
 import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from assistant.agent import Agent
 from assistant.llm import Settings
 from assistant.task_profiles import General
 from automation.execution import WorkExecution
+from contracts.agent_session import Session
 from contracts.json_value import Json
 from contracts.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from tests.agent_requests import body
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, no_feed, response, says
-from tests.test_agent_window import RecordingWindow
+from tests.test_agent_window import Recording, RecordingView
 
 
 def event(kind: str, **fields: Json) -> bytes:
@@ -25,15 +27,51 @@ def event(kind: str, **fields: Json) -> bytes:
     return ("data: " + json.dumps(payload) + "\n\n").encode()
 
 
-class ObservedWindow(RecordingWindow):
-    __slots__ = ("events",)
+@dataclass(frozen=True, slots=True)
+class ObservedWindow:
+    """The recording window, also queueing every live update the agent publishes."""
 
-    def __init__(self, stop: Callable[[], None]) -> None:
-        super().__init__(stop)
-        self.events: queue.Queue[LiveMessage] = queue.Queue()
+    rig: Recording
+    events: queue.Queue[LiveMessage] = field(default_factory=queue.Queue[LiveMessage])
+
+    @classmethod
+    def of(cls, stop: Callable[[], None]) -> ObservedWindow:
+        return cls(Recording.of(stop))
+
+    @property
+    def state(self) -> Session:
+        return self.rig.window.state
+
+    @property
+    def view(self) -> RecordingView:
+        return self.rig.view
+
+    def paint(self) -> None:
+        self.rig.paint()
+
+    def begin(self, task: str) -> None:
+        self.rig.window.begin(task)
+
+    def finish(self) -> None:
+        self.rig.window.finish()
+
+    def stopping(self) -> None:
+        self.rig.window.stopping()
+
+    def step(self, message: str, /) -> None:
+        self.rig.window.step(message)
+
+    def say(self, message: str, /) -> None:
+        self.rig.window.say(message)
+
+    def problem(self, message: str, /) -> None:
+        self.rig.window.problem(message)
+
+    def done(self, message: str, /) -> None:
+        self.rig.window.done(message)
 
     def updates(self) -> Callable[[LiveMessage], None]:
-        publish = super().updates()
+        publish = self.rig.window.updates()
 
         def observe(value: LiveMessage) -> None:
             publish(value)
@@ -96,7 +134,7 @@ def running(agent: Agent, panel: ObservedWindow) -> Generator[threading.Thread]:
 
 def test_summaries_and_answers_are_visible_before_the_response_finishes(tmp_path: Path) -> None:
     release, stop = threading.Event(), threading.Event()
-    panel = ObservedWindow(stop.set)
+    panel = ObservedWindow.of(stop.set)
     summary: Json = {"type": "reasoning", "id": "rs_live", "summary": [{"type": "summary_text", "text": "Checking **the workbook**."}]}
     answer: Json = {
         "type": "message",
@@ -141,7 +179,7 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes(tmp_path
 
 def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_view(tmp_path: Path) -> None:
     stop = threading.Event()
-    panel = ObservedWindow(stop.set)
+    panel = ObservedWindow.of(stop.set)
     summary: Json = {
         "type": "reasoning",
         "id": "rs_parts",
@@ -193,7 +231,7 @@ def test_summary_parts_stay_separate_and_private_reasoning_never_reaches_the_vie
 
 def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row(tmp_path: Path) -> None:
     release, entered, stop = threading.Event(), threading.Event(), threading.Event()
-    panel = ObservedWindow(stop.set)
+    panel = ObservedWindow.of(stop.set)
 
     class HeldClipboard(FakeMachine):
         def get_clipboard(self) -> str:
@@ -223,7 +261,7 @@ def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row(tm
 
 def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_path: Path) -> None:
     release, stop = threading.Event(), threading.Event()
-    panel = ObservedWindow(stop.set)
+    panel = ObservedWindow.of(stop.set)
     requests = 0
 
     def stream(_: Received) -> Generator[bytes]:
@@ -274,7 +312,7 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_pat
 def test_stop_interrupts_provider_backoff_without_another_request(tmp_path: Path) -> None:
     # Defect: request recovery can keep retrying after the caller stops its run.
     stop = threading.Event()
-    panel = ObservedWindow(stop.set)
+    panel = ObservedWindow.of(stop.set)
     with fake_endpoint() as endpoint:
 
         def respond(_: Received) -> Reply:
@@ -292,7 +330,7 @@ def test_stop_interrupts_provider_backoff_without_another_request(tmp_path: Path
 
 def test_ending_a_stream_early_keeps_visible_partial_text_and_reports_the_failure(tmp_path: Path) -> None:
     stop = threading.Event()
-    panel = ObservedWindow(stop.set)
+    panel = ObservedWindow.of(stop.set)
 
     def stream(_: Received) -> Generator[bytes]:
         yield event("response.reasoning_summary_text.delta", item_id="rs_failed", output_index=0, summary_index=0, delta="Checking files.")

@@ -5,6 +5,7 @@ import threading
 import unittest
 from pathlib import Path
 
+from assistant.agent_window import AgentWindow
 from assistant.feed_contracts import FeedCommand, FeedRejected, SaveRule
 from assistant.feed_triage_service import Triage
 from assistant.meeting_tools import MeetingCommand, MeetingOperation
@@ -22,7 +23,7 @@ from contracts.presentation import PresentationEvent, Progress
 from contracts.task import Claim, Completed, Control, Interrupted, Outcome, RequestSource, Running, RunRef
 from contracts.work_snapshot import WorkSnapshot
 from tests.feed_fixture import no_canvas, no_personal_work
-from tests.test_agent_window import RecordingWindow
+from tests.test_agent_window import Recording
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_work_agent import invocation
 
@@ -115,16 +116,16 @@ def test_a_submission_runs_on_the_worker_and_its_output_reaches_the_conversation
     # Defects: the worker misses the request's context, live output never reaches
     # the conversation, owner calls skip the desktop owner, or completion needs a live event.
     tasks = TaskStore(WorkFolder(tmp_path).journal)
-    panels: list[RecordingWindow] = []
+    panels: list[Recording] = []
     errors: list[str] = []
     completed = threading.Event()
     owners = LinkedOwners()
     agent: WorkAgent
 
-    def window(agent: WorkAgent) -> RecordingWindow:
-        panel = RecordingWindow(agent.stop, on_submit=agent.start, on_reset=agent.new_conversation)
-        panels.append(panel)
-        return panel
+    def window(agent: WorkAgent) -> AgentWindow:
+        recording = Recording.of(agent.stop, on_submit=agent.start, on_reset=agent.new_conversation)
+        panels.append(recording)
+        return recording.window
 
     def published(snapshot: WorkSnapshot) -> None:
         if any(isinstance(task.state, Completed) for task in snapshot.tasks):
@@ -158,7 +159,7 @@ def test_a_submission_runs_on_the_worker_and_its_output_reaches_the_conversation
         assert runner.contexts == [invocation("Linked workbook")]
         assert owners.triage.board.rules == ("Keep linked fixture updates quiet.",)
         assert agent.refresh().wait(5)
-        text = panels[0].all_text()
+        text = panels[0].window.all_text()
         assert "Linked progress." in text and "Linked result." in text
         assert not errors
     finally:

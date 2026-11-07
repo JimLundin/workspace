@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+from assistant.agent_window import AgentWindow
 from assistant.conversation_output import ConversationOutput
 from assistant.work_agent import WorkAgent
 from assistant.work_canvas import WorkCanvas, run_prompt
@@ -34,7 +35,7 @@ from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.agent_progress import Busy, Settled, Working, phases
 from desktop_ui.island_agent import notices
 from tests.personal_work_fixture import source
-from tests.test_agent_window import RecordingWindow
+from tests.test_agent_window import Recording
 from winapi.shapes import Window
 
 
@@ -82,7 +83,7 @@ class WorkRig:
         self.saved_context = ContextStore(folder / "context.sqlite3")
         self.worker = worker or RecordingWorker()
         self.clock = Clock()
-        self.windows: list[RecordingWindow] = []
+        self.windows: list[Recording] = []
         self.snapshots: list[WorkSnapshot] = []
         self.on_snapshot = on_snapshot
         self.errors: list[str] = []
@@ -108,15 +109,19 @@ class WorkRig:
         if self.on_snapshot is not None:
             self.on_snapshot(snapshot)
 
-    def create_window(self, agent: WorkAgent) -> RecordingWindow:
-        window = RecordingWindow(agent.stop, on_submit=agent.start, on_reset=agent.new_conversation)
-        self.windows.append(window)
-        return window
+    def create_window(self, agent: WorkAgent) -> AgentWindow:
+        recording = Recording.of(agent.stop, on_submit=agent.start, on_reset=agent.new_conversation)
+        self.windows.append(recording)
+        return recording.window
 
     @property
-    def panel(self) -> RecordingWindow:
+    def recording(self) -> Recording:
         self.agent.prepare()
         return self.windows[0]
+
+    @property
+    def panel(self) -> AgentWindow:
+        return self.recording.window
 
     def refresh(self) -> WorkSnapshot:
         assert self.agent.refresh().wait(5), "The observer did not finish its current journal and transport work."
@@ -130,7 +135,7 @@ class WorkRig:
         self.agent.close()
         assert self.agent.wait_closed(5)
         if self.windows:
-            self.panel.paint()
+            self.recording.paint()
 
 
 @contextmanager
@@ -214,8 +219,8 @@ def test_queued_requests_persist_with_their_invocation_context_without_reopening
             (second.id, invocation("Second workbook")),
         ]
         assert rig.panel.state.queued == ("And this one",)
-        rig.panel.paint()
-        assert rig.panel.view.shown == [False]
+        rig.recording.paint()
+        assert rig.recording.view.shown == [False]
         assert {task.prompt for task in TaskStore(rig.tasks.path).list_tasks()} == {"Summarize this", "And this one"}
         assert b"First workbook" not in rig.tasks.path.read_bytes(), "Activity snapshots must remain volatile."
         assert rig.agent.running() and rig.started == [True]
@@ -448,8 +453,8 @@ def test_a_new_frontend_reprojects_a_durable_question_without_showing_a_hidden_v
     with work(tmp_path) as rig:
         rig.refresh()
         assert rig.panel.waiting
-        rig.panel.paint()
-        assert rig.panel.view.shown == []
+        rig.recording.paint()
+        assert rig.recording.view.shown == []
         assert rig.panel.submit("Use the project folder")
         rig.refresh()
         assert [response.reply for response in store.responses("recovered-task")] == [TextAnswer("Use the project folder")]
