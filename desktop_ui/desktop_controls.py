@@ -29,7 +29,6 @@ class Menu(Enum):
     USAGE = 6
     LOGS = 7
     QUIT = 8
-    UNDO = 10
     OVERLAY = 11
     MEETING = 12
     TRANSCRIPTS = 13
@@ -119,7 +118,7 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
         case Menu.STOP_AGENT:
             return MenuItem(item.action.value, f"{item.label}\t{shortcut_hint(shortcut(Tool.STOP))}", enabled=state.agent_running)
         case (
-            (Menu.KEYMAP | Menu.WORK | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.UNDO | Menu.USAGE | Menu.LOGS)
+            (Menu.KEYMAP | Menu.WORK | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.USAGE | Menu.LOGS)
             | Menu.RESTART_ASSISTANT
             | Menu.RESTART_DESKTOP
             | Menu.QUIT

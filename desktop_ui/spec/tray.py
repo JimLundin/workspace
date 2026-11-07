@@ -23,7 +23,6 @@ TRAY: Final = TraySpec(
         TrayAction(Menu.MEETING),
         TrayAction(Menu.TRANSCRIPTS, "Open meeting transcripts"),
         Separator(),
-        TrayAction(Menu.UNDO, "Undo the last update"),
         TrayAction(Menu.USAGE, "Usage report"),
         TrayAction(Menu.LOGS, "Open logs folder"),
         Separator(),

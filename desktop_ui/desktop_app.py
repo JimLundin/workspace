@@ -10,15 +10,15 @@ the same way and is shown here.
 
 import contextlib
 import os
+import subprocess
 import threading
 import time
 import traceback
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import Final, assert_never
 
 import components
-import keeper_control
+import launch
 import usage
 from config import APPS
 from contracts.desktop_link import (
@@ -339,12 +339,12 @@ class DesktopApp:
                 if not desktop_controls.toggle_layout(Native()):
                     self.problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case desktop_controls.Menu.RESTART_LAYOUT.value:
-                keeper_control.ask(requests(), keeper_control.Restart("layout"))
+                launched("restart", "layout")
             case desktop_controls.Menu.RESTART_ASSISTANT.value:
-                keeper_control.ask(requests(), keeper_control.Restart("assistant"))
+                launched("restart", "assistant")
             case desktop_controls.Menu.RESTART_DESKTOP.value:
-                # The keeper closes this program and starts it again; the assistant keeps working meanwhile.
-                keeper_control.ask(requests(), keeper_control.Restart("desktop"))
+                # The launcher closes this program and starts it again; the assistant keeps working meanwhile.
+                launched("restart", "desktop")
             case desktop_controls.Menu.OVERLAY.value:
                 self.toggle_overlay()
             case desktop_controls.Menu.KEYMAP.value:
@@ -361,20 +361,19 @@ class DesktopApp:
                 self.use(Tool.MEETING_TOGGLE)
             case desktop_controls.Menu.TRANSCRIPTS.value:
                 self.record("folder")
-            case desktop_controls.Menu.UNDO.value:
-                keeper_control.ask(requests(), keeper_control.Undo())
             case desktop_controls.Menu.USAGE.value:
                 os.startfile(write_report())
             case desktop_controls.Menu.LOGS.value:
                 DIRECTORY.mkdir(parents=True, exist_ok=True)
                 os.startfile(DIRECTORY)
             case desktop_controls.Menu.QUIT.value:
-                self.quit()
+                # The launcher asks every program to quit, this one last.
+                launched("stop")
             case _:
                 pass
 
     def quit(self) -> None:
-        """Close the views and the tray; the keeper reads this program's clean exit as Quit Workspace."""
+        """Close the views and the tray."""
         try:
             self.ui.close_desktop()
         except OSError as error:
@@ -396,10 +395,9 @@ class Native:
         return system.post_message(handle, message, wparam, lparam)
 
 
-def requests() -> Path:
-    """The keeper's request inbox, beside the readiness markers in its state folder."""
-    state = os.environ.get(components.STATE_VARIABLE)
-    return Path(state) / "requests" if state else DIRECTORY / "keeper" / "requests"
+def launched(command: str, *names: str) -> None:
+    """Run the launcher on its own, so it outlives this program when it restarts or stops the desktop."""
+    subprocess.Popen([str(launch.pythonw()), str(launch.ROOT / "launch.py"), command, *names], cwd=launch.ROOT, creationflags=launch.DETACHED)
 
 
 def run(*, window: components.Window = components.DESKTOP.window, lock_name: str = LOCK_NAME, views: Views | None = None) -> None:

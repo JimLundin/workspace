@@ -8,7 +8,7 @@ from protocol import LayoutState
 
 
 def test_the_shipped_tray_offers_every_action_once() -> None:
-    # Defect: an edit to the tray spec drops an action (Quit, Undo), leaving no way to reach it.
+    # Defect: an edit to the tray spec drops an action (Quit, Restart desktop), leaving no way to reach it.
     actions = [item.action for item in TRAY.items if isinstance(item, TrayAction)]
     assert sorted(actions, key=lambda action: action.value) == sorted(Menu, key=lambda action: action.value)
     assert tray_problems(TRAY) == ()
