@@ -101,7 +101,8 @@ class NotificationAgent:
             with self.lock:
                 candidates = self._state.get().candidates
             new_status = "" if self.activate(candidates) else _QUEUE_WAIT
-            self._state.set(replace(self._state.get(), status=new_status))
+            with self.lock:
+                self._state.set(replace(self._state.get(), status=new_status))
 
     def close(self) -> None:
         self.closed.set()
@@ -115,7 +116,8 @@ class NotificationAgent:
         if self.submit is None:
             return True
         current = frozenset(map(notification_id, candidates))
-        self._state.update(lambda state: replace(state, accepted=state.accepted & current))
+        with self.lock:
+            self._state.update(lambda state: replace(state, accepted=state.accepted & current))
         for item in candidates:
             if self.closed.is_set():
                 return False
@@ -129,5 +131,6 @@ class NotificationAgent:
                 # Retry refused queue admissions on a later worker tick. Accepted
                 # submissions are redelivered durably by the existing frontend.
                 continue
-            self._state.set(replace(self._state.get(), accepted=self._state.get().accepted | {task}))
+            with self.lock:
+                self._state.set(replace(self._state.get(), accepted=self._state.get().accepted | {task}))
         return current == self._state.get().accepted

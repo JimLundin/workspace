@@ -221,7 +221,8 @@ class PersonalWork:
             self._state.set(replace(self._state.get(), force=False))
         if force:
             self.sources.refresh()
-            self._state.set(replace(self._state.get(), reviewed=None))
+            with self.lock:
+                self._state.set(replace(self._state.get(), reviewed=None))
         observations = self.sources.read(self.clock(), self.closed)
         if self.closed.is_set():
             return
@@ -248,8 +249,9 @@ class PersonalWork:
             if self.closed.is_set():
                 return
             catalog = self.store.reconcile(request, plan, self.clock())
-            new_reviewed = signature(catalog)
-            self._state.set(replace(self._state.get(), reviewed=new_reviewed))
+            reviewed = signature(catalog)
+            with self.lock:
+                self._state.set(replace(self._state.get(), reviewed=reviewed))
             self.show(catalog, "Work and source connections updated automatically. " + status)
         except Exception:
             # The next bounded observation can retry; failed reviews never
