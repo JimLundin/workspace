@@ -125,11 +125,27 @@ violations left, with no baseline of exceptions. Counted in production code on
       from outside: `meetings._Writer` (`bytearray`), `sdk.Timeline` (with its
       `TextBuffer` exception), `scripts.selfcheck.Lanes`, `worker.OwnerCalls`
       (`BoundRunner` sets `current`) and `benchmark_island.Clock`. Each gets a
-      frozen state record in a `Cell`. Largest:
-      `CanvasPanel` (70), `DesktopBar` (56), `Communications` (53),
-      `WorkAgent` (33), `Worker` (23), `Ui` (18), `Triage` (17). One package per
-      session: `link`, `winapi`, `automation`, `contracts`, `scripts`,
-      `gateway`, `assistant`, then `desktop_ui`.
+      frozen state record in a `Cell`. Done 2026-11-07: `link`, `winapi`,
+      `automation`, `contracts`, `scripts`, `gateway`, and `assistant` except
+      `AssistantApp`. Left: `assistant.app.AssistantApp` and about 30
+      `desktop_ui` owners, largest `DesktopBar`, `CanvasPanel`, `Ui`,
+      `application_observer.Worker`, `DesktopApp`.
+      Patterns that held up:
+      - one record per owner works only where every writer holds the owner's
+        lock (audit with a scan for unlocked `Cell` writes); state another
+        thread writes under a different lock gets its own `Cell`
+        (`Communications._pending_drafts`);
+      - read state through properties (`self.window`), not
+        `self._state.get().window`, so pyright can narrow optionals;
+      - an owner whose parts call back into it (a view publication, a window
+        procedure, a server handler) gets them in a classmethod that binds them
+        through a `Cell` holding the owner once it exists (`Gateway.listen`,
+        `AgentWindow.open`, `TrayHost.start`);
+      - a test fixture that subclassed an owner becomes a rig holding a real
+        owner (`Recording`, `TriageFixture`); a test that assigned an owner's
+        state uses an explicit seam (`Triage.set_board`) or a test-side `Cell`.
+      - The audio mixer's 160 000-sample ring stays one buffer written in
+        place: copying it per 10 ms packet would cost about 64 MB/s.
    4. **The keyboard** (`miryoku.win.Keyboard`, 36 sites, and the engine's
       mutable `Modifiers` and the record at `engine.py:193`): the same model,
       measured with `scripts/benchmark_keyboard.py` before and after. Keep an
