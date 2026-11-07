@@ -51,7 +51,7 @@ def run_alone(tmp_path: Path, *parts: str) -> str:
     job = ProcessJob()
     try:
         with subprocess.Popen(
-            [sys.executable, "-S", "-c", "".join(textwrap.dedent(part) for part in parts)],
+            [sys.executable, "-c", "".join(textwrap.dedent(part) for part in parts)],
             cwd=ROOT,
             env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path), WORKSPACE_STATE=str(state), WORKSPACE_READY=str(state / "ready")),
             stdout=subprocess.PIPE,
@@ -98,8 +98,6 @@ def test_the_assistant_runs_reports_ready_and_quits_with_no_desktop(tmp_path: Pa
     output = run_alone(
         tmp_path,
         """\
-        from runtime import activate
-        activate()
         """,
         CLOSE_WHEN_FOUND,
         """\
@@ -128,8 +126,6 @@ def test_the_desktop_runs_reports_ready_and_quits_with_no_assistant(tmp_path: Pa
     output = run_alone(
         tmp_path,
         """\
-        from runtime import activate
-        activate()
         """,
         CLOSE_WHEN_FOUND,
         """\

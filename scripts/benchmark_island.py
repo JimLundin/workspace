@@ -22,7 +22,6 @@ from time import perf_counter_ns
 from pydantic import TypeAdapter
 lazy from PySide6 import QtCore
 
-from runtime import activate
 lazy from contracts.recording_state import RecordingState
 lazy from contracts.status import Job
 lazy from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
@@ -49,7 +48,6 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     match dict(inspect.getmembers(parser.parse_args())):
         case {"rounds": int() as rounds, "output": (Path() | None) as output} if rounds >= 1:
-            activate()
             result = run(rounds)
         case _:
             parser.error("Use at least one round.")

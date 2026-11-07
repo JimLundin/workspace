@@ -194,19 +194,3 @@ def test_compile_excludes_dependency_and_cache_sources(tmp_path: Path) -> None:
     problems: list[str] = []
     compile_all(root, problems)
     assert not problems
-
-
-def test_candidate_dependency_manifest_takes_precedence_over_the_checker_runtime(tmp_path: Path) -> None:
-    # Detect checking against the launcher's bundle after selecting a candidate
-    # that declares an incompatible adjacent runtime.
-    candidate = tree(tmp_path, {**SOUND, ".runtime/manifest.json": '{"python": "3.99"}'})
-    code, report = selfcheck(candidate)
-    assert code == 1 and "Windows x64 Python 3.99" in report, report
-
-
-def test_candidate_bootstrap_import_failure_is_not_hidden_by_the_checker_runtime(tmp_path: Path) -> None:
-    # Detect skipping the selected copy's runtime because activation preloaded
-    # the checker's module under the same import name.
-    candidate = tree(tmp_path, {**SOUND, "runtime.py": "raise RuntimeError('candidate runtime failed')\n"})
-    code, report = selfcheck(candidate)
-    assert code == 1 and "doesn't import: runtime" in report and "candidate runtime failed" in report, report

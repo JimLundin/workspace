@@ -18,7 +18,7 @@ from pathlib import Path
 from pydantic import TypeAdapter, ValidationError
 
 from scripts.check_results import Results, Selection
-from scripts.development_paths import LIVE, TEMP
+from scripts.development_paths import TEMP
 lazy from scripts.check import DIRECT, combined_results, execute, worker_result
 
 RUNNER = """import sys
@@ -32,11 +32,10 @@ if __name__ == "__main__":
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NativeConfiguration:
-    """The Windows runner's input; output and runtime are Windows paths."""
+    """The Windows runner's input; output is a Windows path."""
 
     selection: Selection
     output: str
-    runtime: str
 
 
 NATIVE_CONFIGURATION = TypeAdapter(NativeConfiguration)
@@ -47,7 +46,6 @@ def run_native(root: Path, configuration: Path) -> None:
     """Execute the configured selection in the Windows runner and publish its results."""
     settings = NATIVE_CONFIGURATION.validate_json(configuration.read_bytes(), strict=True)
     os.chdir(root)
-    os.environ["WORKSPACE_BUNDLED_RUNTIME"] = settings.runtime
     results = execute(settings.selection, root)
     Path(settings.output).write_bytes(NATIVE_RESULT.dump_json(results))
     raise SystemExit(bool(results.failures))
@@ -101,11 +99,7 @@ def execute_native(root: Path, selection: Selection) -> Results:
     try:
         runner, configuration, output = scratch / "run.py", scratch / "configuration.json", scratch / "result.json"
         runner.write_text(RUNNER, encoding="utf-8")
-        configuration.write_bytes(
-            NATIVE_CONFIGURATION.dump_json(
-                NativeConfiguration(selection=selection, output=windows_path(output), runtime=windows_path(LIVE / ".runtime"))
-            )
-        )
+        configuration.write_bytes(NATIVE_CONFIGURATION.dump_json(NativeConfiguration(selection=selection, output=windows_path(output))))
         interpreter = sys.executable if os.name == "nt" else str(root / ".venv" / "Scripts" / "python.exe")
         result = subprocess.run(
             [interpreter, windows_path(runner), windows_path(root), windows_path(configuration)], cwd=scratch, check=False, timeout=600

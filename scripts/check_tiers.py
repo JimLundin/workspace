@@ -114,9 +114,6 @@ NATIVE_SLOW: Final[frozendict[str, str]] = frozendict(
         "tests/test_windows_run_alone.py::test_the_desktop_runs_reports_ready_and_quits_with_no_assistant": (
             "the whole desktop starts and quits in a fresh interpreter"
         ),
-        "tests/test_windows_runtime.py::test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle": (
-            "a fresh interpreter in a copied tree imports the SDK and Qt from the bundle"
-        ),
         "tests/test_windows_runtime.py::test_keeper_allows_owned_cleanup_longer_than_five_seconds": ("waits past the keeper's real 5 s close grace"),
         "tests/test_windows_test_desktop.py::test_desktop_bootstrap_preserves_arguments_streams_and_failure_status": (
             "relaunches Python onto a private desktop"

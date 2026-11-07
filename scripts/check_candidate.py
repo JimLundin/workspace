@@ -16,8 +16,6 @@ import inspect
 import sys
 from pathlib import Path
 
-import runtime
-
 # The tools and Pydantic come from the bundled runtime, activated in main.
 lazy from keeper import source_files
 lazy from scripts import architecture, check_standards, quality
@@ -43,7 +41,6 @@ def failures(candidate: Path, base: Path) -> tuple[str, ...]:
 
 
 def main() -> None:
-    runtime.activate(root=Path(__file__).resolve().parent.parent)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--changed-from", type=Path, required=True, metavar="BASE")

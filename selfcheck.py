@@ -45,8 +45,6 @@ from pathlib import Path
 from types import FunctionType
 from typing import Final, Protocol
 
-import runtime
-
 _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 """Signs that an import failed only because this isn't Windows."""
 
@@ -88,7 +86,7 @@ ASSET_READERS: Final = frozendict(
         "pyproject.toml": ("scripts/architecture.py", "scripts/quality.py", "scripts/source_analysis.py", "scripts/check.py"),
         "Dev.cmd": ("scripts/check.py", "scripts/deploy.py"),
         "scripts/dev.ps1": ("scripts/check.py", "scripts/deploy.py"),
-        "StartWorkspace.cmd": ("runtime.py",),
+        "StartWorkspace.cmd": ("environments.py",),
         "assistant/uia.ps1": ("assistant/uia.py",),
         "desktop_ui/fonts/": ("desktop_ui/components/typeface.py", "desktop_ui/components/text.py"),
         "tests/uia_fixture.ps1": ("tests/test_windows_computer.py",),
@@ -358,8 +356,6 @@ def _prepare_worker(root: str) -> None:
     sys.path.insert(0, root)
     os.chdir(root)
     os.environ.pop("WORKSPACE_E2E", None)
-    runtime.activate(root=Path(root))
-    sys.modules.pop("runtime", None)
     if (Path(root) / "assistant" / "sdk.py").is_file():
         # Resolve the SDK graph before Qt installs its per-module source inspection.
         importlib.import_module("assistant.sdk")
@@ -473,12 +469,6 @@ def check(root: Path, scope: Scope = FULL_SCOPE, durations: int = 0) -> tuple[bo
     os.environ.pop("WORKSPACE_E2E", None)  # never the end-to-end tests: they'd start a second workspace
     sys.path.insert(0, str(root))
     os.chdir(root)
-    runtime.activate(root=root)
-    candidate_runtime = root / "runtime.py"
-    if candidate_runtime.is_file() and candidate_runtime.resolve() != Path(runtime.__file__).resolve():
-        # This checker owns a fresh process. Drop only its preloaded bootstrap
-        # cache entry so import_all executes the selected copy's runtime too.
-        sys.modules.pop("runtime", None)
     problems: list[str] = []
     timings: list[tuple[float, str]] = []
     profile = scope.profile

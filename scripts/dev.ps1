@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('check', 'deploy', 'lint', 'format', 'typecheck', 'watch', 'preview', 'volume')]
+    [ValidateSet('setup', 'check', 'deploy', 'lint', 'format', 'typecheck', 'watch', 'preview', 'volume')]
     [string]$Command = 'check',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Arguments
@@ -8,8 +8,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $python = Join-Path $root '.venv\Scripts\python.exe'
-if (-not (Test-Path $python)) { throw 'Create the Windows .venv before running development commands.' }
-$env:WORKSPACE_BUNDLED_RUNTIME = Join-Path $env:LOCALAPPDATA 'Programs\workspace-sdk\workspace\.runtime'
+if ($Command -eq 'setup') {
+    # The development environment holds exactly the pinned lock, like an installed one, plus the dev-only tools.
+    if (-not (Test-Path $python)) { & py -3.15 -m venv (Join-Path $root '.venv'); if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+    Remove-Item (Join-Path $root '.venv\Lib\site-packages\workspace_runtime.pth') -ErrorAction SilentlyContinue
+    & $python -m pip install --disable-pip-version-check --no-deps --require-hashes --only-binary=:all: -r (Join-Path $root 'requirements\windows-py315.lock')
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
+    & $python -m pip install --disable-pip-version-check hypothesis 'watchdog==6.0.0'
+    exit $LASTEXITCODE
+}
+if (-not (Test-Path $python)) { throw 'Run Dev.cmd setup first: it creates the development .venv from the lock.' }
 $env:PATH = "C:\Program Files\Git\cmd;$env:PATH"
 Push-Location $root
 try {

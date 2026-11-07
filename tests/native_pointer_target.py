@@ -7,12 +7,9 @@ from contextlib import suppress
 from ctypes import wintypes
 from dataclasses import dataclass
 
-from runtime import activate
 lazy from winapi import screen, shell, system, windows
 lazy from winapi._core import fn, user32
 lazy from winapi.shapes import Rect
-
-activate()
 
 point_window = fn(user32, "WindowFromPhysicalPoint", wintypes.HWND, wintypes.POINT)
 ancestor = fn(user32, "GetAncestor", wintypes.HWND, wintypes.HWND, wintypes.UINT)

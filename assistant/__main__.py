@@ -10,10 +10,7 @@ import sys
 from assistant.lifecycle import Timings
 from assistant.llm import settings_from
 from components import endpoint
-from runtime import activate
 lazy from assistant.app import Exit, run, show_error
-
-activate()
 
 
 def main() -> None:

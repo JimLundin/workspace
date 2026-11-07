@@ -32,7 +32,6 @@ from assistant.browser_values import (
     navigation_context_error,
 )
 from contracts.json_value import Json
-lazy from runtime import activate
 lazy from winapi.protection import protect, unprotect
 
 MAX_CLIENTS = 8
@@ -488,7 +487,6 @@ def connect_shared(folder: Path, product: Product, cancel: threading.Event) -> H
 
 def main() -> None:
 
-    activate()
     product, folder = Product(sys.argv[1]), Path(sys.argv[2])
     try:
         with lease(folder):

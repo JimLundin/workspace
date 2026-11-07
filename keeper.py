@@ -94,7 +94,6 @@ PROTECTED: Final = frozenset(
         "keeper.py",
         "selfcheck.py",
         "workspace.pyw",
-        "runtime.py",
         "keeper_ui.py",
         "keeper_control.py",
         "components.py",
@@ -973,10 +972,6 @@ def main(ui: Ui) -> None:
 if __name__ == "__main__":
     if sys.platform != "win32":
         sys.exit("the keeper runs on Windows")
-
-    from runtime import activate
-
-    activate()
 
     from keeper_ui import launch
 

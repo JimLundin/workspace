@@ -134,8 +134,6 @@ def test_machine_import_and_construction_do_not_load_ui_or_audio() -> None:
     program = """
 import os
 import sys
-from runtime import activate
-activate()
 from assistant.machine import NativeDesktop, WinMachine
 from winapi import windows
 

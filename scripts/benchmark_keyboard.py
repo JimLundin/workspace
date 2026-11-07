@@ -109,7 +109,6 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         "protocol.py",
         "config.py",
         "components.py",
-        "runtime.py",
         "winapi/inputs.py",
         "winapi/windows.py",
         "winapi/_core.py",

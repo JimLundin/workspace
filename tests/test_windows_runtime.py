@@ -1,7 +1,6 @@
 """Copied source uses the inherited SDK and Qt from the installed bundle."""
 
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -14,7 +13,6 @@ if sys.platform != "win32":
 
 from components import ASSISTANT, Window
 from keeper import Process, WindowsUser32
-from runtime import activate
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -57,54 +55,14 @@ def test_keeper_allows_owned_cleanup_longer_than_five_seconds(tmp_path: Path) ->
                 process.wait(timeout=15)
 
 
-def test_copied_source_starts_the_sdk_and_qt_with_the_inherited_bundle(tmp_path: Path) -> None:
-    if not (ROOT / ".runtime").is_dir() and not os.environ.get("WORKSPACE_BUNDLED_RUNTIME"):
-        raise unittest.SkipTest("Windows bundle integration")
-    activate()
-    source = tmp_path / "source"
-    # This owns copied production source binding, not keeper's complete mirror
-    # policy. Keeper's tests cover that policy; docs/tests/tooling are not needed
-    # to initialize the SDK and native UI in this fresh process.
-    source.mkdir()
-
-    def ignore_bytecode(_folder: str, names: list[str]) -> set[str]:
-        return set(names) & {"__pycache__"}
-
-    for package in ("assistant", "contracts", "desktop_ui", "automation", "gateway", "link", "miryoku", "winapi"):
-        shutil.copytree(ROOT / package, source / package, ignore=ignore_bytecode)
-    for module in ROOT.glob("*.py"):
-        shutil.copyfile(module, source / module.name)
-    assert not (source / ".runtime").exists() and not (source / ".python").exists()
-    script = (
-        "from runtime import activate; activate(); import assistant.sdk, desktop_ui.desktop_bar; "
-        "from pathlib import Path; import os, runtime, PySide6; "
-        "assert all(Path(module.__file__).is_relative_to(Path.cwd()) for module in (runtime, assistant.sdk, desktop_ui.desktop_bar)); "
-        "assert Path(PySide6.__file__).is_relative_to(Path(os.environ['WORKSPACE_BUNDLED_RUNTIME'])); "
-        "from desktop_ui.qt_ui import EventLoop, application; "
-        "root=application(); "
-        "loop=EventLoop(root, lambda: None); loop.pump(); loop.close(); root.processEvents(); print('Copied SDK and Qt passed')"
-    )
-    checked = subprocess.run(
-        [sys.executable, "-S", "-c", script],
-        cwd=source,
-        env=dict(os.environ, PYTHONUTF8="1"),
-        capture_output=True,
-        timeout=75,
-        check=False,
-    )
-    assert checked.returncode == 0, (checked.stdout + checked.stderr).decode("utf-8", errors="replace")
-    assert b"Copied SDK and Qt passed" in checked.stdout
-
-
 def test_qt_import_keeps_asyncio_workers_usable_in_a_fresh_interpreter() -> None:
-    activate()
     script = (
-        "from runtime import activate; activate(); import asyncio; "
+        "import asyncio; "
         "import desktop_ui.components.text; "
         "assert asyncio.run(asyncio.to_thread(lambda: 42)) == 42; print('Qt and async workers passed')"
     )
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script],
+        [sys.executable, "-c", script],
         cwd=ROOT,
         env=dict(os.environ, PYTHONUTF8="1"),
         capture_output=True,
@@ -119,14 +77,12 @@ def test_specs_validate_after_qt_loads_in_a_fresh_interpreter() -> None:
     # Defect: a desktop module that loads Qt before pydantic's lazily exported
     # names fails to import (PySide's import hook re-enters pydantic mid-load),
     # so an install whose changed modules import in that order is refused.
-    activate()
     script = (
-        "from runtime import activate; activate(); "
         "import desktop_ui.components.canvas_chrome; from pydantic import Field; "
         "import desktop_ui.ui_spec; desktop_ui.ui_spec.bar_specs(); print('Qt then specs passed')"
     )
     checked = subprocess.run(
-        [sys.executable, "-S", "-c", script],
+        [sys.executable, "-c", script],
         cwd=ROOT,
         env=dict(os.environ, PYTHONUTF8="1"),
         capture_output=True,

@@ -32,7 +32,6 @@ from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, jso
 from scripts.development_paths import LIVE, PROFILE
 from scripts.source_analysis import Cache
 lazy import selfcheck
-lazy from runtime import activate
 lazy from scripts import check_standards, check_tiers, quality
 lazy from scripts.check_native import execute_lanes
 lazy from scripts.native_desktop import current_name
@@ -162,7 +161,6 @@ class SourceRuntime(Protocol):
 
 class NativeSourceRuntime:
     def activate(self) -> None:
-        activate()
         if sys.platform == "win32":
             # Bootstrap the private test process before broad SDK/Qt imports.
             # Mandatory policy gates have passed; protected gates stay intact.
@@ -291,7 +289,6 @@ def sdk_packages(tests: tuple[str, ...], root: Path) -> tuple[str, ...]:
 
 
 def prepare_worker(root: Path) -> None:
-    activate()
     os.environ.pop("WORKSPACE_E2E", None)
     # No properties run in these workers. Their selected SDK tests already need
     # this graph; resolving it before Qt avoids Qt's dependency-source inspection.

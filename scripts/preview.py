@@ -15,7 +15,6 @@ lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from desktop_ui.qt_runtime import prepare
-from runtime import activate
 lazy from contracts.recording_state import RecordingState
 lazy from contracts.status import Job
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
@@ -190,7 +189,6 @@ def main() -> None:
     options = OPTIONS.validate_python(observed)
     if options.duration is not None and options.duration <= 0:
         parser.error("--duration must be positive")
-    activate()
     with tempfile.TemporaryDirectory(prefix="workspace-preview-") as folder:
         session = options.session if options.session is not None else Path(folder)
         run(options, Files(session, options.state if options.state is not None else session / "state.json"))

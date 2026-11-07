@@ -3,10 +3,7 @@ either runs without the other. Quit in its tray menu quits Workspace."""
 
 import sys
 
-from runtime import activate
 lazy from desktop_ui.desktop_app import run
-
-activate()
 
 
 def main() -> None:
