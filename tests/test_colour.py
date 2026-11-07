@@ -31,7 +31,5 @@ def test_a_written_colour_reads_back_exactly_and_a_malformed_one_is_refused() ->
 
 
 def test_every_tray_state_has_its_own_colour() -> None:
-    # Defect: a state added to the enum has no colour, so the tray fails to draw
-    # its icons; or two states share one, so the dot can't tell them apart.
-    assert set(COLOURS) == set(State)
+    # Defect: two states share one colour, so the dot can't tell them apart.
     assert len(set(COLOURS.values())) == len(State)

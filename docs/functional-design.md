@@ -97,6 +97,7 @@ architecture review's `contract-isolation` rule enforces it.
 | `agent_session.py`, `card_actions.py`, `feed_origin.py` | The agent session's snapshots and the actions its cards offer |
 | `recording_state.py`, `meeting_detection.py`, `meeting_presentation.py`, `meetings.py`, `capture.py` | Meeting recording values and how they read |
 | `geometry.py`, `hotkeys.py` | Rectangle arithmetic, and every tool key's behaviour |
+| `members.py` | Enum translation tables checked to name every member |
 
 ## `desktop_ui/`
 
