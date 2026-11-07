@@ -105,6 +105,10 @@ their tests. Legacy data and backwards compatibility are not requirements.
   over `link` (`contracts.desktop_link`). The architecture review enforces it.
 - Before writing general-purpose code, check for a small focused dependency and
   prefer it when its footprint and integration cost are reasonable.
+- Use the type system's newer tools where they model the data better: PEP 695
+  type parameters and `type` aliases, and type-parameter defaults (PEP 696,
+  `class Read[Q: Located, R = str]`) for a generic usually specialized one way,
+  instead of repeating the common arguments or adding a parallel alias.
 - Pyright (strict) is the only type checker. The
   [module map](docs/functional-design.md) says which module owns what.
 

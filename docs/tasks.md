@@ -126,6 +126,10 @@ violations left, with no baseline of exceptions. Counted in production code on
     row adapters. Dependency results (`sys.argv[1]`, `split(...)[0]`,
     `parents[1]`) have better spellings: argparse, `str.partition`, `.parent`.
     Constant slices (200) are mostly length bounds and stay allowed.
+11. **Type-parameter defaults** (user, 2026-11-07): review the generic classes
+    and aliases (`business_tools.Read`/`Interaction`/`Collection`/`Effect`,
+    `browser_tools.Parser`, `state_store.SavedState`, `web_apps.WebAppOperation`)
+    for a natural default, from how their uses specialize them.
 
 Items 3–5 and 7–8 were added by the user on 2026-11-07: no loop-appending, no
 function requiring mutable data, frozen dataclasses wherever possible (external
