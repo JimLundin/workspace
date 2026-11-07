@@ -33,7 +33,7 @@ def test_job_closure_stops_an_owned_process_and_its_child(tmp_path: Path) -> Non
         "exec('while not gate.exists(): time.sleep(.01)'); "
         "subprocess.Popen([sys.executable,'-c',sys.argv[3],sys.argv[4]], creationflags=0x08000000); time.sleep(60)"
     )
-    job = ProcessJob()
+    job = ProcessJob.create()
     process = subprocess.Popen([sys.executable, "-c", parent, str(gate), str(ready), child, str(child_ready)], creationflags=0x08000000)
     try:
         job.add(process.pid)
@@ -59,7 +59,7 @@ def test_job_handle_also_closes_when_its_owner_exits(tmp_path: Path) -> None:
     source = str(Path(__file__).resolve().parent.parent)
     parent = (
         f"import sys; sys.path.insert(0,{json.dumps(source)}); "
-        "import subprocess,time,pathlib; from winapi.processes import ProcessJob; job=ProcessJob(); "
+        "import subprocess,time,pathlib; from winapi.processes import ProcessJob; job=ProcessJob.create(); "
         "process=subprocess.Popen([sys.executable,'-c',sys.argv[1],sys.argv[2],sys.argv[3]], creationflags=0x08000000); "
         "job.add(process.pid); marker=pathlib.Path(sys.argv[2]); deadline=time.monotonic()+5; "
         "exec('while not marker.exists() and time.monotonic()<deadline: time.sleep(.02)'); assert marker.exists()"

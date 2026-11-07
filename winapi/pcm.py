@@ -2,8 +2,11 @@
 
 import math
 from array import array
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from typing import Final
+
+from cell import Cell
 
 RATE: Final = 16_000
 """Samples per second Workspace records and sends. Speech models work at 16 kHz; more only makes uploads bigger."""
@@ -27,6 +30,16 @@ class PcmFormat:
         return self.channels * (self.bits // 8)
 
 
+@dataclass(frozen=True, slots=True)
+class Position:
+    """How far a conversion has read and written, and the sample it carries across packets."""
+
+    input_frames: int = 0
+    output_frames: int = 0
+    last: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
 class Converter:
     """Downmix native packets and resample with one carried sample, without drift.
 
@@ -34,12 +47,17 @@ class Converter:
     cannot accumulate rounding error. WASAPI supplies little-endian Windows PCM.
     """
 
-    __slots__ = ("format", "input_frames", "last", "output_frames")
+    format: PcmFormat
+    _position: Cell[Position] = field(default_factory=lambda: Cell(Position()))
 
-    def __init__(self, format: PcmFormat) -> None:
-        self.format = format
-        self.input_frames = self.output_frames = 0
-        self.last = 0.0
+    @classmethod
+    def at(cls, format: PcmFormat, position: Position) -> Converter:
+        """A conversion continuing from `position`."""
+        return cls(format, Cell(position))
+
+    @property
+    def position(self) -> Position:
+        return self._position.get()
 
     def convert(self, pcm: bytes) -> bytes:
         format = self.format
@@ -47,9 +65,10 @@ class Converter:
             raise ValueError("The audio packet ended inside a sample.")
         if not pcm:
             return b""
+        position = self._position.get()
         if format == PcmFormat(RATE, 1, 16):
-            self.input_frames += len(pcm) // 2
-            self.output_frames += len(pcm) // 2
+            frames = len(pcm) // 2
+            self._position.set(replace(position, input_frames=position.input_frames + frames, output_frames=position.output_frames + frames))
             return pcm
         if format.bits == 24:
             samples = [float(int.from_bytes(pcm[i : i + 3], "little", signed=True)) / 256 for i in range(0, len(pcm), 3)]
@@ -62,15 +81,14 @@ class Converter:
         if not all(math.isfinite(sample) for sample in samples):
             raise ValueError("The audio device returned a non-finite sample.")
         mono = [sum(samples[i : i + format.channels]) / format.channels for i in range(0, len(samples), format.channels)]
-        beginning = self.input_frames
+        beginning = position.input_frames
         if beginning:
-            mono.insert(0, self.last)
+            mono.insert(0, position.last)
             beginning -= 1
-        self.input_frames += len(pcm) // format.frame_bytes
-        self.last = mono[-1]
+        output_frames = position.output_frames
         result = array("h")
         while True:
-            index, fraction = divmod(self.output_frames * format.rate, RATE)
+            index, fraction = divmod(output_frames * format.rate, RATE)
             local = index - beginning
             if local >= len(mono) or (fraction and local + 1 >= len(mono)):
                 break
@@ -78,7 +96,8 @@ class Converter:
             if fraction:
                 sample += (mono[local + 1] - sample) * fraction / RATE
             result.append(max(-32768, min(32767, round(sample))))
-            self.output_frames += 1
+            output_frames += 1
+        self._position.set(Position(position.input_frames + len(pcm) // format.frame_bytes, output_frames, mono[-1]))
         return result.tobytes()
 
 
@@ -160,6 +179,19 @@ def jump(cursor: int, end: int, until: int, capacity: int) -> int:
     return until - max(cursor, end) if until - cursor > capacity else 0
 
 
+@dataclass(frozen=True, slots=True)
+class _Mixed:
+    cursor: int = 0
+    """The published clock: every frame before it has been taken or is waiting in `ready`."""
+    end: int = 0
+    """Just past the latest mixed audio."""
+    ready: bytes = b""
+    """Published audio not yet taken."""
+    gaps: tuple[Gap, ...] = ()
+    """Recoveries not yet reported."""
+
+
+@dataclass(frozen=True, slots=True)
 class Mixer:
     """A bounded ring on the shared device clock; absent playback is silence.
 
@@ -167,16 +199,27 @@ class Mixer:
     was published loses only the part already published, and a device far
     ahead of the cursor pushes it forward, publishing what the ring holds and
     silence for the rest. Each recovery is a reported gap.
+
+    The ring is the one buffer written in place: copying it for each packet
+    would copy the whole ring every 10 ms. Everything else is one frozen record.
     """
 
-    __slots__ = ("cursor", "end", "gaps", "limit", "ready", "samples")
+    _samples: array[int]
+    limit: int
+    _mixed: Cell[_Mixed]
 
-    def __init__(self, capacity: int = CAPACITY, limit: int = MAX_JUMP) -> None:
-        self.samples = array("i", [0]) * capacity
-        self.limit = limit
-        self.cursor = self.end = 0
-        self.ready = array("h")
-        self.gaps: list[Gap] = []
+    @classmethod
+    def ring(cls, capacity: int = CAPACITY, limit: int = MAX_JUMP, *, cursor: int = 0) -> Mixer:
+        return cls(array("i", [0]) * capacity, limit, Cell(_Mixed(cursor, cursor)))
+
+    @property
+    def cursor(self) -> int:
+        return self._mixed.get().cursor
+
+    @property
+    def samples(self) -> Sequence[int]:
+        """The ring, for inspecting what it still holds."""
+        return self._samples
 
     def add(self, start: int, pcm: bytes) -> None:
         samples = array("h", pcm)
@@ -185,49 +228,51 @@ class Mixer:
         # ignore them before timing checks, while still accounting for late speech.
         if not any(samples):
             return
-        placement = place(self.cursor, self.end, start, len(samples), len(self.samples))
-        if placement.cursor > self.cursor:
-            silence_at = max(self.cursor, self.end)
-            self._publish(placement.cursor)
+        mixed = self._mixed.get()
+        placement = place(mixed.cursor, mixed.end, start, len(samples), len(self._samples))
+        if placement.cursor > mixed.cursor:
+            silence_at = max(mixed.cursor, mixed.end)
+            mixed = self._published(mixed, placement.cursor)
             if placement.silence:
-                self.gaps.append(Skipped(silence_at, placement.silence))
+                mixed = replace(mixed, gaps=(*mixed.gaps, Skipped(silence_at, placement.silence)))
         # One overlapping sample is packet-boundary rounding, not lost audio;
         # before the first take, audio timestamped before Start is not part of the recording.
-        if placement.clipped > 1 and self.cursor:
-            self.gaps.append(LateAudio(start, placement.clipped))
+        if placement.clipped > 1 and mixed.cursor:
+            mixed = replace(mixed, gaps=(*mixed.gaps, LateAudio(start, placement.clipped)))
         for index in range(placement.clipped, len(samples)):
-            self.samples[(start + index) % len(self.samples)] += samples[index]
+            self._samples[(start + index) % len(self._samples)] += samples[index]
         if placement.clipped < len(samples):
-            self.end = max(self.end, start + len(samples))
+            mixed = replace(mixed, end=max(mixed.end, start + len(samples)))
+        self._mixed.set(mixed)
 
     def take(self, until: int) -> bytes:
-        until = max(self.cursor, until)
-        if silence := jump(self.cursor, self.end, until, len(self.samples)):
-            self.gaps.append(Skipped(max(self.cursor, self.end), silence))
-        self._publish(until)
-        result = self.ready.tobytes()
-        self.ready = array("h")
-        return result
+        mixed = self._mixed.get()
+        until = max(mixed.cursor, until)
+        if silence := jump(mixed.cursor, mixed.end, until, len(self._samples)):
+            mixed = replace(mixed, gaps=(*mixed.gaps, Skipped(max(mixed.cursor, mixed.end), silence)))
+        mixed = self._published(mixed, until)
+        self._mixed.set(replace(mixed, ready=b""))
+        return mixed.ready
 
     def reported(self) -> tuple[Gap, ...]:
-        gaps = tuple(self.gaps)
-        self.gaps.clear()
+        gaps = self._mixed.get().gaps
+        self._mixed.update(lambda mixed: replace(mixed, gaps=()))
         return gaps
 
-    def _publish(self, until: int) -> None:
-        if until - self.cursor > self.limit:
+    def _published(self, mixed: _Mixed, until: int) -> _Mixed:
+        """`mixed` with the ring published up to `until`, clearing the published part of the ring."""
+        cursor = mixed.cursor
+        if until - cursor > self.limit:
             raise OSError(
-                f"Recording stopped: the audio clock jumped {(until - self.cursor) / RATE:.0f} s, possibly during sleep. "
-                "The captured part has been saved."
+                f"Recording stopped: the audio clock jumped {(until - cursor) / RATE:.0f} s, possibly during sleep. The captured part has been saved."
             )
-        capacity = len(self.samples)
-        for frame in range(self.cursor, min(until, self.cursor + capacity)):
-            index = frame % capacity
-            self.ready.append(max(-32768, min(32767, self.samples[index])))
-            self.samples[index] = 0
-        if until > self.cursor + capacity:
-            self.ready.extend(array("h", bytes(2 * (until - self.cursor - capacity))))
-        self.cursor = until
+        capacity = len(self._samples)
+        frames = range(cursor, min(until, cursor + capacity))
+        published = array("h", (max(-32768, min(32767, self._samples[frame % capacity])) for frame in frames))
+        for frame in frames:
+            self._samples[frame % capacity] = 0
+        silence = bytes(2 * max(0, until - cursor - capacity))
+        return replace(mixed, cursor=until, ready=mixed.ready + published.tobytes() + silence)
 
 
 def quiet_tail(pcm: bytes) -> bool:

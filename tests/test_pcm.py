@@ -4,7 +4,7 @@ import math
 from array import array
 from unittest import TestCase
 
-from winapi.pcm import CAPACITY, MAX_JUMP, RATE, Converter, LateAudio, Mixer, PcmFormat, Skipped, quiet_tail
+from winapi.pcm import CAPACITY, MAX_JUMP, RATE, Converter, LateAudio, Mixer, PcmFormat, Position, Skipped, quiet_tail
 
 
 def test_resampling_is_identical_across_arbitrary_packet_boundaries() -> None:
@@ -31,7 +31,7 @@ def test_resampling_interpolates_known_samples_and_preserves_native_sample_clock
         assert native.convert(packet) == packet
         frames += len(values)
         # WASAPI uses these clocks to place each packet on the shared timeline.
-        assert native.input_frames == native.output_frames == frames
+        assert native.position.input_frames == native.position.output_frames == frames
 
 
 def test_native_formats_downmix_clip_and_reject_invalid_samples() -> None:
@@ -49,13 +49,9 @@ def test_native_formats_downmix_clip_and_reject_invalid_samples() -> None:
 
 
 def test_resampling_and_mixing_keep_precise_positions_after_eight_hours() -> None:
-    converter = Converter(PcmFormat(48_000, 1, 16))
-    converter.input_frames = 8 * 3600 * 48_000
-    converter.output_frames = 8 * 3600 * RATE
-    converter.last = 1234
+    converter = Converter.at(PcmFormat(48_000, 1, 16), Position(8 * 3600 * 48_000, 8 * 3600 * RATE, 1234))
     assert converter.convert(array("h", [1234] * 480).tobytes()) == array("h", [1234] * 160).tobytes()
-    mixer = Mixer()
-    mixer.cursor = 8 * 3600 * RATE
+    mixer = Mixer.ring(cursor=8 * 3600 * RATE)
     for _ in range(200):
         beginning = mixer.cursor
         mixer.add(beginning, array("h", [1000] * 160).tobytes())
@@ -67,7 +63,7 @@ def test_resampling_and_mixing_keep_precise_positions_after_eight_hours() -> Non
 
 def test_mixer_pads_absent_playback_clips_peaks_and_recovers_from_late_and_early_audio() -> None:
     # Defect: a late or early packet ends the recording instead of costing only its own timing.
-    mixer = Mixer()
+    mixer = Mixer.ring()
     mixer.add(2, array("h", [30000, -30000]).tobytes())
     mixer.add(2, array("h", [30000, -30000]).tobytes())
     assert mixer.take(6) == array("h", [0, 0, 32767, -32768, 0, 0]).tobytes()
@@ -82,7 +78,7 @@ def test_mixer_pads_absent_playback_clips_peaks_and_recovers_from_late_and_early
 
 
 def test_mixer_accepts_an_exactly_full_buffer_and_one_overlapping_sample() -> None:
-    mixer = Mixer()
+    mixer = Mixer.ring()
     mixer.add(CAPACITY - 1, array("h", [1234]).tobytes())
     assert mixer.take(CAPACITY) == bytes(CAPACITY * 2 - 2) + array("h", [1234]).tobytes()
     mixer.add(mixer.cursor - 1, array("h", [111, 222, 333]).tobytes())
@@ -96,7 +92,7 @@ def test_mixer_accepts_an_exactly_full_buffer_and_one_overlapping_sample() -> No
 def test_a_stalled_capture_publishes_the_ring_then_silence_and_reports_it() -> None:
     # Defect: a take longer than the ring wraps and republishes buffered samples,
     # or the stall's silence goes unreported.
-    mixer = Mixer(capacity=4)
+    mixer = Mixer.ring(capacity=4)
     mixer.add(0, array("h", [1, 2, 3]).tobytes())
     assert mixer.take(7) == array("h", [1, 2, 3, 0, 0, 0, 0]).tobytes()
     assert mixer.reported() == (Skipped(3, 4),)
@@ -110,7 +106,7 @@ def test_late_digital_silence_does_not_interrupt_or_change_recorded_audio() -> N
     # Defect: idle WASAPI playback reports old timestamps for silent packets;
     # rejecting their zero contribution stops an otherwise valid recording, or
     # counts silence as lost audio.
-    mixer = Mixer()
+    mixer = Mixer.ring()
     mixer.take(100)
     mixer.add(100, array("h", [1200, -500]).tobytes())
     mixer.add(-RATE * 60, bytes(320))

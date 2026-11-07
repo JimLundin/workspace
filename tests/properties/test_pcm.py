@@ -45,9 +45,9 @@ def test_packet_partition_preserves_audio_and_sample_clocks(case: AudioCase) -> 
     actual = b"".join(fragmented.convert(packet) for packet in case.packets)
     assert actual == expected
     frames = len(case.pcm) // case.format.frame_bytes
-    assert fragmented.input_frames == whole.input_frames == frames
-    assert fragmented.output_frames == whole.output_frames == len(actual) // 2
-    assert abs(fragmented.output_frames - frames * RATE / case.format.rate) <= 2
+    assert fragmented.position.input_frames == whole.position.input_frames == frames
+    assert fragmented.position.output_frames == whole.position.output_frames == len(actual) // 2
+    assert abs(fragmented.position.output_frames - frames * RATE / case.format.rate) <= 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +90,7 @@ def test_late_and_early_packets_cost_only_their_reported_gaps(case: TimingCase) 
     # drops more than the part already published; pushing the cursor forward
     # republishes, reorders or loses buffered audio; a gap is unreported,
     # misplaced, mismeasured or reported for audio that was kept.
-    mixer = Mixer(capacity=case.capacity, limit=8 * case.capacity)
+    mixer = Mixer.ring(capacity=case.capacity, limit=8 * case.capacity)
     output = array("h", mixer.take(1))
     expected: dict[int, int] = {}
     end = 0

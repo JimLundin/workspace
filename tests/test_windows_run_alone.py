@@ -48,7 +48,7 @@ def run_alone(tmp_path: Path, *parts: str) -> str:
     state.mkdir()
     # The run's helpers (the shared browser host personal work samples through)
     # outlive it by design; the job ends them with the run, as a crash would.
-    job = ProcessJob()
+    job = ProcessJob.create()
     try:
         with subprocess.Popen(
             [sys.executable, "-c", "".join(textwrap.dedent(part) for part in parts)],

@@ -8,11 +8,12 @@ import contextlib
 import ctypes
 import threading
 import uuid
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from ctypes import wintypes
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
+from cell import Cell
 from winapi._core import fn, kernel32
 from winapi.audio import WAVEFORMATEX
 from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, Problem, Stall, dropout
@@ -142,56 +143,78 @@ def _format(pointer: ctypes.c_void_p) -> PcmFormat:
     return result
 
 
-class Stream:
-    __slots__ = ("api", "capture", "client", "converter", "device", "end", "gaps", "label", "loopback", "position", "started")
+@dataclass(frozen=True, slots=True)
+class _Captured:
+    converter: Converter
+    """Replaced after a discontinuity, which resets only the carried sample and phase."""
+    started: bool = False
+    position: int | None = None
+    """The device's last native clock position."""
+    end: int | None = None
+    """Just past the last packet on the mix timeline."""
+    gaps: tuple[Gap, ...] = ()
+    """Dropouts not yet reported."""
 
-    def __init__(self, enumerator: ctypes.c_void_p, api: WasapiApi, *, loopback: bool) -> None:
-        self.api = api
-        self.device, self.client, self.capture = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-        self.label = "Computer audio" if loopback else "Microphone"
-        self.loopback = loopback
-        self.started = False
-        self.position: int | None = None
-        self.end: int | None = None
-        self.gaps: list[Gap] = []
+
+def _release_all(pointers: Iterable[ctypes.c_void_p], api: WasapiApi) -> None:
+    for pointer in pointers:
+        _release(pointer, api)
+
+
+@dataclass(frozen=True, slots=True)
+class Stream:
+    api: WasapiApi
+    device: ctypes.c_void_p
+    client: ctypes.c_void_p
+    capture: ctypes.c_void_p
+    label: str
+    loopback: bool = field(kw_only=True)
+    _captured: Cell[_Captured] = field(kw_only=True)
+
+    @classmethod
+    def open(cls, enumerator: ctypes.c_void_p, api: WasapiApi, *, loopback: bool) -> Stream:
+        device, client, capture = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+        label = "Computer audio" if loopback else "Microphone"
         try:
             # Multimedia default matches normal app playback and the system's
             # selected microphone. Both use shared mode, including alongside B/N.
             _check(
-                self.api.method(enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)(
-                    enumerator, 0 if loopback else 1, 1, ctypes.byref(self.device)
-                ),
-                f"Opening {self.label.lower()}",
+                api.method(enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)(enumerator, 0 if loopback else 1, 1, ctypes.byref(device)),
+                f"Opening {label.lower()}",
             )
             _check(
-                self.api.method(self.device, 3, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)(
-                    self.device, _IID_CLIENT, 23, None, ctypes.byref(self.client)
+                api.method(device, 3, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)(
+                    device, _IID_CLIENT, 23, None, ctypes.byref(client)
                 ),
-                f"Preparing {self.label.lower()}",
+                f"Preparing {label.lower()}",
             )
             format = ctypes.c_void_p()
-            _check(self.api.method(self.client, 8, ctypes.c_void_p)(self.client, ctypes.byref(format)), "Reading audio format")
+            _check(api.method(client, 8, ctypes.c_void_p)(client, ctypes.byref(format)), "Reading audio format")
             try:
-                self.converter = Converter(_format(format))
+                converter = Converter(_format(format))
                 _check(
-                    self.api.method(
-                        self.client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_void_p, ctypes.c_void_p
-                    )(self.client, 0, _LOOPBACK if loopback else 0, _BUFFER, 0, format, None),
-                    f"Initializing {self.label.lower()}",
+                    api.method(client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_void_p, ctypes.c_void_p)(
+                        client, 0, _LOOPBACK if loopback else 0, _BUFFER, 0, format, None
+                    ),
+                    f"Initializing {label.lower()}",
                 )
             finally:
-                self.api.free_format(format)
-            _check(
-                self.api.method(self.client, 14, ctypes.c_void_p, ctypes.c_void_p)(self.client, _IID_CAPTURE, ctypes.byref(self.capture)),
-                "Opening audio capture",
-            )
+                api.free_format(format)
+            _check(api.method(client, 14, ctypes.c_void_p, ctypes.c_void_p)(client, _IID_CAPTURE, ctypes.byref(capture)), "Opening audio capture")
         except BaseException:
-            self.close()
+            _release_all((capture, client, device), api)
             raise
+        return cls(api, device, client, capture, label, loopback=loopback, _captured=Cell(_Captured(converter)))
+
+    def reported(self) -> tuple[Gap, ...]:
+        """The dropouts since the last report."""
+        gaps = self._captured.get().gaps
+        self._captured.update(lambda captured: replace(captured, gaps=()))
+        return gaps
 
     def start(self) -> None:
         _check(self.api.method(self.client, 10)(self.client), f"Starting {self.label.lower()}")
-        self.started = True
+        self._captured.update(lambda captured: replace(captured, started=True))
 
     def packets(self, origin: float) -> Iterator[tuple[int, bytes]]:
         size = wintypes.UINT()
@@ -207,10 +230,11 @@ class Stream:
                 ),
                 f"Capturing {self.label.lower()}",
             )
+            captured = self._captured.get()
             try:
                 if flags.value & _TIMESTAMP_ERROR:
                     raise OSError(f"{self.label} lost its audio clock. The captured part has been saved.")
-                if self.position is not None and position.value < self.position:
+                if captured.position is not None and position.value < captured.position:
                     raise OSError(f"{self.label} restarted its audio clock. The captured part has been saved.")
                 # Compare native positions with each other, never with stream
                 # frame counts. The real shared-mode microphone delivers 480
@@ -221,35 +245,36 @@ class Stream:
                 # failed device. Keep the packet's clock position so the mixer
                 # leaves silence for missing samples and keeps the other source.
                 # Reset only the resampler's carried sample/phase across the gap.
-                if self.position is not None and flags.value & _DISCONTINUITY:
-                    self.converter = Converter(self.converter.format)
-                self.position = position.value
-                count = frames.value * self.converter.format.frame_bytes
+                converter = captured.converter
+                if captured.position is not None and flags.value & _DISCONTINUITY:
+                    converter = Converter(converter.format)
+                captured = replace(captured, converter=converter, position=position.value)
+                self._captured.set(captured)
+                count = frames.value * converter.format.frame_bytes
                 raw = bytes(count) if flags.value & _SILENT else ctypes.string_at(data, count)
-                offset = self.converter.output_frames / RATE - self.converter.input_frames / self.converter.format.rate
+                offset = converter.position.output_frames / RATE - converter.position.input_frames / converter.format.rate
                 start = round((timestamp.value / 10_000_000 - origin + offset) * RATE)
-                pcm = self.converter.convert(raw)
+                pcm = converter.convert(raw)
             finally:
                 _check(self.api.method(self.capture, 4, wintypes.UINT)(self.capture, frames), "Returning audio packet")
             # The microphone streams continuously, silence included, so a flagged
             # hole is audio lost before this drain (an overflowed engine buffer).
             # Idle playback sends no packets at all; its holes are not losses.
-            if not self.loopback and (hole := dropout(self.end, start, discontinuous=bool(flags.value & _DISCONTINUITY))) is not None:
-                self.gaps.append(hole)
-            self.end = start + len(pcm) // 2
+            hole = None if self.loopback else dropout(captured.end, start, discontinuous=bool(flags.value & _DISCONTINUITY))
+            gaps = captured.gaps if hole is None else (*captured.gaps, hole)
+            self._captured.set(replace(captured, end=start + len(pcm) // 2, gaps=gaps))
             yield start, pcm
 
     def stop(self) -> None:
-        if self.started:
+        if self._captured.get().started:
             _check(self.api.method(self.client, 11)(self.client), f"Stopping {self.label.lower()}")
-            self.started = False
+            self._captured.update(lambda captured: replace(captured, started=False))
 
     def close(self) -> None:
         try:
             self.stop()
         finally:
-            for pointer in (self.capture, self.client, self.device):
-                _release(pointer, self.api)
+            _release_all((self.capture, self.client, self.device), self.api)
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,8 +282,7 @@ class MeetingAudio:
     """Capture only between explicit Start and Stop; never opens a device at import."""
 
     api: WasapiApi = field(default_factory=NativeWasapi)
-    _: KW_ONLY
-    computer_audio: bool = True
+    computer_audio: bool = field(default=True, kw_only=True)
 
     def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
         """Capture until `stop`; `consume` and `report` run on this real-time thread and must not block."""
@@ -267,21 +291,20 @@ class MeetingAudio:
         streams: list[Stream] = []
         try:
             _check(self.api.create_enumerator(enumerator), "Finding audio devices")
-            streams.append(Stream(enumerator, self.api, loopback=False))
+            streams.append(Stream.open(enumerator, self.api, loopback=False))
             if self.computer_audio:
-                streams.append(Stream(enumerator, self.api, loopback=True))
+                streams.append(Stream.open(enumerator, self.api, loopback=True))
             if stop.is_set():
                 return
-            mixer, origin = Mixer(), self.api.clock()
+            mixer, origin = Mixer.ring(), self.api.clock()
             for stream in streams:
                 stream.start()
             ready()
 
             def gaps() -> None:
                 for stream in streams:
-                    for gap in stream.gaps:
+                    for gap in stream.reported():
                         report(gap)
-                    stream.gaps.clear()
                 for gap in mixer.reported():
                     report(gap)
 
