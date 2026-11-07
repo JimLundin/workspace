@@ -149,6 +149,10 @@ type ContextRevision = tuple[tuple[tuple[str, Phase, int], ...], tuple[ContextRe
 """The task phases and saved context the board last reconsidered against."""
 
 
+type Model = Callable[[tuple[Candidate, ...], tuple[str, ...], Triage], str]
+"""Assess a batch of candidates under the user's rules; the triage supplies its research context."""
+
+
 @dataclass(frozen=True, slots=True)
 class _Triaging:
     board: Board
@@ -167,7 +171,7 @@ class Triage:
     # Cancellable delays and the clock vary independently in native and
     # deterministic adapters, so each is an explicit dependency.
     store: Store
-    model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str]
+    model: Model
     submit: Callable[[str, str, Profile], None] | None
     wait: Callable[[threading.Event, float], bool]
     clock: Callable[[], float]
@@ -187,7 +191,7 @@ class Triage:
     def start(  # noqa: PLR0913 - injected collaborators and test seams
         cls,
         store: Store,
-        model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
+        model: Model,
         *,
         submit: Callable[[str, str, Profile], None] | None = None,
         wait: Callable[[threading.Event, float], bool] = wait_for_stop,
@@ -472,7 +476,7 @@ class Triage:
                 new_board = replace(self._state.get().board, status="Researching your work…")
                 self._state.set(replace(self._state.get(), board=new_board))
             try:
-                assessments = tuple(replace(item, reviewed_on=today) for item in decode(self.model(batch, rules), batch))
+                assessments = tuple(replace(item, reviewed_on=today) for item in decode(self.model(batch, rules, self), batch))
                 with self.lock:
                     if self.closed.is_set():
                         return

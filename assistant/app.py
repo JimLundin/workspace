@@ -551,9 +551,9 @@ class AssistantApp:
             )
         )
 
-    def review_feed(self, batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
-        research = Research(self.settings, self.triage.research_context, self.triage.research_conversation, stop=self.triage.closed)
-        return classify(self.settings, batch, rules, working_context=self.triage.working_context(batch), research=research)
+    def review_feed(self, batch: tuple[Candidate, ...], rules: tuple[str, ...], triage: Triage) -> str:
+        research = Research(self.settings, triage.research_context, triage.research_conversation, stop=triage.closed)
+        return classify(self.settings, batch, rules, working_context=triage.working_context(batch), research=research)
 
     def work_changed(self, snapshot: WorkSnapshot) -> None:
         self.canvas.observe_work(snapshot)

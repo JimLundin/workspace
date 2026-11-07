@@ -12,8 +12,7 @@ from dataclasses import dataclass, field
 from queue import Queue
 
 from assistant.feed_contracts import FeedCommand, FeedRejected
-from assistant.feed_sources import Candidate
-from assistant.feed_triage_service import Store, Triage
+from assistant.feed_triage_service import Model, Store, Triage
 from assistant.feed_work import FeedWork
 from assistant.work_bridge import WorkOwners
 from assistant.work_bridge_contracts import BRIDGE_COMMAND, BRIDGE_RESPONSE, BridgeCommand, FeedResponse
@@ -74,7 +73,7 @@ class TriageFixture:
     def start(
         cls,
         store: Store,
-        model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
+        model: Model,
         *,
         submit: Callable[[str, str, Profile], None] | None = None,
         clock: Callable[[], float] = time.time,

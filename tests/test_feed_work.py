@@ -136,7 +136,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         submitted.append((task, prompt, profile))
         tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
-    triage = TriageFixture.start(feed_store, lambda _batch, _rules: "{}", submit=queue)
+    triage = TriageFixture.start(feed_store, lambda _batch, _rules, _triage: "{}", submit=queue)
     request = feed_bridge(triage.triage)
     rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
@@ -153,7 +153,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         assert _OBJECT.validate_json(result.text)["queued"] == task_id
     finally:
         triage.triage.close()
-    restarted = TriageFixture.start(feed_store, lambda _batch, _rules: "{}", submit=queue)
+    restarted = TriageFixture.start(feed_store, lambda _batch, _rules, _triage: "{}", submit=queue)
     try:
         restarted.triage.command(reply)
         assert len(submitted) == 2 and submitted[0] == submitted[1]
@@ -184,7 +184,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     command = FeedReply(item.identity, proposal_revision(item), "reply", "Check the totals.")
     failed = TriageFixture.start(
         broken,
-        lambda _batch, _rules: "{}",
+        lambda _batch, _rules, _triage: "{}",
         submit=lambda task, _prompt, _profile: submitted.append(task),
     )
     try:
@@ -199,7 +199,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
 
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    queued = TriageFixture.start(store, lambda _batch, _rules: "{}", submit=unavailable)
+    queued = TriageFixture.start(store, lambda _batch, _rules, _triage: "{}", submit=unavailable)
     try:
         with TestCase().assertRaises(OSError):
             queued.triage.command(command)
@@ -217,7 +217,7 @@ def test_context_changes_reconsider_open_work_without_reopening_handled_items(tm
     item = replace(decode(output(([source.identity], "action")), (source,))[0], reviewed_on=day)
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(replace(item, disposition=Disposition.QUIET),)))
-    triage = TriageFixture.start(store, lambda _batch, _rules: "{}")
+    triage = TriageFixture.start(store, lambda _batch, _rules, _triage: "{}")
     try:
         assert not unassessed(triage.triage.board, (source,), today=day)
         triage.triage.context_changed((), ())

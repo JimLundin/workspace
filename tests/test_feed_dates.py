@@ -11,7 +11,7 @@ from assistant.communications_browser import activity_observation, observation
 from assistant.feed_contracts import Disposition
 from assistant.feed_sources import Candidate, Excerpt, PendingFeed, triage_evidence
 from assistant.feed_triage import Board, decode, restored, saved, unassessed
-from assistant.feed_triage_service import classify, source_evidence
+from assistant.feed_triage_service import Triage, classify, source_evidence
 from assistant.llm import Settings
 from assistant.web_apps import ActivityItem, ActivityPage, TeamsPage, TeamsPost
 from tests import fake_endpoint
@@ -42,7 +42,7 @@ def test_saved_review_dates_refresh_only_open_work_and_only_on_a_new_day() -> No
 
 def test_corrected_provider_dates_invalidate_open_work_without_reopening_handled_items(tmp_path: Path) -> None:
     """Ignoring date-only provider corrections leaves stale recommendations cached."""
-    triage = TriageFixture.start(MemoryStore(), lambda _batch, _rules: "{}")
+    triage = TriageFixture.start(MemoryStore(), lambda _batch, _rules, _triage: "{}")
     try:
         triage.triage.closed.set()
         updates = tuple(Update(TeamsActivity(str(index)), "Review", "Please review.", "Teams", THIS_WEEK) for index, _kind in enumerate(Disposition))
@@ -96,7 +96,7 @@ def test_triage_model_receives_readable_current_and_source_dates() -> None:
 
 
 def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path) -> None:
-    triage = TriageFixture.start(MemoryStore(), lambda _batch, _rules: "{}", clock=lambda: THIS_WEEK)
+    triage = TriageFixture.start(MemoryStore(), lambda _batch, _rules, _triage: "{}", clock=lambda: THIS_WEEK)
     try:
         source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
         triage.triage.set_candidates((source,))
@@ -132,7 +132,7 @@ def test_a_new_day_reconsiders_cached_work_without_a_new_notification(tmp_path: 
     calls: list[tuple[str, ...]] = []
     reconsidered = threading.Event()
 
-    def model(batch: tuple[Candidate, ...], rules: tuple[str, ...]) -> str:
+    def model(batch: tuple[Candidate, ...], rules: tuple[str, ...], _triage: Triage) -> str:
         calls.append(tuple(item.identity for item in batch))
         if len(calls) == 2:
             reconsidered.set()
