@@ -79,7 +79,9 @@ their tests. Legacy data and backwards compatibility are not requirements.
   collections with comprehensions, generator expressions, generator functions and
   tuples, never by filling a mutable container in a loop (nor by rebinding an
   accumulator there). A loop is for a side effect, which has no place in a
-  comprehension; even then, keep side effects out of loops where you can.
+  comprehension; even then, keep side effects out of loops where you can. The
+  architecture review rejects a local container filled in a loop, except in the
+  keeper's protected files, which agents don't change.
 - Keep evaluation lazy: a function whose result is just a generator materialized
   (`return tuple(item for ...)`) returns an `Iterator` or is a generator, and the
   caller materializes when it must. Materialize where the value is stored in a

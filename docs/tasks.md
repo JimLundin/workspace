@@ -97,8 +97,12 @@ violations left, with no baseline of exceptions. Counted in production code on
    review's `bare-tuple` rule rejects new ones in production code; 20 remain in
    test fixtures. Adding `Point` to the hook costs about 0.5 µs per key; the
    engine benchmark is unchanged.
-3. **Append in a loop** (83 production, 15 tests). Includes the architecture
-   review's deliberate worklists, which need a rewrite rather than an exception.
+3. **Append in a loop**: done 2026-11-07. 76 sites rewritten with
+   comprehensions, generators and generator functions; the review's
+   `loop-accumulation` rule rejects new ones. The keeper's protected files keep
+   their 17 and are exempt. 11 remain in tests, which the rule doesn't cover.
+   `island_layout.arrange` is about 6 µs slower per call (a frozen step per
+   part), negligible beside its font measurement.
 4. **Mutable parameter types** (41 production, 26 tests): `list`/`dict`/`set`
    and friends in a parameter annotation. Only dependency-dictated callbacks
    (SDK hooks, `gc.callbacks`) are exempt.
