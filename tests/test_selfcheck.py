@@ -128,7 +128,7 @@ def test_every_source_asset_names_readers_that_exist() -> None:
         listed = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True).stdout.decode().split("\0")
     else:
         listed = [path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()]
-    whole_suite = (".python-version", "uv.lock", "requirements/")  # requirements/: until the next install removes the old lock
+    whole_suite = (".python-version", "uv.lock")
     assets = [
         name
         for name in listed
