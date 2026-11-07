@@ -23,18 +23,15 @@ def _base_key(cell: int) -> Key | None:
 
 def _chord_keys() -> frozendict[Key, Request]:
     """Each Apps layer request by the base key at its place: one map for both keyboards."""
-    keys: dict[Key, Request] = {}
-    for cell in range(CELLS):
-        match TABLE[Layer.APPS][cell]:
-            case Tool() | App() as request if (key := _base_key(cell)) is not None:
-                if key in keys:
-                    raise ImportError(f"two Apps layer requests share the chord key {key.name}")
-                keys[key] = request
-            case Tool() | App():
-                raise ImportError("an Apps layer request sits where the base layer has no key to chord")
-            case _:
-                pass
-    return frozendict(keys)
+    requests = tuple((cell, request) for cell in range(CELLS) if isinstance(request := TABLE[Layer.APPS][cell], Tool | App))
+    chorded = tuple((key, request) for cell, request in requests if (key := _base_key(cell)) is not None)
+    if len(chorded) != len(requests):
+        raise ImportError("an Apps layer request sits where the base layer has no key to chord")
+    keys = frozendict(chorded)
+    if len(keys) != len(chorded):
+        repeated = next(key for index, (key, _) in enumerate(chorded) if key in frozendict(chorded[:index]))
+        raise ImportError(f"two Apps layer requests share the chord key {repeated.name}")
+    return keys
 
 
 def key_name(key: Key) -> str:

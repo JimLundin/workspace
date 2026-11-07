@@ -417,21 +417,25 @@ class Unmapped(Enum):
     """No binding: swallowed, does nothing."""
 
 
-def _build_slots() -> dict[Scancode, int | Unmapped]:
-    slots: dict[Scancode, int | Unmapped] = {}
-    for cell, scancode in enumerate(_flatten(PHYSICAL)):
-        if scancode in slots:
+def _build_slots() -> frozendict[Scancode, int | Unmapped]:
+    entries: tuple[tuple[Scancode, int | Unmapped], ...] = (
+        *((scancode, cell) for cell, scancode in enumerate(_flatten(PHYSICAL))),
+        *((scancode, Unmapped.BLOCKED) for scancode in UNUSED),
+        *((scancode, Unmapped.FREE) for scancode in FUNCTION_KEYS),
+    )
+    slots = frozendict(entries)
+    if len(slots) == len(entries):
+        return slots
+    # The first entry whose scancode an earlier one already took, named by what it was meant to be.
+    first = frozendict((scancode, index) for index, (scancode, _) in reversed(tuple(enumerate(entries))))
+    scancode, slot = next((scancode, slot) for index, (scancode, slot) in enumerate(entries) if first[scancode] != index)
+    match slot:
+        case int():
             raise LayoutError(f"physical key {scancode:#x} is used twice")
-        slots[scancode] = cell
-    for scancode in UNUSED:
-        if scancode in slots:
+        case Unmapped.BLOCKED:
             raise LayoutError(f"blocked key {scancode:#x} is also in the layout")
-        slots[scancode] = Unmapped.BLOCKED
-    for scancode in FUNCTION_KEYS:
-        if scancode in slots:
+        case Unmapped.FREE:
             raise LayoutError(f"function key {scancode:#x} is also in the layout")
-        slots[scancode] = Unmapped.FREE
-    return slots
 
 
 SLOTS: Final = _build_slots()
