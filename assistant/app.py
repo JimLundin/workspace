@@ -295,7 +295,7 @@ class AssistantApp:
         self.commands_handler = DesktopCommands(self.canvas, desktop, self)
         self.timings.mark("communications and desktop owners")
         archive = MeetingArchive(DIRECTORY / "meetings")
-        self.meetings = Meetings(
+        self.meetings = Meetings.open(
             self.settings,
             lambda source: recording.MeetingAudio(computer_audio=source == "both"),
             archive=archive,

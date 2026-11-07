@@ -197,34 +197,50 @@ def _unlogged(text: str) -> None:
     pass
 
 
-class Meetings:
-    __slots__ = (
-        "_capture",
-        "_closing",
-        "_emitting",
-        "_lock",
-        "_paused",
-        "_queue",
-        "_quit",
-        "_recovery",
-        "_retry_pending",
-        "_scheduled",
-        "_state",
-        "_stop",
-        "_wake",
-        "_worker",
-        "archive",
-        "factory",
-        "log",
-        "on_meeting",
-        "on_update",
-        "retry_policy",
-        "settings",
-        "transcribe_audio",
-    )
+@dataclass(frozen=True, slots=True)
+class _Recording:
+    state: RecordingState = field(default_factory=RecordingState)
+    """What the view shows."""
+    stop: threading.Event = field(default_factory=threading.Event)
+    """The current capture's stop signal; each capture gets its own."""
+    capture: threading.Thread | None = None
+    worker: threading.Thread | None = None
+    closing: bool = False
+    scheduled: frozenset[Path] = frozenset()
+    """Journals queued for transcription."""
+    paused: frozendict[Path, str] = frozendict()
+    """Journals whose transcription is paused, and why."""
+    retry_pending: frozenset[Path] = frozenset()
+    """Scheduled journals the user asked to retry."""
 
-    def __init__(  # noqa: PLR0913 - injected collaborators and callbacks
-        self,
+
+@dataclass(frozen=True, slots=True)
+class Meetings:
+    # Capture, transcription, storage and their independent publications
+    # are effect dependencies; no callback owns another owner's progress.
+    settings: Settings
+    factory: Callable[[AudioSource], Capture]
+    archive: MeetingArchive
+    transcribe_audio: Transcriber
+    retry_policy: RetryPolicy
+    on_update: Callable[[RecordingState], None] | None
+    on_meeting: Callable[[MeetingStore], None] | None
+    log: Callable[[str], None]
+    _recovery: tuple[Path, ...]
+    """Journals found at startup, scheduled once the worker runs."""
+    _state: Cell[_Recording] = field(default_factory=lambda: Cell(_Recording()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
+    _emitting: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
+    """Serializes publications in state order without holding `_lock`: the
+    view takes its own locks, and capture or snapshot() must never wait for them."""
+    _quit: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _wake: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _queue: queue.Queue[MeetingStore | None] = field(default_factory=queue.Queue[MeetingStore | None], init=False, repr=False)
+
+    @classmethod
+    def open(  # noqa: PLR0913 - injected collaborators and callbacks
+        cls,
         settings: Settings,
         factory: Callable[[AudioSource], Capture],
         *,
@@ -234,34 +250,37 @@ class Meetings:
         retry_policy: RetryPolicy | None = None,
         on_meeting: Callable[[MeetingStore], None] | None = None,
         log: Callable[[str], None] | None = None,
-    ) -> None:
-        # Capture, transcription, storage and their independent publications
-        # are effect dependencies; no callback owns another owner's progress.
-        self.settings, self.factory = settings, factory
-        self.log: Callable[[str], None] = log if log is not None else _unlogged
-        self.archive = archive if archive is not None else MeetingArchive(DIRECTORY / "meetings")
+    ) -> Meetings:
+        """The recorder over `archive`, with its unfinished journals found for recovery."""
+        archive = archive if archive is not None else MeetingArchive(DIRECTORY / "meetings")
 
         def configured_transcriber(audio: bytes, *, context: str) -> str | Failure:
             return transcribe(settings, audio, context=context)
 
-        self.transcribe_audio: Transcriber = transcribe_audio if transcribe_audio is not None else configured_transcriber
-        self.retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
-        self.on_update = on_update
-        self.on_meeting = on_meeting
-        self._lock = threading.RLock()
-        # Serializes publications in state order without holding `_lock`: the
-        # view takes its own locks, and capture or snapshot() must never wait for them.
-        self._emitting = threading.RLock()
-        self._state = RecordingState()
-        self._stop, self._quit, self._wake = threading.Event(), threading.Event(), threading.Event()
-        self._queue: queue.Queue[MeetingStore | None] = queue.Queue()
-        self._scheduled: set[Path] = set()
-        self._paused: dict[Path, str] = {}
-        self._retry_pending: set[Path] = set()
-        self._capture: threading.Thread | None = None
-        self._worker: threading.Thread | None = None
-        self._closing = False
-        self._recovery = self.archive.journals()
+        return cls(
+            settings,
+            factory,
+            archive,
+            transcribe_audio if transcribe_audio is not None else configured_transcriber,
+            retry_policy if retry_policy is not None else RetryPolicy(),
+            on_update,
+            on_meeting,
+            log if log is not None else _unlogged,
+            tuple(archive.journals()),
+        )
+
+    @property
+    def shown(self) -> RecordingState:
+        """What the view shows; callers outside the lock use `snapshot`."""
+        return self._state.get().state
+
+    def _show(self, state: RecordingState) -> None:
+        self._state.set(replace(self._state.get(), state=state))
+
+    def _paused_without(self, folder: Path) -> None:
+        self._state.set(
+            replace(self._state.get(), paused=frozendict((key, value) for key, value in self._state.get().paused.items() if key != folder))
+        )
 
     @property
     def root(self) -> Path:
@@ -269,34 +288,37 @@ class Meetings:
 
     def snapshot(self) -> RecordingState:
         with self._lock:
-            return self._state
+            return self.shown
 
     def start_worker(self) -> None:
         with self._lock:
-            if self._worker is None and not self._closing:
-                self._worker = threading.Thread(target=self._work, name="meeting transcription", daemon=True)
-                self._worker.start()
+            if self._state.get().worker is None and not self._state.get().closing:
+                worker = threading.Thread(target=self._work, name="meeting transcription", daemon=True)
+                self._state.set(replace(self._state.get(), worker=worker))
+                worker.start()
 
     def start(self, source: AudioSource = "both", title: str = "Meeting") -> None:
         if not self.settings.api_key or not self.settings.base_url:
             raise OSError("Set OPENAI_BASE_URL and OPENAI_API_KEY before recording a meeting.")
         with self._lock:
-            if self._closing:
+            if self._state.get().closing:
                 raise OSError("Workspace is shutting down.")
-            if self._state.capturing:
+            if self.shown.capturing:
                 raise OSError("A meeting is already being recorded. Stop it before starting another.")
             self.start_worker()
-            self._stop = threading.Event()
-            self._state = RecordingState(phase="starting", source=source, title=title)
-            self._capture = threading.Thread(target=self._record, args=(source, title, self._stop), name="meeting capture", daemon=True)
-            self._capture.start()
+            stop = threading.Event()
+            capture = threading.Thread(target=self._record, args=(source, title, stop), name="meeting capture", daemon=True)
+            self._state.set(
+                replace(self._state.get(), stop=stop, state=RecordingState(phase="starting", source=source, title=title), capture=capture)
+            )
+            capture.start()
         self._emit()
 
     def stop(self) -> None:
         with self._lock:
-            self._stop.set()
-            if self._state.capturing:
-                self._state = replace(self._state, phase="stopping")
+            self._state.get().stop.set()
+            if self.shown.capturing:
+                self._show(replace(self.shown, phase="stopping"))
         self._wake.set()
         self._emit()
 
@@ -307,9 +329,11 @@ class Meetings:
             return
         store = self.archive.open(Path(state.path).parent)
         with self._lock:
-            self._paused.pop(store.folder, None)
-            if store.folder in self._scheduled:
-                self._retry_pending.add(store.folder)
+            self._state.set(
+                replace(self._state.get(), paused=frozendict((key, value) for key, value in self._state.get().paused.items() if key != store.folder))
+            )
+            if store.folder in self._state.get().scheduled:
+                self._state.set(replace(self._state.get(), retry_pending=self._state.get().retry_pending | {store.folder}))
         self._schedule(store)
         try:
             self._publish(store, detail="", phase="finishing")
@@ -321,9 +345,9 @@ class Meetings:
         # A request already in flight may finish later; its durable audio remains
         # queued if shutdown wins, and no callback can touch a destroyed tray/UI.
         with self._lock:
-            self._closing = True
-            self._stop.set()
-            capture, worker = self._capture, self._worker
+            self._state.set(replace(self._state.get(), closing=True))
+            self._state.get().stop.set()
+            capture, worker = self._state.get().capture, self._state.get().worker
         if capture is not None:
             capture.join(timeout)
         self._quit.set()
@@ -337,9 +361,9 @@ class Meetings:
     def _emit(self) -> None:
         with self._emitting:
             with self._lock:
-                if self._closing or self.on_update is None:
+                if self._state.get().closing or self.on_update is None:
                     return
-                state, update = self._state, self.on_update
+                state, update = self.shown, self.on_update
             update(state)
 
     def _observe_meeting(self, store: MeetingStore) -> None:
@@ -348,8 +372,8 @@ class Meetings:
 
     def _schedule(self, store: MeetingStore) -> None:
         with self._lock:
-            if store.folder not in self._scheduled and not self._closing:
-                self._scheduled.add(store.folder)
+            if store.folder not in self._state.get().scheduled and not self._state.get().closing:
+                self._state.set(replace(self._state.get(), scheduled=self._state.get().scheduled | {store.folder}))
                 self._queue.put(store)
         self._wake.set()
 
@@ -357,11 +381,16 @@ class Meetings:
         incoming = Publication(store.folder.name, str(store.transcript), store.state(), store.preview())
         with self._lock:
             updated = published(
-                self._state, incoming, stopping=self._stop.is_set(), paused=self._paused.get(store.folder), phase=phase, detail=detail
+                self.shown,
+                incoming,
+                stopping=self._state.get().stop.is_set(),
+                paused=self._state.get().paused.get(store.folder),
+                phase=phase,
+                detail=detail,
             )
             if updated is None:
                 return
-            self._state = updated
+            self._show(updated)
         self._emit()
 
     def _record(self, source: AudioSource, title: str, stop: threading.Event) -> None:
@@ -374,7 +403,7 @@ class Meetings:
             store = self.archive.create(source, title)
             self._observe_meeting(store)
             with self._lock:
-                self._state = replace(self._state, identity=store.folder.name, path=str(store.transcript))
+                self._show(replace(self.shown, identity=store.folder.name, path=str(store.transcript)))
             self._publish(store)
             self._schedule(store)
             journal = _Journal(store, spool, self._wake.set, lambda: self._publish(store), self.log)
@@ -384,7 +413,7 @@ class Meetings:
             def ready() -> None:
                 # The capture thread only marks the phase; the journal thread publishes it.
                 with self._lock:
-                    self._state = replace(self._state, phase="recording")
+                    self._show(replace(self.shown, phase="recording"))
                 spool.flag()
 
             self.factory(source).record(stop, spool.put, ready, spool.report)
@@ -410,12 +439,12 @@ class Meetings:
                 except OSError, ValueError, sqlite3.Error:
                     # In particular, never claim that a disk-full write succeeded.
                     with self._lock:
-                        self._state = replace(self._state, phase="interrupted", detail=problem or "Recording stopped: local storage is unavailable.")
+                        self._show(replace(self.shown, phase="interrupted", detail=problem or "Recording stopped: local storage is unavailable."))
                     self._emit()
                 self._wake.set()
             else:
                 with self._lock:
-                    self._state = replace(self._state, phase="interrupted", detail=problem)
+                    self._show(replace(self.shown, phase="interrupted", detail=problem))
                 self._emit()
 
     def _recover(self) -> None:
@@ -435,11 +464,13 @@ class Meetings:
             except OSError, ValueError, sqlite3.Error:
                 # Keep damaged journals for recovery rather than deleting them.
                 with self._lock:
-                    if not self._state.visible:
-                        self._state = RecordingState(
-                            phase="paused",
-                            path=str(path.parent / "transcript.md"),
-                            detail="A saved meeting could not be recovered. Its journal is still in the meetings folder.",
+                    if not self.shown.visible:
+                        self._show(
+                            RecordingState(
+                                phase="paused",
+                                path=str(path.parent / "transcript.md"),
+                                detail="A saved meeting could not be recovered. Its journal is still in the meetings folder.",
+                            )
                         )
                 self._emit()
 
@@ -458,20 +489,22 @@ class Meetings:
                 if isinstance(error, PermissionError):
                     detail = "Text is saved in the journal. Close the transcript in other apps or restore folder access, then choose Retry."
                 with self._lock:
-                    self._paused[store.folder] = detail
-                    if self._state.identity == store.folder.name:
-                        self._stop.set()
-                        self._state = replace(
-                            self._state,
-                            phase="stopping" if self._state.capturing else "paused",
-                            detail=detail,
+                    self._state.set(replace(self._state.get(), paused=frozendict({**self._state.get().paused, store.folder: detail})))
+                    if self.shown.identity == store.folder.name:
+                        self._state.get().stop.set()
+                        self._show(
+                            replace(
+                                self.shown,
+                                phase="stopping" if self.shown.capturing else "paused",
+                                detail=detail,
+                            )
                         )
                 self._emit()
             finally:
                 with self._lock:
-                    self._scheduled.discard(store.folder)
-                    if store.folder in self._retry_pending:
-                        self._retry_pending.remove(store.folder)
+                    self._state.set(replace(self._state.get(), scheduled=self._state.get().scheduled - {store.folder}))
+                    if store.folder in self._state.get().retry_pending:
+                        self._state.set(replace(self._state.get(), retry_pending=self._state.get().retry_pending - {store.folder}))
                         self._schedule(store)
 
     def _transcribe(self, store: MeetingStore) -> None:
@@ -504,7 +537,7 @@ class Meetings:
                 if retry is Exhausted.PAUSED:
                     store.export()
                     with self._lock:
-                        self._paused[store.folder] = detail
+                        self._state.set(replace(self._state.get(), paused=frozendict({**self._state.get().paused, store.folder: detail})))
                     self._publish(store, detail=detail, phase="paused")
                     return
                 failures = retry.failures

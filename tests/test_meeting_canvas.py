@@ -65,7 +65,7 @@ def test_interrupted_meeting_does_not_invent_an_end_at_recovery(tmp_path: Path) 
     def transcribe(audio: bytes, *, context: str) -> str:
         return "Recovered speech."
 
-    recorder = Meetings(
+    recorder = Meetings.open(
         settings("https://fixture.invalid/v1"),
         lambda source: capture,
         archive=MeetingArchive(tmp_path),
@@ -124,7 +124,7 @@ def test_startup_recovery_publishes_every_saved_meeting_to_intake(tmp_path: Path
     saved.finish_capture()
     saved.export()
     observed: list[str] = []
-    recorder = Meetings(
+    recorder = Meetings.open(
         settings("https://fixture.invalid/v1"),
         lambda source: GeneratedCapture(0),
         archive=archive,
@@ -150,7 +150,7 @@ def test_capture_publishes_native_event_and_completed_conversation_to_intake(tmp
     def transcribe(audio: bytes, *, context: str) -> str:
         return "Supplier approval SA-42."
 
-    recorder = Meetings(
+    recorder = Meetings.open(
         settings("https://fixture.invalid/v1"),
         lambda source: capture,
         archive=archive,

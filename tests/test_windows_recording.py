@@ -270,7 +270,7 @@ def test_meeting_service_saves_speech_after_a_microphone_dropout(tmp_path: Path)
             assert api.ticks == api.stop_at
 
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: Capture(), archive=MeetingArchive(tmp_path))
+        service = Meetings.open(settings(endpoint.url), lambda source: Capture(), archive=MeetingArchive(tmp_path))
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))

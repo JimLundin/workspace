@@ -209,7 +209,7 @@ def test_recording_and_transcription_continue_while_the_markdown_file_is_locked(
         temporary.replace(transcript)
 
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path, publish=busy))
+        service = Meetings.open(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path, publish=busy))
         try:
             service.start()
             wait_for(lambda: "refresh its file" in service.snapshot().detail)
@@ -229,7 +229,7 @@ def test_recording_uses_the_configured_endpoint_and_saves_incremental_text(tmp_p
     capture = GeneratedCapture(tail=SPEECH[:1000])
     states: list[RecordingState] = []
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=states.append)
+        service = Meetings.open(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=states.append)
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase == "saved")
@@ -269,7 +269,7 @@ def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> N
                 holder.close()
 
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: LockingCapture(), archive=MeetingArchive(tmp_path))
+        service = Meetings.open(settings(endpoint.url), lambda source: LockingCapture(), archive=MeetingArchive(tmp_path))
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
@@ -301,7 +301,7 @@ def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(tm
 
     capture = GeneratedCapture(31, hold=True)
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=update)
+        service = Meetings.open(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=update)
         try:
             service.start()
             wait_for(lambda: bool(service.snapshot().path))
@@ -336,7 +336,7 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(tmp_path:
     # or a stall without lost audio is counted as a gap.
     logged: list[str] = []
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: GappedCapture(), archive=MeetingArchive(tmp_path), log=logged.append)
+        service = Meetings.open(settings(endpoint.url), lambda source: GappedCapture(), archive=MeetingArchive(tmp_path), log=logged.append)
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
@@ -367,7 +367,7 @@ def test_a_full_spool_refuses_audio_and_says_the_recording_stopped() -> None:
 def test_a_tiny_final_fragment_is_padded_for_upload_without_changing_recorded_duration(tmp_path: Path) -> None:
     tail = SPEECH[:1000]
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: GeneratedCapture(0, tail), archive=MeetingArchive(tmp_path))
+        service = Meetings.open(settings(endpoint.url), lambda source: GeneratedCapture(0, tail), archive=MeetingArchive(tmp_path))
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase == "saved")
@@ -390,7 +390,7 @@ def test_slow_transcription_does_not_block_capture_stop_or_shutdown(tmp_path: Pa
         assert release.wait(HANG)
         return "The late response."
 
-    service = Meetings(
+    service = Meetings.open(
         settings("https://fixture.invalid/v1"),
         lambda source: capture,
         archive=MeetingArchive(tmp_path),
@@ -425,7 +425,7 @@ def test_restart_recovers_pending_audio_without_opening_the_microphone(tmp_path:
             exported.set()
 
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), create, archive=MeetingArchive(tmp_path), on_update=published)
+        service = Meetings.open(settings(endpoint.url), create, archive=MeetingArchive(tmp_path), on_update=published)
         try:
             service.start_worker()
             # Committing text to the journal precedes publishing its file. Wait
@@ -454,7 +454,7 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
         assert resume.wait(HANG)
         return "Recovered after the outage."
 
-    service = Meetings(
+    service = Meetings.open(
         settings("https://fixture.invalid/v1"),
         lambda source: capture,
         archive=MeetingArchive(tmp_path),
@@ -482,7 +482,7 @@ def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: 
     def unavailable(audio: bytes, *, context: str) -> Failure:
         return Failure("fixture offline")
 
-    service = Meetings(
+    service = Meetings.open(
         settings("https://fixture.invalid/v1"),
         lambda source: capture,
         archive=MeetingArchive(tmp_path, max_pending_bytes=RATE * 4),
@@ -519,7 +519,9 @@ def test_export_failure_can_be_retried_immediately_without_uploading_audio_again
             service.retry()
 
     with fake_endpoint() as endpoint:
-        service = Meetings(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path, publish=interrupted), on_update=changed)
+        service = Meetings.open(
+            settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path, publish=interrupted), on_update=changed
+        )
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase == "saved")
@@ -553,7 +555,7 @@ def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_pa
 
     with fake_endpoint() as endpoint:
         endpoint.respond = reply
-        service = Meetings(settings(endpoint.url), lambda source: GeneratedCapture(1), archive=DelayedArchive(tmp_path))
+        service = Meetings.open(settings(endpoint.url), lambda source: GeneratedCapture(1), archive=DelayedArchive(tmp_path))
         try:
             service.start(title="First")
             assert entered.wait(HANG)
