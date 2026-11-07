@@ -4,7 +4,10 @@ import sys
 import time
 import unittest
 from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
+
+from cell import Cell
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows toolbar inbox attention")
@@ -38,28 +41,47 @@ TOP = round(SIZES.bar.top)
 prepare()
 
 
-class InboxUi(Ui):
+@dataclass(frozen=True, slots=True)
+class _Recorded:
+    bar: DesktopBar | None = None
+    canvas: CanvasWindow | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InboxUi:
     """The production Ui with isolated views; it keeps the views Ui built and reads nothing private."""
 
-    __slots__ = ("assistant", "current_bar", "current_canvas")
+    ui: Ui
+    assistant: LocalAssistant | Unreachable
+    recorded: Cell[_Recorded]
 
-    def __init__(self, assistant: LocalAssistant | Unreachable) -> None:
-        self.current_bar: DesktopBar | None = None
-        self.current_canvas: CanvasWindow | None = None
-        self.assistant = assistant
-        super().__init__(assistant, views=Views(self.create_bar, self.create_canvas))
+    @classmethod
+    def start(cls, assistant: LocalAssistant | Unreachable) -> InboxUi:
+        recorded = Cell(_Recorded())
 
-    def create_bar(self, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
-        self.current_bar = DesktopBar(actions, native_shell=False, audio_level=audio_level)
-        return self.current_bar
+        def create_bar(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
+            bar = DesktopBar(actions, native_shell=False, audio_level=audio_level)
+            recorded.update(lambda views: replace(views, bar=bar))
+            return bar
 
-    def create_canvas(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
-        self.current_canvas = CanvasWindow(root, work, canvas)
-        return self.current_canvas
+        def create_canvas(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
+            view = CanvasWindow(root, work, canvas)
+            recorded.update(lambda views: replace(views, canvas=view))
+            return view
+
+        return cls(Ui.start(assistant, views=Views(create_bar, create_canvas)), assistant, recorded)
 
     @property
     def root(self) -> QtWidgets.QApplication:
         return application()
+
+    @property
+    def current_bar(self) -> DesktopBar | None:
+        return self.recorded.get().bar
+
+    @property
+    def current_canvas(self) -> CanvasWindow | None:
+        return self.recorded.get().canvas
 
     def pump(self) -> None:
         # Ui yields queued work between frames. This fixture waits across those
@@ -68,24 +90,26 @@ class InboxUi(Ui):
         while time.monotonic() < deadline:
             if isinstance(self.assistant, LocalAssistant):
                 self.assistant.drain()
-            self.drain()
+            self.ui.drain()
             application().processEvents()
-            if self._jobs.empty() and not (isinstance(self.assistant, LocalAssistant) and self.assistant.jobs):
+            if self.ui.settled() and not (isinstance(self.assistant, LocalAssistant) and self.assistant.jobs):
                 break
-        assert self._jobs.empty(), "Queued UI publications did not settle."
+        assert self.ui.settled(), "Queued UI publications did not settle."
 
     @property
     def bar(self) -> DesktopBar:
-        assert self.current_bar is not None
-        return self.current_bar
+        bar = self.current_bar
+        assert bar is not None
+        return bar
 
     @property
     def canvas_view(self) -> CanvasWindow:
-        assert self.current_canvas is not None
-        return self.current_canvas
+        view = self.current_canvas
+        assert view is not None
+        return view
 
     def dispose(self) -> None:
-        self.close_views()
+        self.ui.close_views()
         self.pump()
 
 
@@ -166,22 +190,22 @@ def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attenti
     # the assistant's triage.
     app, original_style = application(), application().styleSheet()
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
+    ui = InboxUi.start(assistant)
     try:
-        agent = assistant.attach(ui)
-        ui.open_inbox()
+        agent = assistant.attach(ui.ui)
+        ui.ui.open_inbox()
         ui.pump()
         assert ui.current_canvas is not None
-        ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
+        ui.ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
         notices = Observed((Notice(NoticeKey(11, 100), "mail", "Outlook", "Review", "Budget review"),))
-        ui.system_notices(notices)
+        ui.ui.system_notices(notices)
         ui.pump()
         assert waiting(ui.bar) is None and assistant.observed == (notices,)
         agent.request_input(asked("owned", "Which sheet?", "", 3), accept_answer)
         ui.pump()
         capsule = waiting(ui.bar)
         assert capsule is not None and "1 clarification needs" in capsule.accessibleName()
-        assert ui.answer_canvas(SessionRequest(agent.snapshot().identity, "owned"), "Revenue")
+        assert ui.ui.answer_canvas(SessionRequest(agent.snapshot().identity, "owned"), "Revenue")
         ui.pump()
         assert waiting(ui.bar) is None
     finally:
@@ -193,7 +217,7 @@ def test_toolbar_request_expands_in_place_routes_voice_and_opens_canvas_only_fro
     # Defect: the attention click navigates away, clips the request, or sends a
     # spoken reply to the conversation rather than its exact waiting owner.
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
+    ui = InboxUi.start(assistant)
     original_style = application().styleSheet()
     answers: list[TextAnswer] = []
 
@@ -202,14 +226,14 @@ def test_toolbar_request_expands_in_place_routes_voice_and_opens_canvas_only_fro
         return True
 
     try:
-        ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
-        agent = assistant.attach(ui)
+        ui.ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
+        agent = assistant.attach(ui.ui)
         agent.request_input(asked("inline", "Which sheet should I use?", "Revenue contains the approved supplier figures.", 3), accept)
         ui.pump()
         assert ui.current_canvas is None
         ui.bar.visible = True
         ui.bar.render()
-        ui.open_inbox()
+        ui.ui.open_inbox()
         ui.pump()
         settle_toolbar(ui)
         capsule = ui.bar.window.capsules[Key.ISLAND]
@@ -223,9 +247,9 @@ def test_toolbar_request_expands_in_place_routes_voice_and_opens_canvas_only_fro
         ui.pump()
         assert ui.canvas_view.panel.selected == "question:inline"
         ui.canvas_view.hide()
-        ui.open_inbox()
+        ui.ui.open_inbox()
         ui.pump()
-        ui.route_speech("Revenue")
+        ui.ui.route_speech("Revenue")
         ui.pump()
         assert answers == [TextAnswer("Revenue")] and not assistant.spoken
         settle_toolbar(ui)
@@ -239,7 +263,7 @@ def test_an_open_request_follows_its_phase_and_reply_owner_when_work_asks_again(
     # Defect: a continuation asks in the same work context but the open request
     # keeps the resolved question, so voice answers it instead of the new one.
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
+    ui = InboxUi.start(assistant)
     original_style = application().styleSheet()
     answers: list[TextAnswer] = []
 
@@ -248,20 +272,20 @@ def test_an_open_request_follows_its_phase_and_reply_owner_when_work_asks_again(
         return True
 
     try:
-        agent = assistant.attach(ui)
-        ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
+        agent = assistant.attach(ui.ui)
+        ui.ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
         agent.begin("Review budget", source=FeedRequest("source:budget", "Budget notice"))
         agent.request_input(asked("figures", "Which figures?", "Actual or forecast?", 3), accept)
         ui.pump()
-        ui.open_inbox()
+        ui.ui.open_inbox()
         ui.pump()
-        ui.route_speech("Actual")
+        ui.ui.route_speech("Actual")
         ui.pump()
         agent.request_input(asked("deadline", "Which deadline?", "Monday or Friday?", 4), accept)
         ui.pump()
         panel = ui.bar.window.capsules[Key.ISLAND].request
         assert panel is not None and panel.question.text() == "Which deadline?" and ui.current_canvas is None
-        ui.route_speech("Monday")
+        ui.ui.route_speech("Monday")
         ui.pump()
         assert answers == [TextAnswer("Actual"), TextAnswer("Monday")]
     finally:

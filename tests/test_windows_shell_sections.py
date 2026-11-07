@@ -286,7 +286,7 @@ def test_shell_faces_keep_the_bar_symbol_size_and_sit_concentric_inside_the_work
     # Defects: a stylesheet squeezes a pager digit, an application's bitmap in
     # a desktop's stack paints larger than the bar's 16 px symbols, or the first
     # control loses its concentric 3 px inset.
-    ui = Ui(Unreachable())
+    ui = Ui.start(Unreachable())
     parent = QtWidgets.QWidget()
     parent.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
     parent.resize(1200, 50)

@@ -426,7 +426,7 @@ def run(*, window: components.Window = components.DESKTOP.window, lock_name: str
 
         client = Client(published, lambda frame: received(inbox, frame), status) if published is not None else None
         port: AssistantPort = LinkedAssistant(client) if client is not None else Offline()
-        ui = Ui(port, views=views, on_problem=lambda message: inbox.report(Problem(message)))
+        ui = Ui.start(port, views=views, on_problem=lambda message: inbox.report(Problem(message)))
         app = DesktopApp.compose(ui, port, inbox)
         ui.post(lambda _: app.start())
         if client is not None:

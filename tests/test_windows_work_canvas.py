@@ -368,15 +368,15 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
     # focus, or throws away prepared bubbles when the toolbar opens the canvas.
     data, document = nested_bubbles()
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
-    assistant.attach(ui)
+    ui = InboxUi.start(assistant)
+    assistant.attach(ui.ui)
     store = assistant.canvas
     seeded(store, document)
     try:
         # Defect: retrieving the controller opens native views.
-        work = ui.work_window()
+        work = ui.ui.work_window()
         ui.pump()
-        assert ui.current_canvas is None and ui.work_window() is work
+        assert ui.current_canvas is None and ui.ui.work_window() is work
         work.publish(WorkSnapshot(personal=PersonalView(data)))
         work.prepare()
         ui.pump()
@@ -716,19 +716,19 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         tasks.submit(run.task_id, "Canvas instruction", run_prompt(run, run.work_id), contracts.task.RequestSource("canvas"), at=20)
 
     assistant = LocalAssistant(tmp_path, queue=queue)
-    ui = InboxUi(assistant)
-    assistant.attach(ui)
+    ui = InboxUi.start(assistant)
+    assistant.attach(ui.ui)
     store = assistant.canvas
-    work = ui.work_window()
+    work = ui.ui.work_window()
     work.show(focus=False)
     ui.pump()
     try:
         canvas = ui.canvas_view.panel
         instruction = "Find the deployment plan\nand compare the two document versions."
-        ui.route_speech(instruction)
+        ui.ui.route_speech(instruction)
         ui.pump()
         assert canvas.instruction_run is not None and "Queue unavailable" in canvas.status.text()
-        ui.route_speech(instruction)
+        ui.ui.route_speech(instruction)
         ui.pump()
         canvas = ui.canvas_view.panel  # A fresh observation after the retry, not the narrowed earlier one.
         assert canvas.instruction_run is None and attempts[0] == attempts[1] and not assistant.spoken
@@ -739,13 +739,13 @@ def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for
         finding = CanvasNote("note:versions", "Deployment plans", "Two versions found")
         assert canvas.commit(SaveNote(finding))
         canvas.select(finding.id)
-        ui.route_speech("Explain the differences")
+        ui.ui.route_speech("Explain the differences")
         ui.pump()
         assert attempts[-1].work_id == finding.id and store.read().notes == (finding,)
         canvas.clear_context.click()
         assert canvas.selected is None and "whole canvas" in canvas.voice_hint.toolTip()
         ui.canvas_view.window.hide()
-        ui.route_speech("Work in the background")
+        ui.ui.route_speech("Work in the background")
         ui.pump()
         assert assistant.spoken == ("Work in the background",)
     finally:
@@ -916,8 +916,8 @@ def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_re
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
-    assistant.attach(ui)
+    ui = InboxUi.start(assistant)
+    assistant.attach(ui.ui)
     # Windows an earlier test in this process left open are not this test's reveal.
     shown_before = {id(widget) for widget in ui.root.topLevelWidgets() if widget.isVisible()}
     store = assistant.canvas
@@ -968,7 +968,7 @@ def open_question_on_canvas(ui: InboxUi) -> None:
     """Open the waiting question from the bar, then its canvas button."""
     ui.bar.visible = True
     ui.bar.render()
-    ui.open_inbox()
+    ui.ui.open_inbox()
     ui.pump()
     settle_toolbar(ui)
     panel = ui.bar.window.capsules[Key.ISLAND].request
@@ -982,11 +982,11 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
     # clears it, release leaves it pressed during transcription, or dictation
     # incorrectly lights the agent key. Feedback must not resize the toolbar.
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
-    assistant.attach(ui)
-    ui.desktop_state(State.LISTENING, agent_speaking=True)
+    ui = InboxUi.start(assistant)
+    assistant.attach(ui.ui)
+    ui.ui.desktop_state(State.LISTENING, agent_speaking=True)
     ui.pump()
-    work = ui.work_window()
+    work = ui.ui.work_window()
     work.show(focus=False)
     ui.pump()
     try:
@@ -994,25 +994,25 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
         assert pressed(legend) and "Listening" in legend.accessibleDescription()
         held = legend.grab().toImage()
         bounds = legend.geometry()
-        ui.desktop_state(State.LISTENING, agent_speaking=True)
+        ui.ui.desktop_state(State.LISTENING, agent_speaking=True)
         ui.pump()
         assert pressed(legend) and legend.grab().toImage() == held
-        ui.desktop_state(State.WORKING)
+        ui.ui.desktop_state(State.WORKING)
         ui.pump()
         assert not pressed(legend) and legend.geometry() == bounds
         released = legend.grab().toImage()
         assert released != held
-        ui.desktop_state(State.AGENT)
+        ui.ui.desktop_state(State.AGENT)
         ui.pump()
         assert not pressed(legend) and legend.grab().toImage() == released
-        ui.desktop_state(State.LISTENING)
+        ui.ui.desktop_state(State.LISTENING)
         ui.pump()
         assert not pressed(legend) and legend.grab().toImage() == released
-        ui.desktop_state(State.LISTENING, agent_speaking=True)
+        ui.ui.desktop_state(State.LISTENING, agent_speaking=True)
         ui.pump()
         assert pressed(legend) and legend.grab().toImage() == held
         ui.canvas_view.hide()
-        ui.desktop_state(State.AGENT)
+        ui.ui.desktop_state(State.AGENT)
         ui.pump()
         work.show(focus=False)
         ui.pump()
@@ -1025,12 +1025,12 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
     # Defect: the redirect opens the wrong bubble, reserves empty editor space,
     # or spoken context fails to resume the exact existing waiting worker.
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
-    assistant.attach(ui)
+    ui = InboxUi.start(assistant)
+    assistant.attach(ui.ui)
     store = assistant.canvas
     agent = assistant.session
     assert agent is not None
-    ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
+    ui.ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
     ui.pump()
     resumed: list[TextAnswer] = []
 
@@ -1054,7 +1054,7 @@ def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_
         assert not detail.frame.findChildren(QtWidgets.QPlainTextEdit) and detail.frame.height() <= 152
         assert detail.status.text() == "Hold X + K to reply · release to send"
         fallback: list[str] = []
-        ui.route_speech("Contoso owns the handoff.")
+        ui.ui.route_speech("Contoso owns the handoff.")
         pump_until(ui, lambda: bool(resumed))
         assert resumed == [TextAnswer("Contoso owns the handoff.")]
         ui.pump()
@@ -1073,10 +1073,10 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
     # user text, or starting research loses the work-to-run connection on reopen.
     runs: list[CanvasRun] = []
     assistant = LocalAssistant(tmp_path, queue=runs.append)
-    ui = InboxUi(assistant)
-    assistant.attach(ui)
+    ui = InboxUi.start(assistant)
+    assistant.attach(ui.ui)
     store = assistant.canvas
-    work = ui.work_window()
+    work = ui.ui.work_window()
     work.show(focus=False)
     task = work_task(contracts.task.Waiting(contracts.task.Question("request", "Which owner?", "Confirm the handoff.")))
     personal = PersonalStore(tmp_path / "work.sqlite3")
@@ -1092,11 +1092,11 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         canvas.open_at("question:request")
         question = canvas.detail("question:request")
         assert isinstance(question, QuestionDetail)
-        assert not ui.answer_canvas(TaskRequest(task.id, "request"), "x" * 16001)
-        ui.route_speech("x" * 16001)
+        assert not ui.ui.answer_canvas(TaskRequest(task.id, "request"), "x" * 16001)
+        ui.ui.route_speech("x" * 16001)
         ui.pump()
         assert not assistant.spoken and "could not be sent" in canvas.status.text()
-        ui.route_speech("Use Contoso")
+        ui.ui.route_speech("Use Contoso")
         ui.pump()
         assert assistant.work_commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Contoso"))
         rejected = replace(
@@ -1106,7 +1106,7 @@ def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bo
         store.observe_work(rejected)
         ui.pump()
         assert "Use Contoso" in question.response.text() and question.status.text() == "Hold X + K to reply · release to send"
-        ui.route_speech("Use Fabrikam instead")
+        ui.ui.route_speech("Use Fabrikam instead")
         ui.pump()
         assert (
             assistant.work_commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Fabrikam instead")) and not assistant.spoken
@@ -1144,8 +1144,8 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
     # misses its result notice, a late view repeats a notice or replays stale
     # attention over a queued bridge change, or a notice redirects elsewhere.
     assistant = LocalAssistant(tmp_path)
-    ui = InboxUi(assistant)
-    assistant.connect(ui)
+    ui = InboxUi.start(assistant)
+    assistant.connect(ui.ui)
     store = assistant.canvas
     dismissed = WorkThread("work:dismissed", 0, WorkDefinition("Not mine", "Other responsibility"), (), 10, 10)
     active = replace(dismissed, id="work:active", definition=WorkDefinition("Mine", "My responsibility"))
@@ -1167,12 +1167,12 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         store.observe_work(snapshot)
         ui.pump()
         assert assistant.noticed == (("Current question", "question:current"),)
-        ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
+        ui.ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
         ui.pump()
         assert assistant.noticed == (("Current question", "question:current"),)
         check_late_agent_canvas_replay(ui, assistant)
         assert "1 clarification needs" in ui.bar.window.capsules[Key.INBOX].accessibleName()
-        work = ui.work_window()
+        work = ui.ui.work_window()
         work.publish(snapshot)
         work.prepare()
         capsule = waiting(ui.bar)
@@ -1189,7 +1189,7 @@ def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_pa
         work.publish(completed)
         store.observe_work(completed)
         ui.pump()
-        ui.open_canvas_at(assistant.noticed[-1][1])
+        ui.ui.open_canvas_at(assistant.noticed[-1][1])
         ui.pump()
         assert ui.canvas_view.panel.selected == "result:" + research.id
         assert ui.canvas_view.panel.document == store.read()
