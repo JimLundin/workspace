@@ -262,7 +262,7 @@ def main() -> None:
     if not settings.checks and not settings.preview:
         parser.error("--preview-only needs --preview")
     if importlib.util.find_spec("watchdog") is None:
-        parser.error("Install the development watcher: .venv\\Scripts\\python.exe -m pip install watchdog==6.0.0")
+        parser.error("Install the development watcher: Dev.cmd setup")
     try:
         with tempfile.TemporaryDirectory(prefix="workspace-watch-") as folder:
             result = supervise(settings, Path(folder))

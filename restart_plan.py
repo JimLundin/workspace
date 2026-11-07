@@ -139,8 +139,8 @@ def _packages(tree: Tree) -> frozenset[str]:
     return frozenset(name.split("/")[0] for name in tree.files if name.count("/") == 1 and name.endswith("/__init__.py"))
 
 
-DEPENDENCIES = "requirements/"
-"""The pinned dependency locks; each names its own environment."""
+DEPENDENCIES = ("uv.lock",)
+"""uv's lock: each names its own environment."""
 
 
 def restart_plan(before: Tree, after: Tree, protected: frozenset[str]) -> RestartPlan:

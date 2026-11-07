@@ -14,7 +14,7 @@ def test_the_release_holds_the_source_but_no_dependencies_binaries_or_developmen
     for name, data in {
         ".python-version": b"3.15.1\n",
         "workspace.pyw": b"",
-        "requirements/windows-py315.lock": b"pydantic==2 --hash=sha256:aa\n",
+        "uv.lock": b"version = 1\n",
         ".runtime/PySide6/QtCore.pyd": b"old bundle",
         ".venv/Scripts/python.exe": b"dev",
         "assistant/__pycache__/app.cpython-315.pyc": b"cache",
@@ -24,7 +24,7 @@ def test_the_release_holds_the_source_but_no_dependencies_binaries_or_developmen
     output = tmp_path / "dist/workspace.zip"
     assert build(output, root) == 3
     with zipfile.ZipFile(output) as archive:
-        assert sorted(archive.namelist()) == ["workspace/.python-version", "workspace/requirements/windows-py315.lock", "workspace/workspace.pyw"]
+        assert sorted(archive.namelist()) == ["workspace/.python-version", "workspace/uv.lock", "workspace/workspace.pyw"]
     (root / "tools/helper.exe").parent.mkdir()
     (root / "tools/helper.exe").write_bytes(b"MZ")
     with unittest.TestCase().assertRaises(ValueError):

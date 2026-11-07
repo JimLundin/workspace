@@ -52,11 +52,9 @@ def write_watch_source(root: Path, output: Path) -> None:
     copy_check_scripts(root, ("watch.py", "check.py"))
     (root / "pyproject.toml").write_text('[tool.workspace.architecture]\n[tool.ruff]\ntarget-version="py315"\n[tool.ruff.lint.pylint]\nmax-args=5\n')
     (root / ".gitignore").write_text("__pycache__/\n.ruff_cache/\n")
-    (root / "requirements").mkdir()
     # Source-only keeper snapshots omit dotfiles; the fixture targets this runtime.
     (root / ".python-version").write_text(f"{sys.version_info.major}.{sys.version_info.minor}\n")
-    for name in ("windows-py315.lock",):
-        shutil.copyfile(ROOT / "requirements" / name, root / "requirements" / name)
+    shutil.copyfile(ROOT / "uv.lock", root / "uv.lock")
     (root / "value.py").write_text("value = 1\n")
     tests = root / "tests"
     tests.mkdir()

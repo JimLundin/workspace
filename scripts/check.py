@@ -89,7 +89,7 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
         and name.endswith(".py")
         and (native or not Path(name).name.startswith("test_windows_"))
     )
-    if full or not previous or any(name.startswith("requirements/") for name in changed):
+    if full or not previous or "uv.lock" in changed:
         return Selection(all_tests, changed, "full source checks" if full else "dependency pins or missing baseline")
     # Minimal source fixtures need no project/cache configuration.
     cache = Cache(root) if (root / "pyproject.toml").is_file() else None

@@ -86,7 +86,7 @@ def test_release_paths_reject_windows_aliases_and_escapes(tmp_path: Path) -> Non
 
 
 def test_source_contract_excludes_runtime_and_bytecode() -> None:
-    pins = {".python-version": "a" * 64, "requirements/windows-py315.lock": "b" * 64}
+    pins = {".python-version": "a" * 64, "uv.lock": "b" * 64}
     for extra in (".python/private", ".runtime/private", "a/__pycache__/b.pyc", "a.pyc"):
         try:
             source_map({"files": pins | {extra: "c" * 64}})

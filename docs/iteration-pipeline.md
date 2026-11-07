@@ -1,10 +1,11 @@
 # Checking and deploying changes
 
 Run native commands from the checkout in PowerShell. `Dev.cmd` uses the Windows
-`.venv` and adds native Git to PATH. `Dev.cmd setup` creates that `.venv` with uv
-from the user-installed Python 3.15 and installs exactly the hashed lock
-(`requirements/windows-py315.lock`) into it, as an install does, plus the
-dev-only tools; run it again after the lock changes. Keep the installed client
+`.venv` and adds native Git to PATH. `Dev.cmd setup` runs `uv sync --locked`:
+it creates that `.venv` from the user-installed Python 3.15 with exactly
+`uv.lock`, as an install does, plus the `dev` group; run it again after the lock
+changes. Dependencies are declared in `pyproject.toml` (exact versions in
+`[tool.uv] constraint-dependencies`); change them there and run `uv lock`. Keep the installed client
 (`%LOCALAPPDATA%\Programs\workspace-sdk\workspace`) separate so edits and tests never replace files in the running application.
 
 ```powershell
@@ -25,10 +26,9 @@ keep keyboard grids and tables readable.
 gitignored `typings/.workspace-typeshed` from the installed Pyright and
 `typings/typeshed.patch`, then runs Pyright. Pyright is the only type checker.
 
-For feedback on save, install the development watcher once:
+For feedback on save (`Dev.cmd setup` installs the watcher):
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install watchdog==6.0.0
 .\Dev.cmd watch --tests tests/test_island_model.py
 .\Dev.cmd preview
 ```
@@ -101,7 +101,7 @@ Editing checks cache per-file policy observations under
 `%LOCALAPPDATA%\workspace\development\analysis`; the protected selfcheck uses no cache.
 
 Generated tests live in `tests/properties/` and need the `test` extra
-(`python -m pip install -e ".[test]"`).
+(`Dev.cmd setup` installs it, in the `dev` group).
 
 ## Deployment
 

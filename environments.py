@@ -1,10 +1,11 @@
 """Workspace's dependencies: one virtual environment per dependency lock, built by uv.
 
-The pinned, hashed lock (`requirements/windows-py315.lock`) names every
-third-party package exactly. Each distinct lock gets its own environment under
-`%LOCALAPPDATA%/workspace/environments/<hash of the lock>`, built once from PyPI
-by uv (`uv venv`, then `uv pip install` with the lock's hashes). uv keeps its
-own wheel cache, so rebuilding an environment for an undo rarely downloads. An
+`pyproject.toml` declares the dependencies and uv's lock (`uv.lock`) pins every
+one of them, with hashes, for each platform. Each distinct lock gets its own
+environment under `%LOCALAPPDATA%/workspace/environments/<hash of the lock>`,
+built once from PyPI by `uv sync --locked`, which refuses a lock that no longer
+matches `pyproject.toml`. uv keeps its own wheel cache, so rebuilding an
+environment for an undo rarely downloads. An
 environment is ready only once its marker is written, last; a build that failed
 or was interrupted has no marker, and the next `ensure` builds it again from
 scratch. Undoing a dependency change switches back to the previous lock's
@@ -21,15 +22,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 ROOT: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace" / "environments"
 """Where environments live: outside the installed copy, so installs and undo never touch them."""
-LOCK: Final = Path("requirements") / "windows-py315.lock"
-"""The lock, relative to a copy of Workspace."""
+LOCK: Final = Path("uv.lock")
+"""uv's lock, beside `pyproject.toml` in a copy of Workspace."""
 MARKER: Final = "workspace-environment.json"
 """Written last: an environment without it is incomplete."""
 _NO_WINDOW: Final = 0x08000000 if sys.platform == "win32" else 0
@@ -45,12 +46,12 @@ class Ran:
     output: str
 
 
-type Runner = Callable[[Sequence[str]], Ran]
-"""Runs a command to completion: how `ensure` reaches venv and pip."""
+type Runner = Callable[[Sequence[str], Mapping[str, str]], Ran]
+"""Runs a command to completion with extra environment variables: how `ensure` reaches uv."""
 
 
-def native_run(arguments: Sequence[str]) -> Ran:
-    done = subprocess.run(list(arguments), capture_output=True, text=True, check=False, creationflags=_NO_WINDOW)
+def native_run(arguments: Sequence[str], variables: Mapping[str, str]) -> Ran:
+    done = subprocess.run(list(arguments), capture_output=True, text=True, check=False, env={**os.environ, **variables}, creationflags=_NO_WINDOW)
     return Ran(done.returncode, done.stdout + done.stderr)
 
 
@@ -111,40 +112,39 @@ def _step(ran: Ran, doing: str) -> None:
         raise DependencyError(f"Couldn't {doing} (exit {ran.code}).\n{ran.output[-3000:]}")
 
 
-def ensure(lock: Path, *, root: Path = ROOT, run: Runner = native_run, base: Path | None = None, tool: Path | None = None) -> Path:
-    """The ready environment for `lock`, built first if it isn't, by uv (`tool`). Raises DependencyError."""
-    environment = location(lock.read_bytes(), root)
+def ensure(project: Path, *, root: Path = ROOT, run: Runner = native_run, base: Path | None = None, tool: Path | None = None) -> Path:
+    """The ready environment for the lock of the Workspace copy at `project`, built first if it isn't, by uv (`tool`).
+
+    Raises DependencyError."""
+    environment = location((project / LOCK).read_bytes(), root)
     if ready(environment):
         return environment
     shutil.rmtree(environment, ignore_errors=True)  # an unfinished build: start again
-    uv_path = str(tool if tool is not None else uv())
-    interpreter = str(base if base is not None else base_interpreter())
-    _step(run((uv_path, "venv", "--quiet", "--python", interpreter, str(environment))), "create the environment")
     # --native-tls: the Windows certificate store, so company TLS inspection is trusted.
     command = (
-        uv_path, "pip", "install", "--quiet", "--native-tls", "--python", str(python(environment)),
-        "--no-deps", "--require-hashes", "--only-binary", ":all:", "-r", str(lock),
+        str(tool if tool is not None else uv()), "sync", "--quiet", "--native-tls", "--locked", "--no-install-project",
+        "--no-dev", "--python", str(base if base is not None else base_interpreter()), "--project", str(project),
     )  # fmt: skip
-    _step(run(command), "install the pinned dependencies from PyPI")
+    _step(run(command, {"UV_PROJECT_ENVIRONMENT": str(environment)}), "install the locked dependencies from PyPI")
     version = f"{sys.version_info.major}.{sys.version_info.minor}"
     (environment / MARKER).write_text(json.dumps({"lock": environment.name, "python": version}), encoding="utf-8")
     return environment
 
 
 def main() -> None:
-    """`python environments.py ensure LOCK`: build the lock's environment; exit 1 with pip's reason if it can't be."""
+    """`python environments.py ensure PROJECT`: build the environment of that copy's lock; exit 1 with uv's reason if it can't be."""
     match sys.argv[1:]:
-        case ["ensure", lock]:
+        case ["ensure", project]:
             try:
-                environment = ensure(Path(lock))
+                environment = ensure(Path(project))
             except DependencyError as error:
                 sys.stdout.write(f"{error}\n")
                 sys.exit(1)
             sys.stdout.write(f"Dependencies ready: {environment}\n")
-        case ["python", lock]:
-            sys.stdout.write(f"{python(location(Path(lock).read_bytes()))}\n")
+        case ["python", project]:
+            sys.stdout.write(f"{python(location((Path(project) / LOCK).read_bytes()))}\n")
         case _:
-            sys.exit("usage: python environments.py ensure LOCK | python LOCK")
+            sys.exit("usage: python environments.py ensure PROJECT | python PROJECT")
 
 
 def prune(keep: frozenset[Path], root: Path = ROOT) -> tuple[Path, ...]:

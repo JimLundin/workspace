@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 DETACHED_PROCESS = 0x0000_0008
 
 try:
-    environment = environments.ensure(ROOT / environments.LOCK)
+    environment = environments.ensure(ROOT)
 except environments.DependencyError as error:
     ctypes.windll.user32.MessageBoxW(None, f"Workspace couldn't install its dependencies.\n\n{error}", "Workspace", 0x10)
     sys.exit(1)

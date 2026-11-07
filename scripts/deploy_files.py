@@ -17,7 +17,7 @@ RUNTIME = frozenset({".runtime"})
 RESERVED = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))})
 INTERPRETER = ".python-version"
 """The Python version Workspace runs on: installed by hand, never by a deploy."""
-PINS = (INTERPRETER, "requirements/windows-py315.lock")
+PINS = (INTERPRETER, "uv.lock")
 RECORD = TypeAdapter[dict[str, object]](dict[str, object])
 SOURCE_HASHES = TypeAdapter[dict[str, str]](dict[str, str])
 

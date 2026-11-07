@@ -93,7 +93,8 @@ runtime effect (comments, docstrings, docs) need only commit and push.
   checks the tests the change affects, then installs it into
   `C:\Users\Jim.Lundin\AppData\Local\Programs\workspace-sdk\workspace` and restarts only
   what changed; a stopped copy just receives the files. The user has authorized
-  this without asking. A `requirements/` lock change deploys like any other: the
-  keeper builds the lock's environment from PyPI first. Only a `.python-version`
+  this without asking. A `uv.lock` change (`uv lock` after editing
+  `pyproject.toml`) deploys like any other: the keeper builds the lock's
+  environment from PyPI first. Never use pip; uv manages every environment. Only a `.python-version`
   change is refused. Report any refusal or undo.
 - Report exactly what remains uncommitted, undeployed or unpushed, and why.

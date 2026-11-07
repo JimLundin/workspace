@@ -9,13 +9,10 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $python = Join-Path $root '.venv\Scripts\python.exe'
 if ($Command -eq 'setup') {
-    # The development environment holds exactly the pinned lock, like an installed one, plus the dev-only tools.
+    # The development environment holds exactly uv.lock, like an installed one, plus the dev group.
     # uv, as installs use: --native-tls trusts the Windows certificate store (company TLS inspection).
-    if (-not (Test-Path $python)) { & uv venv --python 3.15 (Join-Path $root '.venv'); if ($LASTEXITCODE) { exit $LASTEXITCODE } }
     Remove-Item (Join-Path $root '.venv\Lib\site-packages\workspace_runtime.pth') -ErrorAction SilentlyContinue
-    & uv pip install --native-tls --python $python --no-deps --require-hashes --only-binary ':all:' -r (Join-Path $root 'requirements\windows-py315.lock')
-    if ($LASTEXITCODE) { exit $LASTEXITCODE }
-    & uv pip install --native-tls --python $python hypothesis 'watchdog==6.0.0'
+    & uv sync --native-tls --locked --no-install-project --python 3.15 --project $root
     exit $LASTEXITCODE
 }
 if (-not (Test-Path $python)) { throw 'Run Dev.cmd setup first: it creates the development .venv from the lock.' }

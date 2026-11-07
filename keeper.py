@@ -829,7 +829,7 @@ class _Check:
             self.process = self.selfcheck()
         else:
             _log(f"building the dependencies for the candidate's lock ({self.environment.name})")
-            self.process = self.started([console_python(), str(LIVE / "environments.py"), "ensure", str(lock)])
+            self.process = self.started([console_python(), str(LIVE / "environments.py"), "ensure", str(candidate)])
 
     def started(self, command: list[str]) -> subprocess.Popen[bytes]:
         with self.output.open("ab") as out:

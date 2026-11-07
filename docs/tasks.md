@@ -36,12 +36,11 @@ Left:
   - managed Edge (26 s);
   - attached Edge (19 s).
 - **Dependencies are installed, not bundled** (done 2026-11-07).
-  `environments.py` builds one venv per lock from PyPI with uv; the keeper and every
+  `environments.py` builds one venv per `uv.lock` with `uv sync --locked`; the keeper and every
   program run its interpreter. A lock change deploys through the keeper, and undo
   switches environments.
-  - **Left:** the CI test jobs still use `pip install -e ".[test]"`, which is
-    unpinned. Their matrix may include runners the Windows lock can't install
-    on, so move them to the lock where it can.
+  - uv also manages CI and the dev `.venv` from the same universal `uv.lock`;
+    pip is no longer used anywhere.
 
 ## 2. Check that each side survives the other's restart, live
 

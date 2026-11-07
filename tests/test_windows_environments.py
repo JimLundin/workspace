@@ -1,4 +1,4 @@
-"""A real environment, built by the real venv and the base interpreter's pip, runs its own interpreter."""
+"""A real environment, built by the real uv from a real lock, runs its own interpreter."""
 
 import subprocess
 import sys
@@ -8,16 +8,21 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows environments")
 
-from environments import ensure, python, pythonw, ready
+from environments import ensure, python, pythonw, ready, uv
 
 
-def test_a_real_environment_from_an_empty_lock_runs_its_own_interpreter(tmp_path: Path) -> None:
-    # Defects: venv without pip can't be filled by the base interpreter's pip, the
+def test_a_real_environment_from_a_dependency_free_project_runs_its_own_interpreter(tmp_path: Path) -> None:
+    # Defects: uv sync can't build from a copy's pyproject and lock, the
     # interpreters are looked for in the wrong folder, or the environment's
-    # interpreter still resolves to the base installation. An empty lock needs no network.
-    lock = tmp_path / "empty.lock"
-    lock.write_bytes(b"# no packages\n")
-    environment = ensure(lock, root=tmp_path / "environments")
+    # interpreter still resolves to the base installation. No dependencies: no network.
+    project = tmp_path / "workspace"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "fixture"\nversion = "0"\nrequires-python = ">=3.15"\ndependencies = []\n\n[tool.uv]\npackage = false\n',
+        encoding="utf-8",
+    )
+    subprocess.run([uv(), "lock", "--offline", "--project", project], check=True, capture_output=True, timeout=60)
+    environment = ensure(project, root=tmp_path / "environments")
     assert ready(environment) and pythonw(environment).is_file()
     prefix = subprocess.run([python(environment), "-c", "import sys; print(sys.prefix)"], capture_output=True, text=True, check=True, timeout=30)
     assert Path(prefix.stdout.strip()).resolve() == environment.resolve()

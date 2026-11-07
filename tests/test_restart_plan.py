@@ -66,7 +66,7 @@ def test_restart_plan_tracks_shared_removed_lazy_and_package_dependencies(tmp_pa
         ({"desktop_ui/fonts/face.ttf": "after\n"}, (), RestartChildren(("assistant",))),
         ({"scripts/tool.ps1": "after\n"}, (), RestartChildren(())),
         # A changed lock is another environment: every program, the keeper too, starts again from it.
-        ({"requirements/lock": "after\n"}, (), Relaunch.KEEPER),
+        ({"uv.lock": "after\n"}, (), Relaunch.KEEPER),
     )
     before = source_tree(written(tmp_path / "before", SOURCE))
     for index, (edits, removed, expected) in enumerate(cases):

@@ -2,7 +2,6 @@ __pycache__/
 .pytest_cache/
 .hypothesis/
 .ruff_cache/
-uv.lock
 .pyright/
 typings/.workspace-typeshed/
 .venv/
