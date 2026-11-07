@@ -375,6 +375,23 @@ def enum_translations(tree: ast.AST, module: str, declaration: str = "", bound: 
         yield from enum_translations(child, module, declaration, bound)
 
 
+def bare_tuples(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Finding]:
+    """A fixed `tuple` of only ints and floats is a point, size or span that needs its own type."""
+    for child in ast.iter_child_nodes(tree):
+        match child:
+            case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                yield from bare_tuples(child, module, ".".join(part for part in (declaration, name) if part))
+                continue
+            case ast.Subscript(value=ast.Name(id="tuple"), slice=ast.Tuple(elts=[_, _, *_] as items)) if all(
+                isinstance(item, ast.Name) and item.id in ("int", "float") for item in items
+            ):
+                detail = "Name the values with a frozen domain type and its bounds, such as winapi.shapes.Point or Size."
+                yield Finding("bare-tuple", module, declaration, ast.unparse(child), child.lineno, detail)
+            case _:
+                pass
+        yield from bare_tuples(child, module, declaration)
+
+
 def observation(source: Source, cache: Cache | None) -> Observation:
     key = cache.key("architecture", source) if cache is not None else ""
     if cache is not None and (saved := cache.read(key, OBSERVATION)) is not None:
@@ -408,7 +425,7 @@ def observation(source: Source, cache: Cache | None) -> Observation:
                         )
             case _:
                 pass
-    result = Observation((*_declarations(tree, module), *enum_translations(tree, module)), tuple(dynamic))
+    result = Observation((*_declarations(tree, module), *enum_translations(tree, module), *bare_tuples(tree, module)), tuple(dynamic))
     if cache is not None:
         cache.write(key, result, OBSERVATION)
     return result

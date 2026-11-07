@@ -274,7 +274,7 @@ def label(light: Light) -> str:
             return "go"
 
 class Lamp:
-    def colour(self, light: Light) -> tuple[int, int]:
+    def colour(self, light: Light) -> Rgb:
         match light:
             case Light.RED:
                 value = Rgb(255, 0)
@@ -302,3 +302,25 @@ def outer() -> None:
     write_tree(tmp_path, {"lights.py": source})
     found = [(finding.rule, finding.declaration, finding.expression) for finding in review(tmp_path).failures]
     assert found == [("enum-translation", "label", "light"), ("enum-translation", "Lamp.colour", "light")]
+
+
+def test_a_fixed_tuple_of_numbers_must_be_a_named_type(tmp_path: Path) -> None:
+    # Defect: a point, size or span passed as `tuple[int, int]` swaps its fields
+    # or skips its bounds unnoticed, and the review misses it inside a method,
+    # a mapping's key or a type alias; or it wrongly flags a variable-length
+    # tuple of numbers or a pair that holds other types.
+    source = """class Overlay:
+    def move(self, position: tuple[int, int]) -> None: ...
+
+SIZES: frozendict[tuple[int, int], str] = frozendict()
+type Span = tuple[float, float]
+samples: tuple[float, ...] = ()
+pressed: tuple[str, str] = ("", "")
+"""
+    write_tree(tmp_path, {"overlay.py": source})
+    found = [(finding.rule, finding.declaration, finding.expression) for finding in review(tmp_path).failures]
+    assert found == [
+        ("bare-tuple", "Overlay.move", "tuple[int, int]"),
+        ("bare-tuple", "", "tuple[int, int]"),
+        ("bare-tuple", "", "tuple[float, float]"),
+    ]
