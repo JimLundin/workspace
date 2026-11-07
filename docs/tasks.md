@@ -126,10 +126,19 @@ violations left, with no baseline of exceptions. Counted in production code on
       `TextBuffer` exception), `scripts.selfcheck.Lanes`, `worker.OwnerCalls`
       (`BoundRunner` sets `current`) and `benchmark_island.Clock`. Each gets a
       frozen state record in a `Cell`. Done 2026-11-07: `link`, `winapi`,
-      `automation`, `contracts`, `scripts`, `gateway`, and `assistant` except
-      `AssistantApp`. Left: `assistant.app.AssistantApp` and about 30
-      `desktop_ui` owners, largest `DesktopBar`, `CanvasPanel`, `Ui`,
-      `application_observer.Worker`, `DesktopApp`.
+      `automation`, `contracts`, `scripts`, `gateway`, and `assistant`.
+      **Composition roots fold reported events** (user, 2026-11-07: frozen
+      everywhere is meant to make state explicit; hidden state, even when
+      faster, is harder to follow in a language that tracks no side effects).
+      Done 2026-11-08 for `AssistantApp` (`assistant.control`), `DesktopApp`
+      (`desktop_ui.desktop_control`) and `Ui` (`desktop_ui.ui_control`): parts
+      report facts or requests through one `report(event)`, never calling back
+      into the root; a pure `transition(state, event) -> (state, effects)`
+      decides, lazily; one `perform` carries effects out, and an effect may
+      report a result as the next event (`Fold`). A request is its own effect.
+      Left, in order: `DesktopBar`, `CanvasPanel`, `application_observer.Worker`,
+      `WorkWindow`, the other `desktop_ui` owners (about 25), then owners whose
+      Cells hold a reducible state machine.
       Patterns that held up:
       - one record per owner works only where every writer holds the owner's
         lock (audit with a scan for unlocked `Cell` writes); state another
