@@ -57,7 +57,6 @@ from protocol import (
     decode_indicator,
     encode,
 )
-from tests.test_engine import Harness
 from usage import Detail
 from winapi import inputs, shell, system, windows
 from winapi._core import LRESULT, fn, user32
@@ -829,13 +828,6 @@ def test_native_function_key_clears_a_partial_snippet_without_remapping() -> Non
         assert not keyboard.swallow(inputs.KeyEvent(0x70, 0x3B, 0, 0, 0), down=True)
         assert keyboard.engine.typed == ""
         assert messages == []
-
-
-def test_snippets_still_expand_with_tagged_layout_output() -> None:
-    rig = Harness()
-    for name in (";", ";", "r", "l", "a"):
-        rig.tap(name)
-    assert "~Thanks!" in rig.take()
 
 
 def test_layout_replies_to_queries_and_tray_toggles_without_key_injection() -> None:

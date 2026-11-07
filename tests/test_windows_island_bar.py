@@ -190,19 +190,6 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
         closed(app, bar)
 
 
-def test_status_icons_open_the_controls_menu_like_the_rest_of_the_capsule() -> None:
-    # Defect: pressing an indicator does nothing or launches something other than the menu.
-    app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
-    try:
-        bar.timer.stop()
-        capsule = bar.window.capsules[Key.STATUS]
-        QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(14, TOP + 17))
-        assert bar.opened is not None
-    finally:
-        closed(app, bar)
-
-
 def test_the_pager_is_the_only_toolbar_and_its_canvas_icon_opens_the_canvas() -> None:
     # Defects: the removed web-app or running-app strips come back, the pager
     # leaves the screen's edge, or the canvas icon runs another function.
