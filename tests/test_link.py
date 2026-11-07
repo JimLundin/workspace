@@ -70,10 +70,10 @@ def test_a_wrong_token_is_closed_without_a_reply(tmp_path: Path) -> None:
     client = Client(endpoint, intruder.receive, intruder.status)
     client.start()
     try:
-        time.sleep(0.5)
+        assert until(lambda: Status.DISCONNECTED in intruder.statuses), "The server kept a client with the wrong token"
         client.send(b"use tool")
-        time.sleep(0.3)
-        assert intruder.frames == [] and assistant.frames == [] and not server.connected
+        assert not until(lambda: bool(assistant.frames) or server.connected, seconds=0.1)
+        assert intruder.frames == []
     finally:
         client.close()
         server.close()
