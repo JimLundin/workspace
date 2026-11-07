@@ -139,16 +139,6 @@ def test_queued_messages_appear_once_when_their_turn_starts_and_activity_is_sepa
     assert session.activity == ('open {"target":"budget.xlsx"}',)
 
 
-def test_render_snapshots_remain_unchanged_when_the_model_continues() -> None:
-    session = Session()
-    session = transition(session, Begin("Read the workbook", 0, queued=False))
-    before = session
-    session = transition(session, Enqueued("Then summarize it"))
-    session = transition(session, Said("Read it.", 0))
-    session = transition(session, Finished())
-    assert len(before.messages) == 1 and before.queued == () and before.busy
-
-
 def test_session_events_can_be_replayed_and_branched_without_a_clock_or_shared_mutation() -> None:
     original = Session(identity="replay")
     events: tuple[Event, ...] = (

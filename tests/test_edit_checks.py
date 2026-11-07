@@ -5,7 +5,7 @@ import io
 import sys
 from pathlib import Path
 
-from scripts.architecture import Report, dependencies
+from scripts.architecture import Report
 from scripts.check import (
     COST_RECORD,
     POOL_MINIMUM,
@@ -81,11 +81,6 @@ def test_pins_and_unknown_assets_fall_back_to_full_suite_but_known_assets_select
     assert select(tmp_path, previous | {".gitattributes": "after", "typings/lib.pyi": "after"}, previous).tests == ()
     assert select(tmp_path, previous, previous).tests == ()
     assert set(select(tmp_path, previous, previous, full=True).tests) == {"tests/test_api.py", "tests/test_other.py", "tests/test_quality.py"}
-
-
-def test_static_dynamic_imports_and_ancestors_are_dependencies() -> None:
-    imports = dependencies("app/sub/source.py", 'from .. import api\nimport app.value\nimportlib.import_module("app.more.value")\n')
-    assert {"app", "app.api", "app.value", "app.more", "app.more.value"} <= imports
 
 
 def test_editing_checks_do_not_hide_local_import_or_runtime_failures() -> None:

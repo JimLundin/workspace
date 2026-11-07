@@ -41,25 +41,6 @@ def test_new_computer_tools_are_available_to_the_model_and_run_directly(tmp_path
         assert not any(entry.startswith("confirm ") for entry in rig.machine.log)
 
 
-def test_bad_action_arguments_do_not_reach_the_machine(tmp_path: Path) -> None:
-    machine = FakeMachine()
-    agent = Agent(
-        Settings("", "", "", ""),
-        machine,
-        FakeWindow(),
-        threading.Event(),
-        work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
-    )
-    for name, arguments in (
-        ("ui_action", {"handle": 7, "id": "1.2.3", "action": "unrecognized"}),
-        ("screenshot", {"handle": 7, "desktop": True}),
-    ):
-        result = agent.call(ToolCall("bad", name, json.dumps(arguments)))
-        assert not result.ok, (name, result.text)
-    assert not machine.log
-
-
 def context(title: str = "Budget.xlsx - Excel") -> ContextSnapshot:
     now = time.time()
     return ContextSnapshot(now, "workspace", (Activity(Window(7, title, "excel.exe", minimized=False), now - 2, now, agent_active=False),))

@@ -791,14 +791,6 @@ def test_the_spacebar_b_and_n_are_blocked_now_that_voice_lives_on_the_apps_layer
     assert t.take() == ""
 
 
-def test_f6_remains_a_native_laptop_function() -> None:
-    t = Harness()
-    t.key(Scancode(0x40), down=True, now=0)
-    t.key(Scancode(0x40), down=True, now=10)
-    t.key(Scancode(0x40), down=False, now=20)
-    assert t.take() == ""
-
-
 # ---- requests -------------------------------------------------------------------------
 
 

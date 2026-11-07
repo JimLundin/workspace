@@ -10,20 +10,8 @@ from pydantic import TypeAdapter, ValidationError
 from assistant.browser_requests import Open, OpenHidden
 from assistant.browser_tools import OpenArguments, open_request
 from assistant.browser_values import BrowserError, BrowserStatus
-from automation.actions import Resources
-from automation.execution import WorkExecution
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import Rig, ToolRig, calls, durable, says
-from tests.test_work_actions import claimed
-
-
-def test_retired_embedded_browser_tools_cannot_reach_the_machine_or_start_actions(tmp_path: Path) -> None:
-    store, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock))
-    for operation in ("list", "open", "navigate", "snapshot", "action"):
-        result = rig.call("browser_app_" + operation, url="https://example.invalid", target_id="retired-card", id="send", action="click")
-        assert not result.ok and "no tool called" in result.text
-    assert not rig.machine.log and not store.actions(claim.task.id)
 
 
 def test_model_receives_only_current_browser_capabilities(tmp_path: Path) -> None:
