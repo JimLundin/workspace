@@ -80,7 +80,11 @@ their tests. Legacy data and backwards compatibility are not requirements.
   `frozendict`, frozen dataclasses, or `Sequence`/`Mapping`/`Iterable`), never
   `list`, `dict`, `set` or another mutable container.
 - Define types as frozen, slotted dataclasses wherever possible; only an owner
-  that genuinely holds changing state is a mutable class. Signatures and types
+  that genuinely holds changing state is a mutable class. Where a measured hot
+  path needs cheaper construction, a `typing.NamedTuple` is the fallback: about
+  twice as fast to build, but not smaller (64 bytes against a slotted
+  dataclass's 48 for two fields), and it compares equal to any tuple with the
+  same values, so two such types no longer tell each other apart at runtime. Signatures and types
   an external dependency dictates (Qt overrides, SDK callbacks, ctypes
   structures) are exempt from these rules. A mapping that leaves its owner
   is a `frozendict`, replaced rather than mutated (see
