@@ -11,10 +11,12 @@ import contextlib
 import socket
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Final
 
+from cell import Cell
 from link import frames
 from link.endpoint import read
 
@@ -26,41 +28,53 @@ class Status(Enum):
     DISCONNECTED = auto()
 
 
-class Client:
-    __slots__ = ("_closed", "_endpoint", "_lock", "_outbox", "_receive", "_socket", "_status", "_thread")
+@dataclass(frozen=True, slots=True)
+class _Connected:
+    outbox: frames.Outbox
+    stream: socket.socket
 
-    def __init__(self, endpoint: Path, receive: Callable[[bytes], None], status: Callable[[Status], None]) -> None:
-        self._endpoint, self._receive, self._status = endpoint, receive, status
-        self._lock = threading.Lock()
-        self._outbox: frames.Outbox | None = None
-        self._socket: socket.socket | None = None
-        self._closed = threading.Event()
-        self._thread = threading.Thread(target=self._run, name="link client", daemon=True)
+
+@dataclass(frozen=True, slots=True)
+class Client:
+    endpoint: Path
+    receive: Callable[[bytes], None]
+    status: Callable[[Status], None]
+    _connected: Cell[_Connected | None] = field(default_factory=lambda: Cell[_Connected | None](None), init=False, repr=False)
+    """The live session's outbox and socket, replaced whole under the lock."""
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _started: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    """Set when the connecting thread exits."""
 
     def start(self) -> None:
-        self._thread.start()
+        self._started.set()
+        threading.Thread(target=self._run, name="link client", daemon=True).start()
 
     @property
     def connected(self) -> bool:
         with self._lock:
-            return self._outbox is not None
+            return self._connected.get() is not None
 
     def send(self, payload: bytes) -> bool:
         """Any thread: queue a frame; False while no server is connected."""
         with self._lock:
-            outbox = self._outbox
-        if outbox is None:
+            connected = self._connected.get()
+        if connected is None:
             return False
-        outbox.put(payload)
+        connected.outbox.put(payload)
         return True
 
     def _run(self) -> None:
-        while not self._closed.is_set():
-            published = read(self._endpoint)
-            if published is not None:
-                with contextlib.suppress(OSError):
-                    self._session(published.port, published.token)
-            self._closed.wait(RETRY_S)
+        try:
+            while not self._closed.is_set():
+                published = read(self.endpoint)
+                if published is not None:
+                    with contextlib.suppress(OSError):
+                        self._session(published.port, published.token)
+                self._closed.wait(RETRY_S)
+        finally:
+            self._finished.set()
 
     def _session(self, port: int, token: str) -> None:
         with socket.create_connection(("127.0.0.1", port), timeout=RETRY_S * 4) as connected:
@@ -70,18 +84,18 @@ class Client:
             with self._lock:
                 if self._closed.is_set():
                     return
-                self._outbox, self._socket = outbox, connected
+                self._connected.set(_Connected(outbox, connected))
             writer = threading.Thread(target=self._write, args=(connected, outbox), name="link writer", daemon=True)
             writer.start()
-            self._status(Status.CONNECTED)
+            self.status(Status.CONNECTED)
             try:
                 while (frame := frames.receive(connected)) is not None:
-                    self._receive(frame)
+                    self.receive(frame)
             finally:
                 with self._lock:
-                    self._outbox, self._socket = None, None
+                    self._connected.set(None)
                 outbox.close()
-                self._status(Status.DISCONNECTED)
+                self.status(Status.DISCONNECTED)
 
     @staticmethod
     def _write(connected: socket.socket, outbox: frames.Outbox) -> None:
@@ -92,8 +106,9 @@ class Client:
     def close(self) -> None:
         self._closed.set()
         with self._lock:
-            current = self._socket
+            current = self._connected.get()
         if current is not None:
             with contextlib.suppress(OSError):
-                current.shutdown(socket.SHUT_RDWR)
-        self._thread.join(timeout=5)
+                current.stream.shutdown(socket.SHUT_RDWR)
+        if self._started.is_set():
+            self._finished.wait(timeout=5)

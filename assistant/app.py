@@ -730,7 +730,7 @@ def run(
                 app.received(frame)
 
         published = components.endpoint("assistant")
-        server = Server(os.urandom(24).hex(), received)
+        server = Server.listen(os.urandom(24).hex(), received)
         app = AssistantApp(settings, LinkedDesktop(server), window=window)
         server.start(published)
         timings.mark("link")

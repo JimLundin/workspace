@@ -41,7 +41,7 @@ def test_a_connecting_desktop_gets_the_latest_states_then_events_and_its_command
     # state in turn, misses an event, or its commands never reach the assistant.
     endpoint = tmp_path / "endpoint-assistant"
     assistant, desktop = Peer(), Peer()
-    server = Server("boot-token", assistant.receive)
+    server = Server.listen("boot-token", assistant.receive)
     server.send(b"session 1", "session")
     server.send(b"session 2", "session")
     server.send(b"dropped event")  # No desktop yet: an event is not kept.
@@ -63,7 +63,7 @@ def test_a_wrong_token_is_closed_without_a_reply(tmp_path: Path) -> None:
     # Defect: any local program that finds the port drives the assistant.
     endpoint = tmp_path / "endpoint-assistant"
     assistant, intruder = Peer(), Peer()
-    server = Server("boot-token", assistant.receive)
+    server = Server.listen("boot-token", assistant.receive)
     server.send(b"session", "session")
     server.start(None)
     publish(endpoint, Endpoint(server.port, "guessed"))
@@ -84,7 +84,7 @@ def test_the_desktop_reconnects_when_the_assistant_restarts(tmp_path: Path) -> N
     # sending into the closed connection, so its commands vanish.
     endpoint = tmp_path / "endpoint-assistant"
     first, desktop = Peer(), Peer()
-    server = Server("first-boot", first.receive)
+    server = Server.listen("first-boot", first.receive)
     server.send(b"before", "session")
     server.start(endpoint)
     client = Client(endpoint, desktop.receive, desktop.status)
@@ -95,7 +95,7 @@ def test_the_desktop_reconnects_when_the_assistant_restarts(tmp_path: Path) -> N
         assert until(lambda: desktop.statuses == [Status.CONNECTED, Status.DISCONNECTED])
         assert until(lambda: not client.send(b"lost"))
         second = Peer()
-        restarted = Server("second-boot", second.receive)
+        restarted = Server.listen("second-boot", second.receive)
         restarted.send(b"after", "session")
         restarted.start(endpoint)
         try:
