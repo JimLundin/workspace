@@ -23,7 +23,7 @@ Measured on 2026-11-06:
 - a change to a protected file takes about 60 s to check, then relaunches
   everything.
 
-Test pass (2026-11-07): `--full` went from 291 s to 187 s. Each slow test now
+Test pass (2026-11-07): `--full` went from 291 s to 187 s (measured before the native lanes and the SDK change). Each slow test now
 carries its reason in `scripts/check_tiers.py`, under caps, and a native test
 over 3 s fails by name.
 
@@ -31,6 +31,12 @@ Left:
 
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
   three meeting tests from the slow lists.
+- **Skip the Windows runner for pure test modules.** A small check is about 9 s
+  end to end; about 5 s of that starts the Windows test runner and moves it
+  onto a private desktop. Test modules that can't touch Qt or Win32 could run
+  in the checker process itself. That is a judgement call on isolation.
+- **The SDK now loads only when a test runs an agent** (done 2026-11-07).
+  33 of 117 portable modules used to pay 3–8 s for it on every check.
 - **Investigate the three largest native tests:**
   - UIA (30 s);
   - managed Edge (26 s);
@@ -51,7 +57,34 @@ new desktop connected. Still to watch by eye: the bar showing "reconnecting"
 then replaying the canvas, and an agent task continuing through a desktop
 restart.
 
-## 3. Replace enum `kind` fields with one type per kind
+## 3. Code policy pass: enforce the modelling decisions, then replace `kind` fields
+
+Decisions the user made, to write into AGENTS.md and enforce in the architecture
+or quality review wherever a rule can be checked mechanically:
+
+- **No `kind` fields.** Model alternatives as discriminated unions where each
+  kind is its own frozen, slotted type, so an invalid state can't be
+  constructed. A constant `Literal` tag for JSON is fine; an enum field that
+  decides which values are valid is not. The list below is the migration.
+- **Domain types with bounds, not bare tuples.** Example: `desktop_ui.colour.Rgb`,
+  not `tuple[int, int, int]`.
+- **Translate an enum with a mapping or a value on its members, not a `match`.**
+  Use `Final[frozendict[Enum, Value]]` or the member's value. Example:
+  `desktop_ui.icons.COLOURS`.
+- **No append-to-a-mutable-container-in-a-loop.** Prefer comprehensions, tuples
+  and generator expressions, and immutable data. Use `frozendict`, not `dict`,
+  for mappings that leave their owner, with replacement instead of mutation
+  (for example, `link.server.Server._retained`).
+- **Already in AGENTS.md; keep them enforced:**
+  - no mocks or patches;
+  - no `Any`, `cast` or `getattr`;
+  - at most five parameters;
+  - keyword-only booleans;
+  - every test names its defect.
+- **No pip.** uv manages every environment (`pyproject.toml` + `uv.lock`).
+
+Then replace the enum `kind` fields:
+
 
 The `kind: Literal["…"]` fields (`TextAnswer`, `TaskRequest`, `SessionRequest`
 and about 60 others) are not the problem. Each is already its own frozen type;
