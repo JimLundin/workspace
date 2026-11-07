@@ -86,7 +86,7 @@ class InputDevice:
         """What each endpoint other than the startup one hears."""
 
     def microphone(self) -> audio.Microphone:
-        return audio.Microphone(RATE, 300, EventHandle(1), driver=self)
+        return audio.Microphone.open(RATE, 300, EventHandle(1), driver=self)
 
     def state(self) -> Literal["closed", "ready", "recording"]:
         if self.started_at is not None:

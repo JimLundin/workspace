@@ -245,7 +245,7 @@ class AssistantApp:
         self.view_thread = ViewThread.start()
         self.automatic_attention = AutomaticAttention(lambda status: self.desktop.send(AutomaticChanged(status)), self.warn_automatic_recording)
         self.mic_event = system.create_event()
-        mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
+        mic = audio.Microphone.open(RATE, MAX_SECONDS, self.mic_event)
         self.machine = WinDesktop.following(
             self.window.handle, mic, on_state=self.show, on_job=self.job_changed, on_notify=self.notify, on_problem=self.problem
         )

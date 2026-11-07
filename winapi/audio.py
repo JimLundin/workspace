@@ -6,9 +6,10 @@ import threading
 import time
 from array import array
 from ctypes import wintypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
+from cell import Cell
 from winapi._core import ULONG_PTR, fn, winmm
 from winapi.system import EventHandle, wait_any
 
@@ -175,6 +176,23 @@ def follows_default(opened: str | None, current: str | None) -> bool:
     return current is not None and current != opened
 
 
+@dataclass(frozen=True, slots=True)
+class _Capture:
+    """One recording lifetime's native state, replaced whole under the microphone's lock."""
+
+    handle: wintypes.HANDLE = field(default_factory=_HWAVEIN)
+    device: str | None = None
+    """The capture endpoint that was the default when the handle opened."""
+    header: WAVEHDR = field(default_factory=WAVEHDR)
+    """The queued buffer's header; the driver points at it until it is unprepared."""
+    prepared: bool = False
+    queued: bool = False
+    stopping: bool = False
+    last_position: int = 0
+    """Where the level meter last read up to."""
+
+
+@dataclass(frozen=True, slots=True)
 class Microphone:
     """Records the default microphone as 16-bit mono PCM into one buffer, allocated
     once. Windows sets `event` whenever the recording changes state, including when
@@ -183,48 +201,31 @@ class Microphone:
     changes, `follow_default` or the next press reopens on the new default, so
     dictation and the level meter observe the device Windows now selects."""
 
-    __slots__ = (
-        "_buffer",
-        "_device",
-        "_driver",
-        "_format",
-        "_handle",
-        "_header",
-        "_last_position",
-        "_lock",
-        "_prepared",
-        "_queued",
-        "_stopping",
-        "event",
-    )
+    event: EventHandle
+    _driver: InputDriver
+    _format: WAVEFORMATEX
+    _buffer: ctypes.Array[ctypes.c_char]
+    _capture: Cell[_Capture] = field(default_factory=lambda: Cell(_Capture()), init=False, repr=False)
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
-    # The buffer format/capacity, completion event and native driver jointly
-    # define one recording lifetime; the driver remains a keyword-only port.
-    def __init__(self, rate: int, seconds: int, event: EventHandle, *, driver: InputDriver | None = None) -> None:
-        self._driver: InputDriver = WaveInput() if driver is None else driver
-        self._format = WAVEFORMATEX(_WAVE_FORMAT_PCM, 1, rate, rate * 2, 2, 16, 0)
-        self._buffer = ctypes.create_string_buffer(rate * 2 * seconds)
-        self._handle = _HWAVEIN()
-        self._header = WAVEHDR()
-        self._prepared = False
-        self._queued = False
-        self._stopping = False
-        self._lock = threading.RLock()
-        self._last_position = 0
-        self._device: str | None = None
-        """The capture endpoint that was the default when the handle opened."""
-        self.event = event
-        # Opening a device can take a second. Pay that cost before the talk key is
-        # pressed; start() retries and reports the error if it isn't available yet.
-        self._open()
+    @classmethod
+    def open(cls, rate: int, seconds: int, event: EventHandle, *, driver: InputDriver | None = None) -> Microphone:
+        """A microphone on the default device, opened now: opening can take a second,
+        so pay that before the talk key is pressed; start() retries and reports the
+        error if it isn't available yet."""
+        format = WAVEFORMATEX(_WAVE_FORMAT_PCM, 1, rate, rate * 2, 2, 16, 0)
+        microphone = cls(event, WaveInput() if driver is None else driver, format, ctypes.create_string_buffer(rate * 2 * seconds))
+        microphone._open()
+        return microphone
 
     def _open(self) -> int:
-        if self._handle:
+        capture = self._capture.get()
+        if capture.handle:
             return 0
         device = self._driver.device()
         error, handle = self._driver.open(self._format, self.event)
         if not error:
-            self._handle, self._device = handle, device
+            self._capture.set(replace(capture, handle=handle, device=device))
         return error
 
     def start(self) -> int:
@@ -233,28 +234,30 @@ class Microphone:
             return self._start()
 
     def _start(self) -> int:
-        if self._prepared:
-            if not self._stopping:
+        capture = self._capture.get()
+        if capture.prepared:
+            if not capture.stopping:
                 return 0
             try:
                 self.stop()  # finish cleanup after a failed stop before reusing its buffer
             except OSError as problem:
                 return problem.errno or 1
-        if self._handle and follows_default(self._device, self._driver.device()):
+        capture = self._capture.get()
+        if capture.handle and follows_default(capture.device, self._driver.device()):
             self.close()
         if error := self._open():
             return error
-        self._header = WAVEHDR(ctypes.addressof(self._buffer), len(self._buffer))
-        self._last_position = 0
-        if error := self._driver.prepare(self._handle, self._header):
+        header = WAVEHDR(ctypes.addressof(self._buffer), len(self._buffer))
+        capture = self._capture.update(lambda capture: replace(capture, header=header, last_position=0))
+        if error := self._driver.prepare(capture.handle, header):
             self.close()
             return error
-        self._prepared = True
-        if error := self._driver.add(self._handle, self._header):
+        capture = self._capture.update(lambda capture: replace(capture, prepared=True))
+        if error := self._driver.add(capture.handle, header):
             self.close()
             return error
-        self._queued = True
-        if error := self._driver.start(self._handle):
+        capture = self._capture.update(lambda capture: replace(capture, queued=True))
+        if error := self._driver.start(capture.handle):
             self.close()
         return error
 
@@ -268,7 +271,8 @@ class Microphone:
         if not self._lock.acquire(blocking=False):
             return
         try:
-            if self._prepared or not self._handle or not follows_default(self._device, self._driver.device()):
+            capture = self._capture.get()
+            if capture.prepared or not capture.handle or not follows_default(capture.device, self._driver.device()):
                 return
             self.close()
             self._open()
@@ -276,7 +280,7 @@ class Microphone:
             self._lock.release()
 
     def full(self) -> bool:
-        return bool(self._header.dwFlags & _WHDR_DONE)
+        return bool(self._capture.get().header.dwFlags & _WHDR_DONE)
 
     def stop(self) -> bytes:
         """Returns the recording, keeping the microphone ready for the next press."""
@@ -284,21 +288,19 @@ class Microphone:
             return self._stop()
 
     def _stop(self) -> bytes:
-        if not self._prepared:
+        capture = self._capture.get()
+        if not capture.prepared:
             return b""
-        self._stopping = True
+        capture = self._capture.update(lambda capture: replace(capture, stopping=True))
         recorded = b""
-        if self._queued:
-            if error := self._driver.reset(self._handle):
+        if capture.queued:
+            if error := self._driver.reset(capture.handle):
                 raise OSError(error, "The microphone could not finish recording. Please try again.")
             self._wait_for_return()
-            recorded = ctypes.string_at(self._buffer, int(self._header.dwBytesRecorded))
-        if error := self._driver.unprepare(self._handle, self._header):
+            recorded = ctypes.string_at(self._buffer, int(capture.header.dwBytesRecorded))
+        if error := self._driver.unprepare(capture.handle, capture.header):
             raise OSError(error, "The microphone could not release its recording buffer. Please try again.")
-        self._prepared = False
-        self._queued = False
-        self._stopping = False
-        self._header = WAVEHDR()
+        self._capture.update(lambda capture: replace(capture, prepared=False, queued=False, stopping=False, header=WAVEHDR()))
         return recorded
 
     def level(self) -> float | None:
@@ -311,22 +313,23 @@ class Microphone:
         if not self._lock.acquire(blocking=False):
             return None
         try:
-            if not self._queued or self._stopping:
+            capture = self._capture.get()
+            if not capture.queued or capture.stopping:
                 return None
             position = MMTIME(4, 0, 0)  # TIME_BYTES; drivers may return TIME_SAMPLES.
-            if self._driver.position(self._handle, position):
+            if self._driver.position(capture.handle, position):
                 return None
             if position.kind not in (2, 4):
                 return None
             end = min(len(self._buffer), int(position.value) * (2 if position.kind == 2 else 1)) & ~1
-            if end < self._last_position:
-                # Windows reroutes an open mapper stream to a new default device and
-                # restarts its byte position; the recorded count restarts with it.
-                self._last_position = 0
-            if end == self._last_position:
+            # Windows reroutes an open mapper stream to a new default device and
+            # restarts its byte position; the recorded count restarts with it.
+            last = 0 if end < capture.last_position else capture.last_position
+            if end == last:
+                self._capture.set(replace(capture, last_position=last))
                 return 0.0
-            beginning = max(self._last_position, end - int(self._format.nSamplesPerSec) * 2 // 25) & ~1
-            self._last_position = end
+            beginning = max(last, end - int(self._format.nSamplesPerSec) * 2 // 25) & ~1
+            self._capture.set(replace(capture, last_position=end))
             samples = array("h", ctypes.string_at(ctypes.addressof(self._buffer) + beginning, end - beginning))
             return math.sqrt(sum(sample * sample for sample in samples) / len(samples)) / 32768
         finally:
@@ -347,10 +350,10 @@ class Microphone:
     def close(self) -> None:
         """Stops any recording and releases the microphone before its event closes."""
         with self._lock:
-            if self._handle:
+            if handle := self._capture.get().handle:
                 self.stop()
-                self._driver.close(self._handle)
-                self._handle = _HWAVEIN()
+                self._driver.close(handle)
+                self._capture.update(lambda capture: replace(capture, handle=_HWAVEIN()))
 
 
 def _follow_default(microphone: Microphone, interval: float, closing: threading.Event) -> None:
