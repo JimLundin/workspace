@@ -117,15 +117,15 @@ violations left, with no baseline of exceptions. Counted in production code on
    causes, of which `navigation.Source` is three) would be better as one enum.
    Review each `every_member` table: keep it where members share a value or
    another layer owns the values.
+9. **Every test names its defect**: checkable after all, as a `# Defect:`
+   comment at the top of the body. 638 of 1,128 tests lack one; backfilling
+   means judging each, and deleting a test that guards no plausible defect.
 10. **Index access** (user, 2026-11-07): 262 constant-index reads (`row[0]`,
     `lines[-1]`) in 74 production files, mostly SQLite rows in
     `assistant.meeting_store` (41) and `automation.store` (35), which want typed
     row adapters. Dependency results (`sys.argv[1]`, `split(...)[0]`,
     `parents[1]`) have better spellings: argparse, `str.partition`, `.parent`.
     Constant slices (200) are mostly length bounds and stay allowed.
-9. **Every test names its defect**: checkable after all, as a `# Defect:`
-   comment at the top of the body. 638 of 1,128 tests lack one; backfilling
-   means judging each, and deleting a test that guards no plausible defect.
 
 Items 3–5 and 7–8 were added by the user on 2026-11-07: no loop-appending, no
 function requiring mutable data, frozen dataclasses wherever possible (external
