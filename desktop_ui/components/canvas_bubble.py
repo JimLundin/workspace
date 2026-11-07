@@ -9,7 +9,8 @@ from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens
 from desktop_ui.components.canvas_controls import CanvasControl, ControlAction
 from desktop_ui.components.canvas_look import CONTROL, Surface, paint_selection, paint_surface, surface_fill
 from desktop_ui.components.text import color
-from desktop_ui.work_canvas_gestures import PointerMoved, PointerReleased, PressConnector, ScenePoint
+from desktop_ui.work_canvas_gestures import PointerMoved, PointerReleased, PressConnector
+from desktop_ui.work_canvas_layout import ScenePoint
 
 
 class CanvasPointer(Protocol):

@@ -12,7 +12,7 @@ lazy from PySide6.QtCore import Qt
 from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
-from winapi.shapes import Point, Rect, Size
+from winapi.shapes import Offset, Point, Rect, Size
 lazy from desktop_ui.components import typeface
 lazy from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
@@ -140,8 +140,8 @@ class KeymapCanvas(QtWidgets.QWidget):
 
 @dataclass(frozen=True, slots=True)
 class OverlayDrag:
-    start: Callable[[QtCore.QPoint], None]
-    move: Callable[[QtCore.QPoint], None]
+    start: Callable[[Point], None]
+    move: Callable[[Point], None]
     end: Callable[[], None]
 
 
@@ -169,14 +169,12 @@ class OverlayHandle(QtWidgets.QWidget):
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
-            cursor = self.read_cursor()
-            self.drag.start(QtCore.QPoint(cursor.x, cursor.y))
+            self.drag.start(self.read_cursor())
             self.grabMouse()
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         # The saved overlay position and native moves use physical pixels.
-        cursor = self.read_cursor()
-        self.drag.move(QtCore.QPoint(cursor.x, cursor.y))
+        self.drag.move(self.read_cursor())
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         self.releaseMouse()
@@ -222,7 +220,7 @@ class KeymapOverlay:
         self._handle.setWindowTitle("Workspace keyboard overlay handle")
         self._handle_frame = self._desktop.prepare(self._handle, click_through=False)
         self._position = self._desktop.load_position()
-        self._drag: QtCore.QPoint | None = None
+        self._drag: Offset | None = None
         self._view: tuple[Layer | None, str, tuple[Rect, ...]] | None = None
         self._highlights = KeyHighlights()
         self._highlight_timer: QtCore.QTimer | None = None
@@ -281,14 +279,13 @@ class KeymapOverlay:
         left = x - handle_width // 2
         self._desktop.move(self._handle_frame, Rect(left, y, left + handle_width, y + handle_height))
 
-    def _start_drag(self, point: QtCore.QPoint) -> None:
+    def _start_drag(self, point: Point) -> None:
         if self._position is not None and self._view is not None:
-            self._drag = point - QtCore.QPoint(self._position.x, self._position.y)
+            self._drag = point - self._position
 
-    def _drag_to(self, point: QtCore.QPoint) -> None:
+    def _drag_to(self, point: Point) -> None:
         if self._drag is not None:
-            value = point - self._drag
-            self._move(Point(value.x(), value.y()))
+            self._move(point - self._drag)
 
     def _finish_drag(self) -> None:
         if self._drag is None:

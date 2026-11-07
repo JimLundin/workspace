@@ -18,10 +18,9 @@ from desktop_ui.work_canvas_gestures import (
     PressBubble,
     PressConnector,
     RelationPreview,
-    ScenePoint,
     transition,
 )
-from desktop_ui.work_canvas_layout import Box
+from desktop_ui.work_canvas_layout import Box, ScenePoint
 
 
 def scene() -> GestureScene:

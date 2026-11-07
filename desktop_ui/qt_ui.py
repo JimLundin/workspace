@@ -78,7 +78,7 @@ class EventLoop:
             self.painted()
 
     def scale(self, work: Rect) -> float:
-        area = next((monitor.area for monitor in screen.monitors() if monitor.area.contains(work.left, work.top)), None)
+        area = next((monitor.area for monitor in screen.monitors() if work.top_left in monitor.area), None)
         target = next(
             (
                 display

@@ -1,6 +1,18 @@
 """Plain value types the bindings return. No ctypes: importable anywhere."""
 
 from dataclasses import dataclass, field
+from typing import overload
+
+
+@dataclass(frozen=True, slots=True)
+class Offset:
+    """How far one screen position lies from another, in physical pixels."""
+
+    dx: int
+    dy: int
+
+    def __neg__(self) -> Offset:
+        return Offset(-self.dx, -self.dy)
 
 
 @dataclass(frozen=True, slots=True)
@@ -9,6 +21,20 @@ class Point:
 
     x: int
     y: int
+
+    def __add__(self, offset: Offset) -> Point:
+        return Point(self.x + offset.dx, self.y + offset.dy)
+
+    @overload
+    def __sub__(self, other: Point) -> Offset: ...
+    @overload
+    def __sub__(self, other: Offset) -> Point: ...
+    def __sub__(self, other: Point | Offset) -> Offset | Point:
+        match other:
+            case Point(x=x, y=y):
+                return Offset(self.x - x, self.y - y)
+            case Offset(dx=dx, dy=dy):
+                return Point(self.x - dx, self.y - dy)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,8 +70,12 @@ class Rect:
     def size(self) -> Size:
         return Size(self.width, self.height)
 
-    def contains(self, x: int, y: int) -> bool:
-        return self.left <= x < self.right and self.top <= y < self.bottom
+    @property
+    def top_left(self) -> Point:
+        return Point(self.left, self.top)
+
+    def __contains__(self, point: Point) -> bool:
+        return self.left <= point.x < self.right and self.top <= point.y < self.bottom
 
 
 @dataclass(frozen=True, slots=True)

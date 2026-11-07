@@ -125,10 +125,9 @@ from desktop_ui.work_canvas_gestures import (
     PressBubble,
     PressConnector,
     RelationPreview,
-    ScenePoint,
     transition,
 )
-from desktop_ui.work_canvas_layout import Box, Measurements, Size, layout
+from desktop_ui.work_canvas_layout import Box, Measurements, ScenePoint, Size, layout
 from desktop_ui.work_canvas_view import CanvasCard, CanvasGroup, CanvasViewport
 from desktop_ui.work_window import WorkWindow
 lazy from desktop_ui.work_canvas_detail import CardDetail, NoteDetail, QuestionDetail, SourceDetail, UpdateDetail, WorkDetail

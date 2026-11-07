@@ -14,6 +14,28 @@ from contracts.work_canvas_model import CanvasViewState, Placement
 
 
 @dataclass(frozen=True, slots=True)
+class SceneOffset:
+    """How far one scene position lies from another."""
+
+    dx: float
+    dy: float
+
+    @property
+    def travel(self) -> float:
+        """The distance along the axes, as a pointer travels before a press becomes a drag."""
+        return abs(self.dx) + abs(self.dy)
+
+
+@dataclass(frozen=True, slots=True)
+class ScenePoint:
+    x: float
+    y: float
+
+    def __sub__(self, other: ScenePoint) -> SceneOffset:
+        return SceneOffset(self.x - other.x, self.y - other.y)
+
+
+@dataclass(frozen=True, slots=True)
 class Size:
     width: float
     height: float
@@ -25,6 +47,10 @@ class Box:
     y: float
     width: float
     height: float
+
+    def __contains__(self, point: ScenePoint) -> bool:
+        """Edges included: a press on a bubble's outline still lands on it."""
+        return self.x <= point.x <= self.x + self.width and self.y <= point.y <= self.y + self.height
 
     def overlaps(self, other: Box) -> bool:
         return (

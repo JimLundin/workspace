@@ -6,13 +6,7 @@ from typing import assert_never
 
 from contracts.work_canvas_edits import NestBubble, PlaceBubbles
 from contracts.work_canvas_model import Placement
-from desktop_ui.work_canvas_layout import Box
-
-
-@dataclass(frozen=True, slots=True)
-class ScenePoint:
-    x: float
-    y: float
+from desktop_ui.work_canvas_layout import Box, ScenePoint
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,23 +122,20 @@ class GestureResult:
     effect: GestureEffect = NoChange.NONE
 
 
-def contains(bounds: Box, point: ScenePoint) -> bool:
-    return bounds.x <= point.x <= bounds.x + bounds.width and bounds.y <= point.y <= bounds.y + bounds.height
-
-
 def hit(scene: GestureScene, point: ScenePoint, excluded: frozenset[str] = frozenset()) -> BubbleTarget | None:
     def area(bubble: BubbleTarget) -> float:
         return bubble.bounds.width * bubble.bounds.height
 
     return min(
-        (bubble for bubble in scene.bubbles if bubble.id not in excluded and contains(bubble.bounds, point)),
+        (bubble for bubble in scene.bubbles if bubble.id not in excluded and point in bubble.bounds),
         key=area,
         default=None,
     )
 
 
 def translated(drag: BubbleDrag, point: ScenePoint) -> tuple[Placement, ...]:
-    dx, dy = point.x - drag.origin.x, point.y - drag.origin.y
+    shift = point - drag.origin
+    dx, dy = shift.dx, shift.dy
     # Clamp the complete block, preserving the relative positions of children.
     if drag.positions:
         dx = max(-100000 - min(item.x for item in drag.positions), min(dx, 100000 - max(item.x for item in drag.positions)))
@@ -179,7 +170,7 @@ def transition(state: Gesture, event: GestureInput, scene: GestureScene) -> Gest
 def move(state: Gesture, travel: PointerMoved, scene: GestureScene) -> GestureResult:
     point, tolerance = travel.point, travel.tolerance
     match state:
-        case PendingDrag(drag=drag) if abs(point.x - drag.origin.x) + abs(point.y - drag.origin.y) < tolerance:
+        case PendingDrag(drag=drag) if (point - drag.origin).travel < tolerance:
             return GestureResult(state)
         case PendingDrag(drag=drag) | MovingBubble(drag=drag):
             target = hit(scene, point, drag.members)
