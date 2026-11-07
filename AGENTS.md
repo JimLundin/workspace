@@ -59,8 +59,15 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Use domain types with their bounds, not bare tuples: `desktop_ui.colour.Rgb`,
   not `tuple[int, int, int]`.
 - Prefer immutable values; mutate only inside the owner that needs it. Build
-  collections with comprehensions, generator expressions and tuples, not by
-  appending to a mutable container in a loop. A mapping that leaves its owner
+  collections with comprehensions, generator expressions and tuples, never by
+  appending to a mutable container in a loop.
+- No function requires mutable data. Parameters take immutable types (tuples,
+  `frozendict`, frozen dataclasses, or `Sequence`/`Mapping`/`Iterable`), never
+  `list`, `dict`, `set` or another mutable container.
+- Define types as frozen, slotted dataclasses wherever possible; only an owner
+  that genuinely holds changing state is a mutable class. Signatures and types
+  an external dependency dictates (Qt overrides, SDK callbacks, ctypes
+  structures) are exempt from these rules. A mapping that leaves its owner
   is a `frozendict`, replaced rather than mutated (see
   `link.server.Server._retained`). Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.

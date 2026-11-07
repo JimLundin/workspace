@@ -88,14 +88,28 @@ each check goes live in the architecture review only once its rule has no
 violations left, with no baseline of exceptions. Counted in production code on
 2026-11-07:
 
-1. **Enum-translating `match`** (37): a `match` whose cases are only enum members,
-   each returning or assigning one constant. Mechanical; first.
+1. **Enum-translating `match`** (22): a `match` whose cases are only enum members,
+   each returning or assigning one constant (a literal, a member or a
+   constructor of literals). Mechanical; first. Mappings lose Pyright's
+   exhaustiveness, so build them through one helper that fails at import
+   unless every member is present.
 2. **Bare numeric tuples** (33): `tuple[int, ...]`/`tuple[float, ...]` with fixed
    arity, mostly `desktop_ui.overlay`, `desktop_ui.window_layout` and `winapi`.
    The Win32 boundary shapes need domain types in `winapi.shapes`.
 3. **Append in a loop** (83 production, 15 tests). Includes the architecture
    review's deliberate worklists, which need a rewrite rather than an exception.
-4. **`kind` fields**: the migration below, then the check.
+4. **Mutable parameter types** (41 production, 26 tests): `list`/`dict`/`set`
+   and friends in a parameter annotation. Only dependency-dictated callbacks
+   (SDK hooks, `gc.callbacks`) are exempt.
+5. **Plain classes that could be frozen dataclasses** (about 86 candidates): a
+   class with no base that never assigns to `self` outside `__init__`. The check
+   must also reject mutable attribute types, since some candidates mutate a held
+   container instead.
+6. **`kind` fields**: the migration below, then the check.
+
+Items 3–5 were added by the user on 2026-11-07: no loop-appending, no function
+requiring mutable data, frozen dataclasses wherever possible; external
+dependencies are exempt.
 
 "Every test names its defect" can't be checked mechanically (1,103 tests carry
 the defect only in their names); it stays a review rule.
