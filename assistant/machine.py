@@ -47,13 +47,11 @@ class BrowserControl(Protocol):
     def close(self, *, keep_browser: bool = False) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeDesktop:
     """Capture for a worker's existing clipboard window, without a UI."""
 
-    __slots__ = ("owner",)
-
-    def __init__(self, owner: int) -> None:
-        self.owner = owner
+    owner: int
 
     def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
         size = fit(area.size, longest)

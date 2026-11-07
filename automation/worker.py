@@ -97,13 +97,12 @@ class OwnerCalls:
         return self.meeting_owner(operation)
 
 
+@dataclass(frozen=True, slots=True)
 class LiveLog:
     """A run's live presentation goes straight to the assistant's observer."""
 
-    __slots__ = ("publish", "run")
-
-    def __init__(self, publish: Callable[[RunRef, PresentationEvent], None], run: RunRef) -> None:
-        self.publish, self.run = publish, run
+    publish: Callable[[RunRef, PresentationEvent], None]
+    run: RunRef
 
     def step(self, message: str, /) -> None:
         self.publish(self.run, Progress(message))

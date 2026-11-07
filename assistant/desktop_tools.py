@@ -175,11 +175,10 @@ def _desktop_readback(_arguments: Mapping[str, Json], _result: str) -> Readback:
     return Readback(("all:window",))
 
 
+@dataclass(frozen=True, slots=True)
 class Desktop:
-    __slots__ = ("context", "session")
-
-    def __init__(self, session: Session, context: Callable[[], ContextSnapshot | None]) -> None:
-        self.session, self.context = session, context
+    session: Session
+    context: Callable[[], ContextSnapshot | None]
 
     def tools(self) -> tuple[Tool, ...]:
         return (

@@ -2,7 +2,7 @@
 
 import winreg
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 
 SETTINGS = r"Software\Microsoft\Windows\CurrentVersion\Notifications\Settings"
 BACKUP = r"Software\Workspace\NotificationBannerLease"
@@ -30,6 +30,7 @@ class Coverage:
     unavailable: int
 
 
+@dataclass(frozen=True, slots=True)
 class BannerPolicy:
     """Back up before changing banners; retain delivery, sound and center settings.
 
@@ -37,10 +38,9 @@ class BannerPolicy:
     value still held at zero by this lease, preserving later external changes.
     """
 
-    __slots__ = ("backup_path", "settings_path")
-
-    def __init__(self, *, settings_path: str = SETTINGS, backup_path: str = BACKUP) -> None:
-        self.settings_path, self.backup_path = settings_path, backup_path
+    _: KW_ONLY
+    settings_path: str = SETTINGS
+    backup_path: str = BACKUP
 
     def sync(self) -> Coverage:
         count = unavailable = 0

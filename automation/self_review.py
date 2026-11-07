@@ -243,13 +243,12 @@ def agent_lesson(record: ContextRecord | None) -> Preference | None:
             return None
 
 
+@dataclass(frozen=True, slots=True)
 class ReviewingRunner:
     """After each run, submit the review its signals call for and the previous day's review."""
 
-    __slots__ = ("clock", "runner")
-
-    def __init__(self, runner: Runner, clock: Callable[[], datetime]) -> None:
-        self.runner, self.clock = runner, clock
+    runner: Runner
+    clock: Callable[[], datetime]
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
         outcome = self.runner.run_work(claim, store, log, stop)

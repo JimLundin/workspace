@@ -1,6 +1,7 @@
 """Agent canvas capabilities with exact local-owner receipts."""
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Final
 
 from pydantic import ValidationError
@@ -102,11 +103,10 @@ def verified(command: CanvasCommand, output: str) -> ActionVerified | ActionNotA
             return ActionUncertain("The canvas owner did not confirm the requested edit.")
 
 
+@dataclass(frozen=True, slots=True)
 class Canvas:
-    __slots__ = ("request", "session")
-
-    def __init__(self, session: Session, request: Callable[[BridgeCommand], str]) -> None:
-        self.session, self.request = session, request
+    session: Session
+    request: Callable[[BridgeCommand], str]
 
     def tools(self) -> tuple[Tool, ...]:
         read, update = SPECS

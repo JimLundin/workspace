@@ -5,6 +5,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -23,13 +24,11 @@ class RecoveryGuard(Protocol):
     def close(self) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeRecoveryGuard:
     """Own the recovery subprocess and its bounded readiness read."""
 
-    __slots__ = ("process",)
-
-    def __init__(self, process: subprocess.Popen[bytes]) -> None:
-        self.process = process
+    process: subprocess.Popen[bytes]
 
     def ready(self) -> bool:
         # One worker publishes the bounded pipe read before signalling readiness.

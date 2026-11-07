@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+from dataclasses import dataclass
 
 lazy from agents import Agent, ModelSettings, OpenAIResponsesModel, RunConfig, Runner
 lazy from openai.types.shared import Reasoning
@@ -43,11 +44,9 @@ Return only the changed/new work definitions and their useful associations; leav
 """
 
 
+@dataclass(frozen=True, slots=True)
 class Correlator:
-    __slots__ = ("settings",)
-
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
+    settings: Settings
 
     def __call__(self, request: CorrelationInput, cancel: threading.Event) -> WorkPlan:
         return asyncio.run(self.review(request, cancel))

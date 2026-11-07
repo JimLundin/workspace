@@ -103,11 +103,11 @@ class Views:
     canvas: Callable[[QtWidgets.QApplication, WorkWindow, CanvasEdits], CanvasWindow] = _native_canvas_view
 
 
+@dataclass(frozen=True, slots=True)
 class WaitCursor:
     """The standard wait cursor from the canvas's first reveal until its first paint."""
 
-    def __init__(self, root: QtWidgets.QApplication) -> None:
-        self.root: QtWidgets.QApplication = root
+    root: QtWidgets.QApplication
 
     def show(self) -> None:
         self.root.setOverrideCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))

@@ -269,11 +269,9 @@ def _classify(tool: BrowserTool) -> Callable[[Mapping[str, Json]], Change | Obse
             return lambda arguments: Change(resources(arguments))
 
 
+@dataclass(frozen=True, slots=True)
 class Browser:
-    __slots__ = ("session",)
-
-    def __init__(self, session: Session) -> None:
-        self.session = session
+    session: Session
 
     def tools(self) -> tuple[Tool, ...]:
         return tuple(self._tool(declared) for declared in AGENT_TOOLS)

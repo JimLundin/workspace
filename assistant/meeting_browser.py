@@ -48,11 +48,9 @@ class BrowserPort(Protocol):
     def close(self) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class TeamsCalls:
-    __slots__ = ("browser",)
-
-    def __init__(self, browser: BrowserPort) -> None:
-        self.browser = browser
+    browser: BrowserPort
 
     def observe(self, cancel: threading.Event) -> Observation:
         """A complete read or unknown; a failed page must not look like leaving."""

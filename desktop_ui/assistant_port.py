@@ -7,7 +7,7 @@ is down. `LinkedAssistant` carries them over the link to the assistant process.
 
 import threading
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from contracts.canvas_activity import CanvasQuestion, CanvasRequest, CanvasRun
@@ -28,16 +28,14 @@ class AssistantPort(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
 class LinkedAssistant:
     """The assistant process, over the link's client end."""
 
-    __slots__ = ("_client",)
-
-    def __init__(self, client: Client) -> None:
-        self._client = client
+    client: Client
 
     def send(self, command: ToAssistant) -> bool:
-        return self._client.send(to_assistant(command))
+        return self.client.send(to_assistant(command))
 
 
 class RemoteCanvas:

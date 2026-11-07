@@ -162,13 +162,13 @@ class General:
         return prompt + "\n\n" + feed_agent_tools.INSTRUCTIONS + "\n" + personal_work_tools.INSTRUCTIONS + "\n" + work_canvas_tools.INSTRUCTIONS
 
 
+@dataclass(frozen=True, slots=True)
 class GeneralRun:
     """A general request continues its conversation with the request's desktop context and the whole desktop."""
 
-    __slots__ = ("context", "conversation", "tools")
-
-    def __init__(self, conversation: Conversation, context: RequestContext, tools: GeneralTools) -> None:
-        self.conversation, self.context, self.tools = conversation, context, tools
+    conversation: Conversation
+    context: RequestContext
+    tools: GeneralTools
 
     def toolset(self, agent: Agent) -> Toolset:
         return General(agent, lessons=self.tools.lessons, feed_request=self.tools.feed_request)

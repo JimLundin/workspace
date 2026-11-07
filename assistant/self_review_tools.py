@@ -12,7 +12,6 @@ from automation.actions import Change, Evidence, Observation
 from automation.context import ContextStore
 from automation.execution import WorkExecution
 from automation.self_review import TaskRecord, agent_lesson, describe_history, describe_history_page, lesson, worked_on
-from automation.store import TaskStore
 from contracts.context import Preference
 from contracts.task import ActionUncertain, ActionVerified, Task
 
@@ -51,16 +50,14 @@ _IDENTITY: Final = TypeAdapter(LessonIdentity)
 _LESSONS: Final = "lessons"
 
 
+@dataclass(frozen=True, slots=True)
 class SelfReviewTools:
     """Reads the task journal across tasks and writes only the agent's own lessons."""
 
-    __slots__ = ("lessons", "session", "store", "task_id")
-
-    def __init__(self, session: Session, work: WorkExecution, lessons: ContextStore) -> None:
-        self.session, self.lessons = session, lessons
-        self.store: TaskStore = work.store
-        self.task_id = work.claim.task.id
-        """The running task, which each saved lesson cites."""
+    session: Session
+    work: WorkExecution
+    """The running task, which each saved lesson cites, and the journal it reads."""
+    lessons: ContextStore
 
     def tools(self) -> tuple[Tool, ...]:
         return (
@@ -105,12 +102,12 @@ class SelfReviewTools:
         if request.task_id:
             if request.day or request.offset:
                 raise ArgumentError("task_id detail cannot be combined with day or offset.")
-            found = self.store.get(request.task_id)
+            found = self.work.store.get(request.task_id)
             if found is None:
                 raise ArgumentError(f"there's no task {request.task_id}.")
-            record = TaskRecord(found, self.store.actions(found.id, limit=100), self.store.responses(found.id))
+            record = TaskRecord(found, self.work.store.actions(found.id, limit=100), self.work.store.responses(found.id))
             return describe_history((record,)) + "\nDetail coverage: newest 100 actions; current-goal answers."
-        tasks: tuple[Task, ...] = self.store.list_tasks(limit=1_000)
+        tasks: tuple[Task, ...] = self.work.store.list_tasks(limit=1_000)
         coverage = (
             "Scan coverage: newest 1000 journal tasks; older tasks may exist outside this scan."
             if len(tasks) == 1_000
@@ -135,7 +132,7 @@ class SelfReviewTools:
         return self.session.effect(args.operation, read)
 
     def save_lesson(self, args: Args, request: LessonArguments) -> Output:
-        record = lesson(request.name, request.rule, self.task_id, time.time())
+        record = lesson(request.name, request.rule, self.work.claim.task.id, time.time())
 
         def save() -> Output:
             existing = self.lessons.get(record.id)

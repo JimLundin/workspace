@@ -95,11 +95,9 @@ def _operation(name: str, request: CaptureArguments) -> MeetingOperation:
             raise ValueError(f"The meeting tool {name} has no operation.")
 
 
+@dataclass(frozen=True, slots=True)
 class MeetingCapture:
-    __slots__ = ("session",)
-
-    def __init__(self, session: Session) -> None:
-        self.session = session
+    session: Session
 
     def tools(self) -> tuple[Tool, ...]:
         return tuple(_capture_tool(spec, self.capture) for spec in CAPTURE_SPECS)

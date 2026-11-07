@@ -8,6 +8,7 @@ the desktop process; states are kept and replayed when a desktop connects.
 import queue
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Protocol
 
 from contracts.agent_session import Snapshot
@@ -24,20 +25,18 @@ class DesktopPort(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
 class LinkedDesktop:
     """The desktop process, over the link's server end."""
 
-    __slots__ = ("_server",)
-
-    def __init__(self, server: Server) -> None:
-        self._server = server
+    server: Server
 
     def send(self, message: ToDesktop) -> None:
-        self._server.send(to_desktop(message), state_key(message))
+        self.server.send(to_desktop(message), state_key(message))
 
     @property
     def connected(self) -> bool:
-        return self._server.connected
+        return self.server.connected
 
 
 class ViewThread:
@@ -62,20 +61,19 @@ class ViewThread:
         self._thread.join(timeout=5)
 
 
+@dataclass(frozen=True, slots=True)
 class SessionView:
     """The agent session's view: its snapshots go to the desktop and to the session's other observers."""
 
-    __slots__ = ("_observe", "_port")
-
-    def __init__(self, port: DesktopPort, observe: Callable[[Snapshot], object]) -> None:
-        self._port, self._observe = port, observe
+    port: DesktopPort
+    observe: Callable[[Snapshot], object]
 
     def render(self, state: Snapshot) -> None:
-        self._observe(state)
-        self._port.send(SessionChanged(state))
+        self.observe(state)
+        self.port.send(SessionChanged(state))
 
     def show(self, *, focus: bool = False) -> None:
-        self._port.send(ShowWork(focus=focus))
+        self.port.send(ShowWork(focus=focus))
 
     def close(self) -> None:
         pass

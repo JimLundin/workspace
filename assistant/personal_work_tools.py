@@ -1,6 +1,7 @@
 """Agent contracts for the persistent My work catalog."""
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Final
 
 from pydantic import ValidationError
@@ -182,11 +183,10 @@ def _classify(spec: ToolSpec) -> Callable[[Mapping[str, Json]], Classification]:
             raise ValueError(f"The personal work tool {spec.name} has no classification.")
 
 
+@dataclass(frozen=True, slots=True)
 class PersonalWork:
-    __slots__ = ("request", "session")
-
-    def __init__(self, session: Session, request: Callable[[BridgeCommand], str]) -> None:
-        self.session, self.request = session, request
+    session: Session
+    request: Callable[[BridgeCommand], str]
 
     def tools(self) -> tuple[Tool, ...]:
         return tuple(Tool(spec, self.catalog, _classify(spec), Display.PRIVATE) for spec in SPECS)

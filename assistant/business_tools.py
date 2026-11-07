@@ -339,11 +339,9 @@ WEB_TOOLS: Final = (
 )
 
 
+@dataclass(frozen=True, slots=True)
 class Business:
-    __slots__ = ("session",)
-
-    def __init__(self, session: Session) -> None:
-        self.session = session
+    session: Session
 
     def tools(self) -> tuple[Tool, ...]:
         return tuple(declared.tool(self.session) for declared in WEB_TOOLS)

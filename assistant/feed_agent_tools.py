@@ -1,6 +1,7 @@
 """The feed tool family: current proposals and feedback."""
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Final
 
 from pydantic import ValidationError
@@ -159,11 +160,10 @@ SPECS: Final = (
 )
 
 
+@dataclass(frozen=True, slots=True)
 class Feed:
-    __slots__ = ("request", "session")
-
-    def __init__(self, session: Session, request: Callable[[BridgeCommand], str]) -> None:
-        self.session, self.request = session, request
+    session: Session
+    request: Callable[[BridgeCommand], str]
 
     def tools(self) -> tuple[Tool, ...]:
         read, *changes = SPECS

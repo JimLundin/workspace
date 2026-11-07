@@ -30,11 +30,11 @@ _QUESTION: Final = TypeAdapter(QuestionArguments)
 _RECONCILE: Final = TypeAdapter(ReconcileArguments)
 
 
+@dataclass(frozen=True, slots=True)
 class TaskTools:
-    __slots__ = ("clock", "session", "work")
-
-    def __init__(self, session: Session, work: WorkExecution, clock: Callable[[], datetime]) -> None:
-        self.session, self.work, self.clock = session, work, clock
+    session: Session
+    work: WorkExecution
+    clock: Callable[[], datetime]
 
     def tools(self, proof: Callable[[str], Proof], display: Display) -> tuple[Tool, ...]:
         """`proof` is each tool family's reconciliation rule; `display` applies to the task's own records."""

@@ -125,13 +125,13 @@ class WorkingContext:
         )
 
 
+@dataclass(frozen=True, slots=True)
 class FeedWork:
     """Read existing stores; no second task store, automatic preferences or desktop persistence."""
 
-    __slots__ = ("activity", "context", "tasks")
-
-    def __init__(self, tasks: TaskStore, context: ContextStore, activity: Callable[[], ContextSnapshot]) -> None:
-        self.tasks, self.context, self.activity = tasks, context, activity
+    tasks: TaskStore
+    context: ContextStore
+    activity: Callable[[], ContextSnapshot]
 
     def read(self, board: Board, query: str, now: float) -> WorkingContext:
         # Query, board and time bind one review: linked work is fetched even when

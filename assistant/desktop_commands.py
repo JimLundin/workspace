@@ -7,6 +7,7 @@ in-process with real owners.
 """
 
 import sqlite3
+from dataclasses import dataclass
 from typing import Protocol, assert_never
 
 from assistant.agent_window import AgentWindow
@@ -61,15 +62,15 @@ class Controls(Protocol):
     def problem(self, message: str) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class DesktopCommands:
-    __slots__ = ("_canvas", "_controls", "_desktop")
-
-    def __init__(self, canvas: WorkCanvas, desktop: DesktopPort, controls: Controls) -> None:
-        self._canvas, self._desktop, self._controls = canvas, desktop, controls
+    canvas: WorkCanvas
+    desktop: DesktopPort
+    controls: Controls
 
     def handle(self, message: ToAssistant) -> None:
         """Carry out one command; an owner's OSError, ValueError or sqlite3.Error is the caller's to report."""
-        controls = self._controls
+        controls = self.controls
         match message:
             case UseTool(tool=tool):
                 controls.use_tool(tool)
@@ -79,22 +80,22 @@ class DesktopCommands:
                 controls.work_command(command)
             case EditCanvas(edit=edit):
                 try:
-                    self._canvas.commit(edit)
+                    self.canvas.commit(edit)
                 except OSError, ValueError, sqlite3.Error:
                     # The desktop applied the edit to its copy; give it back the record.
-                    self._desktop.send(CanvasChanged(self._canvas.publication()))
+                    self.desktop.send(CanvasChanged(self.canvas.publication()))
                     raise
             case StartRun(run=run):
-                match self._canvas.start(run):
+                match self.canvas.start(run):
                     case NotQueued(reason=reason):
-                        self._desktop.send(RunRefused(run, reason))
+                        self.desktop.send(RunRefused(run, reason))
                     case Queued():
                         pass
             case ContinueWork(work_id=work_id):
                 self.continue_work(work_id)
             case AnswerCanvas(request=request, answer=answer):
-                if not self._canvas.answer(request, answer, self.deliver_answer):
-                    self._desktop.send(ReplyFailed())
+                if not self.canvas.answer(request, answer, self.deliver_answer):
+                    self.desktop.send(ReplyFailed())
             case SelectAttention(request=request):
                 if controls.session is not None:
                     controls.session.select_attention(request)
@@ -110,27 +111,27 @@ class DesktopCommands:
                 assert_never(message)
 
     def continue_work(self, work_id: str) -> None:
-        match self._canvas.continue_work(work_id):
+        match self.canvas.continue_work(work_id):
             case ResumeTask(task_id=task):
-                self._controls.resume(task)
+                self.controls.resume(task)
             case Investigating.ALREADY:
-                self._desktop.send(CanvasStatus("This work already has an investigation in progress."))
+                self.desktop.send(CanvasStatus("This work already has an investigation in progress."))
             case NotQueued(reason=reason):
-                self._desktop.send(CanvasStatus("Could not queue the investigation: " + reason))
+                self.desktop.send(CanvasStatus("Could not queue the investigation: " + reason))
             case Queued():
                 pass
 
     def deliver_answer(self, request: CanvasRequest, answer: TextAnswer) -> bool:
         """A canvas question's answer goes to the conversation that asked it, or to its task."""
-        session = self._controls.session
+        session = self.controls.session
         match delivery(request, answer, session.snapshot().identity if session is not None else None):
             case ToSession(session_id=identity, request_id=key):
                 return session is not None and session.respond(key, answer, expected_session=identity)
             case ToTask(command=command):
                 try:
-                    self._controls.work_command(command)
+                    self.controls.work_command(command)
                 except (OSError, ValueError) as error:
-                    self._controls.problem(str(error))
+                    self.controls.problem(str(error))
                     return False
                 return True
             case Undeliverable.STALE:

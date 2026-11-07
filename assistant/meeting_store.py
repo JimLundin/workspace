@@ -9,6 +9,7 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from dataclasses import KW_ONLY, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Final
@@ -57,23 +58,15 @@ class BacklogFullError(OSError):
     """The last block was saved, but capture must stop before storing another."""
 
 
+@dataclass(frozen=True, slots=True)
 class MeetingStore:
-    __slots__ = ("connect", "folder", "max_pending_bytes", "publish")
-
-    def __init__(
-        self,
-        folder: Path,
-        *,
-        max_pending_bytes: int = MAX_PENDING_BYTES,
-        publish: Callable[[Path, Path], None] = _replace_transcript,
-        connect: journal.Connect = journal.open_journal,
-    ) -> None:
-        # Location, storage bound, publication and connection lifetime are the
-        # cohesive journal policy. Readers and writers use the same interface.
-        self.connect = connect
-        self.folder = folder
-        self.max_pending_bytes = max_pending_bytes
-        self.publish = publish
+    # Location, storage bound, publication and connection lifetime are the
+    # cohesive journal policy. Readers and writers use the same interface.
+    folder: Path
+    _: KW_ONLY
+    max_pending_bytes: int = MAX_PENDING_BYTES
+    publish: Callable[[Path, Path], None] = _replace_transcript
+    connect: journal.Connect = journal.open_journal
 
     @property
     def transcript(self) -> Path:
@@ -323,19 +316,14 @@ class MeetingStore:
             temporary.unlink(missing_ok=True)
 
 
+@dataclass(frozen=True, slots=True)
 class MeetingArchive:
     """Create and reopen journals with the same storage and publication policy."""
 
-    __slots__ = ("max_pending_bytes", "publish", "root")
-
-    def __init__(
-        self,
-        root: Path,
-        *,
-        max_pending_bytes: int = MAX_PENDING_BYTES,
-        publish: Callable[[Path, Path], None] = _replace_transcript,
-    ) -> None:
-        self.root, self.max_pending_bytes, self.publish = root, max_pending_bytes, publish
+    root: Path
+    _: KW_ONLY
+    max_pending_bytes: int = MAX_PENDING_BYTES
+    publish: Callable[[Path, Path], None] = _replace_transcript
 
     def create(self, source: AudioSource, title: str = "Meeting") -> MeetingStore:
         return MeetingStore.create(self.root, source, title, max_pending_bytes=self.max_pending_bytes, publish=self.publish)

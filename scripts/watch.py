@@ -77,13 +77,12 @@ def preview_change(root: Path, paths: frozenset[Path]) -> bool:
     )
 
 
+@dataclass(frozen=True, slots=True)
 class Events:
     """Watchdog's dispatch adapter; the observer thread only enqueues observations."""
 
-    __slots__ = ("pending", "root")
-
-    def __init__(self, root: Path, pending: queue.SimpleQueue[Path]) -> None:
-        self.root, self.pending = root, pending
+    root: Path
+    pending: queue.SimpleQueue[Path]
 
     def dispatch(self, event: FileSystemEvent) -> None:
         if event.event_type not in ("created", "modified", "moved", "deleted"):
