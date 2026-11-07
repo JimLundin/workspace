@@ -92,9 +92,11 @@ violations left, with no baseline of exceptions. Counted in production code on
    built with `contracts.members.every_member`, which fails at import unless
    every member is present; the architecture review's `enum-translation` rule
    now rejects new ones.
-2. **Bare numeric tuples** (33): `tuple[int, ...]`/`tuple[float, ...]` with fixed
-   arity, mostly `desktop_ui.overlay`, `desktop_ui.window_layout` and `winapi`.
-   The Win32 boundary shapes need domain types in `winapi.shapes`.
+2. **Bare numeric tuples**: done 2026-11-07. `winapi.shapes` gained `Point`,
+   `Size` and `Offset`; single-owner shapes got their own frozen records. The
+   review's `bare-tuple` rule rejects new ones in production code; 20 remain in
+   test fixtures. Adding `Point` to the hook costs about 0.5 µs per key; the
+   engine benchmark is unchanged.
 3. **Append in a loop** (83 production, 15 tests). Includes the architecture
    review's deliberate worklists, which need a rewrite rather than an exception.
 4. **Mutable parameter types** (41 production, 26 tests): `list`/`dict`/`set`
@@ -105,13 +107,23 @@ violations left, with no baseline of exceptions. Counted in production code on
    must also reject mutable attribute types, since some candidates mutate a held
    container instead.
 6. **`kind` fields**: the migration below, then the check.
+7. **Operators on domain types** (user, 2026-11-07): screen `Point`/`Offset`/`Rect`
+   and canvas `ScenePoint`/`Box` have theirs. Still hand-written: the bar
+   layout's `Box` scaled to a screen `Rect` (`island_surface`, `island_layout`),
+   `Spot` spans shifted by `x + shift`, and the canvas drag's clamp of
+   `Placement` coordinates.
+8. **Enums over their values** (user, 2026-11-07, a pattern being tried):
+   `canvas_look.Role` is the pilot. The navigation log's `Cause` literal (six
+   causes, of which `navigation.Source` is three) would be better as one enum.
+   Review each `every_member` table: keep it where members share a value or
+   another layer owns the values.
+9. **Every test names its defect**: checkable after all, as a `# Defect:`
+   comment at the top of the body. 638 of 1,128 tests lack one; backfilling
+   means judging each, and deleting a test that guards no plausible defect.
 
-Items 3–5 were added by the user on 2026-11-07: no loop-appending, no function
-requiring mutable data, frozen dataclasses wherever possible; external
-dependencies are exempt.
-
-"Every test names its defect" can't be checked mechanically (1,103 tests carry
-the defect only in their names); it stays a review rule.
+Items 3–5 and 7–8 were added by the user on 2026-11-07: no loop-appending, no
+function requiring mutable data, frozen dataclasses wherever possible (external
+dependencies are exempt), operators on domain types, enums over their values.
 
 Then replace the enum `kind` fields:
 

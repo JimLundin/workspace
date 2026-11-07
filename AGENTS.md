@@ -58,8 +58,19 @@ their tests. Legacy data and backwards compatibility are not requirements.
   returns one constant per member. Build a total table with
   `contracts.members.every_member`, which fails at import unless it names every
   member; the architecture review enforces the rule.
+- When the enum's own module owns the values and each member has its own, make
+  the values the members: `canvas_look.Role.TITLE = RoleType(14.0, 600, -0.084)`,
+  read as `role.value`. Members that would share a value collapse into aliases,
+  so keep a table for those and for values another layer owns (UI labels for a
+  `winapi` enum).
 - Use domain types with their bounds, not bare tuples: `desktop_ui.colour.Rgb`,
-  not `tuple[int, int, int]`.
+  `winapi.shapes.Point` and `Size`, not `tuple[int, int, int]`. The architecture
+  review rejects a fixed tuple of only ints and floats.
+- Give domain types the operators their arithmetic needs, so domain code reads
+  natively: `point - origin` is a `winapi.shapes.Offset`, `point + offset` a
+  `Point`, and `point in rect` replaces a `contains` call. Keep each coordinate
+  space its own types (screen pixels, canvas scene, bar layout) and cross spaces
+  with a named method, never an operator.
 - Prefer immutable values; mutate only inside the owner that needs it. Build
   collections with comprehensions, generator expressions and tuples, never by
   appending to a mutable container in a loop.
