@@ -83,8 +83,24 @@ or quality review wherever a rule can be checked mechanically:
   - every test names its defect.
 - **No pip.** uv manages every environment (`pyproject.toml` + `uv.lock`).
 
-Then replace the enum `kind` fields:
+Written into AGENTS.md on 2026-11-07. The user chose fix first, then enforce:
+each check goes live in the architecture review only once its rule has no
+violations left, with no baseline of exceptions. Counted in production code on
+2026-11-07:
 
+1. **Enum-translating `match`** (37): a `match` whose cases are only enum members,
+   each returning or assigning one constant. Mechanical; first.
+2. **Bare numeric tuples** (33): `tuple[int, ...]`/`tuple[float, ...]` with fixed
+   arity, mostly `desktop_ui.overlay`, `desktop_ui.window_layout` and `winapi`.
+   The Win32 boundary shapes need domain types in `winapi.shapes`.
+3. **Append in a loop** (83 production, 15 tests). Includes the architecture
+   review's deliberate worklists, which need a rewrite rather than an exception.
+4. **`kind` fields**: the migration below, then the check.
+
+"Every test names its defect" can't be checked mechanically (1,103 tests carry
+the defect only in their names); it stays a review rule.
+
+Then replace the enum `kind` fields:
 
 The `kind: Literal["…"]` fields (`TextAnswer`, `TaskRequest`, `SessionRequest`
 and about 60 others) are not the problem. Each is already its own frozen type;
@@ -107,5 +123,10 @@ problem is a single type whose enum `kind` decides which values are valid:
 - `assistant.feed_history` (`kind: DecisionKind`);
 - `assistant.communications` (`kind: UpdateKind`);
 - `assistant.browser_host` (`kind: str`).
+- also found by the scan, to sort into migrations or plain display tags:
+  `assistant.feed_triage.Solution` (`SolutionKind`),
+  `desktop_ui.canvas_toolbar.Bubble`, `desktop_ui.keymap.Cap`,
+  `desktop_ui.navigation_log.Entry` (each `Kind`) and
+  `diagnostics.FailureInfo` (`kind: str`).
 
 Take one type per session, `WorkSource` first.

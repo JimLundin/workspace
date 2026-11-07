@@ -49,10 +49,21 @@ their tests. Legacy data and backwards compatibility are not requirements.
   suppressions in production code. For a poorly typed dependency, add a stub
   for only the API we use under `typings/`. Tests may cast fixtures narrowly.
 - Model alternatives as unions of frozen, slotted dataclasses (or `Enum` without
-  payloads) and handle them with `match` and `assert_never`.
-- Prefer immutable values; mutate only inside the owner that needs it. Put
-  decisions in pure functions and keep threads, files, network and UI in the
-  modules that own those effects.
+  payloads) and handle them with `match` and `assert_never`. Make invalid states
+  unconstructible: no `kind` field whose enum decides which other values are
+  valid; give each kind its own type. A constant `Literal` tag that tells a
+  stored union apart in JSON is fine.
+- Translate an enum to values with a `Final[frozendict[Enum, Value]]` or a value
+  on its members (see `desktop_ui.icons.COLOURS`), not a `match` that only
+  returns one constant per member.
+- Use domain types with their bounds, not bare tuples: `desktop_ui.colour.Rgb`,
+  not `tuple[int, int, int]`.
+- Prefer immutable values; mutate only inside the owner that needs it. Build
+  collections with comprehensions, generator expressions and tuples, not by
+  appending to a mutable container in a loop. A mapping that leaves its owner
+  is a `frozendict`, replaced rather than mutated (see
+  `link.server.Server._retained`). Put decisions in pure functions and keep
+  threads, files, network and UI in the modules that own those effects.
 - Use direct typed attributes, not `getattr`/`hasattr`.
 - Use absolute imports from the owning module, at module level. Use `lazy import`
   to defer loading. No re-exports or cosmetic aliases.
