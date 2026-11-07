@@ -10,35 +10,74 @@ the same way and is shown here.
 
 import contextlib
 import os
+import queue
 import subprocess
 import threading
 import time
 import traceback
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from typing import Final, assert_never
 
 import components
 import launch
 import usage
+from cell import Cell
 from config import APPS
 from contracts.desktop_link import (
-    MicLevel,
-    Notify,
     Record,
-    RecordingChanged,
-    SessionChanged,
-    ToDesktop,
     UseTool,
-    VoiceChanged,
     WireError,
     from_assistant,
 )
-from contracts.recording_state import RecordingAction
-from contracts.status import State
 from desktop_ui import desktop_controls
 from desktop_ui.assistant_port import UNAVAILABLE, AssistantPort, LinkedAssistant
-from desktop_ui.keymap import indicator_text
-from desktop_ui.navigation import AppKey, Order, Source, SwitcherPick, keyed
+from desktop_ui.desktop_control import (
+    AssistantSaid,
+    Beep,
+    Chord,
+    Connection,
+    Controlled,
+    DesktopState,
+    Effect,
+    Event,
+    Flash,
+    Fold,
+    Indicate,
+    Indicated,
+    Launch,
+    LayoutReported,
+    LayoutShown,
+    Log,
+    MenuChosen,
+    MenuRequested,
+    Navigate,
+    OpenInbox,
+    OpenLogs,
+    OpenUsage,
+    OverlayEnabled,
+    OverlayToggled,
+    PressedKeys,
+    Problem,
+    Quit,
+    RecordUse,
+    RestoreTray,
+    Send,
+    ShowCanvas,
+    ShowKeymap,
+    ShowMenu,
+    ShowOverlay,
+    ShowViews,
+    SpecLoaded,
+    SwitchWindows,
+    ToggleLayout,
+    ToggleTaskbar,
+    TrayNotify,
+    TrayShow,
+    transition,
+    tray_state,
+)
+from desktop_ui.navigation import Source, SwitcherPick
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.report import write_report
@@ -46,7 +85,6 @@ from desktop_ui.tray import Tray
 from desktop_ui.ui import Ui, Views
 from desktop_ui.ui_spec import SpecError
 from link.client import Client, Status
-from miryoku.layout import Layer
 from protocol import (
     WM_CHORD,
     WM_INDICATOR,
@@ -55,13 +93,7 @@ from protocol import (
     WM_QUERY_LAYOUT_STATE,
     WM_REQUEST,
     WM_WINDOWS_KEY_TAP,
-    App,
-    LayoutState,
-    Request,
-    Side,
     Tool,
-    decode_indicator,
-    owner,
 )
 from usage import DIRECTORY
 from winapi import screen, shell, system, windows
@@ -73,6 +105,8 @@ LOCK_NAME: Final = "Local\\workspace-desktop"
 LOG: Final = DIRECTORY / "desktop.log"
 WM_TRAY: Final = system.WM_APP + 20
 WM_SHOW_MENU: Final = 0x8056
+WM_EVENTS: Final = system.WM_APP + 22
+"""Any thread -> Qt thread: events are waiting in the inbox."""
 
 
 def log(text: str) -> None:
@@ -97,281 +131,256 @@ class Offline:
         return False
 
 
+def window_event(message: int, wparam: int, lparam: int) -> Event | None:
+    """What a message to the control window reports."""
+    if message == shell.TASKBAR_CREATED:
+        return RestoreTray()
+    if message == WM_SHOW_MENU or (message == WM_TRAY and lparam in (system.WM_LBUTTONUP, system.WM_RBUTTONUP)):
+        return MenuRequested()
+    if message in (WM_KEY_STATE, WM_REQUEST, desktop_controls.WM_TOOL_CHOSEN):
+        return Controlled(desktop_controls.control_event(desktop_controls.WindowInput(message, wparam, lparam), APPS))
+    if message == WM_INDICATOR:
+        return Indicated(wparam)
+    if message == WM_LAYOUT_STATE:
+        return LayoutReported(wparam)
+    if message == WM_CHORD:
+        return Chord(held=bool(wparam))
+    if message == WM_WINDOWS_KEY_TAP:
+        return ToggleTaskbar()
+    if message == system.WM_CLOSE:  # Quit Workspace, or a test
+        return Quit()
+    return None
+
+
 @dataclass(frozen=True, slots=True)
-class Shown:
-    """What the assistant last published that the tray and its menu read."""
+class Inbox:
+    """The Qt thread's events: any thread reports one, and the control window's procedure folds them.
 
-    state: State = State.LAYOUT_OFF
-    capturing: bool = False
-    agent_running: bool = False
-    connected: bool = False
+    Qt's own loop dispatches the control window's messages, so the procedure is
+    where events reach the application. Events reported before `connect` wait
+    in the queue; connecting is the one late binding, at that boundary.
+    """
+
+    window: shell.AppWindow
+    pending: queue.SimpleQueue[Event]
+    _handler: Cell[Callable[[Event], None] | None]
+
+    @classmethod
+    def open(cls, window: components.Window) -> Inbox:
+        pending = queue.SimpleQueue[Event]()
+        handler: Cell[Callable[[Event], None] | None] = Cell(None)
+
+        def procedure(hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
+            if message == WM_EVENTS:
+                _drain(pending, handler)
+                return 0
+            if (event := window_event(message, wparam, lparam)) is None:
+                return None
+            pending.put(event)
+            system.post_message(hwnd, WM_EVENTS, 0, 0)
+            return 0
+
+        return cls(shell.AppWindow.create(window.title, procedure, class_name=window.window_class), pending, handler)
+
+    def report(self, event: Event) -> None:
+        """Any thread: queue `event` for the Qt thread."""
+        self.pending.put(event)
+        system.post_message(self.window.handle, WM_EVENTS, 0, 0)
+
+    def connect(self, handler: Callable[[Event], None]) -> None:
+        """Qt thread: fold queued and future events with `handler`."""
+        self._handler.set(handler)
+        system.post_message(self.window.handle, WM_EVENTS, 0, 0)
 
 
+def _drain(pending: queue.SimpleQueue[Event], handler: Cell[Callable[[Event], None] | None]) -> None:
+    if (handle := handler.get()) is None:
+        return
+    while True:
+        try:
+            event = pending.get_nowait()
+        except queue.Empty:
+            return
+        try:
+            handle(event)
+        except Exception:
+            log(traceback.format_exc())
+
+
+def received(inbox: Inbox, frame: bytes) -> None:
+    """Link thread: the assistant's message, for the Qt thread."""
+    try:
+        message = from_assistant(frame)
+    except WireError as error:
+        log(f"Refused a frame from the assistant: {error}")
+        return
+    inbox.report(AssistantSaid(message))
+
+
+@dataclass(frozen=True, slots=True)
 class DesktopApp:
-    __slots__ = ("assistant", "layout", "level", "overlay", "shown", "tray", "tray_spec", "ui", "window")
+    """The desktop's views and tray, and the Qt-thread fold of their events into effects."""
 
-    def __init__(self, ui: Ui, assistant: AssistantPort, *, window: components.Window = components.DESKTOP.window) -> None:
-        self.ui, self.assistant = ui, assistant
-        self.window = shell.AppWindow.create(window.title, self.on_message, class_name=window.window_class)
-        self.tray = Tray.add(self.window.handle, WM_TRAY)
-        self.tray_spec: desktop_controls.TraySpec = desktop_controls.tray(reload=False)
-        self.overlay = OverlayState(enabled=load_enabled())
-        self.layout: LayoutState | None = None
-        self.shown = Shown()
-        self.level: float | None = None
-        """The microphone's latest level from the assistant, for the bar's trace."""
-        self.ui.desktop_overlay(enabled=self.overlay.enabled)
+    inbox: Inbox
+    ui: Ui
+    assistant: AssistantPort
+    tray: Tray
+    state: Cell[DesktopState]
+
+    @classmethod
+    def compose(cls, ui: Ui, assistant: AssistantPort, inbox: Inbox) -> DesktopApp:
+        state = Cell(DesktopState(overlay=OverlayState(enabled=load_enabled())))
+        app = cls(inbox, ui, assistant, Tray.add(inbox.window.handle, WM_TRAY), state)
+        ui.desktop_overlay(enabled=state.get().overlay.enabled)
+        inbox.connect(app.handle)
+        return app
 
     def start(self) -> None:
         """Qt thread: the bar and the canvas's controller, then the layout's state, then readiness."""
+        report, state = self.inbox.report, self.state
         self.ui.desktop(
-            record=self.record,
-            stop=lambda: self.use(Tool.STOP),
-            overlay=self.toggle_overlay,
-            menu=self.request_menu,
-            audio_level=lambda: self.level,
-            tool=self.choose_tool,
+            record=lambda action: report(Send(Record(action))),
+            stop=lambda: report(Send(UseTool(Tool.STOP))),
+            overlay=lambda: report(OverlayToggled()),
+            menu=lambda: report(MenuRequested()),
+            audio_level=lambda: state.get().level,
+            tool=lambda tool: report(Controlled(desktop_controls.ChosenTool(tool))),
         )
         self.ui.work_window().prepare()
         if (layout := windows.find(components.LAYOUT.window.title)) is not None:
             system.post_message(layout, WM_QUERY_LAYOUT_STATE, 0, 0)
-        self.show_tray()
+        self.perform(TrayShow(tray_state(state.get().shown)))
         components.ready()
 
-    # ---- the assistant -----------------------------------------------------------------
+    # ---- the fold ----------------------------------------------------------------------
 
-    def received(self, frame: bytes) -> None:
-        """Link thread: the assistant's message, shown on the Qt thread."""
-        try:
-            message = from_assistant(frame)
-        except WireError as error:
-            log(f"Refused a frame from the assistant: {error}")
-            return
-        self.ui.post(lambda _: self.show(message))
+    def handle(self, event: Event) -> None:
+        """Qt thread: fold `event`, perform its effects in order, and fold what they report."""
+        state, effects = transition(self.state.get(), event)
+        self.state.set(state)
+        for effect in effects:
+            for reported in self.perform(effect):
+                self.handle(reported)
 
-    def status(self, status: Status) -> None:
-        """Link thread: the assistant came or went."""
-        self.ui.post(lambda _: self.connection(status))
-
-    def connection(self, status: Status) -> None:
-        match status:
-            case Status.CONNECTED:
-                self.shown = replace(self.shown, connected=True)
-            case Status.DISCONNECTED:
-                self.shown = replace(self.shown, connected=False, agent_running=False)
-                self.level = None
+    def perform(self, effect: Effect) -> Iterator[Event]:
+        """Carry out `effect`; what it reports back (a menu choice, a refusal) is folded next."""
+        match effect:
+            case Fold(event):
+                yield event
+            case Send(command):
+                if not self.assistant.send(command):
+                    yield Problem(UNAVAILABLE)
+            case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep():
+                self._tray(effect)
+            case ShowViews() | Navigate() | OpenInbox() | SwitchWindows() | Chord() | ToggleTaskbar() | ShowKeymap() | ShowCanvas():
+                self._views(effect)
+            case ShowOverlay() | OverlayEnabled() | Flash() | LayoutShown() | PressedKeys() | Indicate() | ToggleLayout():
+                yield from self._keys(effect)
+            case ShowMenu():
+                yield from self._menu(effect)
+            case RecordUse() | Launch() | OpenUsage() | OpenLogs():
+                self._launch(effect)
+            case Quit():
+                self.quit()
             case _:
-                assert_never(status)
-        self.show_tray()
+                assert_never(effect)
 
-    def show(self, message: ToDesktop) -> None:
-        """Qt thread: what the tray reads, then the views."""
-        match message:
-            case SessionChanged(session=session):
-                self.shown = replace(self.shown, agent_running=session.busy)
-            case VoiceChanged(state=state):
-                self.shown = replace(self.shown, state=state)
-            case RecordingChanged(recording=recording):
-                self.shown = replace(self.shown, capturing=recording.capturing)
-            case MicLevel(level=level):
-                self.level = level
-            case Notify(title=title, text=text, warning=warning):
-                if warning:
-                    system.beep(system.MB_ICONEXCLAMATION)
+    def _tray(self, effect: RestoreTray | TrayNotify | TrayShow | Log | Beep) -> None:
+        match effect:
+            case RestoreTray():
+                self.tray.restore()
+            case TrayNotify(title, text, warning):
                 self.tray.notify(title, text, warning=warning)
+            case TrayShow(shown):
+                self.tray.show(shown)
+            case Log(text):
+                log(text)
+            case Beep():
+                system.beep(system.MB_ICONEXCLAMATION)
             case _:
-                pass
-        self.ui.show(message)
-        self.show_tray()
+                assert_never(effect)
 
-    def use(self, tool: Tool) -> None:
-        """A tool the assistant owns, chosen here; while it's down, say so."""
-        if not self.assistant.send(UseTool(tool)):
-            self.problem(UNAVAILABLE)
-
-    def record(self, action: RecordingAction) -> None:
-        if not self.assistant.send(Record(action)):
-            self.problem(UNAVAILABLE)
-
-    def problem(self, message: str) -> None:
-        log(message)
-        system.beep(system.MB_ICONEXCLAMATION)
-        self.tray.notify("Workspace", message, warning=True)
-
-    def show_tray(self) -> None:
-        shown = self.shown
-        self.tray.show(State.RECORDING if shown.capturing else shown.state if shown.connected else State.LAYOUT_OFF)
-
-    # ---- the keyboard ------------------------------------------------------------------
-
-    def handle(self, request: Request) -> None:
-        """A request the desktop owns: an app key, a window key, the inbox or the switcher."""
-        match request:
-            case App():
-                self.used(f"app:{request.name}", AppKey(request, Source.KEY))
-            case Tool.OPEN_INBOX:
+    def _views(self, effect: ShowViews | Navigate | OpenInbox | SwitchWindows | Chord | ToggleTaskbar | ShowKeymap | ShowCanvas) -> None:
+        match effect:
+            case ShowViews(message):
+                self.ui.show(message)
+            case Navigate(order):
+                self.ui.navigate(order)
+            case OpenInbox():
                 self.ui.open_inbox()
-            case Tool.WINDOW_SWITCHER:
-                self.switch_windows()
-            case Tool():
-                self.used(request.name.lower(), keyed(request))
+            case SwitchWindows():
+                self._switch_windows()
+            case Chord(held):
+                self.ui.desktop_chord(held=held)
+            case ToggleTaskbar():
+                self.ui.toggle_taskbar()
+            case ShowKeymap():
+                self.ui.show_keymap()
+            case ShowCanvas():
+                self.ui.show_canvas()
             case _:
-                assert_never(request)
+                assert_never(effect)
 
-    def used(self, feature: str, order: Order | None) -> None:
-        if order is not None:
-            self.ui.navigate(order)
-        with contextlib.suppress(OSError):
-            usage.record("desktop", feature, {})
+    def _keys(self, effect: ShowOverlay | OverlayEnabled | Flash | LayoutShown | PressedKeys | Indicate | ToggleLayout) -> Iterator[Event]:
+        match effect:
+            case ShowOverlay(overlay):
+                self.ui.show_keyboard_overlay(overlay.layer, overlay.title, indicator_area(), visible=overlay.visible, pressed=overlay.pressed)
+            case OverlayEnabled(enabled):
+                self.ui.desktop_overlay(enabled=enabled)
+                try:
+                    save_enabled(enabled=enabled)
+                except OSError:
+                    yield Problem("The overlay changed, but its setting couldn't be saved.")
+            case Flash(text):
+                self.ui.flash(text, indicator_area())
+            case LayoutShown(enabled):
+                self.ui.desktop_layout(enabled=enabled)
+            case PressedKeys(pressed, reset):
+                self.ui.show_pressed_keys(pressed, reset=reset)
+            case Indicate(text):
+                self.ui.indicate(text, indicator_area())
+            case ToggleLayout():
+                if not desktop_controls.toggle_layout(Native()):
+                    yield Problem("Couldn't reach the layout. Try Start layout or Restart layout.")
+            case _:
+                assert_never(effect)
 
-    def choose_tool(self, tool: Tool) -> None:
-        """Marshal menu choices from the bar to this window's thread."""
-        system.post_message(self.window.handle, desktop_controls.WM_TOOL_CHOSEN, tool.value, 0)
+    def _launch(self, effect: RecordUse | Launch | OpenUsage | OpenLogs) -> None:
+        match effect:
+            case RecordUse(feature):
+                with contextlib.suppress(OSError):
+                    usage.record("desktop", feature, {})
+            case Launch(command, names):
+                launched(command, *names)
+            case OpenUsage():
+                os.startfile(write_report())
+            case OpenLogs():
+                DIRECTORY.mkdir(parents=True, exist_ok=True)
+                os.startfile(DIRECTORY)
+            case _:
+                assert_never(effect)
 
-    def switch_windows(self) -> None:
+    def _menu(self, effect: ShowMenu) -> Iterator[Event]:
+        spec = effect.spec
+        try:
+            spec = desktop_controls.tray()
+            yield SpecLoaded(spec)
+        except SpecError as error:
+            yield Problem(f"The tray menu kept its last good spec: {error}")
+        shown = spec if spec is not None else desktop_controls.tray(reload=False)
+        yield MenuChosen(shell.show_menu(self.inbox.window.handle, desktop_controls.menu_items(effect.state, shown)))
+
+    def _switch_windows(self) -> None:
+        ui = self.ui
+
         def focus(handle: int) -> None:
-            self.ui.navigate(SwitcherPick(handle, Source.KEY))
+            ui.navigate(SwitcherPick(handle, Source.KEY))
 
         def collect() -> None:
             own = os.getpid()
-            self.ui.switch_windows(tuple(w for w in windows.windows() if windows.process_id(w.handle) != own), focus)
+            ui.switch_windows(tuple(w for w in windows.windows() if windows.process_id(w.handle) != own), focus)
 
         threading.Thread(target=collect, name="window list", daemon=True).start()
-
-    def show_overlay(self, work: Rect) -> None:
-        self.ui.show_keyboard_overlay(self.overlay.layer, self.overlay.title, work, visible=self.overlay.visible, pressed=self.overlay.pressed)
-
-    def display_overlay(self, change: desktop_controls.OverlayChange) -> None:
-        self.overlay = replace(self.overlay, enabled=change.enabled)
-        self.show_overlay(indicator_area())
-        self.ui.desktop_overlay(enabled=change.enabled)
-
-    def persist_overlay(self, change: desktop_controls.OverlayChange) -> None:
-        save_enabled(enabled=change.enabled)
-
-    def toggle_overlay(self) -> None:
-        change = desktop_controls.OverlayChange(enabled=not self.overlay.enabled)
-        if (problem := desktop_controls.change_overlay(change, self)) is not None:
-            self.problem(problem)
-
-    def layout_changed(self, value: int) -> None:
-        with contextlib.suppress(ValueError):
-            self.layout = LayoutState(value)
-        on = self.layout is LayoutState.ON
-        work = indicator_area()
-        if self.layout is not LayoutState.QUIT:
-            self.ui.flash("Layout on" if on else "Layout off", work)
-        self.ui.desktop_layout(enabled=on)
-        self.overlay = self.overlay.set_layout(on=on)
-        self.ui.show_pressed_keys(self.overlay.pressed, reset=True)
-        self.show_overlay(work)
-
-    def on_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
-        try:
-            if message == shell.TASKBAR_CREATED:
-                self.tray.restore()
-                return 0
-            if message == WM_SHOW_MENU or (message == WM_TRAY and lparam in (system.WM_LBUTTONUP, system.WM_RBUTTONUP)):
-                self.menu()
-                return 0
-            if message in (WM_KEY_STATE, WM_REQUEST, desktop_controls.WM_TOOL_CHOSEN):
-                self.control(desktop_controls.control_event(desktop_controls.WindowInput(message, wparam, lparam), APPS))
-                return 0
-            if message == WM_INDICATOR:
-                index, locked, caps_word = decode_indicator(wparam)
-                layer = next((layer for layer in Layer if layer.value == index), None)
-                work = indicator_area()
-                self.ui.indicate(indicator_text(layer, locked=locked, caps_word=caps_word), work)
-                self.overlay = self.overlay.indicate(layer, locked=locked, caps_word=caps_word)
-                self.show_overlay(work)
-                return 0
-            if message == WM_LAYOUT_STATE:
-                self.layout_changed(wparam)
-                return 0
-            if message == WM_CHORD:
-                self.ui.desktop_chord(held=bool(wparam))
-                return 0
-            if message == WM_WINDOWS_KEY_TAP:
-                self.ui.toggle_taskbar()
-                return 0
-            if message == system.WM_CLOSE:  # the keeper asks, or Quit Workspace
-                self.quit()
-                return 0
-        except Exception:
-            log(traceback.format_exc())
-        return None
-
-    def control(self, action: desktop_controls.ControlAction | None) -> None:
-        match action:
-            case desktop_controls.PhysicalKey(scancode=scancode, down=down):
-                self.overlay = self.overlay.key(scancode, down=down)
-                self.ui.show_pressed_keys(self.overlay.pressed, reset=action.reset)
-            case desktop_controls.FeatureRequest(request=request, down=down):
-                if down and owner(request) is Side.DESKTOP:
-                    self.handle(request)
-            case desktop_controls.ChosenTool(tool=tool):
-                match owner(tool):
-                    case Side.DESKTOP:
-                        self.handle(tool)
-                    case Side.ASSISTANT:
-                        self.use(tool)
-                    case _:
-                        assert_never(owner(tool))
-            case None:
-                pass
-            case _:
-                assert_never(action)
-
-    # ---- the tray menu -----------------------------------------------------------------
-
-    def request_menu(self) -> None:
-        system.post_message(self.window.handle, WM_SHOW_MENU, 0, 0)
-
-    def menu(self) -> None:
-        state = desktop_controls.MenuState(
-            layout=self.layout, overlay_enabled=self.overlay.enabled, agent_running=self.shown.agent_running, capturing=self.shown.capturing
-        )
-        try:
-            self.tray_spec = desktop_controls.tray()
-        except SpecError as error:
-            self.problem(f"The tray menu kept its last good spec: {error}")
-        match shell.show_menu(self.window.handle, desktop_controls.menu_items(state, self.tray_spec)):
-            case desktop_controls.Menu.TOGGLE_LAYOUT.value:
-                if not desktop_controls.toggle_layout(Native()):
-                    self.problem("Couldn't reach the layout. Try Start layout or Restart layout.")
-            case desktop_controls.Menu.RESTART_LAYOUT.value:
-                launched("restart", "layout")
-            case desktop_controls.Menu.RESTART_ASSISTANT.value:
-                launched("restart", "assistant")
-            case desktop_controls.Menu.RESTART_DESKTOP.value:
-                # The launcher closes this program and starts it again; the assistant keeps working meanwhile.
-                launched("restart", "desktop")
-            case desktop_controls.Menu.OVERLAY.value:
-                self.toggle_overlay()
-            case desktop_controls.Menu.KEYMAP.value:
-                self.ui.show_keymap()
-            case desktop_controls.Menu.AGENT.value:
-                self.use(Tool.AGENT_TYPED)
-            case desktop_controls.Menu.WORK.value:
-                self.ui.show_canvas()
-            case desktop_controls.Menu.TASKBAR.value:
-                self.ui.toggle_taskbar()
-            case desktop_controls.Menu.STOP_AGENT.value:
-                self.use(Tool.STOP)
-            case desktop_controls.Menu.MEETING.value:
-                self.use(Tool.MEETING_TOGGLE)
-            case desktop_controls.Menu.TRANSCRIPTS.value:
-                self.record("folder")
-            case desktop_controls.Menu.USAGE.value:
-                os.startfile(write_report())
-            case desktop_controls.Menu.LOGS.value:
-                DIRECTORY.mkdir(parents=True, exist_ok=True)
-                os.startfile(DIRECTORY)
-            case desktop_controls.Menu.QUIT.value:
-                # The launcher asks every program to quit, this one last.
-                launched("stop")
-            case _:
-                pass
 
     def quit(self) -> None:
         """Close the views and the tray."""
@@ -381,7 +390,7 @@ class DesktopApp:
             log(str(error))
         self.ui.close_windows()
         self.tray.remove()
-        self.window.destroy()
+        self.inbox.window.destroy()
         self.ui.close()
 
 
@@ -410,20 +419,15 @@ def run(*, window: components.Window = components.DESKTOP.window, lock_name: str
         return
     try:
         published = components.endpoint("assistant")
-        app: DesktopApp | None = None
-
-        def received(frame: bytes) -> None:
-            if app is not None:
-                app.received(frame)
+        inbox = Inbox.open(window)
 
         def status(change: Status) -> None:
-            if app is not None:
-                app.status(change)
+            inbox.report(Connection(change))
 
-        client = Client(published, received, status) if published is not None else None
+        client = Client(published, lambda frame: received(inbox, frame), status) if published is not None else None
         port: AssistantPort = LinkedAssistant(client) if client is not None else Offline()
-        ui = Ui(port, views=views, on_problem=lambda message: app.problem(message) if app is not None else log(message))
-        app = DesktopApp(ui, port, window=window)
+        ui = Ui(port, views=views, on_problem=lambda message: inbox.report(Problem(message)))
+        app = DesktopApp.compose(ui, port, inbox)
         ui.post(lambda _: app.start())
         if client is not None:
             client.start()
