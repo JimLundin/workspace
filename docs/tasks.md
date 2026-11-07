@@ -101,18 +101,36 @@ violations left, with no baseline of exceptions. Counted in production code on
    rule rejects new ones; `@override` methods are exempt, and four
    SDK/`gc.callbacks` signatures are exact exceptions. 18 remain in tests, which
    the rule doesn't cover.
-5. **Plain classes that could be frozen dataclasses**: done 2026-11-07. 29
-   classes whose `__init__` only stored their inputs became frozen records. The
-   review's `plain-record` rule rejects new ones: a class with no base or
-   decorator, no computed state in `__init__` (no call, container or
-   comprehension) and no later rebinding, and whose attributes no module
-   assigns through another receiver (`OwnerCalls.current`, the benchmark
-   `Clock.now`). `MemorySession` is an exact exception, since the SDK's `Session`
-   protocol needs writable attributes. Left as classes: owners that build a lock,
-   queue, thread, socket or buffer in `__init__`. About ten more only default an
-   input (`x if x is not None else Default()`, as in `WinMachine`, `MeetingAudio`
-   and `WebApps`) and could take a `default_factory`, which the rule doesn't
-   require. Six test fixtures remain, which the rule doesn't cover.
+5. **Every class a frozen dataclass; no reassignment** (user, 2026-11-07): the
+   point is that nothing reassigns an attribute of ours. Owners of changing
+   state hold a `cell.Cell` of a frozen state record and replace it whole; the
+   keyboard follows the same model, benchmarked. Counted in production code on
+   2026-11-07:
+   1. **Classes that only held their inputs**: done. 29 became frozen records;
+      the review's `plain-record` rule rejects new ones. `MemorySession` is an
+      exact exception: the SDK's `Session` protocol needs writable attributes.
+   2. **Classes that build state in `__init__` but never rebind** (49): a
+      thread, queue, lock, socket, ctypes handle or a defaulted input
+      (`Server`, `StatusObserver`, `Tray`, `WinMachine`, `TaskStore`, ...).
+      Move the construction into a classmethod or `default_factory`, and start
+      threads from the constructor, not `__init__`.
+   3. **Owners that rebind their own attributes** (85 classes, about 700
+      sites): each gets a frozen state record in a `Cell`. Largest:
+      `CanvasPanel` (70), `DesktopBar` (56), `Communications` (53),
+      `WorkAgent` (33), `Worker` (23), `Ui` (18), `Triage` (17). One package per
+      session: `link`, `winapi`, `automation`, `contracts`, `scripts`,
+      `gateway`, `assistant`, then `desktop_ui`.
+   4. **The keyboard** (`miryoku.win.Keyboard`, 36 sites, and the engine's
+      mutable `Modifiers` and the record at `engine.py:193`): the same model,
+      measured with `scripts/benchmark_keyboard.py` before and after. Keep an
+      exact exception only if latency or allocation regresses.
+   5. **Classes with an external base** (22 Qt widgets rebind): set attributes
+      only in `__init__` and keep changing state in a `Cell`.
+   6. **The rule**: every class with no base (or only `Generic`) is a frozen,
+      slotted dataclass, and no class rebinds an attribute outside `__init__`.
+      `Cell` is its one exception besides what a dependency dictates. Also
+      reject `object.__setattr__`. Six test fixtures still match the
+      `plain-record` rule, which doesn't cover tests.
 6. **`kind` fields**: the migration below, then the check.
 7. **Operators on domain types** (user, 2026-11-07): screen `Point`/`Offset`/`Rect`
    and canvas `ScenePoint`/`Box` have theirs. Still hand-written: the bar

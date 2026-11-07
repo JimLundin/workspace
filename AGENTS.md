@@ -38,7 +38,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 - Keep the keyboard process isolated: `miryoku/` and everything it imports use
   only the standard library, `winapi` and the stdlib-only top-level modules
-  (`config`, `protocol`, `usage`, `components`, `diagnostics`), never
+  (`cell`, `config`, `protocol`, `usage`, `components`, `diagnostics`), never
   `assistant`, `desktop_ui`, `automation` or third-party packages. Measure key-event latency, allocation
   and GC with `scripts/benchmark_keyboard.py` before and after changing the
   hook, the engine or their shared dependencies.
@@ -90,9 +90,16 @@ their tests. Legacy data and backwards compatibility are not requirements.
   `frozendict`, frozen dataclasses, or `Sequence`/`Mapping`/`Iterable`), never
   `list`, `dict`, `set` or another mutable container. The architecture review
   enforces it; an `@override` method's base owns its signature.
-- Define types as frozen, slotted dataclasses wherever possible; only an owner
-  that genuinely holds changing state is a mutable class; the architecture
-  review rejects a plain class whose `__init__` only stores its inputs. Where a measured hot
+- Every class we define is a frozen, slotted dataclass: nothing reassigns an
+  attribute of ours. An owner whose state changes holds a `cell.Cell` of a
+  frozen state record and replaces the whole record on each transition
+  (`self.state.update(lambda state: replace(state, selected=note))`); `Cell`
+  is the one class that reassigns. Build what an owner needs (a thread, a
+  socket, a lock) in a classmethod constructor or a `default_factory`, not in
+  `__init__`. A class an external base dictates (a Qt widget, a ctypes
+  structure) sets its attributes only in `__init__` and keeps changing state in
+  a `Cell` too. The architecture review rejects a plain class whose `__init__`
+  only stores its inputs; the rest is migrating (`docs/tasks.md`). Where a measured hot
   path needs cheaper construction, a `typing.NamedTuple` is the fallback: about
   twice as fast to build, but not smaller (64 bytes against a slotted
   dataclass's 48 for two fields), and it compares equal to any tuple with the
