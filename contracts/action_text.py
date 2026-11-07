@@ -112,10 +112,7 @@ def result(name: str, text: str, *, limit: int = 0) -> str:
         }.get(name, "The work feed was read.")
     if name == "inspect_ui" and (fields := object_fields(text)) is not None and isinstance(controls := fields.get("controls"), list):
         items = controls
-        names: list[str] = []
-        for item in items[:4]:
-            if isinstance(item, dict) and isinstance(value := item.get("name"), str) and value.strip():
-                names.append(value)
+        names = tuple(value for item in items[:4] if isinstance(item, dict) and isinstance(value := item.get("name"), str) and value.strip())
         if names:
             summary = "Controls found:\n" + "\n".join("• " + value for value in names)
             if len(items) > len(names):
@@ -141,13 +138,9 @@ def describe(value: Json, depth: int = 0) -> str:
             fields = value
             if depth >= 3:
                 return f"{len(fields)} fields"
-            lines: list[str] = []
-            for key, item in islice(fields.items(), 6):
-                text = describe(item, depth + 1)
-                lines.append(f"{label(key)}: {text}".replace("\n", "\n  "))
-            if len(fields) > 6:
-                lines.append(f"… {len(fields) - 6} more fields")
-            return "\n".join(lines)
+            shown = (f"{label(key)}: {describe(item, depth + 1)}".replace("\n", "\n  ") for key, item in islice(fields.items(), 6))
+            more = (f"… {len(fields) - 6} more fields",) if len(fields) > 6 else ()
+            return "\n".join((*shown, *more))
         case list():
             items = value
             if not items:

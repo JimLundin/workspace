@@ -6,9 +6,11 @@ source identity, stale edits, association corrections and model reconciliation.
 """
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from functools import reduce
+from itertools import chain, groupby
 from typing import Annotated, Literal, assert_never
 from urllib.parse import urlsplit
 
@@ -434,22 +436,29 @@ def source_context(sources: Sequence[Source], referenced: frozenset[str]) -> fro
         referenced = extended
 
 
+def _newer(previous: Source, source: Source) -> Source:
+    """The source an observation leaves in the index: a meeting keeps its latest revision."""
+    match source, previous:
+        case MeetingSource(meeting=incoming), MeetingSource(meeting=stored):
+            return previous if incoming.revision < stored.revision or (incoming == stored and source.excerpt == previous.excerpt) else source
+        case _:
+            return source if source.observed_at >= previous.observed_at else previous
+
+
+def _source_id(source: Source) -> str:
+    return source.id
+
+
+def _merged(stored: Mapping[str, Source], identity: str, incoming: Iterable[Source]) -> Source:
+    return reduce(_newer, chain((stored[identity],) if identity in stored else (), incoming))
+
+
 def observe_sources(catalog: Catalog, sources: tuple[Source, ...]) -> Catalog:
-    # This bounded merge index is local to the transition. Mutating it avoids
-    # copying the entire index per source; only an immutable catalog is published.
-    current = {source.id: source for source in catalog.sources}
-    for source in sources:
-        previous = current.get(source.id)
-        match source, previous:
-            case MeetingSource(meeting=incoming), MeetingSource(meeting=stored):
-                if incoming.revision < stored.revision or (incoming == stored and source.excerpt == previous.excerpt):
-                    continue
-                current[source.id] = source
-                continue
-            case _:
-                pass
-        if previous is None or source.observed_at >= previous.observed_at:
-            current[source.id] = source
+    stored = {source.id: source for source in catalog.sources}
+    # A stable sort keeps each identity's observations in arrival order for the merge.
+    current = stored | {
+        identity: _merged(stored, identity, incoming) for identity, incoming in groupby(sorted(sources, key=_source_id), key=_source_id)
+    }
     referenced = frozenset(
         link.source_id for work in (*catalog.works, *(item.work for item in catalog.dismissed)) for link in work.links
     ) | frozenset(source.id for source in current.values() if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE, SourceKind.MEETING))
@@ -468,24 +477,36 @@ def observe_sources(catalog: Catalog, sources: tuple[Source, ...]) -> Catalog:
     return replace(catalog, revision=catalog.revision + 1, sources=retained)
 
 
-def reconcile_plan(catalog: Catalog, plan: WorkPlan, at: float) -> Catalog:
-    works = catalog.works
-    updated: set[str] = set()
+@dataclass(frozen=True, slots=True)
+class _Planned:
+    item: PlannedWork
+    identity: str
+    links: tuple[Association, ...]
+    original: WorkThread | None
+
+
+def _dismissed(catalog: Catalog, item: PlannedWork, links: tuple[Association, ...]) -> bool:
+    source_ids = frozenset(link.source_id for link in links)
+    return any(
+        item.work_id == dismissed.work.id
+        or (
+            item.work_id is None
+            and (
+                item.definition.goal.casefold() == dismissed.work.definition.goal.casefold()
+                or source_ids <= frozenset(link.source_id for link in dismissed.work.links)
+            )
+        )
+        for dismissed in catalog.dismissed
+    )
+
+
+def _planned(catalog: Catalog, plan: WorkPlan) -> Iterator[_Planned]:
+    """Resolve each undismissed planned work to its identity, refusing a second update of one work."""
     rejected = frozenset((item.work_id, item.source_id) for item in catalog.rejected)
+    seen: frozenset[str] = frozenset()
     for item in plan.works:
         links = checked_links(catalog, item.links)
-        source_ids = frozenset(link.source_id for link in links)
-        if any(
-            item.work_id == dismissed.work.id
-            or (
-                item.work_id is None
-                and (
-                    item.definition.goal.casefold() == dismissed.work.definition.goal.casefold()
-                    or source_ids <= frozenset(link.source_id for link in dismissed.work.links)
-                )
-            )
-            for dismissed in catalog.dismissed
-        ):
+        if _dismissed(catalog, item, links):
             continue
         original = find_work(catalog, item.work_id) if item.work_id is not None else None
         identity = (
@@ -494,32 +515,42 @@ def reconcile_plan(catalog: Catalog, plan: WorkPlan, at: float) -> Catalog:
             else "work:"
             + hashlib.sha256(_WORK_KEY.dump_json((item.definition.goal.casefold(), tuple(sorted(link.source_id for link in links))))).hexdigest()[:24]
         )
-        if identity in updated:
+        if identity in seen:
             raise ValueError("The model updated the same work twice.")
-        updated.add(identity)
-        links = tuple(link for link in links if (identity, link.source_id) not in rejected)
-        if original is None:
-            original = next((work for work in works if work.id == identity), None)
-        if original is not None:
-            # A partial model review can add associations, never erase existing
-            # ones. Corrections are explicit, durable user operations.
-            merged = tuple(link for link in original.links if link.source_id not in {link.source_id for link in links}) + links
-            definition = item.definition
-            if original.personal_state:
-                definition = replace(
-                    definition,
-                    title=original.definition.title,
-                    goal=original.definition.goal,
-                    state=original.definition.state,
-                    project=original.definition.project,
-                )
-            if definition == original.definition and merged == original.links:
-                continue
-            work = replace(original, revision=original.revision + 1, definition=definition, links=merged, updated_at=at)
-            works = tuple(work if entry.id == identity else entry for entry in works)
-        elif links:
-            work = WorkThread(identity, 0, item.definition, links, at, at)
-            works = (*works, work)
+        seen = seen | {identity}
+        yield _Planned(item, identity, tuple(link for link in links if (identity, link.source_id) not in rejected), original)
+
+
+def _planned_work(catalog: Catalog, planned: _Planned, at: float) -> WorkThread | None:
+    """The changed or new work a planned item makes, or None when it changes nothing."""
+    item, identity, links = planned.item, planned.identity, planned.links
+    original = planned.original if planned.original is not None else next((work for work in catalog.works if work.id == identity), None)
+    if original is None:
+        return WorkThread(identity, 0, item.definition, links, at, at) if links else None
+    # A partial model review can add associations, never erase existing
+    # ones. Corrections are explicit, durable user operations.
+    merged = tuple(link for link in original.links if link.source_id not in {link.source_id for link in links}) + links
+    definition = item.definition
+    if original.personal_state:
+        definition = replace(
+            definition,
+            title=original.definition.title,
+            goal=original.definition.goal,
+            state=original.definition.state,
+            project=original.definition.project,
+        )
+    if definition == original.definition and merged == original.links:
+        return None
+    return replace(original, revision=original.revision + 1, definition=definition, links=merged, updated_at=at)
+
+
+def reconcile_plan(catalog: Catalog, plan: WorkPlan, at: float) -> Catalog:
+    # Each planned work has its own identity, so every change applies to the
+    # catalog's works independently: replace existing works and append new ones.
+    changes = tuple(work for planned in _planned(catalog, plan) if (work := _planned_work(catalog, planned, at)) is not None)
+    changed = {work.id: work for work in changes}
+    existing = frozenset(work.id for work in catalog.works)
+    works = (*(changed.get(work.id, work) for work in catalog.works), *(work for work in changes if work.id not in existing))
     if works == catalog.works:
         return catalog
     return CATALOG.validate_python(replace(catalog, revision=catalog.revision + 1, works=works))

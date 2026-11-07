@@ -1,6 +1,8 @@
 """Bounded failure evidence without exception objects, content or source lines."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass
+from types import TracebackType
 
 from usage import Detail
 from winapi.shapes import InputRejectedError
@@ -20,16 +22,20 @@ class FailureInfo:
         return details
 
 
+def _traces(trace: TracebackType | None) -> Iterator[TracebackType]:
+    while trace is not None:
+        yield trace
+        trace = trace.tb_next
+
+
+def _location(trace: TracebackType) -> str:
+    code = trace.tb_frame.f_code
+    filename = code.co_filename.replace("\\", "/").rsplit("/", 1)[-1]
+    return f"{filename}:{trace.tb_lineno}:{code.co_name}"
+
+
 def failure_info(error: Exception) -> FailureInfo:
     """Copy only scalar evidence; a traceback would retain the keyboard's heap."""
-    locations: list[str] = []
-    trace = error.__traceback__
-    while trace is not None:
-        code = trace.tb_frame.f_code
-        filename = code.co_filename.replace("\\", "/").rsplit("/", 1)[-1]
-        locations.append(f"{filename}:{trace.tb_lineno}:{code.co_name}")
-        if len(locations) > 8:
-            del locations[0]
-        trace = trace.tb_next
+    locations = tuple(_location(trace) for trace in tuple(_traces(error.__traceback__))[-8:])
     accepted, expected = (error.accepted, error.expected) if isinstance(error, InputRejectedError) else (None, None)
-    return FailureInfo(type(error).__name__, tuple(locations), accepted, expected)
+    return FailureInfo(type(error).__name__, locations, accepted, expected)

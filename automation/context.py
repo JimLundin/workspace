@@ -1,6 +1,7 @@
 """Explicit saved preferences and project notes, with pure bounded retrieval."""
 
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, assert_never
@@ -157,45 +158,59 @@ def select_context(
         raise ValueError("Context selection exceeds its input bound.")
     words = _terms(query)
     terms = words - _CONNECTIVES
-    named_projects: set[str] = set()
-    for record in records:
-        if isinstance(record, ProjectNote):
-            project_words = _terms(record.project)
-            if (project_words and project_words <= words) or (not project_words and record.project.casefold() in query.casefold()):
-                named_projects.add(record.project.casefold())
-    ranked: list[tuple[int, float, str, ContextRecord]] = []
-    for record in records:
-        match record:
-            case Preference():
-                ranked.append((1_000_000, record.updated_at, record.id, record))
-            case ProjectNote():
-                if named_projects and record.project.casefold() not in named_projects:
-                    continue
-                project_terms = _terms(record.project)
-                content_terms = _terms(record.text) - _CONNECTIVES
-                score = 3 * len(terms & project_terms) + len(terms & content_terms)
-                if score or not words or named_projects:
-                    ranked.append((score, record.observed_at, record.id, record))
-            case _:
-                assert_never(record)
-    ranked.sort(key=_rank)
-    chosen: list[ContextRecord] = []
-    stale: list[ProjectNote] = []
-    used = 0
+    named_projects = frozenset(
+        record.project.casefold() for record in records if isinstance(record, ProjectNote) and _names_project(record.project, words, query)
+    )
+    ranked = sorted(
+        (rank for record in records if (rank := _ranking(record, words, terms, named_projects)) is not None),
+        key=_rank,
+    )
     budget = max_chars - 300  # reserve the framing and omission notice
-    truncated = False
-    for _, _, _, record in ranked:
-        old = isinstance(record, ProjectNote) and not record.observed_at <= now < record.valid_until
-        cost = len(_record_text(record, stale=old)) + 1
-        if len(chosen) + len(stale) >= limit or used + cost > budget:
-            truncated = True
-            continue
-        used += cost
-        if old and isinstance(record, ProjectNote):
-            stale.append(record)
-        else:
-            chosen.append(record)
-    return ContextSelection(tuple(chosen), tuple(stale), truncated=truncated)
+    kept = tuple(_within_budget((record for _, _, _, record in ranked), now, limit=limit, budget=budget))
+    return ContextSelection(
+        tuple(record for record in kept if not _is_stale(record, now)),
+        tuple(record for record in kept if isinstance(record, ProjectNote) and _is_stale(record, now)),
+        truncated=len(kept) < len(ranked),
+    )
+
+
+def _names_project(project: str, words: set[str], query: str) -> bool:
+    project_words = _terms(project)
+    return bool(project_words and project_words <= words) or (not project_words and project.casefold() in query.casefold())
+
+
+def _ranking(
+    record: ContextRecord,
+    words: set[str],
+    terms: set[str],
+    named_projects: frozenset[str],
+) -> tuple[int, float, str, ContextRecord] | None:
+    match record:
+        case Preference():
+            return 1_000_000, record.updated_at, record.id, record
+        case ProjectNote():
+            if named_projects and record.project.casefold() not in named_projects:
+                return None
+            score = 3 * len(terms & _terms(record.project)) + len(terms & (_terms(record.text) - _CONNECTIVES))
+            return (score, record.observed_at, record.id, record) if score or not words or named_projects else None
+        case _:
+            assert_never(record)
+
+
+def _is_stale(record: ContextRecord, now: float) -> bool:
+    return isinstance(record, ProjectNote) and not record.observed_at <= now < record.valid_until
+
+
+def _within_budget(records: Iterable[ContextRecord], now: float, *, limit: int, budget: int) -> Iterator[ContextRecord]:
+    """Yield, in rank order, each record that still fits the count limit and text budget."""
+    used = 0
+    count = 0
+    for record in records:
+        cost = len(_record_text(record, stale=_is_stale(record, now))) + 1
+        if count < limit and used + cost <= budget:
+            used += cost
+            count += 1
+            yield record
 
 
 def _decode(row: tuple[object, ...]) -> ContextRecord:

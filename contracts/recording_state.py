@@ -184,23 +184,32 @@ class CaptureReport:
     text: str
 
 
+@dataclass(frozen=True, slots=True)
+class _Gap:
+    label: str
+    frames: int
+
+
+def _gap(problem: Problem) -> _Gap | None:
+    match problem:
+        case Stall():
+            return None
+        case LateAudio(frames=frames):
+            return _Gap("late audio clipped (it arrived after its time was saved)", frames)
+        case Skipped(frames=frames):
+            return _Gap("silence inserted (capture fell further behind than the mixing ring)", frames)
+        case Dropout(frames=frames):
+            return _Gap("microphone audio lost before it was read (its engine buffer overflowed)", frames)
+        case _:
+            assert_never(problem)
+
+
 def capture_report(problems: Sequence[Problem]) -> CaptureReport:
-    stalls: list[float] = []
-    gaps: dict[str, list[int]] = {}
-    for problem in problems:
-        match problem:
-            case Stall(seconds=seconds):
-                stalls.append(seconds)
-            case LateAudio(frames=frames):
-                gaps.setdefault("late audio clipped (it arrived after its time was saved)", []).append(frames)
-            case Skipped(frames=frames):
-                gaps.setdefault("silence inserted (capture fell further behind than the mixing ring)", []).append(frames)
-            case Dropout(frames=frames):
-                gaps.setdefault("microphone audio lost before it was read (its engine buffer overflowed)", []).append(frames)
-            case _:
-                assert_never(problem)
-    parts = [f"capture loop stalled {len(stalls)}x, longest {max(stalls):.1f} s"] if stalls else []
-    parts.extend(f"{label} {len(frames)}x, {sum(frames) * 1000 // RATE} ms" for label, frames in gaps.items())
+    stalls = tuple(problem.seconds for problem in problems if isinstance(problem, Stall))
+    found = tuple(gap for problem in problems if (gap := _gap(problem)) is not None)
+    gaps = {label: tuple(gap.frames for gap in found if gap.label == label) for label in dict.fromkeys(gap.label for gap in found)}
+    stalled = (f"capture loop stalled {len(stalls)}x, longest {max(stalls):.1f} s",) if stalls else ()
+    parts = (*stalled, *(f"{label} {len(frames)}x, {sum(frames) * 1000 // RATE} ms" for label, frames in gaps.items()))
     return CaptureReport(
         sum(map(len, gaps.values())),
         sum(map(sum, gaps.values())),

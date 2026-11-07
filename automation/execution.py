@@ -201,16 +201,13 @@ class WorkExecution:
 
     def checkpoint(self, items: list[Json]) -> None:
         """Checkpoint structural progress, never raw SDK or integration payloads."""
-        names: list[str] = []
-        for item in items[-100:]:
-            if (
-                isinstance(item, dict)
-                and item.get("type") == "function_call"
-                and isinstance(name := item.get("name"), str)
-                and len(name) <= 128
-                and name not in names
-            ):
-                names.append(name)
+        names = tuple(
+            dict.fromkeys(
+                name
+                for item in items[-100:]
+                if isinstance(item, dict) and item.get("type") == "function_call" and isinstance(name := item.get("name"), str) and len(name) <= 128
+            )
+        )
         summary = "Conversation checkpoint; requested tools"
         if names:
             summary += ": " + ", ".join(names[-20:])
@@ -331,19 +328,20 @@ class WorkExecution:
             return Waiting(Blocked("An action has an uncertain outcome. Resume to inspect and reconcile it before further changes."))
         match report:
             case Reported(result):
-                evidence: list[str] = []
                 # Uncertain and interrupted actions were refused above. A returned
                 # action ran to completion; blocking a finished task until the model
                 # reconciled every one, even a read-only command that exited 0, ended
                 # most command-using tasks unfinished. The result names them instead.
-                actions = self.store.actions(self.claim.task.id, limit=100)
-                for action in actions:
-                    if isinstance(action.outcome, ActionVerified):
-                        evidence.append(action.outcome.evidence)
-                if returned := sorted({action.specification.tool for action in self.store.unverified_actions(self.claim.task.id)}):
-                    evidence.append("Returned without independent verification: " + ", ".join(returned) + ".")
-                evidence.extend(f"Observed {item.tool}." for item in self.observations[-8:])
-                return Completed(result[:64_000] or "Done.", tuple(evidence[-64:]))
+                verified = tuple(
+                    action.outcome.evidence
+                    for action in self.store.actions(self.claim.task.id, limit=100)
+                    if isinstance(action.outcome, ActionVerified)
+                )
+                returned = sorted({action.specification.tool for action in self.store.unverified_actions(self.claim.task.id)})
+                unverified = ("Returned without independent verification: " + ", ".join(returned) + ".",) if returned else ()
+                observed = tuple(f"Observed {item.tool}." for item in self.observations[-8:])
+                evidence = (*verified, *unverified, *observed)
+                return Completed(result[:64_000] or "Done.", evidence[-64:])
             case Incomplete(reason):
                 return Waiting(Blocked(reason[:8_000]))
             case InvalidConfiguration(reason):

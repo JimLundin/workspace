@@ -1,5 +1,6 @@
 """Transactional, validated persistence for tasks, inputs, and action outcomes."""
 
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from pydantic import ConfigDict, TypeAdapter
@@ -108,6 +109,15 @@ def _answer(value: object) -> TextAnswer:
             return answer
         case None:
             raise ValueError("Invalid stored input reply.")
+
+
+def _response(row: tuple[object, ...]) -> Response:
+    if len(row) != 4:
+        raise ValueError("Incomplete stored input response.")
+    request = _decoded(_WAIT, row[0])
+    if not isinstance(request, Question) or request.id != identifier(row[3], "request identity"):
+        raise ValueError("Invalid stored input request.")
+    return Response(request, _answer(row[1]), timestamp(row[2]))
 
 
 def _specification(value: object) -> ActionSpec:
@@ -283,10 +293,7 @@ class TaskStore:
         marks = ",".join("?" for _ in identities)
         with journal.reading(self.path) as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks WHERE id IN ({marks})", identities).fetchall()
-            selected: dict[str, Task] = {}
-            for row in rows:
-                task = self._read_task(connection, row)
-                selected[task.id] = task
+            selected = {task.id: task for task in (self._read_task(connection, row) for row in rows)}
             return tuple(selected[id] for id in identities if id in selected)
 
     def list_tasks(self, *, limit: int = 100) -> tuple[Task, ...]:
@@ -449,15 +456,7 @@ class TaskStore:
             ).fetchall()
         if len(rows) > MAX_PAGE:
             raise ValueError("Too many input responses to recover this task.")
-        replies: list[Response] = []
-        for row in rows:
-            if len(row) != 4:
-                raise ValueError("Incomplete stored input response.")
-            request = _decoded(_WAIT, row[0])
-            if not isinstance(request, Question) or request.id != identifier(row[3], "request identity"):
-                raise ValueError("Invalid stored input request.")
-            replies.append(Response(request, _answer(row[1]), timestamp(row[2])))
-        return tuple(replies)
+        return tuple(_response(row) for row in rows)
 
     def recover(self, owner: str, *, at: float) -> tuple[Task, ...]:
         """Reconcile abandoned runs after the caller acquired exclusive ownership.
@@ -467,20 +466,22 @@ class TaskStore:
         """
         identifier(owner, "worker owner")
         timestamp(at)
-        recovered: list[Task] = []
         with journal.writing(self.path) as connection:
             rows = connection.execute(f"SELECT {_TASK_SELECT} FROM tasks WHERE phase='running' ORDER BY created_at,id").fetchall()
-            for row in rows:
-                task = self._read_task(connection, row)
-                if not isinstance(task.state, Running):
-                    raise ValueError("The running index disagrees with task state.")
-                if task.state.owner == owner:
-                    continue
-                result = interrupted(task, task.state.run, "Execution stopped before its outcome was saved.", at=at)
-                if result is not None:
-                    self._put(connection, task, result)
-                    recovered.append(result)
-        return tuple(recovered)
+            return tuple(self._interrupting(connection, rows, owner, at=at))
+
+    def _interrupting(self, connection: journal.Connection, rows: Iterable[tuple[object, ...]], owner: str, *, at: float) -> Iterator[Task]:
+        """Save and yield each abandoned run's interruption, reading and writing in row order."""
+        for row in rows:
+            task = self._read_task(connection, row)
+            if not isinstance(task.state, Running):
+                raise ValueError("The running index disagrees with task state.")
+            if task.state.owner == owner:
+                continue
+            result = interrupted(task, task.state.run, "Execution stopped before its outcome was saved.", at=at)
+            if result is not None:
+                self._put(connection, task, result)
+                yield result
 
     def _read_action(self, connection: journal.Connection, row: tuple[object, ...]) -> Action:
         action = _action(row)
