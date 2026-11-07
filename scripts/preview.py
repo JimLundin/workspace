@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
 
@@ -14,6 +14,7 @@ from pydantic import TypeAdapter, ValidationError
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from desktop_ui.qt_runtime import prepare
 lazy from contracts.recording_state import RecordingState
 lazy from contracts.status import Job
@@ -69,97 +70,117 @@ class PreviewBar(DesktopBar):
         self.actions.problem("Windows notification settings")
 
 
+@dataclass(frozen=True, slots=True)
+class _Previewing:
+    bar: DesktopBar | None = None
+    closed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Preview:
     """UI-thread owner. Sample actions never reach production effect owners."""
 
-    __slots__ = ("bar", "closed", "control", "files", "root", "selector", "status", "timer")
+    files: Files
+    root: QtWidgets.QApplication
+    control: QtWidgets.QDialog
+    selector: QtWidgets.QComboBox
+    status: QtWidgets.QLabel
+    timer: QtCore.QTimer
+    _previewing: Cell[_Previewing] = field(default_factory=lambda: Cell(_Previewing()), init=False, repr=False)
 
-    def __init__(self, files: Files) -> None:
+    @classmethod
+    def open(cls, files: Files) -> Preview:
         screen.use_physical_pixels()
-        self.closed = False
-        self.files = files
-        self.root = application()
-        self.control = QtWidgets.QDialog()
-        self.control.setWindowTitle("Workspace UI preview · sample data")
-        self.control.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-        self.control.finished.connect(self.root.quit)
-        layout = QtWidgets.QVBoxLayout(self.control)
+        root = application()
+        control = QtWidgets.QDialog()
+        control.setWindowTitle("Workspace UI preview · sample data")
+        control.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        control.finished.connect(root.quit)
+        layout = QtWidgets.QVBoxLayout(control)
         layout.addWidget(QtWidgets.QLabel("Sample data · saves restart these views automatically"))
-        self.selector = QtWidgets.QComboBox()
-        self.selector.addItems(SCENARIOS)
-        layout.addWidget(self.selector)
-        self.status = QtWidgets.QLabel("Actions stay in this preview.")
-        layout.addWidget(self.status)
+        selector = QtWidgets.QComboBox()
+        selector.addItems(SCENARIOS)
+        layout.addWidget(selector)
+        status = QtWidgets.QLabel("Actions stay in this preview.")
+        layout.addWidget(status)
         close = QtWidgets.QPushButton("Close preview")
-        close.clicked.connect(self.root.quit)
+        close.clicked.connect(root.quit)
         layout.addWidget(close)
-        self.control.resize(440, 160)
-        self.bar: DesktopBar | None = None
-        self.timer = QtCore.QTimer(self.control)
-        self.timer.setInterval(50)
-        self.timer.timeout.connect(self.tick)
+        control.resize(440, 160)
+        timer = QtCore.QTimer(control)
+        timer.setInterval(50)
+        preview = cls(files, root, control, selector, status, timer)
+        timer.timeout.connect(preview.tick)
         try:
             actions = BarActions(
-                lambda: self.action("Work"),
-                lambda: self.action("Stop"),
-                lambda action: self.action("Recording: " + action),
-                lambda: self.action("Keyboard"),
-                lambda: self.action("Overlay"),
-                lambda: self.action("Menu"),
-                self.action,
-                inbox=lambda: self.action("Inbox"),
-                open_item=lambda identity: self.action("Open canvas at " + identity),
+                lambda: preview.action("Work"),
+                lambda: preview.action("Stop"),
+                lambda action: preview.action("Recording: " + action),
+                lambda: preview.action("Keyboard"),
+                lambda: preview.action("Overlay"),
+                lambda: preview.action("Menu"),
+                preview.action,
+                inbox=lambda: preview.action("Inbox"),
+                open_item=lambda identity: preview.action("Open canvas at " + identity),
             )
-            self.bar = PreviewBar(actions, native_shell=False)
-            self.bar.visible = True
-            self.bar.window.setWindowTitle("Workspace preview toolbar")
+            bar = PreviewBar(actions, native_shell=False)
+            preview._previewing.set(_Previewing(bar))
+            bar.visible = True
+            bar.window.setWindowTitle("Workspace preview toolbar")
             try:
                 choice = CHOICE.validate_json(files.state.read_bytes())
             except OSError, ValidationError:
                 choice = Choice()
-            self.selector.setCurrentIndex(choice.scenario)
-            self.selector.currentIndexChanged.connect(self.select)
-            self.select(choice.scenario)
-            self.control.show()
-            self.timer.start()
+            selector.setCurrentIndex(choice.scenario)
+            selector.currentIndexChanged.connect(preview.select)
+            preview.select(choice.scenario)
+            control.show()
+            timer.start()
         except BaseException:
-            self.close()
+            preview.close()
             raise
+        return preview
+
+    @property
+    def bar(self) -> DesktopBar | None:
+        return self._previewing.get().bar
 
     def action(self, text: str) -> None:
         self.status.setText("Preview action: " + text)
 
     def select(self, index: int) -> None:
-        if self.closed:
+        previewing = self._previewing.get()
+        if previewing.closed:
             return
         self.files.state.write_bytes(CHOICE.dump_json(Choice(index)))
         recording = RecordingState(phase="recording", seconds=125) if index in (2, 6) else RecordingState()
-        if self.bar is not None:
-            self.bar.recording_changed(recording)
+        if (bar := previewing.bar) is not None:
+            bar.recording_changed(recording)
             asking = Agent("Which sheet should the reply cover?", waiting=True)
-            self.bar.agent_changed(WORKING if index in (1, 6) else asking if index == 3 else None)
-            self.bar.job_changed(Job.TRANSCRIBING if index in (4, 6) else None)
-            self.bar.dictation(active=index in (5, 6))
+            bar.agent_changed(WORKING if index in (1, 6) else asking if index == 3 else None)
+            bar.job_changed(Job.TRANSCRIBING if index in (4, 6) else None)
+            bar.dictation(active=index in (5, 6))
             if index == 7:
                 # A fresh identity announces the sample again each time it is chosen.
                 at = time.time()
                 text = "Revenue is up 4% against the approved figures; travel is 12% over the Q3 forecast."
-                self.bar.notices_changed((Notice(f"reply:preview:{at}", "Compare the budget sheets", text, None, at),))
+                bar.notices_changed((Notice(f"reply:preview:{at}", "Compare the budget sheets", text, None, at),))
         self.status.setText("Sample state: " + SCENARIOS[index])
 
     def tick(self) -> None:
-        if self.closed:
+        if self._previewing.get().closed:
             return
         if (self.files.session / "stop").exists():
             self.root.quit()
 
     def close(self) -> None:
-        if self.closed:
+        previewing = self._previewing.get()
+        if previewing.closed:
             return
-        self.closed = True
+        self._previewing.set(replace(previewing, closed=True))
         self.timer.stop()
-        if self.bar is not None:
-            self.bar.close()
+        if previewing.bar is not None:
+            previewing.bar.close()
         self.control.close()
         self.control.deleteLater()
         self.root.processEvents()
@@ -167,7 +188,7 @@ class Preview:
 
 
 def run(options: Options, files: Files) -> None:
-    preview = Preview(files)
+    preview = Preview.open(files)
     try:
         preview.root.processEvents()
         ready: dict[str, int | str] = {"pid": os.getpid()}

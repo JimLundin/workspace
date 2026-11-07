@@ -16,12 +16,14 @@ import sys
 import tempfile
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import TypeAdapter
 lazy from watchdog.events import FileSystemEvent, FileSystemMovedEvent
 lazy from watchdog.observers import Observer
+
+from cell import Cell
 
 ROOT = Path(__file__).resolve().parent.parent
 IGNORED = frozenset(
@@ -151,39 +153,44 @@ def run_check(settings: Settings, receipt: Path) -> int:
     return result
 
 
+@dataclass(frozen=True, slots=True)
+class _Child:
+    folder: Path
+    """The child's session folder: its readiness and stop files."""
+    process: subprocess.Popen[bytes]
+
+
+@dataclass(frozen=True, slots=True)
 class PreviewProcess:
     """Own exactly one preview child and its clean-close control files."""
 
-    __slots__ = ("folder", "process", "scratch")
-
-    def __init__(self, scratch: Path) -> None:
-        self.scratch = scratch
-        self.folder: Path | None = None
-        self.process: subprocess.Popen[bytes] | None = None
+    scratch: Path
+    _child: Cell[_Child | None] = field(default_factory=lambda: Cell[_Child | None](None), init=False, repr=False)
 
     def restart(self) -> bool:
         self.close()
-        self.folder = Path(tempfile.mkdtemp(prefix="preview-", dir=self.scratch))
+        folder = Path(tempfile.mkdtemp(prefix="preview-", dir=self.scratch))
         started = time.perf_counter()
-        self.process = subprocess.Popen(
+        process = subprocess.Popen(
             (
                 sys.executable,
                 "-B",
                 "-m",
                 "scripts.preview",
                 "--session",
-                str(self.folder),
+                str(folder),
                 "--state",
                 str(self.scratch / "preview-state.json"),
             ),
             cwd=ROOT,
         )
+        self._child.set(_Child(folder, process))
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
-            if (self.folder / "ready.json").is_file():
+            if (folder / "ready.json").is_file():
                 print(f"Preview visible in {time.perf_counter() - started:.2f}s.", flush=True)
                 return True
-            if self.process.poll() is not None:
+            if process.poll() is not None:
                 print("Preview failed to start; the next relevant save will retry.", flush=True)
                 return False
             time.sleep(0.05)
@@ -192,20 +199,22 @@ class PreviewProcess:
         return False
 
     def closed_by_user(self) -> bool:
-        return self.process is not None and self.process.poll() == 0
+        child = self._child.get()
+        return child is not None and child.process.poll() == 0
 
     def close(self) -> None:
-        if self.process is None:
+        child = self._child.get()
+        if child is None:
             return
-        if self.folder is not None and self.process.poll() is None:
-            (self.folder / "stop").touch()
+        if child.process.poll() is None:
+            (child.folder / "stop").touch()
             try:
-                self.process.wait(timeout=10)
+                child.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                self.process.terminate()
-                self.process.wait(timeout=5)
+                child.process.terminate()
+                child.process.wait(timeout=5)
                 print("Preview did not close cleanly; its isolated child was terminated.", flush=True)
-        self.process = None
+        self._child.set(None)
 
 
 def supervise(settings: Settings, scratch: Path) -> int:

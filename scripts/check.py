@@ -19,13 +19,14 @@ import time
 import unittest
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol, runtime_checkable
 lazy from concurrent.futures import Future, ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
 
+from cell import Cell
 from scripts.architecture import Report, dependencies, python_sources, review
 from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, json_record, read, sha, source_map, write, write_receipt
@@ -154,13 +155,15 @@ def selected_tests(module: str, loaded: object, requested: str = "") -> Iterator
                 pass
 
 
+@dataclass(frozen=True, slots=True)
 class Phases:
     """The durations of a check's phases, in the order they finish; each phase's time counts even when it raises."""
 
-    __slots__ = ("recorded",)
+    _recorded: Cell[tuple[tuple[float, str], ...]] = field(default_factory=lambda: Cell[tuple[tuple[float, str], ...]](()), repr=False)
 
-    def __init__(self) -> None:
-        self.recorded: tuple[tuple[float, str], ...] = ()
+    @property
+    def recorded(self) -> tuple[tuple[float, str], ...]:
+        return self._recorded.get()
 
     @contextmanager
     def timed(self, label: str) -> Generator[None]:
@@ -168,7 +171,8 @@ class Phases:
         try:
             yield
         finally:
-            self.recorded = (*self.recorded, (time.perf_counter() - started, label))
+            elapsed = time.perf_counter() - started
+            self._recorded.update(lambda recorded: (*recorded, (elapsed, label)))
 
 
 class SourceRuntime(Protocol):

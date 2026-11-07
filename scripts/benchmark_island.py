@@ -22,6 +22,7 @@ from time import perf_counter_ns
 from pydantic import TypeAdapter
 lazy from PySide6 import QtCore
 
+from cell import Cell
 lazy from contracts.recording_state import RecordingState
 lazy from contracts.status import Job
 lazy from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
@@ -40,18 +41,6 @@ class Result:
     max_ms: float
     allocated_kb_p95: float
     loop_stopped_at_rest: bool
-
-
-class Clock:
-    """The controlled time the bar reads; the benchmark owns it and steps it one frame at a time."""
-
-    __slots__ = ("now",)
-
-    def __init__(self, now: float) -> None:
-        self.now = now
-
-    def read(self) -> float:
-        return self.now
 
 
 def main() -> None:
@@ -96,13 +85,14 @@ def transitions(bar: DesktopBar) -> tuple[Callable[[], None], ...]:
 
 def run(rounds: int) -> Result:
     app = application()
-    clock = Clock(1000.0)
+    clock = Cell(1000.0)
+    # The controlled time the bar reads; the benchmark steps it one frame at a time.
 
     def inert(*_: object) -> None:
         return None
 
     actions = BarActions(inert, inert, inert, inert, inert, inert, inert, inbox=inert, open_item=inert)
-    observations = BarObservations(clock=clock.read, motion=lambda: True, material=lambda: appearance.Material.GLASS)
+    observations = BarObservations(clock=clock.get, motion=lambda: True, material=lambda: appearance.Material.GLASS)
     bar = DesktopBar(actions, native_shell=False, observations=observations)
     bar.timer.stop()  # The benchmark owns every frame.
     bar.visible = True
@@ -121,7 +111,7 @@ def run(rounds: int) -> Result:
                 for step in steps:
                     step()
                     for _ in range(90):  # 1.5 s: every transition settles within it.
-                        clock.now += FRAME
+                        clock.update(lambda now: now + FRAME)
                         if traced:
                             tracemalloc.reset_peak()
                             before = tracemalloc.get_traced_memory()[0]

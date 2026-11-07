@@ -177,7 +177,7 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
     # Detect accidentally starting the production taskbar/hook/communication
     # services or failing to route sample-state changes to the real views.
     files = Files(tmp_path, tmp_path / "state.json")
-    preview = Preview(files)
+    preview = Preview.open(files)
     try:
         assert preview.bar is not None
         assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None

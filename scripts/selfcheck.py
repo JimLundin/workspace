@@ -440,6 +440,29 @@ def _lane_failure(group: Sequence[Path], text: str) -> Outcome:
     return 0, 0, (f"FAILED native lane ({', '.join(path.name for path in group)}): {text}",), ()
 
 
+@dataclass(frozen=True, slots=True)
+class _Lane:
+    group: Sequence[Path]
+    result: Path
+    log: Path
+    process: subprocess.Popen[bytes]
+
+
+def _launched(root: Path, groups: Sequence[Sequence[Path]], scratch: Path, job: ProcessJob | None) -> Iterator[_Lane]:
+    """Start one lane per group, each added to `job` as soon as it exists."""
+    environment = {key: value for key, value in os.environ.items() if key != "WORKSPACE_TEST_DESKTOP"}
+    for index, group in enumerate(groups):
+        result, log = scratch / f"lane-{index}.json", scratch / f"lane-{index}.txt"
+        names = [path.relative_to(root).as_posix() for path in group]
+        command = [sys.executable, os.path.abspath(__file__), str(root), "--modules", ",".join(names), "--result", str(result)]
+        with log.open("wb") as output:
+            process = subprocess.Popen(command, cwd=root, env=environment, stdout=output, stderr=subprocess.STDOUT)
+        if job is not None:
+            job.add(process.pid)
+        yield _Lane(group, result, log, process)
+
+
+@dataclass(frozen=True, slots=True)
 class Lanes:
     """Native lane processes running beside the coordinator, each on a private desktop of its own.
 
@@ -449,20 +472,15 @@ class Lanes:
     lanes with it instead of leaving them running.
     """
 
-    def __init__(self, root: Path, groups: Sequence[Sequence[Path]]) -> None:
-        environment = {key: value for key, value in os.environ.items() if key != "WORKSPACE_TEST_DESKTOP"}
-        self.scratch = tempfile.TemporaryDirectory(prefix="selfcheck-lanes-")
-        self.job = _job()
-        self.running: list[tuple[Sequence[Path], Path, Path, subprocess.Popen[bytes]]] = []
-        for index, group in enumerate(groups):
-            result, log = Path(self.scratch.name) / f"lane-{index}.json", Path(self.scratch.name) / f"lane-{index}.txt"
-            names = [path.relative_to(root).as_posix() for path in group]
-            command = [sys.executable, os.path.abspath(__file__), str(root), "--modules", ",".join(names), "--result", str(result)]
-            with log.open("wb") as output:
-                process = subprocess.Popen(command, cwd=root, env=environment, stdout=output, stderr=subprocess.STDOUT)
-            if self.job is not None:
-                self.job.add(process.pid)
-            self.running.append((group, result, log, process))
+    scratch: tempfile.TemporaryDirectory[str]
+    job: ProcessJob | None
+    running: tuple[_Lane, ...]
+
+    @classmethod
+    def start(cls, root: Path, groups: Sequence[Sequence[Path]]) -> Lanes:
+        scratch = tempfile.TemporaryDirectory(prefix="selfcheck-lanes-")
+        job = _job()
+        return cls(scratch, job, tuple(_launched(root, groups, Path(scratch.name), job)))
 
     def collect(self) -> tuple[Outcome, ...]:
         """Wait for every lane and its outcome; a lane that died without a result fails."""
@@ -474,7 +492,8 @@ class Lanes:
             self.scratch.cleanup()
 
     def _outcomes(self) -> Iterator[Outcome]:
-        for group, result, log, process in self.running:
+        for running in self.running:
+            group, result, log, process = running.group, running.result, running.log, running.process
             code = process.wait()
             report = log.read_text(encoding="utf-8", errors="replace")
             sys.stdout.write(report)
@@ -629,7 +648,7 @@ def run_tests(root: Path, paths: Sequence[Path], scope: Scope = FULL_SCOPE) -> O
     # The slow lanes run in their own processes while the coordinator runs the
     # remaining native modules itself, as it did before there were lanes.
     groups, remaining = native_groups(root, native)
-    lanes = Lanes(root, groups) if groups and not halted else None
+    lanes = Lanes.start(root, groups) if groups and not halted else None
     here = () if halted else tuple(_sequential(remaining if lanes is not None else native, stop=stop))
     laned = lanes.collect() if lanes is not None else ()
     # Every outcome in run order; a lane reports once for all of its modules.
