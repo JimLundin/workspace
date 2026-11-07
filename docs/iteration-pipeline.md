@@ -1,8 +1,8 @@
 # Checking and deploying changes
 
 Run native commands from the checkout in PowerShell. `Dev.cmd` uses the Windows
-`.venv` and adds native Git to PATH. `Dev.cmd setup` creates that `.venv` from
-the user-installed Python 3.15 and installs exactly the hashed lock
+`.venv` and adds native Git to PATH. `Dev.cmd setup` creates that `.venv` with uv
+from the user-installed Python 3.15 and installs exactly the hashed lock
 (`requirements/windows-py315.lock`) into it, as an install does, plus the
 dev-only tools; run it again after the lock changes. Keep the installed client
 (`%LOCALAPPDATA%\Programs\workspace-sdk\workspace`) separate so edits and tests never replace files in the running application.
@@ -107,7 +107,7 @@ Generated tests live in `tests/properties/` and need the `test` extra
 
 Deploy with `Dev.cmd deploy`. It needs no prior check: the keeper checks the
 change itself. A changed dependency lock is installed like any change: the
-keeper builds the lock's environment from PyPI (`environments.py`), checks the
+keeper builds the lock's environment from PyPI with uv (`environments.py`), checks the
 change with that environment's interpreter, and relaunches into it. A changed
 `.python-version` is refused: install that Python by hand.
 

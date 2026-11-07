@@ -15,7 +15,7 @@ class Builds:
 
     def run(self, arguments: Sequence[str]) -> Ran:
         self.commands = (*self.commands, tuple(arguments))
-        if "venv" in arguments:
+        if arguments[1] == "venv":
             Path(arguments[-1]).mkdir(parents=True)
             return Ran(0, "")
         return Ran(self.pip_code, "ERROR: Could not fetch https://pypi.org/simple/pyside6/")
@@ -32,15 +32,14 @@ def test_an_environment_is_named_by_its_lock_and_built_once(tmp_path: Path) -> N
     # other's packages), the same lock rebuilds every start, or pip is run without
     # the hashes and exact wheels the lock pins.
     root, builds = tmp_path / "environments", Builds()
-    first = ensure(lock(tmp_path, "pydantic==2.0 --hash=sha256:aa\n"), root=root, run=builds.run, base=Path("python"))
+    first = ensure(lock(tmp_path, "pydantic==2.0 --hash=sha256:aa\n"), root=root, run=builds.run, base=Path("python"), tool=Path("uv"))
     assert ready(first) and first == location(b"pydantic==2.0 --hash=sha256:aa\n", root)
     pip = builds.commands[1]
-    assert ("--require-hashes" in pip and "--no-deps" in pip and "--only-binary=:all:" in pip) and pip[pip.index("--python") + 1] == str(
-        python(first)
-    )
-    assert ensure(lock(tmp_path, "pydantic==2.0 --hash=sha256:aa\n"), root=root, run=builds.run, base=Path("python")) == first
+    assert pip[:3] == ("uv", "pip", "install") and "--require-hashes" in pip and "--no-deps" in pip and pip[pip.index("--only-binary") + 1] == ":all:"
+    assert "--native-tls" in pip and pip[pip.index("--python") + 1] == str(python(first))
+    assert ensure(lock(tmp_path, "pydantic==2.0 --hash=sha256:aa\n"), root=root, run=builds.run, base=Path("python"), tool=Path("uv")) == first
     assert len(builds.commands) == 2
-    second = ensure(lock(tmp_path, "pydantic==2.1 --hash=sha256:bb\n"), root=root, run=builds.run, base=Path("python"))
+    second = ensure(lock(tmp_path, "pydantic==2.1 --hash=sha256:bb\n"), root=root, run=builds.run, base=Path("python"), tool=Path("uv"))
     assert second != first and ready(first) and ready(second)
 
 
@@ -50,7 +49,7 @@ def test_a_failed_build_is_not_ready_and_the_next_one_starts_over(tmp_path: Path
     root, pinned = tmp_path / "environments", lock(tmp_path, "pyside6==6.10 --hash=sha256:cc\n")
     failing = Builds(pip_code=1)
     try:
-        ensure(pinned, root=root, run=failing.run, base=Path("python"))
+        ensure(pinned, root=root, run=failing.run, base=Path("python"), tool=Path("uv"))
     except DependencyError as error:
         assert "pypi.org" in str(error)
     else:
@@ -58,7 +57,7 @@ def test_a_failed_build_is_not_ready_and_the_next_one_starts_over(tmp_path: Path
     half = location(pinned.read_bytes(), root)
     assert half.is_dir() and not ready(half)
     (half / "leftover").write_text("from the failed build", encoding="utf-8")
-    environment = ensure(pinned, root=root, run=Builds().run, base=Path("python"))
+    environment = ensure(pinned, root=root, run=Builds().run, base=Path("python"), tool=Path("uv"))
     assert ready(environment) and not (environment / "leftover").exists()
 
 

@@ -1,9 +1,10 @@
-"""Workspace's dependencies: one virtual environment per dependency lock, built by pip.
+"""Workspace's dependencies: one virtual environment per dependency lock, built by uv.
 
 The pinned, hashed lock (`requirements/windows-py315.lock`) names every
 third-party package exactly. Each distinct lock gets its own environment under
-`%LOCALAPPDATA%/workspace/environments/<hash of the lock>`, built once from PyPI:
-a venv without pip, filled by the base interpreter's pip (`pip --python`). An
+`%LOCALAPPDATA%/workspace/environments/<hash of the lock>`, built once from PyPI
+by uv (`uv venv`, then `uv pip install` with the lock's hashes). uv keeps its
+own wheel cache, so rebuilding an environment for an undo rarely downloads. An
 environment is ready only once its marker is written, last; a build that failed
 or was interrupted has no marker, and the next `ensure` builds it again from
 scratch. Undoing a dependency change switches back to the previous lock's
@@ -71,6 +72,17 @@ def pythonw(environment: Path) -> Path:
     return environment / "Scripts/pythonw.exe" if sys.platform == "win32" else python(environment)
 
 
+def uv() -> Path:
+    """The uv executable: on PATH, or where uv's installer puts it."""
+    found = shutil.which("uv")
+    if found is not None:
+        return Path(found)
+    installed = Path.home() / ".local" / "bin" / ("uv.exe" if sys.platform == "win32" else "uv")
+    if installed.is_file():
+        return installed
+    raise DependencyError("Workspace needs uv to install its dependencies: see https://docs.astral.sh/uv/ and start Workspace again.")
+
+
 def base_interpreter() -> Path:
     """The installed Python the environments are made from, even when called from inside one."""
     return Path(sys.base_prefix) / ("python.exe" if sys.platform == "win32" else f"bin/python{sys.version_info.major}.{sys.version_info.minor}")
@@ -99,18 +111,19 @@ def _step(ran: Ran, doing: str) -> None:
         raise DependencyError(f"Couldn't {doing} (exit {ran.code}).\n{ran.output[-3000:]}")
 
 
-def ensure(lock: Path, *, root: Path = ROOT, run: Runner = native_run, base: Path | None = None) -> Path:
-    """The ready environment for `lock`, built first if it isn't. Raises DependencyError."""
+def ensure(lock: Path, *, root: Path = ROOT, run: Runner = native_run, base: Path | None = None, tool: Path | None = None) -> Path:
+    """The ready environment for `lock`, built first if it isn't, by uv (`tool`). Raises DependencyError."""
     environment = location(lock.read_bytes(), root)
     if ready(environment):
         return environment
     shutil.rmtree(environment, ignore_errors=True)  # an unfinished build: start again
+    uv_path = str(tool if tool is not None else uv())
     interpreter = str(base if base is not None else base_interpreter())
-    _step(run((interpreter, "-m", "venv", "--without-pip", str(environment))), "create the environment")
+    _step(run((uv_path, "venv", "--quiet", "--python", interpreter, str(environment))), "create the environment")
+    # --native-tls: the Windows certificate store, so company TLS inspection is trusted.
     command = (
-        interpreter, "-m", "pip", "--python", str(python(environment)), "install",
-        "--no-deps", "--require-hashes", "--only-binary=:all:", "--disable-pip-version-check", "--no-input",
-        "-r", str(lock),
+        uv_path, "pip", "install", "--quiet", "--native-tls", "--python", str(python(environment)),
+        "--no-deps", "--require-hashes", "--only-binary", ":all:", "-r", str(lock),
     )  # fmt: skip
     _step(run(command), "install the pinned dependencies from PyPI")
     version = f"{sys.version_info.major}.{sys.version_info.minor}"

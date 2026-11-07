@@ -36,9 +36,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.15'
+      - uses: astral-sh/setup-uv@v6
       - run: python scripts/release.py dist/workspace-python315-win64.zip
       - run: python -m zipfile -e dist/workspace-python315-win64.zip dist/check
-      # As the first start does: build the lock's environment from PyPI, then check the release in it.
+      # As the first start does: build the lock's environment from PyPI with uv, then check the release in it.
       - run: python dist/check/workspace/environments.py ensure dist/check/workspace/requirements/windows-py315.lock
       - shell: pwsh
         run: |

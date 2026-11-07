@@ -45,7 +45,7 @@ nothing, because their program reloads them.
 | `protocol.py` | Window messages from the layout to the desktop and the assistant, the `Tool` and `App` requests, and each request's owner (`Side`, `owner`) |
 | `config.py` | User settings: apps, snippets, agent step limit, dark-screen delay |
 | `usage.py`, `diagnostics.py` | The usage log and its failure details |
-| `environments.py` | One virtual environment per dependency lock, built from PyPI; the keeper and every program run its interpreter |
+| `environments.py` | One virtual environment per dependency lock, built from PyPI by uv; the keeper and every program run its interpreter |
 | `winapi/` | Typed Win32 and COM bindings: the only `ctypes` code |
 
 ## `miryoku/`
