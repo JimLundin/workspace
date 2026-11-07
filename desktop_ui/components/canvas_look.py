@@ -111,14 +111,11 @@ def card_shape(bounds: QtCore.QRectF, surface: Surface) -> QtCore.QRectF:
             assert_never(surface)
 
 
+RADII: Final = every_member(Surface, {Surface.CARD: CARD_RADIUS, Surface.QUESTION: CARD_RADIUS, Surface.GROUP: GROUP_RADIUS})
+
+
 def radius(surface: Surface) -> float:
-    match surface:
-        case Surface.CARD | Surface.QUESTION:
-            return CARD_RADIUS
-        case Surface.GROUP:
-            return GROUP_RADIUS
-        case _:
-            assert_never(surface)
+    return RADII[surface]
 
 
 def surface_fill(theme: Tokens, surface: Surface) -> QtGui.QColor:

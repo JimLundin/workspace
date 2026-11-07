@@ -308,6 +308,73 @@ def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Ma
         yield from _declarations(child, module, declaration, local)
 
 
+def _constant(value: ast.expr, bound: frozenset[str]) -> bool:
+    """A literal or a name from outside the function, or a call, tuple or attribute built only from those."""
+    match value:
+        case ast.Constant():
+            return True
+        case ast.Name(id=name):
+            return name not in bound
+        case ast.Attribute(value=base) | ast.UnaryOp(operand=base):
+            return _constant(base, bound)
+        case ast.Tuple(elts=items):
+            return all(_constant(item, bound) for item in items)
+        case ast.Call(func=function, args=arguments, keywords=keywords):
+            return _constant(function, bound) and all(_constant(item, bound) for item in (*arguments, *(keyword.value for keyword in keywords)))
+        case _:
+            return False
+
+
+def _members(pattern: ast.pattern) -> bool:
+    match pattern:
+        case ast.MatchValue(value=ast.Attribute()):
+            return True
+        case ast.MatchOr(patterns=patterns):
+            return all(_members(item) for item in patterns)
+        case _:
+            return False
+
+
+def _translates(cases: Iterable[ast.match_case], bound: frozenset[str]) -> bool:
+    """Every case but a wildcard names enum members and only returns or assigns one constant."""
+
+    def constant(case: ast.match_case) -> bool:
+        match case.body:
+            case [ast.Return(value=ast.expr() as value)] | [ast.Assign(value=value)]:
+                return _constant(value, bound)
+            case _:
+                return False
+
+    named = tuple(case for case in cases if not (isinstance(case.pattern, ast.MatchAs) and case.pattern.pattern is None))
+    return len(named) >= 2 and all(_members(case.pattern) and case.guard is None and constant(case) for case in named)
+
+
+def _bound(function: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]:
+    """The function's parameters and every name it assigns: values that vary between calls."""
+    arguments = function.args
+    parameters = (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs, *(item for item in (arguments.vararg, arguments.kwarg) if item))
+    stored = (node.id for node in ast.walk(function) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store))
+    return frozenset((*(item.arg for item in parameters), *stored))
+
+
+def enum_translations(tree: ast.AST, module: str, declaration: str = "", bound: frozenset[str] = frozenset()) -> Iterator[Finding]:
+    """A `match` that only maps enum members to constants belongs in an `every_member` table."""
+    for child in ast.iter_child_nodes(tree):
+        match child:
+            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                yield from enum_translations(child, module, ".".join(part for part in (declaration, name) if part), _bound(child))
+                continue
+            case ast.ClassDef(name=name):
+                yield from enum_translations(child, module, ".".join(part for part in (declaration, name) if part), bound)
+                continue
+            case ast.Match(subject=subject, cases=cases) if _translates(cases, bound):
+                detail = "Translate enum members with a contracts.members.every_member table, or a frozendict for a partial one."
+                yield Finding("enum-translation", module, declaration, ast.unparse(subject), child.lineno, detail)
+            case _:
+                pass
+        yield from enum_translations(child, module, declaration, bound)
+
+
 def observation(source: Source, cache: Cache | None) -> Observation:
     key = cache.key("architecture", source) if cache is not None else ""
     if cache is not None and (saved := cache.read(key, OBSERVATION)) is not None:
@@ -341,7 +408,7 @@ def observation(source: Source, cache: Cache | None) -> Observation:
                         )
             case _:
                 pass
-    result = Observation(tuple(_declarations(tree, module)), tuple(dynamic))
+    result = Observation((*_declarations(tree, module), *enum_translations(tree, module)), tuple(dynamic))
     if cache is not None:
         cache.write(key, result, OBSERVATION)
     return result

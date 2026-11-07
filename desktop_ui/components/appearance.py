@@ -178,31 +178,26 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 """ + tooltip_style(theme)
 
 
+BRANDS: Final = every_member(
+    App,
+    {
+        App.TEAMS: "#6264a7",
+        App.OUTLOOK: "#0f6cbd",
+        App.CODEX: "#10a37f",
+        App.CLAUDE: "#d97757",
+        App.EDGE: "#1b9de2",
+        App.WEB_PAGE: "#5e9ad6",
+        App.DOCUMENT: "#2b7cd3",
+        App.KANBAN: "#c28a2c",
+        App.WINDOWS: "#0078d4",
+        App.WORKSPACE: GLASS_ACCENT,
+    },
+)
+"""Each app's own colour, shown only on its badge."""
+
+
 def brand(app: App) -> str:
-    """Each app's own colour, shown only on its badge."""
-    match app:
-        case App.TEAMS:
-            return "#6264a7"
-        case App.OUTLOOK:
-            return "#0f6cbd"
-        case App.CODEX:
-            return "#10a37f"
-        case App.CLAUDE:
-            return "#d97757"
-        case App.EDGE:
-            return "#1b9de2"
-        case App.WEB_PAGE:
-            return "#5e9ad6"
-        case App.DOCUMENT:
-            return "#2b7cd3"
-        case App.KANBAN:
-            return "#c28a2c"
-        case App.WINDOWS:
-            return "#0078d4"
-        case App.WORKSPACE:
-            return GLASS_ACCENT
-        case _:
-            assert_never(app)
+    return BRANDS[app]
 
 
 # Every glass surface shares its ink and rim vocabulary.

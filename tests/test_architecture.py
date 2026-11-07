@@ -251,3 +251,54 @@ def test_mock_frameworks_and_replacement_fixtures_are_rejected_in_all_sources(tm
         },
     )
     assert not review(tmp_path).failures
+
+
+def test_a_match_that_only_maps_enum_members_to_constants_must_be_a_table(tmp_path: Path) -> None:
+    # Defect: a member-to-constant `match` slips past the review because one
+    # case joins members with `|`, a wildcard covers the rest, or it sits in a
+    # method; or a `match` whose cases use the function's own values (a
+    # parameter, `self`, a local or a nested function's parameter) is wrongly
+    # flagged although no table could hold them.
+    source = """from enum import Enum
+
+class Light(Enum):
+    RED = 1
+    AMBER = 2
+    GREEN = 3
+
+def label(light: Light) -> str:
+    match light:
+        case Light.RED | Light.AMBER:
+            return "stop"
+        case Light.GREEN:
+            return "go"
+
+class Lamp:
+    def colour(self, light: Light) -> tuple[int, int]:
+        match light:
+            case Light.RED:
+                value = Rgb(255, 0)
+            case Light.GREEN:
+                value = Rgb(0, 255)
+            case _:
+                value = Rgb(0, 0)
+        return value
+
+def inset(light: Light, bounds: Box) -> Box:
+    match light:
+        case Light.RED:
+            return bounds.adjusted(1)
+        case Light.GREEN:
+            return bounds.adjusted(2)
+
+def outer() -> None:
+    def inner(scale: int, light: Light) -> int:
+        match light:
+            case Light.RED:
+                return scale
+            case Light.GREEN:
+                return -scale
+"""
+    write_tree(tmp_path, {"lights.py": source})
+    found = [(finding.rule, finding.declaration, finding.expression) for finding in review(tmp_path).failures]
+    assert found == [("enum-translation", "label", "light"), ("enum-translation", "Lamp.colour", "light")]

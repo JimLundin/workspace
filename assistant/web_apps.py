@@ -18,6 +18,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from assistant.browser_documents import Download, Downloaded
 from assistant.browser_requests import BrowserRequest, Evaluate
 from assistant.browser_values import BrowserError
+from contracts.members import every_member
 from contracts.work_documents import LocalDocument
 lazy from assistant.browser import BrowserResult
 
@@ -907,6 +908,10 @@ OUTLOOK_DOWNLOAD_DOCUMENT: Final = DocumentCollection(
 )
 
 
+_HELPERS: Final = every_member(App, {App.KANBAN: _KANBAN, App.OUTLOOK: _MAIL, App.TEAMS: ""})
+"""The page helpers each application's scripts call."""
+
+
 class WebApps:
     __slots__ = ("browser", "origins")
 
@@ -920,15 +925,7 @@ class WebApps:
         return operation.perform(self, query, cancel)
 
     def evaluate[Q: Located, R](self, operation: PageOperation[Q, R], query: Q, cancel: threading.Event) -> str:
-        match operation.app:
-            case App.KANBAN:
-                helpers = _KANBAN
-            case App.OUTLOOK:
-                helpers = _MAIL
-            case App.TEAMS:
-                helpers = ""
-            case _:
-                assert_never(operation.app)
+        helpers = _HELPERS[operation.app]
         allowed = _ORIGINS.dump_json(self.origins.of(operation.app)).decode()
         options = operation.query.dump_json(query).decode()
         guard = f"if(!{allowed}.includes(location.origin))throw new Error('The selected tab belongs to a different application.');"
