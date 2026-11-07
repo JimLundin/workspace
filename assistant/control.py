@@ -109,8 +109,18 @@ class LayoutReported:
     """The layout's raw `LayoutState`; an unknown value keeps the last known one."""
 
 
+@dataclass(frozen=True, slots=True)
+class Started:
+    """The controls run: the capture timer exists and work and personal views have their first values."""
+
+    capture_timer: int
+    work: WorkSnapshot
+    personal: PersonalView
+
+
 type Fact = (
-    JobReported
+    Started
+    | JobReported
     | Notified
     | Problem
     | WorkObserved
@@ -348,6 +358,8 @@ class ControlState:
     personal: PersonalView = field(default_factory=PersonalView)
     agent_active: bool = False
     """Agent work has started and not yet finished; the activity tracker reads it."""
+    capture_timer: int | None = None
+    """The control window's timer that bounds a voice capture, once the controls run."""
 
 
 AUTOMATIC_UNAVAILABLE = Notify(
@@ -370,6 +382,8 @@ def recording_notice(prior: Phase, recording: RecordingState) -> Notify | None:
 def _reacted(state: ControlState, fact: Fact) -> Iterator[Effect]:
     """The effects of `fact` given the state it arrived in."""
     match fact:
+        case Started(work=work, personal=personal):
+            yield Send(WorkChanged(replace(work, personal=personal)))
         case JobReported(job):
             yield Send(JobChanged(job))
         case Notified(title, text):
@@ -423,6 +437,8 @@ def _layout(reported: LayoutReported, state: ControlState) -> LayoutState | None
 def _remembered(state: ControlState, fact: Fact) -> ControlState:
     """The state after `fact`; most facts change nothing the control thread keeps."""
     match fact:
+        case Started(timer, work, personal):
+            return replace(state, capture_timer=timer, work=work, personal=personal)
         case WorkObserved(snapshot):
             return replace(state, work=snapshot)
         case PersonalObserved(view):
