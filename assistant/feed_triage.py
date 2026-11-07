@@ -1,9 +1,11 @@
 """Pure work-feed triage: source evidence is data, never authorization."""
 
 import hashlib
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
+from functools import reduce
+from itertools import accumulate
 from typing import Final, assert_never
 
 from pydantic import TypeAdapter
@@ -19,6 +21,7 @@ from assistant.feed_contracts import (
     Disposition,
     ForgetRule,
     ItemEdit,
+    ProposedItem,
     ProposedSolution,
     QuietItem,
     RejectProposal,
@@ -213,43 +216,46 @@ def decode(raw: str, candidates: tuple[Candidate, ...]) -> tuple[Assessment, ...
     """A whole batch commits together; omissions, duplicates and invented evidence fail closed."""
     groups = REVIEW_OUTPUT.validate_json(raw).items
     by_id = {item.identity: item for item in candidates}
-    seen: set[str] = set()
-    result: list[Assessment] = []
-    for value in groups:
-        group = value
-        refs = group.sources
-        if not refs or len(set(refs)) != len(refs) or any(ref not in by_id or ref in seen for ref in refs):
-            raise ValueError("Triage returned unknown or duplicate sources.")
-        seen.update(refs)
-        disposition = Disposition(group.disposition)
-        if disposition not in AUTOMATIC:
-            raise ValueError("Source triage can only propose work or keep it quiet.")
-        priority = group.priority
-        if type(priority) is not int or not 0 <= priority <= 2:
-            raise ValueError("Invalid triage priority.")
-        title, summary, suggestion = group.title, group.summary, group.suggestion
-        question = ""
-        solutions = solution_options(group.solutions)
-        if disposition is Disposition.ACTION and (not title.strip() or not summary.strip() or not suggestion.strip() or not solutions):
-            raise ValueError("Action needs an explanation and a proposed next step.")
-        result.append(
-            Assessment(
-                identity("plan", "|".join(sorted(refs))),
-                tuple((ref, by_id[ref].revision) for ref in refs),
-                title,
-                summary,
-                suggestion,
-                question,
-                priority,
-                max(by_id[ref].created_at for ref in refs),
-                disposition,
-                solutions,
-                origins=tuple(dict.fromkeys((by_id[ref].origin for ref in refs), True)),
-            )
-        )
-    if seen != set(by_id):
+    earlier = accumulate(groups, _with_sources, initial=frozenset[str]())
+    result = tuple(_assessment(group, by_id, claimed) for group, claimed in zip(groups, earlier, strict=False))
+    if {ref for group in groups for ref in group.sources} != set(by_id):
         raise ValueError("Triage omitted sources.")
-    return tuple(result)
+    return result
+
+
+def _with_sources(claimed: frozenset[str], group: ProposedItem) -> frozenset[str]:
+    return claimed | frozenset(group.sources)
+
+
+def _assessment(group: ProposedItem, by_id: Mapping[str, Candidate], claimed: frozenset[str]) -> Assessment:
+    """One proposed group, checked against the sources earlier groups already claimed."""
+    refs = group.sources
+    if not refs or len(set(refs)) != len(refs) or any(ref not in by_id or ref in claimed for ref in refs):
+        raise ValueError("Triage returned unknown or duplicate sources.")
+    disposition = Disposition(group.disposition)
+    if disposition not in AUTOMATIC:
+        raise ValueError("Source triage can only propose work or keep it quiet.")
+    priority = group.priority
+    if type(priority) is not int or not 0 <= priority <= 2:
+        raise ValueError("Invalid triage priority.")
+    title, summary, suggestion = group.title, group.summary, group.suggestion
+    question = ""
+    solutions = solution_options(group.solutions)
+    if disposition is Disposition.ACTION and (not title.strip() or not summary.strip() or not suggestion.strip() or not solutions):
+        raise ValueError("Action needs an explanation and a proposed next step.")
+    return Assessment(
+        identity("plan", "|".join(sorted(refs))),
+        tuple((ref, by_id[ref].revision) for ref in refs),
+        title,
+        summary,
+        suggestion,
+        question,
+        priority,
+        max(by_id[ref].created_at for ref in refs),
+        disposition,
+        solutions,
+        origins=tuple(dict.fromkeys((by_id[ref].origin for ref in refs), True)),
+    )
 
 
 def batch_for(board: Board, candidates: tuple[Candidate, ...], *, today: date | None = None) -> tuple[Candidate, ...]:
@@ -258,13 +264,14 @@ def batch_for(board: Board, candidates: tuple[Candidate, ...], *, today: date | 
     if not fresh:
         return ()
     by_ref = {(item.identity, item.revision): item for item in candidates}
-    batch = list(fresh)
-    selected = {(item.identity, item.revision) for item in batch}
-    for item in board.actions:
+
+    def consolidated(batch: tuple[Candidate, ...], item: Assessment) -> tuple[Candidate, ...]:
+        selected = {(candidate.identity, candidate.revision) for candidate in batch}
         if len(batch) + len(item.references) <= 20 and all(ref in by_ref and ref not in selected for ref in item.references):
-            batch.extend(by_ref[ref] for ref in item.references)
-            selected.update(item.references)
-    return tuple(batch)
+            return (*batch, *(by_ref[ref] for ref in item.references))
+        return batch
+
+    return reduce(consolidated, board.actions, fresh)
 
 
 def applied(board: Board, assessments: tuple[Assessment, ...], candidates: tuple[Candidate, ...]) -> Board:

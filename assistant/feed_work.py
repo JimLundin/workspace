@@ -3,6 +3,7 @@
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from itertools import accumulate, pairwise
 from typing import assert_never
 
 from assistant.feed_history import Decision
@@ -78,14 +79,14 @@ class TaskEvidence:
 
 def bounded(rows: Iterable[str], budget: int) -> str:
     """Publish complete evidence rows within this feed request's character budget."""
-    result: list[str] = []
-    used = 0
-    for row in rows:
+    offered = tuple(rows)
+
+    def spent(used: int, row: str) -> int:
         cost = len(row) + 2
-        if used + cost <= budget:
-            result.append(row)
-            used += cost
-    return "\n\n".join(result)
+        return used + cost if used + cost <= budget else used
+
+    totals = pairwise(accumulate(offered, spent, initial=0))
+    return "\n\n".join(row for row, (before, after) in zip(offered, totals, strict=True) if after > before)
 
 
 @dataclass(frozen=True, slots=True)

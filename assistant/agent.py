@@ -45,12 +45,13 @@ _ARGUMENTS = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False)
 
 def registry(tools: Iterable[Tool]) -> frozendict[str, Tool]:
     """Every offered name has exactly one declaration."""
-    named: dict[str, Tool] = {}
-    for tool in tools:
-        if tool.spec.name in named:
-            raise ValueError(f"Two tool families declare {tool.spec.name}.")
-        named[tool.spec.name] = tool
-    return frozendict(named)
+    offered = tuple(tools)
+    names = tuple(tool.spec.name for tool in offered)
+    first = {name: index for index, name in reversed(tuple(enumerate(names)))}
+    repeated = next((name for index, name in enumerate(names) if first[name] != index), None)
+    if repeated is not None:
+        raise ValueError(f"Two tool families declare {repeated}.")
+    return frozendict(zip(names, offered, strict=True))
 
 
 class Toolset(Protocol):

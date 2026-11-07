@@ -1,7 +1,7 @@
 """Journal effects and worker notifications, owned by the frontend's observer."""
 
 from dataclasses import dataclass, replace
-from itertools import islice
+from itertools import chain, islice
 from typing import Protocol, assert_never
 
 from automation.activity import ContextSnapshot
@@ -178,10 +178,8 @@ class WorkService:
             if confirmed
             else "Could not confirm this request while the work journal is unavailable."
         )
-        for identity in sorted(watched - current.keys() - pending):
-            if identity not in problems:
-                problems[identity] = SubmissionProblem(identity, missing_reason)
-        return tuple(problems.values())
+        missing = (SubmissionProblem(identity, missing_reason) for identity in sorted(watched - current.keys() - pending) if identity not in problems)
+        return (*problems.values(), *missing)
 
     def unavailable(self, previous: WorkSnapshot, watched: frozenset[str], pending: frozenset[str]) -> WorkSnapshot:
         """Keep known state; failed reads cannot prove that a commit did not happen."""
@@ -210,10 +208,9 @@ class WorkService:
     def snapshot(self, *, watched: frozenset[str] = frozenset(), pending: frozenset[str] = frozenset()) -> WorkSnapshot:
         self._limit_submissions(watched)
         tasks = self.tasks.list_tasks(limit=1_000)
-        current = {task.id: task for task in tasks}
         # Watched rows and unconfirmed writes share one bounded read snapshot.
-        for retained in self.tasks.get_many(tuple(sorted(watched | self._submissions.keys()))):
-            current[retained.id] = retained
+        retained = self.tasks.get_many(tuple(sorted(watched | self._submissions.keys())))
+        current = {task.id: task for task in chain(tasks, retained)}
         tasks = tuple(current.values())
         context = self.context.list()
         problems = self._submission_problems(current, watched, pending, confirmed=True)

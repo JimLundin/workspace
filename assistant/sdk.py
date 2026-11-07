@@ -5,7 +5,7 @@ import base64
 import copy
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Protocol, runtime_checkable
 
@@ -319,22 +319,38 @@ def after_tools(context: RunContextWrapper[Agent], results: list[FunctionToolRes
     return ToolsToFinalOutputResult(is_final_output=False)
 
 
-def recent_images(items: list[Json]) -> list[Json]:
+def recent_images(items: Sequence[Json]) -> list[Json]:
     """Bound both automatic request screenshots and explicit screenshot results."""
-    shots: list[tuple[int, str, dict[str, Json], list[Json]]] = []
-    for index, item in enumerate(items):
-        if not isinstance(item, dict):
-            continue
-        key = "output" if item.get("type") == "function_call_output" else "content"
-        parts = item.get(key)
-        if isinstance(parts, list) and any(isinstance(part, dict) and part.get("type") == "input_image" for part in parts):
-            shots.append((index, key, item, parts))
-    converted = list(items)
-    for index, key, item, original_parts in shots[:-KEPT_SCREENSHOTS]:
-        parts = [part for part in original_parts if not isinstance(part, dict) or part.get("type") != "input_image"]
-        parts.append({"type": "input_text", "text": "[an earlier screenshot, removed to save space]"})
-        converted[index] = {**item, key: parts}
-    return converted
+    shots = tuple(index for index, item in enumerate(items) if _with_image(item))
+    removed = frozenset(shots[:-KEPT_SCREENSHOTS])
+    return [_without_image(item) if index in removed else item for index, item in enumerate(items)]
+
+
+def _is_image(part: Json) -> bool:
+    return isinstance(part, dict) and part.get("type") == "input_image"
+
+
+def _image_key(item: dict[str, Json]) -> str:
+    return "output" if item.get("type") == "function_call_output" else "content"
+
+
+def _with_image(item: Json) -> bool:
+    if not isinstance(item, dict):
+        return False
+    parts = item.get(_image_key(item))
+    return isinstance(parts, list) and any(_is_image(part) for part in parts)
+
+
+def _without_image(item: Json) -> Json:
+    """The item with its screenshots replaced by a note; the SDK input shape wants a list of parts."""
+    if not isinstance(item, dict):
+        return item
+    key = _image_key(item)
+    parts = item.get(key)
+    if not isinstance(parts, list):
+        return item
+    note: Json = {"type": "input_text", "text": "[an earlier screenshot, removed to save space]"}
+    return {**item, key: [*(part for part in parts if not _is_image(part)), note]}
 
 
 def trim_screenshots(data: CallModelData[object]) -> ModelInputData:

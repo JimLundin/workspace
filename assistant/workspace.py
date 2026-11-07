@@ -115,13 +115,12 @@ class Workspace:
 
     def diff(self) -> str:
         """A unified diff against the running version."""
-        parts: list[str] = []
-        for change in self.changes():
-            name = change.split(" ", 1)[1]
-            before = (self.live / name).read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if (self.live / name).exists() else []
-            after = (self.root / name).read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if (self.root / name).exists() else []
-            parts.append("".join(difflib.unified_diff(before, after, f"running/{name}", f"changed/{name}")))
-        return "\n".join(parts)
+        return "\n".join(self._unified(change.split(" ", 1)[1]) for change in self.changes())
+
+    def _unified(self, name: str) -> str:
+        before = (self.live / name).read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if (self.live / name).exists() else []
+        after = (self.root / name).read_text(encoding="utf-8", errors="replace").splitlines(keepends=True) if (self.root / name).exists() else []
+        return "".join(difflib.unified_diff(before, after, f"running/{name}", f"changed/{name}"))
 
     def protected_problem(self) -> str:
         """Detect stale or altered protected source before executing or submitting a draft."""

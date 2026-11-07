@@ -1,9 +1,11 @@
 """Immutable communication observations, local acknowledgement and reply evidence."""
 
 import hashlib
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import Enum, auto
+from itertools import groupby
 from typing import Literal
 
 from winapi.system_notices import NoticeKey
@@ -171,12 +173,28 @@ def message_order(message: Message) -> tuple[float, str]:
     return message.created_at, message.identity
 
 
+def grouped[K, V](items: Iterable[V], key: Callable[[V], K]) -> frozendict[K, tuple[V, ...]]:
+    """Items by key, keys in first-appearance order and each group in its original order."""
+    ordered = tuple(items)
+    rank = {name: position for position, name in enumerate(dict.fromkeys(map(key, ordered)))}
+    return frozendict((name, tuple(group)) for name, group in groupby(sorted(ordered, key=lambda item: rank[key(item)]), key=key))
+
+
+def message_key(message: Message) -> tuple[str, str]:
+    return message.key
+
+
+def _merged_message(previous: Message | None, revisions: tuple[Message, ...]) -> Message:
+    """The latest revision keeps the first observation time and stays own once any revision was."""
+    first = previous if previous is not None else revisions[0]
+    return replace(revisions[-1], observed_at=first.observed_at, own=first.own or any(message.own for message in revisions))
+
+
 def observed(feed: Feed, messages: tuple[Message, ...], at: float) -> Feed:
     """Stable source keys update an existing entry; reactions do not re-alert it."""
-    merged = {message.key: message for message in feed.messages}
-    for message in messages:
-        previous = merged.get(message.key)
-        merged[message.key] = replace(message, observed_at=previous.observed_at, own=message.own or previous.own) if previous is not None else message
+    known = {message.key: message for message in feed.messages}
+    arrived = {key: _merged_message(known.get(key), revisions) for key, revisions in grouped(messages, message_key).items()}
+    merged = {**known, **arrived}
     retained = tuple(sorted(merged.values(), key=message_order)[-MAX_MESSAGES:])
     keys = {message.key for message in retained}
     return replace(feed, messages=retained, checked_at=at, acknowledged=tuple(mark for mark in feed.acknowledged if mark.key in keys))
@@ -207,11 +225,21 @@ def reopen(feed: Feed, key: tuple[str, str]) -> Feed:
 
 
 def updates_observed(feed: Feed, updates: tuple[Update, ...]) -> Feed:
-    merged = {item.key: item for item in feed.updates}
-    for item in updates:
-        previous = merged.get(item.key)
-        merged[item.key] = replace(item, created_at=previous.created_at) if previous is not None else item
+    known = {item.key: item for item in feed.updates}
+    arrived = {
+        key: replace(revisions[-1], created_at=_first_update(known.get(key), revisions).created_at)
+        for key, revisions in grouped(updates, update_key).items()
+    }
+    merged = {**known, **arrived}
     return replace(feed, updates=tuple(sorted(merged.values(), key=update_order)[-MAX_MESSAGES:]))
+
+
+def _first_update(previous: Update | None, revisions: tuple[Update, ...]) -> Update:
+    return previous if previous is not None else revisions[0]
+
+
+def update_key(update: Update) -> tuple[str, str]:
+    return update.key
 
 
 def update_order(update: Update) -> float:
@@ -229,11 +257,12 @@ class ChatTicket:
 
 
 def chat_tickets(feed: Feed) -> tuple[ChatTicket, ...]:
-    chats: dict[str, list[Message]] = {}
-    for message in sorted(feed.messages, key=message_order):
-        if message.conversation in feed.followed and feed.unseen(message):
-            chats.setdefault(message.conversation, []).append(message)
-    return tuple(ChatTicket(identity, tuple(messages)) for identity, messages in chats.items())
+    pending = (message for message in sorted(feed.messages, key=message_order) if message.conversation in feed.followed and feed.unseen(message))
+    return tuple(ChatTicket(identity, messages) for identity, messages in grouped(pending, message_conversation).items())
+
+
+def message_conversation(message: Message) -> str:
+    return message.conversation
 
 
 def reply_changed(feed: Feed, reply: Reply) -> Feed:

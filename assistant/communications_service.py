@@ -224,11 +224,7 @@ class Communications:
         followed = self.feed.followed
         if not followed:
             candidates = (found.current, *(chat.identity for chat in found.conversations if chat.kind == "chat"))
-            selected: list[str] = []
-            for candidate in candidates:
-                if candidate and candidate not in selected:
-                    selected.append(candidate)
-            followed = tuple(selected[:4])
+            followed = tuple(dict.fromkeys(candidate for candidate in candidates if candidate))[:4]
             self.dirty = True
         self.feed = replace(self.feed, conversations=tuple(known.values())[:150], followed=followed)
         self.feed = observed(self.feed, found.messages, time.time())
@@ -398,11 +394,8 @@ class Communications:
 
     def follow(self, identities: tuple[str, ...]) -> None:
         known = {chat.identity for chat in self.feed.conversations}
-        followed: list[str] = []
-        for identity in identities:
-            if identity in known and identity not in followed:
-                followed.append(identity)
-        self.feed = replace(self.feed, followed=tuple(followed[:MAX_FOLLOWED]))
+        followed = tuple(dict.fromkeys(identity for identity in identities if identity in known))[:MAX_FOLLOWED]
+        self.feed = replace(self.feed, followed=followed)
         self.save()
         self.next_poll = 0
         self.changed()

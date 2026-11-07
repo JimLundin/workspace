@@ -7,7 +7,6 @@ resumes pending text work after a restart. Restarting Workspace never resumes
 microphone or computer-audio capture.
 """
 
-import contextlib
 import queue
 import sqlite3
 import threading
@@ -523,10 +522,14 @@ class Meetings:
         )
 
     def recent(self) -> str:
-        entries: list[str] = []
-        for path in reversed(self.archive.journals()[-20:]):
-            with contextlib.suppress(OSError, ValueError, sqlite3.Error):
-                store = self.archive.open(path.parent)
-                state = store.state()
-                entries.append(f"{state.title} · {state.frames / RATE:.0f}s · {store.transcript}")
+        entries = (entry for path in reversed(self.archive.journals()[-20:]) if (entry := self._entry(path)) is not None)
         return "\n".join(entries) or "No saved meeting transcripts yet."
+
+    def _entry(self, path: Path) -> str | None:
+        """One saved meeting's summary line, or nothing when its journal cannot be read."""
+        try:
+            store = self.archive.open(path.parent)
+            state = store.state()
+            return f"{state.title} · {state.frames / RATE:.0f}s · {store.transcript}"
+        except OSError, ValueError, sqlite3.Error:
+            return None

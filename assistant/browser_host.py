@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal, assert_never
@@ -208,21 +208,24 @@ def frame(data: bytes) -> bytes:
 
 
 def receive(stream: socket.socket, cancel: threading.Event, deadline: float) -> bytes:
-    def read(size: int) -> bytes:
-        data = bytearray()
-        while len(data) < size:
+    def chunks(size: int) -> Iterator[bytes]:
+        remaining = size
+        while remaining > 0:
             if cancel.is_set():
                 raise InterruptedError("Stopped while waiting for the browser host. Inspect any action already started.")
             if time.monotonic() >= deadline:
                 raise BrowserError("The browser host did not answer in time. Inspect any action already started before retrying.")
             try:
-                chunk = stream.recv(min(size - len(data), 65536))
+                chunk = stream.recv(min(remaining, 65536))
             except TimeoutError:
                 continue
             if not chunk:
                 raise DisconnectedError("The browser connection host disconnected. Reconnect explicitly to continue.")
-            data.extend(chunk)
-        return bytes(data)
+            remaining -= len(chunk)
+            yield chunk
+
+    def read(size: int) -> bytes:
+        return b"".join(chunks(size))
 
     size = int.from_bytes(read(4), byteorder="big")
     if not 0 < size <= MAX_RESPONSE:

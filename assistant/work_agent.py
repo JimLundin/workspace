@@ -9,7 +9,7 @@ import threading
 import time
 import traceback
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import assert_never
 
@@ -119,6 +119,16 @@ def turn_ended(task: Task) -> bool:
 
 def chronological(task: Task) -> tuple[float, str]:
     return task.created_at, task.id
+
+
+def _drained[T](source: queue.Queue[T] | queue.SimpleQueue[T], limit: int) -> Iterator[T]:
+    """Up to limit items already waiting, in queue order, without blocking."""
+    for _ in range(limit):
+        try:
+            item = source.get_nowait()
+        except queue.Empty:
+            return
+        yield item
 
 
 class WorkAgent:
@@ -649,21 +659,14 @@ class WorkAgent:
         return True
 
     def _take_events(self) -> tuple[tuple[RunRef, PresentationEvent], ...]:
-        events: list[tuple[RunRef, PresentationEvent]] = []
-        for _ in range(512):
-            try:
-                events.append(self._events.get_nowait())
-            except queue.Empty:
-                break
-        return tuple(events)
+        return tuple(_drained(self._events, 512))
 
     def _jobs_ready(self) -> tuple[Observe, ...]:
-        observed: list[Observe] = []
-        for _ in range(64):
-            try:
-                job = self._jobs.get_nowait()
-            except queue.Empty:
-                break
+        return tuple(self._applied_jobs())
+
+    def _applied_jobs(self) -> Iterator[Observe]:
+        """Apply up to 64 queued jobs in order, yielding the observations for the caller to run."""
+        for job in _drained(self._jobs, 64):
             match job:
                 case StopConversation():
                     pass
@@ -677,7 +680,7 @@ class WorkAgent:
                     case StopConversation(conversation_id):
                         self._service.stop_conversation(conversation_id, at=self.clock())
                     case Observe():
-                        observed.append(job)
+                        pass
                     case _:
                         assert_never(job)
             except Exception as error:
@@ -697,7 +700,8 @@ class WorkAgent:
                             self._last_stop = None
                         case _:
                             pass
-        return tuple(observed)
+            if isinstance(job, Observe):
+                yield job
 
     def _record_failure(self, job: Issued | IdentifiedSubmission) -> None:
         watched, _ = self._observed_ids()

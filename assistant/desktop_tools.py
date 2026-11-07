@@ -4,6 +4,7 @@ import hashlib
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from itertools import islice
 from pathlib import Path
 from typing import Annotated, Final, Literal
 
@@ -356,13 +357,8 @@ class Desktop:
         folder, pattern, limit = Path(request.folder).expanduser(), request.pattern, request.limit
 
         def find() -> Output:
-            found: list[str] = []
-            for path in folder.rglob(pattern):
-                if path.is_file():
-                    found.append(str(path))
-                    if len(found) >= limit:
-                        found.append(f"[stopped at {limit} files]")
-                        break
+            files = tuple(islice((str(path) for path in folder.rglob(pattern) if path.is_file()), max(limit, 1)))
+            found = (*files, f"[stopped at {limit} files]") if files and len(files) >= limit else files
             return Output("\n".join(sorted(found)) or "No files match.")
 
         return self.session.effect(args.operation, find)
