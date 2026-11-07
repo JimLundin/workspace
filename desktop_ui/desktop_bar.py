@@ -307,7 +307,7 @@ class DesktopBar:
             Cell(native_shell),
         )
         try:
-            bar = replace(bar, audio_meter=AudioMeter(audio_level) if audio_level is not None else None)
+            bar = replace(bar, audio_meter=AudioMeter.start(audio_level) if audio_level is not None else None)
             if native_shell:
                 bar = replace(bar, shell=bar._start_shell())
             deliver.set(bar.handle)
@@ -322,7 +322,7 @@ class DesktopBar:
     def _start_shell(self) -> _Shell:
         notifications = NotificationObserver.start()
         status = StatusObserver.start()
-        away = AwayScreens(_record_usage)
+        away = AwayScreens.start(_record_usage)
 
         def message(_hwnd: int, message: int, wparam: int, _lparam: int) -> int | None:
             away.message(message, wparam)

@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final
 
+from cell import Cell
 from config import DARK_WHEN_IDLE_MINUTES
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
@@ -122,6 +123,24 @@ def set_power(sources: Sequence[PhysicalMonitors], monitor: Monitor, wanted: Pow
     return result, len(sources)
 
 
+@dataclass(frozen=True, slots=True)
+class _Away:
+    """What the screens, the keyboard's light and the laptop's panel are doing, and why."""
+
+    light: KeyboardLight
+    """The keyboard's backlight, dark exactly while the screens are."""
+    panel: LaptopPanel
+    """The laptop's own panel, at brightness 0 exactly while the screens are dark."""
+    kept: PhysicalMonitors
+    """Handles opened while unlocked, used when opening fails during a lock."""
+    locked: bool
+    setting: Setting = Setting(DELAY_MS, enabled=True)
+    held: Reason | None = None
+    recording: bool = False
+    dark: frozenset[Monitor] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
 class AwayScreens:
     """Owns the darkened screens across lock, unlock, idleness and input, on the bar's thread.
 
@@ -130,68 +149,72 @@ class AwayScreens:
     65 ms on the home 4K screen, so only a darken or restore edge costs one
     request per protected screen on that thread."""
 
-    __slots__ = ("dark", "held", "kept", "light", "locked", "panel", "record", "recording", "setting")
+    record: Callable[[str, Mapping[str, Detail]], None]
+    _state: Cell[_Away]
+    """Replaced whole on the bar's thread."""
 
-    def __init__(
-        self,
+    @classmethod
+    def start(
+        cls,
         record: Callable[[str, Mapping[str, Detail]], None],
         light: KeyboardLight | None = None,
         panel: LaptopPanel | None = None,
-    ) -> None:
-        self.record = record
-        self.light = light if light is not None else KeyboardLight(ViaBacklight(), record)
-        """The keyboard's backlight, dark exactly while the screens are."""
-        self.panel = panel if panel is not None else LaptopPanel(WmiBrightness(), record)
-        """The laptop's own panel, at brightness 0 exactly while the screens are dark."""
-        self.setting = Setting(DELAY_MS, enabled=True)
-        self.held: Reason | None = None
-        self.recording = False
-        self.dark: frozenset[Monitor] = frozenset()
-        # Native ownership: handles opened while unlocked, used when opening fails during a lock.
-        self.kept = PhysicalMonitors.open()
-        # Started, or restarted after a crash, behind the lock screen.
-        self.locked = session.locked() is True
-        self.settle()
+    ) -> AwayScreens:
+        """Started, or restarted after a crash, behind the lock screen as well as in front of it."""
+        away = _Away(
+            light if light is not None else KeyboardLight(ViaBacklight(), record),
+            panel if panel is not None else LaptopPanel(WmiBrightness(), record),
+            PhysicalMonitors.open(),
+            locked=session.locked() is True,
+        )
+        screens = cls(record, Cell(away))
+        screens.settle()
+        return screens
+
+    @property
+    def setting(self) -> Setting:
+        return self._state.get().setting
 
     def message(self, message: int, wparam: int) -> None:
         if message == session.WM_DISPLAYCHANGE:
-            self.kept.close()
-            self.kept = PhysicalMonitors.open()
-            if self.held is None:
-                self.panel = self.panel.restore()  # A panel that refused while the lid was closed is back.
+            away = self._state.get()
+            away.kept.close()
+            # A panel that refused while the lid was closed is back.
+            panel = away.panel.restore() if away.held is None else away.panel
+            self._state.set(replace(away, kept=PhysicalMonitors.open(), panel=panel))
         match session.change(message, wparam):
             case session.Change.LOCKED:
-                self.locked = True
+                self._state.update(lambda away: replace(away, locked=True))
                 self.settle()
             case session.Change.UNLOCKED:
-                self.locked = False
+                self._state.update(lambda away: replace(away, locked=False))
                 self.settle()
             case None:
                 pass
 
     def poll(self, *, recording: bool) -> None:
-        self.recording = recording
+        self._state.update(lambda away: replace(away, recording=recording))
         self.settle()
 
     def toggle(self) -> None:
-        self.setting = replace(self.setting, enabled=not self.setting.enabled)
-        self.record("dark_when_away_toggle", {"enabled": self.setting.enabled})
+        away = self._state.update(lambda away: replace(away, setting=replace(away.setting, enabled=not away.setting.enabled)))
+        self.record("dark_when_away_toggle", {"enabled": away.setting.enabled})
         self.settle()
 
     def settle(self) -> None:
-        observed = Presence(presence.idle_ms(), locked=self.locked, display_required=self.recording or presence.display_required())
-        self.held, change = step(self.held, observed, self.setting)
+        away = self._state.get()
+        observed = Presence(presence.idle_ms(), locked=away.locked, display_required=away.recording or presence.display_required())
+        held, change = step(away.held, observed, away.setting)
+        self._state.set(replace(away, held=held))
         idle_seconds = observed.idle_ms // 1000
         match change:
             case Darken(reason=begun):
                 protected = dark_when_away(screen.monitors())
-                self.apply(protected - self.dark, Power.OFF, {"reason": begun.name.lower(), "idle_seconds": idle_seconds})
-                self.light = self.light.darken()
-                self.panel = self.panel.darken()
+                self.apply(protected - away.dark, Power.OFF, {"reason": begun.name.lower(), "idle_seconds": idle_seconds})
+                self._state.update(lambda current: replace(current, light=current.light.darken(), panel=current.panel.darken()))
             case Restore(reason=ended):
-                self.apply(self.dark, Power.ON, {"reason": ended.name.lower(), "idle_seconds": idle_seconds})
-                self.light = self.light.restore()
-                self.panel = self.panel.restore()
+                self.apply(away.dark, Power.ON, {"reason": ended.name.lower(), "idle_seconds": idle_seconds})
+                self._state.update(lambda current: replace(current, light=current.light.restore(), panel=current.panel.restore()))
             case None:
                 pass
 
@@ -200,17 +223,17 @@ class AwayScreens:
             return
         fresh = PhysicalMonitors.open()
         try:
-            results = frozendict((monitor, set_power((fresh, self.kept), monitor, wanted)) for monitor in monitors)
+            results = frozendict((monitor, set_power((fresh, self._state.get().kept), monitor, wanted)) for monitor in monitors)
         finally:
             fresh.close()
-        self.dark = dark_after(self.dark, frozendict((monitor, result) for monitor, (result, _) in results.items()))
+        powered = frozendict((monitor, result) for monitor, (result, _) in results.items())
+        self._state.update(lambda away: replace(away, dark=dark_after(away.dark, powered)))
         kept = sum(1 for _, source in results.values() if source == 1)
         ok = all(result is wanted for result, _ in results.values())
         self.record("dark_when_away", {"power": wanted.name.lower(), **cause, "screens": len(results), "kept_handles": kept, "ok": ok})
 
     def close(self) -> None:
         """Workspace leaving while away turns the screens back on rather than leaving them dark."""
-        self.apply(self.dark, Power.ON, {"reason": "close"})
-        self.light = self.light.restore()
-        self.panel = self.panel.restore()
-        self.kept.close()
+        self.apply(self._state.get().dark, Power.ON, {"reason": "close"})
+        away = self._state.update(lambda current: replace(current, light=current.light.restore(), panel=current.panel.restore()))
+        away.kept.close()

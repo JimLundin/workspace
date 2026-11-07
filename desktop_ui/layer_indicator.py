@@ -1,8 +1,11 @@
 """The quiet layer indicator and its timed feedback capsule."""
 
+from dataclasses import dataclass, field, replace
+
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from desktop_ui.qt_runtime import prepare
 from winapi import windows
 from winapi.shapes import Rect
@@ -14,34 +17,38 @@ lazy from desktop_ui.qt_ui import cancel, later
 prepare()
 
 
-class Indicator:
-    __slots__ = (
-        "__weakref__",
-        "_flash",
-        "_frame",
-        "_ink",
-        "_label",
-        "_steady",
-        "_window",
-    )
+@dataclass(frozen=True, slots=True)
+class _Shown:
+    steady: tuple[str | None, Rect] | None = None
+    """What the indicator shows between flashes."""
+    flash: QtCore.QTimer | None = None
+    """The timer ending a flash in progress."""
 
-    def __init__(self, root: QtWidgets.QApplication) -> None:
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
+class Indicator:
+    _ink: str
+    _window: QtWidgets.QWidget
+    _label: QtWidgets.QLabel
+    _frame: int
+    _shown: Cell[_Shown] = field(default_factory=lambda: Cell(_Shown()), init=False, repr=False)
+
+    @classmethod
+    def build(cls, _root: QtWidgets.QApplication) -> Indicator:
         theme = tokens(scheme())
-        self._ink: str = theme.ink.css
-        self._window = QtWidgets.QWidget()
-        self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
-        self._window.setStyleSheet(window_style(theme))
-        self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self._window.setWindowOpacity(0.9)
+        window = QtWidgets.QWidget()
+        window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        window.setStyleSheet(window_style(theme))
+        window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        window.setWindowOpacity(0.9)
         # A 34 px capsule, as the island's.
-        layout = row(surface(self._window, theme, 17))
+        layout = row(surface(window, theme, 17))
         layout.setContentsMargins(16, 8, 16, 8)
-        self._label = label("")
-        layout.addWidget(self._label)
-        self._frame = int(self._window.winId())
-        windows.make_overlay(self._frame)
-        self._steady: tuple[str | None, Rect] | None = None
-        self._flash: QtCore.QTimer | None = None
+        text = label("")
+        layout.addWidget(text)
+        frame = int(window.winId())
+        windows.make_overlay(frame)
+        return cls(theme.ink.css, window, text, frame)
 
     def _show(self, text: str | None, work: Rect, colour: str) -> None:
         if text is None:
@@ -58,18 +65,19 @@ class Indicator:
         windows.show_quietly(self._frame, visible=True)
 
     def set(self, text: str | None, work: Rect) -> None:
-        self._steady = (text, work)
-        if self._flash is None:
+        shown = self._shown.update(lambda shown: replace(shown, steady=(text, work)))
+        if shown.flash is None:
             self._show(text, work, self._ink)
 
     def flash(self, text: str, work: Rect, seconds: float) -> None:
-        cancel(self._flash)
+        cancel(self._shown.get().flash)
         self._show(text, work, GLASS_ACCENT)
-        self._flash = later(self._window, round(seconds * 1000), self._end_flash)
+        timer = later(self._window, round(seconds * 1000), self._end_flash)
+        self._shown.update(lambda shown: replace(shown, flash=timer))
 
     def _end_flash(self) -> None:
-        self._flash = None
-        if self._steady is not None:
-            self._show(*self._steady, self._ink)
+        shown = self._shown.update(lambda shown: replace(shown, flash=None))
+        if shown.steady is not None:
+            self._show(*shown.steady, self._ink)
         else:
             self._window.hide()

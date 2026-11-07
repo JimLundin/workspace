@@ -5,10 +5,11 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
+from cell import Cell
 from winapi import desktop_shell
 
 
@@ -70,57 +71,70 @@ def launch_recovery_guard() -> RecoveryGuard:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _Taskbars:
+    revealed: bool = False
+    ready: bool = False
+    """Recovery is running, so the taskbars may be hidden."""
+    closed: bool = False
+    guard: RecoveryGuard | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class TaskbarControl:
     """Hide Explorer's taskbars until toggled, and restore them on normal or abrupt exit."""
 
-    __slots__ = ("closed", "desktop", "guard", "launch", "lock", "ready", "revealed")
+    desktop: TaskbarDesktop = desktop_shell
+    launch: Callable[[], RecoveryGuard] = launch_recovery_guard
+    _state: Cell[_Taskbars] = field(default_factory=lambda: Cell(_Taskbars()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    lock: threading.Lock = field(default_factory=threading.Lock, init=False)
 
-    def __init__(self, desktop: TaskbarDesktop = desktop_shell, launch: Callable[[], RecoveryGuard] = launch_recovery_guard) -> None:
-        self.closed = False
-        self.desktop = desktop
-        self.launch = launch
-        self.guard: RecoveryGuard | None = None
-        self.lock = threading.Lock()
-        self.revealed = False
-        self.ready = False
+    @property
+    def revealed(self) -> bool:
+        return self._state.get().revealed
+
+    @property
+    def ready(self) -> bool:
+        return self._state.get().ready
 
     def start(self) -> None:
         """The handshake runs on a worker. No taskbar is hidden before recovery is ready."""
         guard = self.launch()
         ready = guard.ready() and guard.poll() is None
         with self.lock:
-            if ready and not self.closed:
-                self.guard = guard
-                self.ready = True
+            if ready and not self._state.get().closed:
+                self._state.update(lambda taskbars: replace(taskbars, guard=guard, ready=True))
                 return
         guard.close()
         if not ready:
             raise OSError("Independent taskbar recovery could not start; Windows taskbars remain available.")
 
     def toggle(self) -> None:
-        self.revealed = not self.revealed
+        with self.lock:
+            self._state.update(lambda taskbars: replace(taskbars, revealed=not taskbars.revealed))
         self.enforce()
 
     def enforce(self) -> None:
         with self.lock:
-            if self.closed or not self.ready:
+            taskbars = self._state.get()
+            if taskbars.closed or not taskbars.ready:
                 return
-            if self.guard is None or self.guard.poll() is not None:
-                self.ready = False
+            if taskbars.guard is None or taskbars.guard.poll() is not None:
+                self._state.set(replace(taskbars, ready=False))
                 for hwnd in self.desktop.taskbars():
                     self.desktop.taskbar_visible(hwnd, show=True)
                 raise OSError("Taskbar recovery stopped; Windows taskbars have been restored.")
             for hwnd in self.desktop.taskbars():
-                if self.desktop.visible(hwnd) != self.revealed:
-                    self.desktop.taskbar_visible(hwnd, show=self.revealed)
+                if self.desktop.visible(hwnd) != taskbars.revealed:
+                    self.desktop.taskbar_visible(hwnd, show=taskbars.revealed)
 
     def close(self) -> None:
         with self.lock:
-            self.closed = True
-            owned, self.ready = self.ready, False
-            guard, self.guard = self.guard, None
-            if owned:
+            taskbars = self._state.get()
+            self._state.set(replace(taskbars, closed=True, ready=False, guard=None))
+            if taskbars.ready:
                 for hwnd in self.desktop.taskbars():
                     self.desktop.taskbar_visible(hwnd, show=True)
-        if guard is not None:
-            guard.close()
+        if taskbars.guard is not None:
+            taskbars.guard.close()

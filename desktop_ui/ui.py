@@ -453,7 +453,7 @@ class Ui:
 
     def _indicator(self, root: QtWidgets.QApplication) -> Indicator:
         if (indicator := self._built.get().indicator) is None:
-            indicator = Indicator(root)
+            indicator = Indicator.build(root)
             self._built.set(replace(self._built.get(), indicator=indicator))
         return indicator
 
