@@ -130,6 +130,11 @@ violations left, with no baseline of exceptions. Counted in production code on
     and aliases (`business_tools.Read`/`Interaction`/`Collection`/`Effect`,
     `browser_tools.Parser`, `state_store.SavedState`, `web_apps.WebAppOperation`)
     for a natural default, from how their uses specialize them.
+12. **Lazy results** (user, 2026-11-07): 129 functions return a collection that
+    only materializes a generator (107 `tuple`, 13 `frozendict`, 6 `frozenset`,
+    3 `dict`), most in `desktop_ui.window_layout`, `automation.store`,
+    `scripts.check`, `desktop_ui.island_menu` and `winapi.tray_host`. Each needs
+    its callers checked: keep it where the value is stored, cached or reused.
 
 Items 3–5 and 7–8 were added by the user on 2026-11-07: no loop-appending, no
 function requiring mutable data, frozen dataclasses wherever possible (external

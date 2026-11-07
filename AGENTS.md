@@ -80,6 +80,11 @@ their tests. Legacy data and backwards compatibility are not requirements.
   tuples, never by filling a mutable container in a loop (nor by rebinding an
   accumulator there). A loop is for a side effect, which has no place in a
   comprehension; even then, keep side effects out of loops where you can.
+- Keep evaluation lazy: a function whose result is just a generator materialized
+  (`return tuple(item for ...)`) returns an `Iterator` or is a generator, and the
+  caller materializes when it must. Materialize where the value is stored in a
+  record, cached, iterated more than once or handed to a dependency that needs
+  a collection; return a `frozenset` or `frozendict` when callers look things up.
 - No function requires mutable data. Parameters take immutable types (tuples,
   `frozendict`, frozen dataclasses, or `Sequence`/`Mapping`/`Iterable`), never
   `list`, `dict`, `set` or another mutable container.
