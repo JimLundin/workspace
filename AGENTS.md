@@ -91,7 +91,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
   `list`, `dict`, `set` or another mutable container. The architecture review
   enforces it; an `@override` method's base owns its signature.
 - Define types as frozen, slotted dataclasses wherever possible; only an owner
-  that genuinely holds changing state is a mutable class. Where a measured hot
+  that genuinely holds changing state is a mutable class; the architecture
+  review rejects a plain class whose `__init__` only stores its inputs. Where a measured hot
   path needs cheaper construction, a `typing.NamedTuple` is the fallback: about
   twice as fast to build, but not smaller (64 bytes against a slotted
   dataclass's 48 for two fields), and it compares equal to any tuple with the

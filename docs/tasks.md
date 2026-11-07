@@ -101,10 +101,18 @@ violations left, with no baseline of exceptions. Counted in production code on
    rule rejects new ones; `@override` methods are exempt, and four
    SDK/`gc.callbacks` signatures are exact exceptions. 18 remain in tests, which
    the rule doesn't cover.
-5. **Plain classes that could be frozen dataclasses** (about 86 candidates): a
-   class with no base that never assigns to `self` outside `__init__`. The check
-   must also reject mutable attribute types, since some candidates mutate a held
-   container instead.
+5. **Plain classes that could be frozen dataclasses**: done 2026-11-07. 29
+   classes whose `__init__` only stored their inputs became frozen records. The
+   review's `plain-record` rule rejects new ones: a class with no base or
+   decorator, no computed state in `__init__` (no call, container or
+   comprehension) and no later rebinding, and whose attributes no module
+   assigns through another receiver (`OwnerCalls.current`, the benchmark
+   `Clock.now`). `MemorySession` is an exact exception, since the SDK's `Session`
+   protocol needs writable attributes. Left as classes: owners that build a lock,
+   queue, thread, socket or buffer in `__init__`. About ten more only default an
+   input (`x if x is not None else Default()`, as in `WinMachine`, `MeetingAudio`
+   and `WebApps`) and could take a `default_factory`, which the rule doesn't
+   require. Six test fixtures remain, which the rule doesn't cover.
 6. **`kind` fields**: the migration below, then the check.
 7. **Operators on domain types** (user, 2026-11-07): screen `Point`/`Offset`/`Rect`
    and canvas `ScenePoint`/`Box` have theirs. Still hand-written: the bar
