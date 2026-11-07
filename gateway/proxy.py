@@ -10,6 +10,7 @@ client that goes away closes the provider's stream with it.
 import contextlib
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Final, assert_never
 from urllib.parse import urlsplit
@@ -17,6 +18,7 @@ from urllib.parse import urlsplit
 from pydantic import TypeAdapter
 lazy import httpx
 
+from cell import Cell
 from gateway.upstream import Unconfigured, Upstream, request_headers, response_headers, target
 
 TIMEOUT_S: Final = 900.0
@@ -41,17 +43,29 @@ def _bind(port: int, handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServ
         return ThreadingHTTPServer(("127.0.0.1", 0), handler)
 
 
+@dataclass(frozen=True, slots=True)
 class Gateway:
     """Owns the listening socket, its request threads and the provider pool."""
 
-    __slots__ = ("_client", "_server", "_thread", "token", "upstream")
+    upstream: Upstream | Unconfigured
+    token: str
+    _client: httpx.Client
+    _server: ThreadingHTTPServer
+    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
+    """The background serving thread, when `start` serves."""
 
-    def __init__(self, upstream: Upstream | Unconfigured, token: str, *, port: int = 0, client: Callable[[], httpx.Client] = provider_client) -> None:
-        self.upstream = upstream
-        self.token = token
-        self._client = client()
-        self._server = _bind(port, _handler(self))
-        self._thread: threading.Thread | None = None
+    @classmethod
+    def listen(cls, upstream: Upstream | Unconfigured, token: str, *, port: int = 0, client: Callable[[], httpx.Client] = provider_client) -> Gateway:
+        bound: Cell[Gateway | None] = Cell(None)
+
+        def relay(request: BaseHTTPRequestHandler) -> None:
+            # Requests arrive only once serving starts, after the gateway exists.
+            if (gateway := bound.get()) is not None:
+                gateway.relay(request)
+
+        gateway = cls(upstream, token, client(), _bind(port, _handler(relay)))
+        bound.set(gateway)
+        return gateway
 
     @property
     def port(self) -> int:
@@ -59,16 +73,17 @@ class Gateway:
 
     def start(self) -> None:
         """Serve on a background thread (tests); `serve` blocks instead."""
-        self._thread = threading.Thread(target=self._server.serve_forever, name="gateway", daemon=True)
-        self._thread.start()
+        thread = threading.Thread(target=self._server.serve_forever, name="gateway", daemon=True)
+        self._thread.set(thread)
+        thread.start()
 
     def serve(self) -> None:
         self._server.serve_forever()
 
     def close(self) -> None:
-        if self._thread is not None:
+        if (thread := self._thread.get()) is not None:
             self._server.shutdown()
-            self._thread.join()
+            thread.join()
         self._server.server_close()
         self._client.close()
 
@@ -130,19 +145,19 @@ def _error(request: BaseHTTPRequestHandler, status: int, message: str) -> None:
     request.wfile.write(body)
 
 
-def _handler(gateway: Gateway) -> type[BaseHTTPRequestHandler]:
+def _handler(relay: Callable[[BaseHTTPRequestHandler], None]) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
         """Keep-alive: the SDK reuses its connection to us across requests."""
 
         def do_GET(self) -> None:
-            gateway.relay(self)
+            relay(self)
 
         def do_POST(self) -> None:
-            gateway.relay(self)
+            relay(self)
 
         def do_DELETE(self) -> None:
-            gateway.relay(self)
+            relay(self)
 
         def log_message(self, format: str, *args: object) -> None:
             """Requests are not logged: their paths and timing are the clients' to record."""

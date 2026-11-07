@@ -28,7 +28,7 @@ def test_requests_reach_the_provider_with_its_key_not_the_gateway_token(tmp_path
     # Defect: the gateway forwards the client's token (or no key) to the provider,
     # loses the path, or the assistant still calls the provider directly.
     with fake_endpoint() as provider:
-        gateway = Gateway(Upstream(provider.url, "provider-key"), TOKEN)
+        gateway = Gateway.listen(Upstream(provider.url, "provider-key"), TOKEN)
         gateway.start()
         try:
             assert transcribe(through(tmp_path, gateway), wav(bytes(2 * RATE), RATE)) == "hello there"
@@ -41,7 +41,7 @@ def test_requests_reach_the_provider_with_its_key_not_the_gateway_token(tmp_path
 def test_a_wrong_token_is_refused_before_the_provider_is_called(tmp_path: Path) -> None:
     # Defect: any local program reaching the port spends the provider key.
     with fake_endpoint() as provider:
-        gateway = Gateway(Upstream(provider.url, "provider-key"), "another-boot")
+        gateway = Gateway.listen(Upstream(provider.url, "provider-key"), "another-boot")
         gateway.start()
         try:
             result = transcribe(through(tmp_path, gateway), wav(b"", RATE))
@@ -55,7 +55,7 @@ def test_a_wrong_token_is_refused_before_the_provider_is_called(tmp_path: Path) 
 def test_an_unconfigured_gateway_names_the_missing_variables(tmp_path: Path) -> None:
     # Defect: a gateway started without credentials crashes (and the keeper gives
     # up on it) or answers with an error that doesn't say what to set.
-    gateway = Gateway(Unconfigured(("OPENAI_API_KEY",)), TOKEN)
+    gateway = Gateway.listen(Unconfigured(("OPENAI_API_KEY",)), TOKEN)
     gateway.start()
     try:
         result = transcribe(through(tmp_path, gateway), wav(b"", RATE))
@@ -77,7 +77,7 @@ def test_streamed_replies_are_relayed_as_they_arrive() -> None:
 
     with fake_endpoint() as provider:
         provider.stream = stream
-        gateway = Gateway(Upstream(provider.url, "provider-key"), TOKEN)
+        gateway = Gateway.listen(Upstream(provider.url, "provider-key"), TOKEN)
         gateway.start()
         try:
             url = f"http://127.0.0.1:{gateway.port}/v1/responses"
@@ -94,10 +94,10 @@ def test_streamed_replies_are_relayed_as_they_arrive() -> None:
 
 def test_a_restarted_gateway_takes_back_its_port() -> None:
     # Defect: a gateway restart moves the port, so clients built before it fail.
-    first = Gateway(Unconfigured(()), TOKEN)
+    first = Gateway.listen(Unconfigured(()), TOKEN)
     port = first.port
     first.close()
-    second = Gateway(Unconfigured(()), TOKEN, port=port)
+    second = Gateway.listen(Unconfigured(()), TOKEN, port=port)
     try:
         assert second.port == port
     finally:
