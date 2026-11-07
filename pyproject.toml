@@ -322,13 +322,6 @@ expression = "Modifiers"
 reason = "Modifier ownership counters are updated for every key event inside the measured keyboard path; copying them would add per-event allocation."
 
 [[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "assistant.sdk"
-declaration = "TextBuffer"
-expression = "TextBuffer"
-reason = "Private streaming accumulators update growing fragment maps and completion sets; persistent copies per fragment add substantial cumulative work. Published timeline values remain immutable."
-
-[[tool.workspace.architecture.exceptions]]
 rule = "plain-record"
 module = "assistant.sdk"
 declaration = "MemorySession"

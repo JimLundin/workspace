@@ -40,6 +40,7 @@ from assistant.agent import KEPT_SCREENSHOTS
 from assistant.agent_history import History
 from assistant.llm import ToolCall, ToolSpec, async_client
 from automation.execution import Incomplete, InvalidConfiguration, Reported, ReportStatus
+from cell import Cell
 from contracts.json_value import Json
 from contracts.presentation import Answer, LiveMessage, ReasoningSummary, StreamState
 lazy from assistant.agent import Agent
@@ -158,40 +159,52 @@ class Hooks(RunHooks["Agent"]):
         context.context.mark("first_response_seconds")
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class TextBuffer:
-    """Mutable transport fragments stay here; the timeline receives immutable values."""
+    """One streamed item's fragments; the timeline publishes its joined message."""
 
     message: Answer | ReasoningSummary
-    parts: dict[int, str] = field(default_factory=dict[int, str])
-    completed: set[int] = field(default_factory=set[int])
+    parts: frozendict[int, str] = frozendict()
+    completed: frozenset[int] = frozenset()
 
 
+def _with_part(buffer: TextBuffer, index: int, text: str, *, done: bool, separator: str) -> TextBuffer:
+    """`buffer` with fragment `text` appended to part `index`, or replacing it when the part is done."""
+    parts = frozendict({**buffer.parts, index: text if done else buffer.parts.get(index, "") + text})
+    joined = separator.join(parts[key] for key in sorted(parts))
+    return TextBuffer(replace(buffer.message, text=joined), parts, buffer.completed | {index} if done else buffer.completed)
+
+
+@dataclass(frozen=True, slots=True)
+class _Streamed:
+    active: frozendict[str, TextBuffer] = frozendict()
+    """Items still streaming, by key."""
+    completed: frozenset[str] = frozenset()
+    """Items already published whole; late fragments for them are ignored."""
+
+
+def _prefix() -> str:
+    return uuid.uuid4().hex
+
+
+@dataclass(frozen=True, slots=True)
 class Timeline:
     """Allow only response text and public reasoning summaries across the SDK boundary."""
 
-    __slots__ = ("active", "completed", "prefix", "publish")
-
-    def __init__(self, publish: Callable[[LiveMessage], None]) -> None:
-        self.publish = publish
-        self.prefix = uuid.uuid4().hex
-        self.active: dict[str, TextBuffer] = {}
-        self.completed: set[str] = set()
+    publish: Callable[[LiveMessage], None]
+    prefix: str = field(default_factory=_prefix)
+    _streamed: Cell[_Streamed] = field(default_factory=lambda: Cell(_Streamed()), init=False, repr=False)
 
     def part(self, kind: type[Answer] | type[ReasoningSummary], identity: str, index: int, text: object, *, done: bool = False) -> None:
         key = f"{self.prefix}:{identity}"
-        if key in self.completed or not isinstance(text, str):
+        streamed = self._streamed.get()
+        if key in streamed.completed or not isinstance(text, str):
             return
-        if key not in self.active:
-            self.active[key] = TextBuffer(kind(key, "", time.time()))
-        buffer = self.active[key]
+        buffer = streamed.active.get(key) or TextBuffer(kind(key, "", time.time()))
         if index in buffer.completed:
             return
-        buffer.parts[index] = text if done else buffer.parts.get(index, "") + text
-        if done:
-            buffer.completed.add(index)
-        separator = "\n\n" if kind is ReasoningSummary else ""
-        buffer.message = replace(buffer.message, text=separator.join(buffer.parts[index] for index in sorted(buffer.parts)))
+        buffer = _with_part(buffer, index, text, done=done, separator="\n\n" if kind is ReasoningSummary else "")
+        self._streamed.set(replace(streamed, active=frozendict({**streamed.active, key: buffer})))
         if buffer.message.text.strip():
             self.publish(buffer.message)
 
@@ -208,10 +221,12 @@ class Timeline:
             case _:
                 return
         key = f"{self.prefix}:{item.id}"
-        if key in self.completed:
+        streamed = self._streamed.get()
+        if key in streamed.completed:
             return
-        self.completed.add(key)
-        buffer = self.active.pop(key, None)
+        buffer = streamed.active.get(key)
+        active = frozendict((name, held) for name, held in streamed.active.items() if name != key)
+        self._streamed.set(_Streamed(active, streamed.completed | {key}))
         at = buffer.message.created_at if buffer is not None else time.time()
         state = StreamState.INTERRUPTED if interrupted or item.status == "incomplete" else StreamState.COMPLETE
         if text.strip():
@@ -240,10 +255,11 @@ class Timeline:
                 pass  # Other events, including private reasoning, have no UI representation.
 
     def finish(self) -> None:
-        for buffer in self.active.values():
+        streamed = self._streamed.get()
+        self._streamed.set(replace(streamed, active=frozendict()))
+        for buffer in streamed.active.values():
             if buffer.message.text:
                 self.publish(replace(buffer.message, state=StreamState.INTERRUPTED))
-        self.active.clear()
 
 
 async def watch_stop(local: Agent, result: RunResultStreaming, hooks: Hooks) -> None:
