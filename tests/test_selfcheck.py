@@ -213,6 +213,4 @@ def test_fast_checks_still_compile_native_tests_and_import_production_modules(tm
 
 def test_compile_excludes_dependency_and_cache_sources(tmp_path: Path) -> None:
     root = tree(tmp_path, {**SOUND, **{f"{folder}/broken.py": "def broken(:\n" for folder in (".runtime", ".python", ".venv", "__pycache__")}})
-    problems: list[str] = []
-    compile_all(root, problems)
-    assert not problems
+    assert not tuple(compile_all(root))

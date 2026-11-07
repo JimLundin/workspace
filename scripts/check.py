@@ -17,7 +17,7 @@ import sys
 import tempfile
 import time
 import unittest
-from collections.abc import Callable, Generator, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -125,9 +125,11 @@ def windows_only(error: BaseException) -> bool:
             return False
 
 
-def import_changed(changed: tuple[str, ...], root: Path, failures: list[Failure], load: Callable[[str], object] = importlib.import_module) -> None:
-    # Changed source, its root and failure ledger identify one import review;
-    # the loader belongs to the check runtime, shared with test discovery.
+def import_changed(changed: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Iterator[Failure]:
+    """Compile each changed source and import the changed production modules, yielding each import failure.
+
+    The loader belongs to the check runtime, shared with test discovery.
+    """
 
     for name in changed:
         if not name.endswith((".py", ".pyw")) or not (root / name).exists():
@@ -138,7 +140,7 @@ def import_changed(changed: tuple[str, ...], root: Path, failures: list[Failure]
                 load(module_name(name))
             except Exception as error:
                 if not windows_only(error):
-                    failures.append(raised(name, error))
+                    yield raised(name, error)
 
 
 def selected_tests(module: str, loaded: object, requested: str = "") -> Iterator[tuple[str, Test]]:
@@ -152,20 +154,31 @@ def selected_tests(module: str, loaded: object, requested: str = "") -> Iterator
                 pass
 
 
-@contextmanager
-def timed(label: str, timings: list[tuple[float, str]]) -> Generator[None]:
-    started = time.perf_counter()
-    try:
-        yield
-    finally:
-        timings.append((time.perf_counter() - started, label))
+class Phases:
+    """The durations of a check's phases, in the order they finish; each phase's time counts even when it raises."""
+
+    __slots__ = ("recorded",)
+
+    def __init__(self) -> None:
+        self.recorded: tuple[tuple[float, str], ...] = ()
+
+    @contextmanager
+    def timed(self, label: str) -> Generator[None]:
+        started = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.recorded = (*self.recorded, (time.perf_counter() - started, label))
 
 
 class SourceRuntime(Protocol):
     """Runtime initialization and source loading owned by a check invocation."""
 
     def activate(self) -> None: ...
-    def import_all(self, root: Path, failures: list[str]) -> None: ...
+    def import_all(self, root: Path) -> Iterable[str]:
+        """Import every production module, yielding a report of each that fails."""
+        ...
+
     def load(self, module: str) -> object: ...
 
 
@@ -176,8 +189,8 @@ class NativeSourceRuntime:
             # Mandatory policy gates have passed; protected gates stay intact.
             importlib.import_module("tests")
 
-    def import_all(self, root: Path, failures: list[str]) -> None:
-        selfcheck.import_all(root, failures)
+    def import_all(self, root: Path) -> Iterable[str]:
+        return selfcheck.import_all(root)
 
     def load(self, module: str) -> object:
         return importlib.import_module(module)
@@ -228,19 +241,17 @@ def combined_results(results: tuple[Results, ...], phases: tuple[tuple[float, st
 NATIVE_SOURCE_RUNTIME = NativeSourceRuntime()
 
 
-def step_failures(node: str, step: Callable[[Path, list[str]], None], root: Path) -> tuple[Failure, ...]:
-    # selfcheck's source steps append free text to a ledger owned by this call.
-    problems: list[str] = []
-    step(root, problems)
-    return tuple(reported(node, problem) for problem in problems)
+def step_failures(node: str, step: Callable[[Path], Iterable[str]], root: Path) -> Iterator[Failure]:
+    """selfcheck's source step's free-text problems, as failures of node."""
+    return (reported(node, problem) for problem in step(root))
 
 
 def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SOURCE_RUNTIME) -> Results:
-    phases: list[tuple[float, str]] = []
+    phases = Phases()
     os.environ.pop("WORKSPACE_E2E", None)
-    with timed("phase:runtime activation", phases):
+    with phases.timed("phase:runtime activation"):
         runtime.activate()
-    failures: list[Failure] = []
+    failures: tuple[Failure, ...] = ()
     # No separate compile phase: the architecture review and Ruff parse every
     # source before any test, and the import review compiles what it loads.
     broad = selection.reason not in (DIRECT, "explicit iteration scope")
@@ -251,27 +262,29 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     generated = tuple(name for name in selection.tests if name.startswith("tests/properties/"))
     first = execute_tests(generated, root, runtime.load)
     if broad:
-        with timed("phase:import all production modules", phases):
+        with phases.timed("phase:import all production modules"):
             # This phase already requires the SDK. Resolve its dependency graph
             # before Qt installs its per-module source-inspection callback.
             # Narrow/Qt-only checks never pay this preload; generic source
             # fixtures without the SDK keep their existing import inventory.
-            import_changed(("assistant/sdk.py",), root, failures, runtime.load)
-            failures.extend(step_failures("import all production modules", runtime.import_all, root))
+            failures = (
+                *import_changed(("assistant/sdk.py",), root, runtime.load),
+                *step_failures("import all production modules", runtime.import_all, root),
+            )
     if not failures:
-        with timed("phase:import changed source", phases):
-            import_changed(selection.changed, root, failures, runtime.load)
+        with phases.timed("phase:import changed source"):
+            failures = tuple(import_changed(selection.changed, root, runtime.load))
     if not broad and not failures:
         # A cold SDK import costs about 2 s; paid here, the time budget does not
         # blame whichever selected test happens to use the SDK first.
-        with timed("phase:import the SDK", phases):
+        with phases.timed("phase:import the SDK"):
             for package in sdk_packages(selection.tests, root):
                 runtime.load(package)
     if failures:
-        return combined_results((first, Results(0, 0, tuple(failures), ())), tuple(phases))
+        return combined_results((first, Results(0, 0, failures, ())), phases.recorded)
     remaining = tuple(name for name in selection.tests if not name.startswith("tests/properties/"))
     following = execute_overlapped(remaining, root, runtime.load)
-    return combined_results((first, following), tuple(phases))
+    return combined_results((first, following), phases.recorded)
 
 
 SDK_PACKAGES = ("agents", "openai")
@@ -334,22 +347,22 @@ def execute_overlapped(tests: tuple[str, ...], root: Path, load: Callable[[str],
     plan = execution_plan(tests)
     if not plan.portable:
         return execute_tests(plan.sequential, root, load)
-    phases: list[tuple[float, str]] = []
+    phases = Phases()
     # The coordinator owns futures and ledgers until all children exit. Only
     # immutable Results cross the stdlib pool boundary; no native module is
     # submitted to it. Each worker module keeps the ordinary executor, fixtures,
     # assertions and failure protocol.
-    with timed("phase:portable worker dispatch", phases):
+    with phases.timed("phase:portable worker dispatch"):
         pool = ProcessPoolExecutor(max_workers=WORKERS, initializer=prepare_worker, initargs=(root,))
     try:
-        with timed("phase:portable worker submission", phases):
+        with phases.timed("phase:portable worker submission"):
             pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in plan.portable)
-        with timed("phase:portable worker completion", phases):
+        with phases.timed("phase:portable worker completion"):
             completed = tuple(_completed(name, future) for name, future in pending)
     finally:
-        with timed("phase:portable worker shutdown", phases):
+        with phases.timed("phase:portable worker shutdown"):
             pool.shutdown(wait=True, cancel_futures=True)
-    return combined_results((*completed, execute_tests(plan.sequential, root, load)), tuple(phases))
+    return combined_results((*completed, execute_tests(plan.sequential, root, load)), phases.recorded)
 
 
 def _completed(name: str, future: Future[Results]) -> Results:
@@ -642,18 +655,17 @@ def main() -> None:
     if args.timings is not None and args.receipt is not None and args.timings.absolute() == args.receipt.absolute():
         parser.error("Timing evidence and the success receipt need separate paths")
     started = time.perf_counter()
-    # This coordinator owns the small mutable timing ledger. Published evidence
-    # contains only scalar durations, source identities and immutable results.
-    overhead: list[tuple[float, str]] = []
-    with timed("phase:initial source manifest", overhead):
+    # Published evidence contains only scalar durations, source identities and immutable results.
+    overhead = Phases()
+    with overhead.timed("phase:initial source manifest"):
         stamps = source_stamps()
         current = source_files()
     cache = Cache(ROOT)
     if args.standards:
-        with timed("phase:lint standards", overhead):
+        with overhead.timed("phase:lint standards"):
             check_lint(ROOT)
     # Selection parses source without importing it, so it may precede the reviews.
-    with timed("phase:baseline and test selection", overhead):
+    with overhead.timed("phase:baseline and test selection"):
         selection = choose(args, current, parser)
     # The type checkers overlap the policy reviews and test execution. Their
     # failures block the receipt like test failures; an earlier policy failure
@@ -664,9 +676,9 @@ def main() -> None:
     with types as typed:
         # Mandatory even for explicit --tests scopes; no application imports or
         # native effects before ownership and source policies have passed.
-        with timed("phase:architecture review", overhead):
+        with overhead.timed("phase:architecture review"):
             architecture = check_architecture(ROOT, current, cache)
-        with timed("phase:quality review", overhead):
+        with overhead.timed("phase:quality review"):
             check_quality(ROOT, current, cache)
         scope: dict[str, str | int] = {"profile": selection.reason, "test_modules": len(selection.tests), "changed_files": len(selection.changed)}
         print(json.dumps(scope), flush=True)
@@ -679,9 +691,9 @@ def main() -> None:
             results = execute_lanes(ROOT, selection, typed if args.full else check_standards.unchecked)
         else:
             results = execute(selection, ROOT)
-        with timed("phase:type standards", overhead):
+        with overhead.timed("phase:type standards"):
             results = combined_results((results, Results(0, 0, (*typed(), *editing_budget(args, selection, results)), ())))
-    with timed("phase:final source manifest", overhead):
+    with overhead.timed("phase:final source manifest"):
         # Stamps taken before hashing: unchanged stamps mean unchanged bytes. Re-hashing
         # every file after the tests cost up to 15 s under post-run file contention.
         final = current if source_stamps() == stamps else source_files()
@@ -690,7 +702,7 @@ def main() -> None:
         message = "Working source changed during checks; no receipt written."
         results = combined_results((results, Results(0, 0, (Failure("working source", message, f"{message} Changed: " + ", ".join(changed)),), ())))
     elapsed = time.perf_counter() - started
-    run = CheckRun(frozendict(current), selection, combined_results((results,), tuple(overhead)), architecture, elapsed)
+    run = CheckRun(frozendict(current), selection, combined_results((results,), overhead.recorded), architecture, elapsed)
     raise SystemExit(publish_check(args, run))
 
 

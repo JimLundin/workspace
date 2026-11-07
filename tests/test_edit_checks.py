@@ -3,6 +3,7 @@
 import contextlib
 import io
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 from scripts.architecture import Report
@@ -101,9 +102,9 @@ class SourceFixture:
     def activate(self) -> None:
         pass
 
-    def import_all(self, root: Path, failures: list[str]) -> None:
+    def import_all(self, root: Path) -> Iterable[str]:
         self.order.append("imports")
-        failures.append("A dependency does not import")
+        return ("A dependency does not import",)
 
     def load(self, module: str) -> object:
         if module == "assistant.sdk":

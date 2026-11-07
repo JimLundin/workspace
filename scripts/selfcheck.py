@@ -34,7 +34,7 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
@@ -309,22 +309,24 @@ def _modules(root: Path) -> Iterator[str]:
             yield ".".join(p for p in parts if p != "__init__") if parts[-1] == "__init__" else ".".join(parts)
 
 
-def compile_all(root: Path, problems: list[str]) -> None:
+def compile_all(root: Path) -> Iterator[str]:
+    """A report of each source that doesn't compile."""
     # In memory: writing hundreds of scratch .pyc files cost several times the compilation.
     for path in _sources(root):
         try:
             compile(path.read_bytes(), str(path), "exec")
         except (SyntaxError, ValueError) as error:
-            problems.append(f"doesn't compile: {path.relative_to(root).as_posix()}\n{error}")
+            yield f"doesn't compile: {path.relative_to(root).as_posix()}\n{error}"
 
 
-def import_all(root: Path, problems: list[str]) -> None:
+def import_all(root: Path) -> Iterator[str]:
+    """Import every production module, yielding a report of each that fails."""
     for name in _modules(root):
         try:
             importlib.import_module(name)
         except Exception as error:
             if not _windows_only(error):
-                problems.append(f"doesn't import: {name}\n{''.join(traceback.format_exception(error))}")
+                yield f"doesn't import: {name}\n{''.join(traceback.format_exception(error))}"
 
 
 class Test(Protocol):
@@ -413,7 +415,7 @@ class LaneOutcome:
     timings: tuple[tuple[float, str], ...]
 
 
-def native_groups(root: Path, paths: list[Path]) -> tuple[list[list[Path]], list[Path]]:
+def native_groups(root: Path, paths: Sequence[Path]) -> tuple[list[list[Path]], list[Path]]:
     """The selected native modules of each lane (empty lanes omitted), and the remaining ones."""
     relative = {path: path.relative_to(root).as_posix() for path in paths}
     grouped = [[path for path in paths if relative[path] in lane] for lane in NATIVE_LANES]
@@ -421,7 +423,7 @@ def native_groups(root: Path, paths: list[Path]) -> tuple[list[list[Path]], list
     return [group for group in grouped if group], remaining
 
 
-def run_lane(paths: list[Path], result: Path) -> bool:
+def run_lane(paths: Sequence[Path], result: Path) -> bool:
     """Run one lane's modules here, in order, and write their combined outcome to `result`."""
     outcomes = tuple(outcome for _, outcome in _sequential(paths, stop=False))
     combined = LaneOutcome(
@@ -434,7 +436,7 @@ def run_lane(paths: list[Path], result: Path) -> bool:
     return not combined.problems
 
 
-def _lane_failure(group: list[Path], text: str) -> Outcome:
+def _lane_failure(group: Sequence[Path], text: str) -> Outcome:
     return 0, 0, (f"FAILED native lane ({', '.join(path.name for path in group)}): {text}",), ()
 
 
@@ -447,11 +449,11 @@ class Lanes:
     lanes with it instead of leaving them running.
     """
 
-    def __init__(self, root: Path, groups: list[list[Path]]) -> None:
+    def __init__(self, root: Path, groups: Sequence[Sequence[Path]]) -> None:
         environment = {key: value for key, value in os.environ.items() if key != "WORKSPACE_TEST_DESKTOP"}
         self.scratch = tempfile.TemporaryDirectory(prefix="selfcheck-lanes-")
         self.job = _job()
-        self.running: list[tuple[list[Path], Path, Path, subprocess.Popen[bytes]]] = []
+        self.running: list[tuple[Sequence[Path], Path, Path, subprocess.Popen[bytes]]] = []
         for index, group in enumerate(groups):
             result, log = Path(self.scratch.name) / f"lane-{index}.json", Path(self.scratch.name) / f"lane-{index}.txt"
             names = [path.relative_to(root).as_posix() for path in group]
@@ -505,15 +507,15 @@ def test_paths(root: Path, profile: Profile, changed: frozenset[str] | None) -> 
     return paths if affected is None else [path for path in paths if path.relative_to(root).as_posix() in affected]
 
 
-def import_changed(root: Path, changed: frozenset[str], problems: list[str]) -> None:
-    """Compile every changed Python file and import the changed production modules."""
+def import_changed(root: Path, changed: frozenset[str]) -> Iterator[str]:
+    """Compile every changed Python file and import the changed production modules, yielding each problem."""
     for name in sorted(changed):
         if not name.endswith((".py", ".pyw")) or not (root / name).is_file():
             continue
         try:
             compile((root / name).read_text(encoding="utf-8"), name, "exec")
         except SyntaxError as error:
-            problems.append(f"doesn't compile: {name}\n{error}")
+            yield f"doesn't compile: {name}\n{error}"
             continue
         module = _module(name)
         if name.endswith(".py") and not name.startswith("tests/") and name != "scripts/selfcheck.py":
@@ -521,7 +523,7 @@ def import_changed(root: Path, changed: frozenset[str], problems: list[str]) -> 
                 importlib.import_module(module)
             except Exception as error:
                 if not _windows_only(error):
-                    problems.append(f"doesn't import: {module}\n{''.join(traceback.format_exception(error))}")
+                    yield f"doesn't import: {module}\n{''.join(traceback.format_exception(error))}"
 
 
 def failed_modules(report: str) -> frozenset[str]:
@@ -538,7 +540,7 @@ type Runs = tuple[list[Path], list[Path], list[Path], list[Path], list[Path]]
 workers), later (after the workers) and native modules, each in run order."""
 
 
-def partition(root: Path, paths: list[Path], first: frozenset[str]) -> Runs:
+def partition(root: Path, paths: Sequence[Path], first: frozenset[str]) -> Runs:
     """Which runner takes each selected module."""
     relative = {path: path.relative_to(root).as_posix() for path in paths}
     leading = [path for path in paths if relative[path] in first]
@@ -604,8 +606,8 @@ def _with_workers(root: Path, portable: Sequence[Path], alongside: Sequence[Path
     return done if stop and _ran_failed(done) else (*done, *_sequential(later, stop=stop))
 
 
-def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope = FULL_SCOPE) -> tuple[int, int, tuple[tuple[float, str], ...]]:
-    """Passed tests, skipped test modules and per-test timings.
+def run_tests(root: Path, paths: Sequence[Path], scope: Scope = FULL_SCOPE) -> Outcome:
+    """Passed tests, skipped test modules, problems and per-test timings.
 
     `scope.first` modules run first, alone. Then reviewed portable modules run on
     worker processes while the other non-native modules run here. Native modules
@@ -633,11 +635,18 @@ def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope =
     # Every outcome in run order; a lane reports once for all of its modules.
     outcomes = (*(outcome for _, outcome in (*done, *here)), *laned)
     ran = frozenset(path for path, _ in (*done, *here)) | frozenset(path for group in groups for path in group if lanes is not None)
-    problems.extend(problem for _, _, found, _ in outcomes for problem in found)
-    if (left := len(paths) - len(ran)) and stop and _failed(outcomes):
-        problems.append(f"Stopped at the first failure: {left} affected test module{'' if left == 1 else 's'} not run.")
-    measured = tuple(timing for _, _, _, timings in outcomes for timing in timings)
-    return sum(passed for passed, _, _, _ in outcomes), sum(skipped for _, skipped, _, _ in outcomes), measured
+    left = len(paths) - len(ran)
+    stopped = (
+        (f"Stopped at the first failure: {left} affected test module{'' if left == 1 else 's'} not run.",)
+        if left and stop and _failed(outcomes)
+        else ()
+    )
+    return (
+        sum(passed for passed, _, _, _ in outcomes),
+        sum(skipped for _, skipped, _, _ in outcomes),
+        (*(problem for _, _, found, _ in outcomes for problem in found), *stopped),
+        tuple(timing for _, _, _, timings in outcomes for timing in timings),
+    )
 
 
 def _enter(root: Path) -> None:
@@ -647,29 +656,38 @@ def _enter(root: Path) -> None:
     os.chdir(root)
 
 
+@dataclass(frozen=True, slots=True)
+class Step:
+    """A source step's problems and how long it took."""
+
+    problems: tuple[str, ...]
+    timing: tuple[float, str]
+
+
+def _step(label: str, problems: Callable[[], Iterable[str]]) -> Step:
+    started = time.perf_counter()
+    found = tuple(problems())
+    return Step(found, (time.perf_counter() - started, label))
+
+
 def check(root: Path, scope: Scope = FULL_SCOPE, durations: int = 0) -> tuple[bool, str]:
     """Whether the copy at `root` is sound, and a report. Imports from `root`, so run
     it in a process of its own (as `main` does)."""
     _enter(root)
-    problems: list[str] = []
-    timings: list[tuple[float, str]] = []
     profile = scope.profile
     changed = changed_files(root, scope.base) if scope.base is not None else None
-    if profile is not Profile.NATIVE and changed is not None:
-        started = time.perf_counter()
-        import_changed(root, changed, problems)
-        timings.append((time.perf_counter() - started, "compile and import changed source"))
-    elif profile is not Profile.NATIVE:
-        started = time.perf_counter()
-        compile_all(root, problems)
-        timings.append((time.perf_counter() - started, "compile all source"))
-        if not problems:
-            started = time.perf_counter()
-            import_all(root, problems)
-            timings.append((time.perf_counter() - started, "import all modules"))
+    if profile is Profile.NATIVE:
+        steps: tuple[Step, ...] = ()
+    elif changed is not None:
+        steps = (_step("compile and import changed source", lambda: import_changed(root, changed)),)
+    else:
+        compiled = _step("compile all source", lambda: compile_all(root))
+        steps = (compiled,) if compiled.problems else (compiled, _step("import all modules", lambda: import_all(root)))
+    source = tuple(problem for step in steps for problem in step.problems)
     paths = test_paths(root, profile, changed)
-    passed, skipped, measured = run_tests(root, problems, paths, scope) if not problems else (0, 0, ())
-    timings.extend(measured)
+    passed, skipped, found, measured = run_tests(root, paths, scope) if not source else (0, 0, (), ())
+    problems = (*source, *found)
+    timings = (*(step.timing for step in steps), *measured)
     summary = f"{passed} passed, {len([p for p in problems if p.startswith('FAILED')])} failed, {skipped} module{'' if skipped == 1 else 's'} skipped"
     if scope.base is not None:
         summary += f", {len(paths)} affected test module{'' if len(paths) == 1 else 's'} (the full suite runs in CI)"
