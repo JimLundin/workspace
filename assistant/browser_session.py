@@ -447,7 +447,7 @@ class NativeSessions:
         owner: Managed | None = None
         try:
             if sys.platform == "win32":
-                job = ProcessJob()
+                job = ProcessJob.create()
                 process: Process = job.start(arguments)
             else:
                 process = subprocess.Popen(arguments, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

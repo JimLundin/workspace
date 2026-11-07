@@ -14,6 +14,7 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from typing import Final
 
+from cell import Cell
 from winapi import system
 from winapi._core import fn, user32
 
@@ -92,25 +93,35 @@ def _event(kind: int, window: int, object_id: int) -> WinEvent | None:
     return SwitchEnd(at) if kind == _EVENT_SYSTEM_SWITCHEND else None
 
 
+@dataclass(frozen=True, slots=True)
 class WinEvents:
     """Delivers each event to `deliver` on its own thread until closed; `deliver` must only hand it on."""
 
-    __slots__ = ("deliver", "proc", "ready", "thread", "thread_id")
+    proc: object
+    """The ctypes callback, kept alive while the hooks are installed."""
+    _thread_id: Cell[int] = field(default_factory=lambda: Cell(0), init=False, repr=False)
+    """The hook thread, once it has installed the hooks."""
+    _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
-    def __init__(self, deliver: Callable[[WinEvent], None]) -> None:
-        self.deliver = deliver
-        self.proc = _WINEVENTPROC(self.callback)  # kept alive while the hooks are installed
-        self.thread_id = 0
-        self.ready = threading.Event()
-        self.thread = threading.Thread(target=self.run, name="foreground events", daemon=True)
-        self.thread.start()
-        self.ready.wait(timeout=5)
+    @classmethod
+    def start(cls, deliver: Callable[[WinEvent], None]) -> WinEvents:
+        def callback(_hook: int, kind: int, window: int | None, object_id: int, _child: int, _thread: int, _time: int) -> None:
+            if (event := _event(kind, int(window or 0), object_id)) is not None:
+                deliver(event)
 
-    def callback(self, _hook: int, kind: int, window: int | None, object_id: int, _child: int, _thread: int, _time: int) -> None:
-        if (event := _event(kind, int(window or 0), object_id)) is not None:
-            self.deliver(event)
+        events = cls(_WINEVENTPROC(callback))
+        ready = threading.Event()
+        threading.Thread(target=events._run, args=(ready,), name="foreground events", daemon=True).start()
+        ready.wait(timeout=5)
+        return events
 
-    def run(self) -> None:
+    def _run(self, ready: threading.Event) -> None:
+        try:
+            self._hook(ready)
+        finally:
+            self._finished.set()
+
+    def _hook(self, ready: threading.Event) -> None:
         flags = _WINEVENT_OUTOFCONTEXT | _WINEVENT_SKIPOWNPROCESS
         ranges = (
             (_EVENT_SYSTEM_FOREGROUND, _EVENT_SYSTEM_FOREGROUND),
@@ -118,8 +129,8 @@ class WinEvents:
             (_EVENT_SYSTEM_SWITCHSTART, _EVENT_SYSTEM_SWITCHEND),
         )
         hooks = tuple(hook for low, high in ranges if (hook := _SetWinEventHook(low, high, None, self.proc, 0, 0, flags)))
-        self.thread_id = system.thread_id()
-        self.ready.set()
+        self._thread_id.set(system.thread_id())
+        ready.set()
         try:
             for _ in system.messages():
                 pass
@@ -128,6 +139,6 @@ class WinEvents:
                 _UnhookWinEvent(hook)
 
     def close(self) -> None:
-        if self.thread_id:
-            system.post_thread_message(self.thread_id, _WM_QUIT, 0, 0)
-        self.thread.join(timeout=5)
+        if thread_id := self._thread_id.get():
+            system.post_thread_message(thread_id, _WM_QUIT, 0, 0)
+        self._finished.wait(timeout=5)

@@ -4,9 +4,10 @@ import ctypes
 import os
 import winreg
 from ctypes import wintypes
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass, field
 from typing import Protocol
 
+from cell import Cell
 from winapi._core import fn, user32
 
 _LoadKeyboardLayout = fn(user32, "LoadKeyboardLayoutW", wintypes.HANDLE, wintypes.LPCWSTR, wintypes.UINT)
@@ -82,29 +83,42 @@ class NativeLanguageDesktop:
             raise OSError("The foreground application refused the keyboard-language request.")
 
 
+@dataclass(frozen=True, slots=True)
+class _Enforced:
+    active: int | None = None
+    _: KW_ONLY
+    firmware_connected: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class KeyboardLanguages:
     """Run on the layout's message-loop timer, never in a keyboard-hook callback."""
 
-    __slots__ = ("active", "colemak", "desktop", "english", "firmware_connected")
+    desktop: LanguageDesktop
+    english: int
+    colemak: int
+    _enforced: Cell[_Enforced] = field(default_factory=lambda: Cell(_Enforced()), init=False, repr=False)
 
-    def __init__(self, desktop: LanguageDesktop | None = None) -> None:
-        self.desktop = desktop if desktop is not None else NativeLanguageDesktop()
-        self.english = self.desktop.load("00000409")
-        self.colemak = self.desktop.load(self.desktop.colemak())
-        if not self.english or not self.colemak:
+    @classmethod
+    def load(cls, desktop: LanguageDesktop | None = None) -> KeyboardLanguages:
+        desktop = desktop if desktop is not None else NativeLanguageDesktop()
+        english, colemak = desktop.load("00000409"), desktop.load(desktop.colemak())
+        if not english or not colemak:
             raise OSError("Windows could not load the English and Colemak keyboards.")
-        self.active: int | None = None
-        self.firmware_connected: bool = False
+        return cls(desktop, english, colemak)
+
+    @property
+    def active(self) -> int | None:
+        return self._enforced.get().active
 
     def enforce(self, *, enabled: bool, firmware_connected: bool = False) -> None:
-        self.firmware_connected = firmware_connected
         target = self.english if enabled or firmware_connected else self.colemak
         if self.active != target:
             self.desktop.activate(target)
-            self.active = target
+        self._enforced.set(_Enforced(target, firmware_connected=firmware_connected))
         foreground = self.desktop.foreground()
         if foreground.window and foreground.layout != target:
             self.desktop.request(foreground.window, target)
 
     def close(self) -> None:
-        self.enforce(enabled=False, firmware_connected=self.firmware_connected)
+        self.enforce(enabled=False, firmware_connected=self._enforced.get().firmware_connected)

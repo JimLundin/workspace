@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
+from cell import Cell
 from winapi._core import dxva2, fn
 from winapi.screen import Monitor, attached
 
@@ -99,19 +100,30 @@ def _opened() -> Iterator[_Opened]:
             yield _Opened(monitor, array)
 
 
+@dataclass(frozen=True, slots=True)
+class _Handles:
+    arrays: tuple[ctypes.Array[PhysicalMonitor], ...]
+    handles: frozendict[Monitor, tuple[int, ...]]
+
+
+@dataclass(frozen=True, slots=True)
 class PhysicalMonitors:
     """Physical-monitor handles for every attached monitor, opened together and destroyed by `close`.
 
     Native ownership: the handle arrays stay allocated, and open, until `close`."""
 
-    __slots__ = ("_arrays", "_handles")
+    _opened: Cell[_Handles]
 
-    def __init__(self) -> None:
+    @classmethod
+    def open(cls) -> PhysicalMonitors:
         opened = tuple(_opened())
-        self._arrays: tuple[ctypes.Array[PhysicalMonitor], ...] = tuple(physical.array for physical in opened)
-        self._handles: frozendict[Monitor, tuple[int, ...]] = frozendict(
-            (physical.monitor, tuple(int(entry.handle or 0) for entry in physical.array)) for physical in opened
-        )
+        arrays = tuple(physical.array for physical in opened)
+        handles = frozendict((physical.monitor, tuple(int(entry.handle or 0) for entry in physical.array)) for physical in opened)
+        return cls(Cell(_Handles(arrays, handles)))
+
+    @property
+    def _handles(self) -> frozendict[Monitor, tuple[int, ...]]:
+        return self._opened.get().handles
 
     @property
     def monitors(self) -> frozenset[Monitor]:
@@ -140,6 +152,6 @@ class PhysicalMonitors:
         return Unanswered(refused[0]) if refused else power
 
     def close(self) -> None:
-        for array in self._arrays:
+        for array in self._opened.get().arrays:
             _DestroyPhysicalMonitors(len(array), array)
-        self._arrays, self._handles = (), frozendict()
+        self._opened.set(_Handles((), frozendict()))

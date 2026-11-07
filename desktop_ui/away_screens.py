@@ -139,7 +139,7 @@ class AwayScreens:
         self.recording = False
         self.dark: frozenset[Monitor] = frozenset()
         # Native ownership: handles opened while unlocked, used when opening fails during a lock.
-        self.kept = PhysicalMonitors()
+        self.kept = PhysicalMonitors.open()
         # Started, or restarted after a crash, behind the lock screen.
         self.locked = session.locked() is True
         self.settle()
@@ -147,7 +147,7 @@ class AwayScreens:
     def message(self, message: int, wparam: int) -> None:
         if message == session.WM_DISPLAYCHANGE:
             self.kept.close()
-            self.kept = PhysicalMonitors()
+            self.kept = PhysicalMonitors.open()
         match session.change(message, wparam):
             case session.Change.LOCKED:
                 self.locked = True
@@ -185,7 +185,7 @@ class AwayScreens:
     def apply(self, monitors: frozenset[Monitor], wanted: Power, cause: Mapping[str, Detail]) -> None:
         if not monitors:
             return
-        fresh = PhysicalMonitors()
+        fresh = PhysicalMonitors.open()
         try:
             results = frozendict((monitor, set_power((fresh, self.kept), monitor, wanted)) for monitor in monitors)
         finally:

@@ -128,7 +128,7 @@ class LanguageDesktop:
 
 def test_keyboard_language_rechecks_each_foreground_and_both_toggle_states() -> None:
     desktop = LanguageDesktop()
-    languages = keyboard_language.KeyboardLanguages(desktop)
+    languages = keyboard_language.KeyboardLanguages.load(desktop)
     languages.enforce(enabled=True)
     languages.enforce(enabled=True)
     languages.enforce(enabled=False)
@@ -141,7 +141,7 @@ def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown()
     """Detect Colemak being applied a second time to firmware-generated output."""
     desktop = LanguageDesktop()
     desktop.observations = iter(Foreground(*pair) for pair in ((11, 0x4090409), (11, 0xF002041D), (22, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
-    languages = keyboard_language.KeyboardLanguages(desktop)
+    languages = keyboard_language.KeyboardLanguages.load(desktop)
     driver = KeyboardFixture()
     keyboard = Keyboard(driver)
     keyboard.on_message(WM_TOGGLE_LAYOUT)

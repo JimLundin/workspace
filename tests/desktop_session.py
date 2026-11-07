@@ -58,7 +58,7 @@ def run_isolated(name: str) -> int:
     # and exit status; the job owns cleanup if the launcher is interrupted.
     command = ctypes.create_unicode_buffer(subprocess.list2cmdline((sys.executable, *sys.orig_argv[1:])))
     info = PROCESS_INFORMATION()
-    job = ProcessJob()
+    job = ProcessJob.create()
     try:
         with inherited_stream(-10) as stdin, inherited_stream(-11) as stdout, inherited_stream(-12) as stderr:
             startup = STARTUPINFOW(
@@ -66,7 +66,7 @@ def run_isolated(name: str) -> int:
             )
             if not CreateProcessW(sys.executable, command, None, None, 1, 0x08000004, None, None, startup, info):
                 raise WinError(GetLastError())
-        process = Process(info.hProcess, info.dwProcessId)
+        process = Process.owning(info.hProcess, info.dwProcessId)
         try:
             job.add(process.pid)
             if ResumeThread(info.hThread) == 0xFFFFFFFF:

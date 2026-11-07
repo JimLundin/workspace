@@ -6,8 +6,10 @@ import subprocess
 import time
 from collections.abc import Sequence
 from ctypes import wintypes
+from dataclasses import dataclass
 from pathlib import Path
 
+from cell import Cell
 from winapi._core import fn, kernel32, last_error
 
 
@@ -171,14 +173,31 @@ _GetExitCodeProcess = fn(kernel32, "GetExitCodeProcess", wintypes.BOOL, wintypes
 _TerminateProcess = fn(kernel32, "TerminateProcess", wintypes.BOOL, wintypes.HANDLE, wintypes.UINT)
 
 
+@dataclass(frozen=True, slots=True)
+class _Owned:
+    handle: int
+    """Zero once exit is observed and the handle is released."""
+    returncode: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Process:
     """An owned native process; release its handle as soon as exit is observed."""
 
-    __slots__ = ("handle", "pid", "returncode")
+    pid: int
+    _owned: Cell[_Owned]
 
-    def __init__(self, handle: int, pid: int) -> None:
-        self.handle, self.pid = handle, pid
-        self.returncode: int | None = None
+    @classmethod
+    def owning(cls, handle: int, pid: int) -> Process:
+        return cls(pid, Cell(_Owned(handle)))
+
+    @property
+    def handle(self) -> int:
+        return self._owned.get().handle
+
+    @property
+    def returncode(self) -> int | None:
+        return self._owned.get().returncode
 
     def poll(self) -> int | None:
         if not self.handle or _WaitForSingleObject(self.handle, 0) == 258:  # WAIT_TIMEOUT
@@ -196,31 +215,39 @@ class Process:
         code = wintypes.DWORD()
         if not _GetExitCodeProcess(self.handle, ctypes.byref(code)):
             raise last_error()
-        self.returncode = int(code.value)
         _CloseHandle(self.handle)
-        self.handle = 0
-        return self.returncode
+        self._owned.set(_Owned(0, int(code.value)))
+        return int(code.value)
 
     def kill(self) -> None:
         if self.poll() is None and not _TerminateProcess(self.handle, 1):
             raise last_error()
 
 
+@dataclass(frozen=True, slots=True)
 class ProcessJob:
     """Closing this handle, including on a Workspace crash, terminates owned children."""
 
-    __slots__ = ("handle",)
+    _handle: Cell[int]
+    """Zero once closed."""
 
-    def __init__(self) -> None:
-        self.handle = int(_CreateJobObject(None, None) or 0)
-        if not self.handle:
+    @classmethod
+    def create(cls) -> ProcessJob:
+        handle = int(_CreateJobObject(None, None) or 0)
+        if not handle:
             raise last_error()
+        job = cls(Cell(handle))
         limits = _ExtendedLimits()
         limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        if not _SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+        if not _SetInformationJobObject(handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
             error = last_error()
-            self.close()
+            job.close()
             raise error
+        return job
+
+    @property
+    def handle(self) -> int:
+        return self._handle.get()
 
     def add(self, pid: int) -> None:
         process = _OpenProcess(0x0101, False, pid)  # PROCESS_SET_QUOTA | PROCESS_TERMINATE
@@ -242,7 +269,7 @@ class ProcessJob:
             raise last_error()
         if info.process is None:
             raise OSError("Windows returned no process handle after process creation.")
-        process = Process(info.process, info.pid)
+        process = Process.owning(info.process, info.pid)
         try:
             if not _AssignProcessToJobObject(self.handle, info.process) or _ResumeThread(info.thread) == 0xFFFF_FFFF:
                 raise last_error()
@@ -271,7 +298,7 @@ class ProcessJob:
                     time.sleep(0.02)
             finally:
                 _CloseHandle(self.handle)
-                self.handle = 0
+                self._handle.set(0)
 
 
 def edge_path() -> Path | None:

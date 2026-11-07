@@ -10,10 +10,11 @@ import winreg
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from ctypes import wintypes
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Protocol
 
+from cell import Cell
 from winapi._core import fn, gdi32, user32
 from winapi.shapes import Rect
 
@@ -35,6 +36,17 @@ class Backdrop:
     frost: Frost
 
 
+def sample_backgrounds(bounds: tuple[Rect, ...]) -> tuple[Backdrop, ...]:
+    return tuple(Backdrop(rect, background_frost(rect)) for rect in bounds)
+
+
+@dataclass(frozen=True, slots=True)
+class _Sampling:
+    worker: ThreadPoolExecutor | None = None
+    pending: Future[tuple[Backdrop, ...]] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FrostSampler:
     """One bounded background read; GetPixel can wait on the desktop compositor.
 
@@ -43,35 +55,27 @@ class FrostSampler:
     for desktop pixels. The owner discards observations after a card moves.
     """
 
-    __slots__ = ("pending", "sample", "worker")
-
-    def __init__(self, sample: Callable[[tuple[Rect, ...]], tuple[Backdrop, ...]] | None = None) -> None:
-        self.sample = sample_backgrounds if sample is None else sample
-        self.worker: ThreadPoolExecutor | None = None
-        self.pending: Future[tuple[Backdrop, ...]] | None = None
+    sample: Callable[[tuple[Rect, ...]], tuple[Backdrop, ...]] = sample_backgrounds
+    _sampling: Cell[_Sampling] = field(default_factory=lambda: Cell(_Sampling()), init=False, repr=False)
 
     def submit(self, bounds: tuple[Rect, ...]) -> None:
-        if not bounds or self.pending is not None:
+        sampling = self._sampling.get()
+        if not bounds or sampling.pending is not None:
             return
-        if self.worker is None:
-            self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="workspace-glass")
-        self.pending = self.worker.submit(self.sample, bounds)
+        worker = sampling.worker or ThreadPoolExecutor(max_workers=1, thread_name_prefix="workspace-glass")
+        self._sampling.set(_Sampling(worker, worker.submit(self.sample, bounds)))
 
     def read(self) -> tuple[Backdrop, ...]:
-        if self.pending is None or not self.pending.done():
+        sampling = self._sampling.get()
+        if sampling.pending is None or not sampling.pending.done():
             return ()
-        completed, self.pending = self.pending, None
-        return completed.result()
+        self._sampling.set(replace(sampling, pending=None))
+        return sampling.pending.result()
 
     def close(self) -> None:
-        if self.worker is not None:
-            self.worker.shutdown(wait=False, cancel_futures=True)
-            self.worker = None
-        self.pending = None
-
-
-def sample_backgrounds(bounds: tuple[Rect, ...]) -> tuple[Backdrop, ...]:
-    return tuple(Backdrop(rect, background_frost(rect)) for rect in bounds)
+        if (worker := self._sampling.get().worker) is not None:
+            worker.shutdown(wait=False, cancel_futures=True)
+        self._sampling.set(_Sampling())
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +119,7 @@ class NativeTimerPeriod:
         _TimeEndPeriod(1)
 
 
+@dataclass(frozen=True, slots=True)
 class TimerResolution:
     """Keep the UI's short frame timers accurate only while UI motion is running.
 
@@ -123,18 +128,19 @@ class TimerResolution:
     view closes; idle notifications and the keyboard process never request it.
     """
 
-    __slots__ = ("active", "period")
+    period: TimerPeriod = field(default_factory=NativeTimerPeriod)
+    _active: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
 
-    def __init__(self, period: TimerPeriod | None = None) -> None:
-        self.period = NativeTimerPeriod() if period is None else period
-        self.active = False
+    @property
+    def active(self) -> bool:
+        return self._active.get()
 
     def update(self, *, active: bool) -> None:
         if active and not self.active:
-            self.active = self.period.request()
+            self._active.set(self.period.request())
         elif not active and self.active:
             self.period.release()
-            self.active = False
+            self._active.set(False)
 
 
 def animations_enabled() -> bool:

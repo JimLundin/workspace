@@ -491,7 +491,7 @@ class Lanes:
 
 def _job() -> ProcessJob | None:
     """A job that ends the lanes when this check ends; None off Windows."""
-    return ProcessJob() if _ON_WINDOWS else None
+    return ProcessJob.create() if _ON_WINDOWS else None
 
 
 def _progress(path: Path, outcome: Outcome, seconds: float) -> None:

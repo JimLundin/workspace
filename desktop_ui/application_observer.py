@@ -282,7 +282,7 @@ class Worker:
 
     def run(self) -> None:
         # The hooks' own thread waits for their messages; it only queues each event for this worker.
-        events = WinEvents(self.observer.requests.put)
+        events = WinEvents.start(self.observer.requests.put)
         try:
             while not self.observer.stop.is_set():
                 self.poll()

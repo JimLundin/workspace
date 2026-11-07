@@ -716,7 +716,7 @@ def release_keyboard(keyboard: Keyboard) -> None:
 def open_languages(*, firmware_connected: bool = False) -> keyboard_language.KeyboardLanguages | None:
     languages: keyboard_language.KeyboardLanguages | None = None
     try:
-        languages = keyboard_language.KeyboardLanguages()
+        languages = keyboard_language.KeyboardLanguages.load()
         languages.enforce(enabled=True, firmware_connected=firmware_connected)
     except OSError:
         traceback.print_exc()
