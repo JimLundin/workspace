@@ -5,12 +5,13 @@ import queue
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_sources import Observations
 from assistant.personal_work_store import PersonalStore
+from cell import Cell
 from contracts.personal_work import (
     CORRELATION_INPUT,
     PERSONAL_REQUEST,
@@ -77,6 +78,20 @@ def signature(catalog: Catalog) -> str:
     return hashlib.sha256(CORRELATION_INPUT.dump_json(canonical)).hexdigest()
 
 
+type Command = SaveWork | UnlinkWork | AddDocument | AddWebPage | DismissWork | RestoreWork
+"""A UI write the worker applies in order."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Reviewing:
+    view: PersonalView
+    reviewed: str | None = None
+    """The signature of the catalog last reviewed by the model."""
+    force: bool = False
+    """Review on the next tick even if nothing changed."""
+
+
+@dataclass(frozen=True, slots=True)
 class PersonalWork:
     """The worker owns polling/queued UI writes; HTTP handlers own their own transactions.
 
@@ -84,25 +99,26 @@ class PersonalWork:
     local to this owner. The catalog, source observations and view stay immutable.
     """
 
-    __slots__ = (
-        "clock",
-        "closed",
-        "commands",
-        "dismissed",
-        "force",
-        "lock",
-        "model",
-        "publish",
-        "reviewed",
-        "sources",
-        "store",
-        "thread",
-        "view",
-        "wake",
-    )
+    # Store, source reader, UI publisher, model and clock have independent
+    # effect ownership. Dismissal cancels bound research only after its
+    # correction commits; the model can only return a typed connection plan.
+    store: PersonalStore
+    sources: Sources
+    publish: Callable[[PersonalView], None]
+    _state: Cell[_Reviewing]
+    """Replaced whole under the lock."""
+    model: Model | None = field(default=None, kw_only=True)
+    clock: Callable[[], float] = field(default=time.time, kw_only=True)
+    dismissed: Callable[[WorkThread], None] | None = field(default=None, kw_only=True)
+    lock: threading.RLock = field(default_factory=threading.RLock, init=False)
+    closed: threading.Event = field(default_factory=threading.Event, init=False)
+    wake: threading.Event = field(default_factory=threading.Event, init=False)
+    commands: queue.Queue[Command] = field(default_factory=lambda: queue.Queue[Command](maxsize=64), init=False)
+    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
 
-    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
-        self,
+    @classmethod
+    def open(  # noqa: PLR0913 - injected collaborators and test seams
+        cls,
         store: PersonalStore,
         sources: Sources,
         publish: Callable[[PersonalView], None],
@@ -110,40 +126,36 @@ class PersonalWork:
         model: Model | None = None,
         clock: Callable[[], float] = time.time,
         dismissed: Callable[[WorkThread], None] | None = None,
-    ) -> None:
-        # Store, source reader, UI publisher, model and clock have independent
-        # effect ownership. Dismissal cancels bound research only after its
-        # correction commits; the model can only return a typed connection plan.
-        self.store, self.sources, self.publish, self.model, self.clock = store, sources, publish, model, clock
-        self.lock = threading.RLock()
-        self.closed, self.wake = threading.Event(), threading.Event()
-        self.thread: threading.Thread | None = None
-        self.commands: queue.Queue[SaveWork | UnlinkWork | AddDocument | AddWebPage | DismissWork | RestoreWork] = queue.Queue(maxsize=64)
-        self.view = PersonalView(store.read())
-        self.reviewed: str | None = None
-        self.force = False
-        self.dismissed: Callable[[WorkThread], None] | None = dismissed
+    ) -> PersonalWork:
+        """The service, showing the stored catalog until its first review."""
+        return cls(store, sources, publish, Cell(_Reviewing(PersonalView(store.read()))), model=model, clock=clock, dismissed=dismissed)
+
+    @property
+    def view(self) -> PersonalView:
+        return self._state.get().view
 
     def snapshot(self) -> PersonalView:
         with self.lock:
-            return self.view
+            return self._state.get().view
 
     def show(self, catalog: Catalog, status: str) -> None:
         with self.lock:
-            if catalog.revision < self.view.catalog.revision:
+            if catalog.revision < self._state.get().view.catalog.revision:
                 return
-            self.view = PersonalView(catalog, status)
-            self.publish(self.view)
+            new_view = PersonalView(catalog, status)
+            self._state.set(replace(self._state.get(), view=new_view))
+            self.publish(self._state.get().view)
 
     def start(self) -> None:
         with self.lock:
-            if self.thread is None:
-                self.thread = threading.Thread(target=self.run, name="personal work", daemon=True)
-                self.thread.start()
+            if self._thread.get() is None:
+                thread = threading.Thread(target=self.run, name="personal work", daemon=True)
+                self._thread.set(thread)
+                thread.start()
 
     def refresh(self) -> None:
         with self.lock:
-            self.force = True
+            self._state.set(replace(self._state.get(), force=True))
             self.wake.set()
 
     def observe_meeting(self, store: MeetingStore) -> None:
@@ -205,10 +217,11 @@ class PersonalWork:
             if isinstance(response, WorkRefused):
                 self.show(self.store.read(), response.error)
         with self.lock:
-            force, self.force = self.force, False
+            force = self._state.get().force
+            self._state.set(replace(self._state.get(), force=False))
         if force:
             self.sources.refresh()
-            self.reviewed = None
+            self._state.set(replace(self._state.get(), reviewed=None))
         observations = self.sources.read(self.clock(), self.closed)
         if self.closed.is_set():
             return
@@ -223,7 +236,7 @@ class PersonalWork:
             status += " " + " ".join(observations.problems)
         self.show(catalog, status)
         current = signature(catalog)
-        if not catalog.sources or current == self.reviewed:
+        if not catalog.sources or current == self._state.get().reviewed:
             return
         if self.model is None:
             self.show(catalog, status + " Configure the agent model to connect sources automatically.")
@@ -235,7 +248,8 @@ class PersonalWork:
             if self.closed.is_set():
                 return
             catalog = self.store.reconcile(request, plan, self.clock())
-            self.reviewed = signature(catalog)
+            new_reviewed = signature(catalog)
+            self._state.set(replace(self._state.get(), reviewed=new_reviewed))
             self.show(catalog, "Work and source connections updated automatically. " + status)
         except Exception:
             # The next bounded observation can retry; failed reviews never
@@ -259,7 +273,7 @@ class PersonalWork:
     def close(self) -> None:
         self.closed.set()
         self.wake.set()
-        thread = self.thread
+        thread = self._thread.get()
         if thread is not None:
             thread.join(20)
             if thread.is_alive():

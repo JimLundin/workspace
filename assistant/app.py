@@ -379,7 +379,7 @@ class AssistantApp:
 
     def create_personal(self, tasks: TaskStore) -> PersonalWork:
         self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
-        return PersonalWork(
+        return PersonalWork.open(
             PersonalStore(tasks.path),
             BrowserSources(Browser.at(BROWSER_PROFILE, source=Product.EDGE)),
             self.personal_changed,

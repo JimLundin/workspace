@@ -117,7 +117,7 @@ def test_dismissal_cancels_research_only_after_the_correction_commits(tmp_path: 
     def cancel_research(work: WorkThread) -> None:
         observations.append((work.id, any(item.work.id == work.id for item in PersonalStore(store.path).read().dismissed)))
 
-    service = PersonalWork(store, CapturedSources(), lambda _view: None, clock=lambda: 11, dismissed=cancel_research)
+    service = PersonalWork.open(store, CapturedSources(), lambda _view: None, clock=lambda: 11, dismissed=cancel_research)
     try:
         stale = service.handle(DismissWork(saved.work.id, saved.work.revision + 1, "Not mine"))
         assert isinstance(stale, WorkRefused) and not observations
@@ -259,7 +259,7 @@ def test_background_reviews_skip_timestamp_only_changes_and_retry_failures(tmp_p
         work_id = captured.works[0].id if captured.works else None
         return WorkPlan((PlannedWork(work_id, WorkDefinition("Atlas", "Deploy Atlas"), (Association(captured.sources[0].id, "Deployment ticket"),)),))
 
-    service = PersonalWork(store, sources, lambda _: None, model=model)
+    service = PersonalWork.open(store, sources, lambda _: None, model=model)
     try:
         service.tick()
         first = store.read().works[0]
@@ -283,7 +283,7 @@ def test_queue_rejects_invalid_identity_before_admission_and_commits_valid_edits
     # Defect: the owner admits an invalid UI edit before checking its identity,
     # or moving validation prevents a valid queued edit from being committed.
     store = PersonalStore(tmp_path / "work.sqlite3")
-    service = PersonalWork(store, CapturedSources(), lambda _: None, clock=lambda: 10)
+    service = PersonalWork.open(store, CapturedSources(), lambda _: None, clock=lambda: 10)
     definition = WorkDefinition("Atlas", "Check queued ownership")
     try:
         with TestCase().assertRaisesRegex(ValueError, "Invalid personal work edit"):
@@ -313,7 +313,7 @@ def test_user_correction_during_review_is_not_undone(tmp_path: Path) -> None:
         assert isinstance(corrected, WorkSaved)
         return WorkPlan((PlannedWork(saved.work.id, saved.work.definition, saved.work.links),))
 
-    service = PersonalWork(store, CapturedSources((evidence,)), lambda _: None, model=model)
+    service = PersonalWork.open(store, CapturedSources((evidence,)), lambda _: None, model=model)
     try:
         service.tick()
         assert not service.snapshot().catalog.works[0].links
@@ -448,7 +448,7 @@ def test_agent_tools_use_the_desktop_owner_and_record_confirmed_edits(tmp_path: 
     store = PersonalStore(tasks.path)
     evidence = source(SourceKind.TEAMS)
     store.observe((evidence,))
-    service = PersonalWork(store, CapturedSources(), lambda _: None)
+    service = PersonalWork.open(store, CapturedSources(), lambda _: None)
     request = owner_request(WorkOwners(feed_unavailable, service.handle, no_canvas))
     rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
     try:

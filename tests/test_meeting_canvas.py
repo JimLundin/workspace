@@ -90,7 +90,7 @@ def test_meeting_intake_is_durable_and_idempotent(tmp_path: Path) -> None:
     store = archive.create("both", "Planning")
     tasks = TaskStore(tmp_path / "work.sqlite3")
     personal_store = PersonalStore(tasks.path)
-    personal = PersonalWork(personal_store, CapturedSources(), lambda view: None, clock=lambda: 20)
+    personal = PersonalWork.open(personal_store, CapturedSources(), lambda view: None, clock=lambda: 20)
     personal.observe_meeting(archive.open(store.folder))
     first = personal_store.read()
     assert len(first.sources) == 1 and isinstance(first.sources[0], MeetingSource)
@@ -102,7 +102,7 @@ def test_meeting_intake_is_durable_and_idempotent(tmp_path: Path) -> None:
     store.export()
     # Defect: a clock correction makes newer journal state look older and leaves
     # the meeting permanently recording on the canvas. Journal revisions own freshness.
-    corrected_clock = PersonalWork(personal_store, CapturedSources(), lambda view: None, clock=lambda: 10)
+    corrected_clock = PersonalWork.open(personal_store, CapturedSources(), lambda view: None, clock=lambda: 10)
     corrected_clock.observe_meeting(store)
     corrected = personal_store.read().sources[0]
     assert isinstance(corrected, MeetingSource) and corrected.meeting.transcript_state is TranscriptState.COMPLETE
@@ -144,7 +144,7 @@ def test_capture_publishes_native_event_and_completed_conversation_to_intake(tmp
     archive = MeetingArchive(tmp_path / "meetings")
     tasks = TaskStore(tmp_path / "work.sqlite3")
     store = PersonalStore(tasks.path)
-    personal = PersonalWork(store, CapturedSources(), lambda view: None)
+    personal = PersonalWork.open(store, CapturedSources(), lambda view: None)
     capture = GeneratedCapture(1, hold=True)
 
     def transcribe(audio: bytes, *, context: str) -> str:
@@ -187,7 +187,7 @@ def test_agent_reads_meeting_pages_and_links_one_event_to_multiple_threads(tmp_p
     meeting.finish_capture()
     meeting.export()
     personal_store = PersonalStore(tmp_path / "work.sqlite3")
-    personal = PersonalWork(personal_store, CapturedSources(), lambda view: None)
+    personal = PersonalWork.open(personal_store, CapturedSources(), lambda view: None)
     personal.observe_meeting(meeting)
     source = personal_store.read().sources[0]
     for title in ("Supplier approval", "Friday rollout"):
