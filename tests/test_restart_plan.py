@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from keeper import PROTECTED, source_tree
-from restart_plan import Relaunch, RestartChildren, RestartPlan, restart_plan
+from restart_plan import Relaunch, RestartChildren, RestartPlan, Tree, restart_plan
 
 SOURCE = {
     "keeper.py": "import keeper_control\nimport supervisor_support\n",
@@ -31,13 +31,17 @@ SOURCE = {
 }
 
 
-def plan(tmp_path: Path, edits: dict[str, str], removed: tuple[str, ...] = ()) -> RestartPlan:
-    before, after = tmp_path / "before", tmp_path / "after"
-    for root, files in ((before, SOURCE), (after, {name: text for name, text in SOURCE.items() if name not in removed} | edits)):
-        for name, text in files.items():
-            (root / name).parent.mkdir(parents=True, exist_ok=True)
-            (root / name).write_text(text, encoding="utf-8")
-    return restart_plan(source_tree(before), source_tree(after), PROTECTED)
+def written(root: Path, files: dict[str, str]) -> Path:
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text, encoding="utf-8")
+    return root
+
+
+def plan(before: Tree, after: Path, edits: dict[str, str], removed: tuple[str, ...] = ()) -> RestartPlan:
+    """The plan from the shared `before` tree to SOURCE with `edits` and without `removed`, written at `after`."""
+    changed = written(after, {name: text for name, text in SOURCE.items() if name not in removed} | edits)
+    return restart_plan(before, source_tree(changed), PROTECTED)
 
 
 def test_restart_plan_tracks_shared_removed_lazy_and_package_dependencies(tmp_path: Path) -> None:
@@ -63,5 +67,6 @@ def test_restart_plan_tracks_shared_removed_lazy_and_package_dependencies(tmp_pa
         ({"scripts/tool.ps1": "after\n"}, (), RestartChildren(())),
         ({"requirements/lock": "after\n"}, (), RestartChildren(("gateway", "layout", "assistant", "desktop"))),
     )
+    before = source_tree(written(tmp_path / "before", SOURCE))
     for index, (edits, removed, expected) in enumerate(cases):
-        assert plan(tmp_path / str(index), edits, removed) == expected, edits
+        assert plan(before, tmp_path / str(index), edits, removed) == expected, edits
