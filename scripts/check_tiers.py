@@ -23,10 +23,8 @@ SLOW below it.
 
 SLOW: Final = frozenset(
     {
-        "tests/test_agent.py::test_agent_preserves_reasoning_between_tool_calls_and_follow_ups",
         "tests/test_agent.py::test_apply_needs_a_passing_check_of_exactly_these_changes",
         "tests/test_agent.py::test_runtime_failure_returns_to_the_agent_to_fix_before_installing",
-        "tests/test_agent.py::test_the_agent_edits_checks_and_applies_a_change",
         "tests/test_architecture.py::test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt",
         "tests/test_computer_tools.py::test_automatic_and_explicit_screenshots_share_the_same_history_limit",
         "tests/test_feed_dates.py::test_a_new_day_reconsiders_cached_work_without_a_new_notification",

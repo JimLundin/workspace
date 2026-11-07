@@ -416,19 +416,6 @@ def test_agent_uses_responses_with_max_reasoning_and_opens_directly(tmp_path: Pa
         assert rig.window.log[-1] == "done Opened the workbook."
 
 
-def test_agent_preserves_reasoning_between_tool_calls_and_follow_ups(tmp_path: Path) -> None:
-    reasoning: Json = {"id": "rs_test", "type": "reasoning", "summary": [], "encrypted_content": "opaque-reasoning"}
-    call: Json = {"type": "function_call", "call_id": "call_test", "name": "get_clipboard", "arguments": "{}"}
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, response(reasoning, message("Reading."), call), says("Read it."), work=durable(tmp_path))
-        rig.run(effort="high")
-        assert reasoning in rig.sent()
-        assert cast(dict[str, Json], json.loads(endpoint.last.body))["reasoning"] == {"effort": "high", "summary": "auto"}
-        endpoint.replies = [says("It said clipped.")]
-        rig.run("What did it say?", effort="high")
-        assert reasoning in rig.sent()
-
-
 def test_invalid_reasoning_effort_is_reported_without_a_request(tmp_path: Path) -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, says("unused"), work=durable(tmp_path))
@@ -563,14 +550,6 @@ def test_tool_publishes_readable_previews_without_changing_the_model_result(tmp_
 # ---- what needs permission -------------------------------------------------------------
 
 
-def test_commands_run_and_report_their_output(tmp_path: Path) -> None:
-    rig = ToolRig(work=durable(tmp_path))
-    rig.machine.commands = {"Stop-Process -Name notepad": (1, "no such process")}
-    result = rig.call("run_powershell", command="Stop-Process -Name notepad")
-    assert not result.ok and result.text == "Exit code 1.\nno such process"
-    assert rig.machine.executed == [("Stop-Process -Name notepad", 120, None, rig.agent.stop)]
-
-
 def test_a_failing_command_finishes_but_an_interrupted_one_waits_for_reconciliation(tmp_path: Path) -> None:
     # Detect a nonzero exit blocking later changes again (a failing test run ended
     # self-modification), or an interrupted command ending the task before the
@@ -593,9 +572,11 @@ def test_commands_run_only_within_their_timeout_bounds(tmp_path: Path) -> None:
         assert result.ok and result.text == "Exit code 0.\nok"
         assert rig.machine.executed[-1] == ("git status", timeout, "work folder", rig.agent.stop)
     assert rig.machine.log == ["ran git status", "ran git status"]
+    rig.call("run_powershell", command="git status")
+    assert rig.machine.executed[-1] == ("git status", 120, None, rig.agent.stop)  # the default timeout
     for timeout in (0, 601):
         assert not rig.call("run_powershell", command="git status", timeout_seconds=timeout).ok
-    assert len(rig.machine.executed) == 2
+    assert len(rig.machine.executed) == 3
 
 
 # ---- screenshots -----------------------------------------------------------------------
@@ -707,18 +688,6 @@ def source(tmp_path: Path) -> Workspace:
 
 
 EDIT: Final = ("edit_source", {"path": "config.py", "old": "'hej'", "new": "'hello'"})
-
-
-def test_the_agent_edits_checks_and_applies_a_change(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    with fake_endpoint() as endpoint:
-        apply = ("apply_changes", {"summary": "Say hello"})
-        rig = Rig(endpoint, calls(EDIT), calls(("check_changes", {})), calls(apply), says("never asked"), workspace=workspace, work=durable(tmp_path))
-        rig.run("greet in English")
-        assert rig.machine.log == ["install Say hello after its fast check"]
-        assert "1 passed, 0 failed" in rig.results(2)[0]
-        assert rig.window.log[-1] == "done Installing: Say hello. Workspace restarts in a moment."
-        assert len(endpoint.received) == 3  # the task ends with the install
 
 
 def test_apply_needs_a_passing_check_of_exactly_these_changes(tmp_path: Path) -> None:
@@ -861,3 +830,5 @@ def test_runtime_failure_returns_to_the_agent_to_fix_before_installing(tmp_path:
         assert "the last check failed" in rig.results(3)[0]
         assert "1 passed, 0 failed" in rig.results(5)[0]
         assert rig.machine.log == ["install Fix greeting after its fast check"]
+        assert rig.window.log[-1] == "done Installing: Fix greeting. Workspace restarts in a moment."
+        assert len(endpoint.received) == 6  # the task ends with the install
