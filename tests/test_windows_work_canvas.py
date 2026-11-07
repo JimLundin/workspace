@@ -966,7 +966,7 @@ def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_re
 
 def open_question_on_canvas(ui: InboxUi) -> None:
     """Open the waiting question from the bar, then its canvas button."""
-    ui.bar.visible = True
+    ui.bar.show(visible=True)
     ui.bar.render()
     ui.ui.open_inbox()
     ui.pump()

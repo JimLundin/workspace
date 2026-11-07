@@ -53,9 +53,9 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
     # Defects: intermediate states of one Qt turn reach composition, a capsule
     # change moves the glass window, or the glass sits above the bar's content.
     app = application()
-    bar = DesktopBar(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
+    bar = DesktopBar.open(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
     try:
-        bar.visible = True
+        bar.show(visible=True)
         bar.render()
         app.processEvents()
         scene = bar.window.scene
@@ -82,7 +82,7 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
 def test_first_visible_frame_retains_application_glass_prepared_while_parent_hidden() -> None:
     # Defect: global child visibility omits the applications' glass from the cached first frame.
     app = application()
-    bar = DesktopBar(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
+    bar = DesktopBar.open(inert(), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
     try:
         editor = Application("editor.exe", (Window(1, "Editor", "editor.exe", minimized=False),))
         bar.window.shell_sections.applications((Shelf(EMPTY_SHELF.pinned, (editor,)), 0))
@@ -91,7 +91,7 @@ def test_first_visible_frame_retains_application_glass_prepared_while_parent_hid
         bar.render()
         assert not bar.window.isVisible()
         assert "desktops" in {pane.key for pane in bar.window.panes}
-        bar.visible = True
+        bar.show(visible=True)
         bar.render()
         app.processEvents()
         scene = bar.window.scene

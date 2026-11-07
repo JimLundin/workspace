@@ -21,6 +21,7 @@ from contracts.recording_state import RecordingState
 from contracts.status import Job
 from desktop_ui import shell_surface
 from desktop_ui.ambient import Ambient, SystemStatus
+from desktop_ui.bar_events import Opening
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
 from desktop_ui.fluent_icons import REGULAR
@@ -54,7 +55,7 @@ def test_idle_toolbar_preserves_application_focus_and_menu_can_take_the_keyboard
     # Defect: the toolbar activates before an app click observes the current
     # window, so repeated icon clicks stop cycling that application's windows.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False)
+    bar = DesktopBar.open(recorded([]), native_shell=False)
     try:
         handle = int(bar.window.winId())
         assert _GetWindowLong(handle, -20) & 0x08000000
@@ -136,7 +137,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
     # Defects: readings shift fixed controls, missing readings imply a
     # healthy state, or unavailable symbols fall back to a document glyph.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         bar.timer.stop()
         sections = bar.window.shell_sections
@@ -152,7 +153,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
         assert before[0].left() == 12
         for speakers in Speakers:
             for wifi in Wifi:
-                bar.system = SystemStatus(speakers, wifi)
+                bar.observe_system(SystemStatus(speakers, wifi))
                 bar.render()
                 capsule = bar.window.capsules[Key.STATUS]
                 assert capsule.view is not None
@@ -173,7 +174,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
             PowerUnavailable.NO_BATTERY,
             PowerUnavailable.UNKNOWN,
         ):
-            bar.ambient = Ambient("11:11", power)
+            bar.observe_ambient(Ambient("11:11", power))
             bar.render()
             assert geometries() == before
             status = bar.window.capsules[Key.STATUS]
@@ -182,7 +183,7 @@ def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
             assert abs(bar.window.measure(status.view).width - status.width()) <= 1
         # Processor and memory readings change every two seconds; the drawn font must fit their reserve.
         for cpu, memory in ((100, 100), (8, 1), (None, None), (47, 88)):
-            bar.system = SystemStatus(cpu=cpu, memory=memory)
+            bar.observe_system(SystemStatus(cpu=cpu, memory=memory))
             bar.render()
             assert geometries() == before
             assert bar.system.resource_description in bar.window.capsules[Key.STATUS].accessibleName()
@@ -195,7 +196,7 @@ def test_the_pager_is_the_only_toolbar_and_its_canvas_icon_opens_the_canvas() ->
     # leaves the screen's edge, or the canvas icon runs another function.
     app = application()
     invoked: list[str] = []
-    bar = DesktopBar(recorded(invoked), native_shell=False)
+    bar = DesktopBar.open(recorded(invoked), native_shell=False)
     try:
         assert shown(bar) == FIXED
         sections = bar.window.shell_sections
@@ -218,7 +219,7 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
     app = application()
     invoked: list[str] = []
     observations = BarObservations(power=lambda: Battery(73, powered=False, charging=False), local_time=lambda: datetime(2026, 10, 30, 20, 59))
-    bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
+    bar = DesktopBar.open(recorded(invoked), native_shell=False, observations=observations)
     try:
         assert shown(bar) == FIXED
         status = bar.window.capsules[Key.STATUS]
@@ -265,7 +266,7 @@ def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
     # Defects: the island drifts off centre, neighbours touch or overlap it, the
     # edge strip leaves a dead band above the glass, or controls lose their concentric inset.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False)
+    bar = DesktopBar.open(recorded([]), native_shell=False)
     try:
         area = app.primaryScreen().geometry()
         assert bar.window.geometry() == QtCore.QRect(area.x(), area.y(), area.width(), TOP + 34)
@@ -290,9 +291,11 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
     # This query was qualified red against the old STATIC host; it runs on the
     # target's own message thread and never injects input into an unshown desktop.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False))
+    bar = DesktopBar.open(
+        recorded([]), native_shell=False, observations=BarObservations(material=lambda: appearance.Material.GLASS, motion=lambda: False)
+    )
     try:
-        bar.visible = True
+        bar.show(visible=True)
         bar.agent_changed(WORKING)
         bar.timer.stop()
         app.processEvents()
@@ -309,7 +312,7 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
                     # covered elsewhere. Supply the immutable expanded observation
                     # without requesting foreground on the unshown desktop.
                     app.processEvents()
-                    bar.opened = bar.menu()
+                    bar.handle(Opening(bar.menu(), None))
                     bar.render()
                     app.processEvents()
                     assert windows.outer_rect(handle).height > rest_height
@@ -343,10 +346,10 @@ def test_capsules_spring_between_views_and_the_frame_loop_stops_once_settled() -
     # frame loop keeps running at rest, or reduced motion still animates.
     app = application()
     now, motion = [100.0], [True]
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0]))
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0]))
     try:
         bar.timer.stop()
-        bar.visible = True
+        bar.show(visible=True)
         bar.agent_changed(WORKING)
         now[0] += 2
         bar.paint_frames()
@@ -383,16 +386,16 @@ def test_tray_icons_sit_in_the_menu_and_hand_their_clicks_to_the_application() -
     # no cell shows them, or a click keeps the menu open or takes focus back.
     app = application()
     focused: list[int] = []
-    bar = DesktopBar(
+    bar = DesktopBar.open(
         recorded([]),
         native_shell=False,
         observations=BarObservations(motion=lambda: False, foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd)),
     )
     try:
         bar.timer.stop()
-        bar.visible = True
+        bar.show(visible=True)
         entries = tuple(Entry(1, index, b"", 0x8001, None, f"Fixture {index}") for index in range(12))
-        bar.window.show_tray(entries)
+        bar.show_tray(entries)
         bar.render()
         assert bar.window.tray_locations() == ()
         bar.open_menu()
@@ -422,7 +425,7 @@ def test_contrast_paints_system_colours_and_releases_only_its_composition_owner(
     # Defects: high contrast keeps glass or Workspace colours, or closing the bar
     # closes the composition that other views still use.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(material=lambda: appearance.Contrast("#000000", "#ffff00")))
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(material=lambda: appearance.Contrast("#000000", "#ffff00")))
     other_view = EventLoop(app, lambda: None)
     try:
         island = bar.window.capsules[Key.STATUS]
@@ -444,7 +447,7 @@ def test_dictation_traces_the_microphone_only_while_listening() -> None:
     # microphone keeps the last level, or leaving dictation wipes the trace mid-frame.
     app = application()
     level = [0.25]
-    bar = DesktopBar(recorded([]), native_shell=False, audio_level=lambda: level[0])
+    bar = DesktopBar.open(recorded([]), native_shell=False, audio_level=lambda: level[0])
     try:
         assert not bar.audio_timer.isActive()
         bar.dictation(active=True)
@@ -474,7 +477,7 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
         released.wait(0.25)
         return 0.25
 
-    bar = DesktopBar(recorded([]), native_shell=False, audio_level=level)
+    bar = DesktopBar.open(recorded([]), native_shell=False, audio_level=level)
     try:
         bar.dictation(active=True)
         started = time.monotonic()
@@ -494,10 +497,10 @@ def test_dictation_animates_between_samples_without_republishing_glass() -> None
     # frames repeat unchanged native glass/layout publication.
     app = application()
     now = [100.0]
-    bar = DesktopBar(
+    bar = DesktopBar.open(
         recorded([]), native_shell=False, audio_level=lambda: 0.25, observations=BarObservations(clock=lambda: now[0], motion=lambda: True)
     )
-    bar.visible = True
+    bar.show(visible=True)
     try:
         bar.timer.stop()
         bar.dictation(active=True)
@@ -530,14 +533,14 @@ def test_activity_indicators_move_only_while_work_runs_and_motion_allows() -> No
     # frame timer running after work ends, or ignore Windows' reduced-motion setting.
     app = application()
     now, motion = [10.0], [True]
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0]))
-    bar.visible = True
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0]))
+    bar.show(visible=True)
     try:
         # Seed the capsule before testing animated updates; its first frame is absent.
-        bar.visible = False
+        bar.show(visible=False)
         bar.agent_changed(WORKING)
         island = bar.window.capsules[Key.ISLAND]
-        bar.visible = True
+        bar.show(visible=True)
 
         def transcribe(_: Agent) -> None:
             bar.job_changed(Job.TRANSCRIBING)
@@ -582,12 +585,12 @@ def test_expanded_menu_keeps_its_activity_spinner_running_after_settling() -> No
 
     app = application()
     now, motion = [100.0], [True]
-    bar = DesktopBar(
+    bar = DesktopBar.open(
         recorded([]),
         native_shell=False,
         observations=BarObservations(clock=lambda: now[0], motion=lambda: motion[0], material=lambda: appearance.Material.SOLID),
     )
-    bar.visible = True
+    bar.show(visible=True)
     try:
         bar.timer.stop()
         bar.agent_changed(WORKING)
@@ -622,8 +625,8 @@ def test_repeated_observations_cannot_postpone_the_next_animation_frame() -> Non
     # Defect: each observation restarts the frame timer, starving animation
     # delivery when observations arrive faster than the frame interval.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: True))
-    bar.visible = True
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: True))
+    bar.show(visible=True)
     frames = 0
 
     def painted() -> None:
@@ -652,8 +655,8 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
     # Defect: Qt briefly reports inactive between native activation events,
     # immediately closing the first expanded menu before its next interaction.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, audio_level=lambda: 0.25, observations=BarObservations(motion=lambda: True))
-    bar.visible = True
+    bar = DesktopBar.open(recorded([]), native_shell=False, audio_level=lambda: 0.25, observations=BarObservations(motion=lambda: True))
+    bar.show(visible=True)
     bar.dictation(active=True)
     waiting = QtCore.QEventLoop()
     target = QtWidgets.QWidget()
@@ -679,7 +682,7 @@ def test_pager_offers_each_desktop_directly() -> None:
     # Defects: the pager loses a desktop or its accessible names, a click on an
     # app reaches another one, or the current empty desktop can't be reached.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     chosen: list[Navigation] = []
     picked: list[tuple[App, Click]] = []
     try:
@@ -705,7 +708,7 @@ def test_pager_draws_each_desktops_apps_as_one_widening_stack_and_an_empty_one_b
     # button, an empty desktop shows nothing, or a held chord's letter loses to
     # the icons.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         sections = bar.window.shell_sections
         sections.desktops(
@@ -732,7 +735,7 @@ def test_tool_choice_hands_the_keyboard_back_to_the_window_it_came_from() -> Non
     invoked: list[Tool] = []
     foreground, focused = [42], list[int]()
     observations = BarObservations(foreground=lambda: foreground[0], focus=lambda hwnd: remember(focused, hwnd))
-    bar = DesktopBar(recorded([], tools=invoked), native_shell=False, observations=observations)
+    bar = DesktopBar.open(recorded([], tools=invoked), native_shell=False, observations=observations)
     try:
         bar.open_menu()
         foreground[0] = 999
@@ -746,7 +749,7 @@ def test_the_status_capsule_expands_into_the_menu_at_its_right_hand_anchor() -> 
     # Defects: the menu opens somewhere other than the capsule that opened it,
     # that capsule leaves the right edge, or its readings move as it expands.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         status = bar.window.capsules[Key.STATUS]
         right = status.geometry().x() + status.geometry().width()
@@ -763,7 +766,7 @@ def test_the_status_capsule_expands_into_the_menu_at_its_right_hand_anchor() -> 
 def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
     # Defect: the expanded capsule's tooltip propagates to every menu row.
     app = application()
-    bar = DesktopBar(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
+    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         assert bar.window.capsules[Key.STATUS].toolTip()
         bar.open_menu()
@@ -785,7 +788,7 @@ def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_
     invoked: list[str] = []
     focused: list[int] = []
     observations = BarObservations(foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd))
-    bar = DesktopBar(recorded(invoked), native_shell=False, observations=observations)
+    bar = DesktopBar.open(recorded(invoked), native_shell=False, observations=observations)
     try:
         bar.open_menu()
         island = bar.window.capsules[Key.STATUS]

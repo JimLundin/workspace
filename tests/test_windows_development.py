@@ -180,10 +180,8 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
     preview = Preview.open(files)
     try:
         assert preview.bar is not None
-        assert preview.bar.controls is None and preview.bar.worker is None and preview.bar.audio_meter is None
+        assert preview.bar.shell is None and preview.bar.audio_meter is None
         assert not preview.bar.taskbar.ready
-        assert preview.bar.notification_service is None
-        assert preview.bar.status_service is None
         deadline = time.monotonic() + 5
         while not settled(preview.bar.motion) and time.monotonic() < deadline:
             QTest.qWait(20)

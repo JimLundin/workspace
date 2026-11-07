@@ -97,7 +97,7 @@ class DesktopFactory(Protocol):
 
 def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
     # Resolve the lazy native module only when Qt owns this view's construction.
-    return DesktopBar(actions, audio_level=audio_level)
+    return DesktopBar.open(actions, audio_level=audio_level)
 
 
 def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:

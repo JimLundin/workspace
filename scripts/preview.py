@@ -58,18 +58,6 @@ CHOICE = TypeAdapter[Choice](Choice)
 OPTIONS = TypeAdapter[Options](Options)
 
 
-class PreviewBar(DesktopBar):
-    """Keep the real menu's native-only actions inside the sample adapter too."""
-
-    __slots__ = ()
-
-    def toggle_taskbar(self) -> None:
-        self.actions.problem("Windows taskbar")
-
-    def notification_settings(self) -> None:
-        self.actions.problem("Windows notification settings")
-
-
 @dataclass(frozen=True, slots=True)
 class _Previewing:
     bar: DesktopBar | None = None
@@ -123,9 +111,15 @@ class Preview:
                 inbox=lambda: preview.action("Inbox"),
                 open_item=lambda identity: preview.action("Open canvas at " + identity),
             )
-            bar = PreviewBar(actions, native_shell=False)
+            # The real menu's native-only actions stay inside the sample adapter too.
+            sampled = replace(
+                actions,
+                taskbar=lambda: preview.action("Windows taskbar"),
+                notification_settings=lambda: preview.action("Windows notification settings"),
+            )
+            bar = DesktopBar.open(sampled, native_shell=False)
             preview._previewing.set(_Previewing(bar))
-            bar.visible = True
+            bar.show(visible=True)
             bar.window.setWindowTitle("Workspace preview toolbar")
             try:
                 choice = CHOICE.validate_json(files.state.read_bytes())

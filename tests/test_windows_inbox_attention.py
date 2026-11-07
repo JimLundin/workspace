@@ -60,7 +60,7 @@ class InboxUi:
         recorded = Cell(_Recorded())
 
         def create_bar(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
-            bar = DesktopBar(actions, native_shell=False, audio_level=audio_level)
+            bar = DesktopBar.open(actions, native_shell=False, audio_level=audio_level)
             recorded.update(lambda views: replace(views, bar=bar))
             return bar
 
@@ -150,7 +150,7 @@ def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp
         inbox=lambda: invoke("inbox"),
         open_item=lambda _: None,
     )
-    bar = DesktopBar(actions, native_shell=False)
+    bar = DesktopBar.open(actions, native_shell=False)
     try:
         assert waiting(bar) is None
         bar.inbox_changed(1)
@@ -231,7 +231,7 @@ def test_toolbar_request_expands_in_place_routes_voice_and_opens_canvas_only_fro
         agent.request_input(asked("inline", "Which sheet should I use?", "Revenue contains the approved supplier figures.", 3), accept)
         ui.pump()
         assert ui.current_canvas is None
-        ui.bar.visible = True
+        ui.bar.show(visible=True)
         ui.bar.render()
         ui.ui.open_inbox()
         ui.pump()
@@ -309,9 +309,9 @@ def test_a_finished_reply_takes_the_island_then_waits_in_the_bell_and_opens_its_
         inbox=lambda: None,
         open_item=opened.append,
     )
-    bar = DesktopBar(actions, native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: False))
+    bar = DesktopBar.open(actions, native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: False))
     try:
-        bar.visible = True
+        bar.show(visible=True)
         reply = desktop_ui.island_moment.Notice(
             "reply:s:1", "Compare the budget sheets", "Revenue is up four percent on the approved figures.", "reply:s:1", 5
         )

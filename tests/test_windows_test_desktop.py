@@ -46,9 +46,9 @@ def test_qt_children_stay_off_the_input_desktop() -> None:
             inbox=lambda: None,
             open_item=lambda _: None,
         )
-        bar = DesktopBar(inert, native_shell=False)
+        bar = DesktopBar.open(inert, native_shell=False)
         try:
-            bar.visible = True
+            bar.show(visible=True)
             bar.render()
             application().processEvents()
             handle = int(bar.window.winId())

@@ -137,7 +137,7 @@ def test_the_desktop_runs_reports_ready_and_quits_with_no_assistant(tmp_path: Pa
 
         def headless_bar(actions, *, audio_level=None):
             # The real bar hosts the notification area; a second one would take its icons.
-            return DesktopBar(actions, native_shell=False, audio_level=audio_level)
+            return DesktopBar.open(actions, native_shell=False, audio_level=audio_level)
 
         desktop_app.run(window=Window(title, None), lock_name="Local" + chr(92) + title, views=Views(desktop=headless_bar))
         assert QApplication.instance() is None
