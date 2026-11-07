@@ -459,7 +459,9 @@ def connect_shared(folder: Path, product: Product, cancel: threading.Event) -> H
     except OSError, ValueError:
         location = None
     if location is None:
-        flags = 0x0000_0208 if sys.platform == "win32" else 0
+        # CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW. The venv's python.exe is a launcher whose
+        # interpreter child would open a visible console of its own under DETACHED_PROCESS.
+        flags = 0x0800_0200 if sys.platform == "win32" else 0
         subprocess.Popen(
             [sys.executable, "-B", "-m", "assistant.browser_host", product.value, str(folder)],
             cwd=Path(__file__).parents[1],
