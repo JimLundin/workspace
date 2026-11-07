@@ -23,8 +23,6 @@ from pydantic import TypeAdapter
 lazy from watchdog.events import FileSystemEvent, FileSystemMovedEvent
 lazy from watchdog.observers import Observer
 
-from scripts.development_paths import LIVE
-
 ROOT = Path(__file__).resolve().parent.parent
 IGNORED = frozenset(
     {
@@ -125,8 +123,9 @@ def _arrivals(pending: queue.SimpleQueue[Path], debounce: float) -> Iterator[Pat
 
 
 def check_command(settings: Settings, receipt: Path) -> tuple[str, ...]:
-    baseline = receipt if receipt.is_file() else LIVE
-    command: tuple[str, ...] = (sys.executable, "-B", "-m", "scripts.check", "--baseline", str(baseline), "--receipt", str(receipt))
+    # Without its own receipt yet, the session starts from the check's last passing source.
+    baseline = ("--baseline", str(receipt)) if receipt.is_file() else ()
+    command: tuple[str, ...] = (sys.executable, "-B", "-m", "scripts.check", *baseline, "--receipt", str(receipt))
     if settings.native:
         command += ("--native",)
     if settings.full:
