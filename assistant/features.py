@@ -57,16 +57,31 @@ class Controls(Protocol):
     def toggle_meeting(self) -> None: ...
 
 
-def submit_voice_text(text: str, send: Callable[[str], None], details: dict[str, Detail]) -> None:
+class Progress:
+    """A job's diagnostic details so far, kept for `Features.timed` even when the job raises.
+
+    The job notes each phase as it reaches it; each note replaces the held
+    `frozendict`, so a reader never sees one change partway through.
+    """
+
+    __slots__ = ("details",)
+
+    def __init__(self, details: Mapping[str, Detail]) -> None:
+        self.details = frozendict(details)
+
+    def note(self, **details: Detail) -> None:
+        self.details = self.details | details
+
+
+def submit_voice_text(text: str, send: Callable[[str], None], progress: Progress) -> None:
     """Measure submission, without retaining content or claiming the app displayed it."""
-    details["requested_characters"] = len(text)
-    details["phase"] = "submitting"
+    progress.note(requested_characters=len(text), phase="submitting")
     started = time.monotonic()
     try:
         send(text)
-        details["submitted_characters"] = len(text)
+        progress.note(submitted_characters=len(text))
     finally:
-        details["submit_seconds"] = round(time.monotonic() - started, 3)
+        progress.note(submit_seconds=round(time.monotonic() - started, 3))
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,8 +197,8 @@ class Assistant:
         self.desktop.busy(job)
         self.desktop.show_state(State.WORKING)
 
-    def timed(self, feature: str, job: Callable[[], Failure | None], *, extra: Mapping[str, Detail] | None = None) -> None:
-        """Runs a job, reports a failure, and logs the use (never the content)."""
+    def timed(self, feature: str, job: Callable[[], Failure | None], *, progress: Progress | None = None) -> None:
+        """Runs a job, reports a failure, and logs the use (never the content), with the details the job noted."""
         started = time.monotonic()
         outcome: Failure | None = Failure("crashed")
         evidence: dict[str, Detail] = {}
@@ -191,7 +206,7 @@ class Assistant:
             outcome = job()
         except Exception as error:
             evidence = failure_info(error).details()
-            phase = (extra or {}).get("phase", "working")
+            phase = progress.details.get("phase", "working") if progress is not None else "working"
             message = f"{feature.replace('_', ' ').title()} failed while {phase}. Please try again; diagnostic details are in Workspace's usage log."
             if phase == "submitting" and self.latest_transcription is not None:
                 message = (
@@ -201,7 +216,7 @@ class Assistant:
             outcome = Failure(message)
         finally:
             details: dict[str, Detail] = {
-                **(extra or {}),
+                **(progress.details if progress is not None else {}),
                 **evidence,
                 "ok": not isinstance(outcome, Failure),
                 "seconds": round(time.monotonic() - started, 2),
@@ -286,7 +301,8 @@ class Assistant:
         tool = capture.tool
         self.record("voice_capture", {**lengths, "phase": "queued"})
         try:
-            self.submit(lambda: self.timed(tool.name.lower(), lambda: self.heard(tool, pcm, lengths), extra=lengths))
+            progress = Progress(lengths)
+            self.submit(lambda: self.timed(tool.name.lower(), lambda: self.heard(tool, pcm, progress), progress=progress))
         except Exception as error:
             self.capture_problem(capture, "queueing", error)
             self.idle()
@@ -300,22 +316,22 @@ class Assistant:
 
     # ---- the tools ---------------------------------------------------------------------
 
-    def heard(self, tool: Tool, pcm: bytes, details: dict[str, Detail]) -> Failure | None:
-        details["phase"] = "transcribing"
+    def heard(self, tool: Tool, pcm: bytes, progress: Progress) -> Failure | None:
+        progress.note(phase="transcribing")
         started = time.monotonic()
         try:
             transcript = transcribe(self.settings, wav(pcm, RATE))
         finally:
-            details["transcribe_seconds"] = round(time.monotonic() - started, 3)
+            progress.note(transcribe_seconds=round(time.monotonic() - started, 3))
         if isinstance(transcript, Failure):
             return transcript
-        details["transcript_characters"] = len(transcript)
+        progress.note(transcript_characters=len(transcript))
         self.remember_transcript(transcript)
         match tool:
             case Tool.DICTATE:
-                submit_voice_text(typed_text(transcript), self.desktop.type_text, details)
+                submit_voice_text(typed_text(transcript), self.desktop.type_text, progress)
             case Tool.AGENT_VOICE:
-                submit_voice_text(transcript, self.controls.run_agent, details)
+                submit_voice_text(transcript, self.controls.run_agent, progress)
             case _:
                 raise AssertionError(f"{tool} doesn't listen")
         return None
