@@ -4,21 +4,28 @@ import contextlib
 import json
 import os
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from cell import Cell
 
+
+def _trace() -> Path | None:
+    value = os.environ.get("WORKSPACE_LIFECYCLE_TRACE")
+    return Path(value) if value else None
+
+
+@dataclass(frozen=True, slots=True)
 class Timings:
-    __slots__ = ("event", "last", "output")
-
-    def __init__(self, event: str) -> None:
-        value = os.environ.get("WORKSPACE_LIFECYCLE_TRACE")
-        self.output = Path(value) if value else None
-        self.event = event
-        self.last = time.perf_counter()
+    event: str
+    output: Path | None = field(default_factory=_trace)
+    _last: Cell[float] = field(default_factory=lambda: Cell(time.perf_counter()), init=False, repr=False)
+    """When the previous phase ended."""
 
     def mark(self, phase: str) -> None:
         now = time.perf_counter()
-        elapsed, self.last = now - self.last, now
+        elapsed = now - self._last.get()
+        self._last.set(now)
         if self.output is not None:
             with contextlib.suppress(OSError), self.output.open("a", encoding="utf-8") as stream:
                 record: dict[str, str | float] = {"event": self.event, "phase": phase, "seconds": round(elapsed, 4)}

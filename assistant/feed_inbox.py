@@ -7,31 +7,37 @@ replaces that observer's last and the whole feed goes to triage.
 
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
 from assistant.communications import Feed
 from assistant.feed_sources import NoticesObserved, PendingFeed, TeamsObserved, observe
 from assistant.notification_sources import NotificationSources, NotificationState
 from assistant.state_store import SavedState
+from cell import Cell
 from winapi.system_notices import Observed
 
 type Assess = Callable[[PendingFeed], None]
 
 
+@dataclass(frozen=True, slots=True)
 class FeedInbox:
-    __slots__ = ("_assess", "_feed", "_lock", "_sources")
+    _sources: NotificationSources
+    _assess: Assess
+    _feed: Cell[PendingFeed] = field(default_factory=lambda: Cell(PendingFeed()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
-    def __init__(self, notifications: SavedState[NotificationState], assess: Assess) -> None:
-        self._sources = NotificationSources(notifications)
-        self._sources.load()
-        self._assess = assess
-        self._feed = PendingFeed()
-        self._lock = threading.Lock()
+    @classmethod
+    def load(cls, notifications: SavedState[NotificationState], assess: Assess) -> FeedInbox:
+        """The inbox with the saved notification choices loaded."""
+        sources = NotificationSources(notifications)
+        sources.load()
+        return cls(sources, assess)
 
     def communications(self, feed: Feed) -> None:
         """Any thread: Teams' latest conversations."""
         with self._lock:
-            self._feed = observe(self._feed, TeamsObserved(feed))
-            current = self._feed
+            current = self._feed.update(lambda pending: observe(pending, TeamsObserved(feed)))
         self._assess(current)
 
     def notices(self, observation: Observed) -> None:
@@ -39,6 +45,6 @@ class FeedInbox:
         with self._lock:
             if not self._sources.observe(observation):
                 return
-            self._feed = observe(self._feed, NoticesObserved(self._sources.state))
-            current = self._feed
+            notices = NoticesObserved(self._sources.state)
+            current = self._feed.update(lambda pending: observe(pending, notices))
         self._assess(current)

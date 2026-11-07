@@ -31,6 +31,7 @@ from assistant.browser_values import (
     decoded,
     navigation_context_error,
 )
+from cell import Cell
 from contracts.json_value import Json
 lazy from winapi.protection import protect, unprotect
 
@@ -233,11 +234,19 @@ def receive(stream: socket.socket, cancel: threading.Event, deadline: float) -> 
     return read(size)
 
 
-class HostedConnection:
-    __slots__ = ("closed", "identity", "location")
+def _identity() -> str:
+    return uuid.uuid4().hex
 
-    def __init__(self, location: Endpoint) -> None:
-        self.location, self.identity, self.closed = location, uuid.uuid4().hex, False
+
+@dataclass(frozen=True, slots=True)
+class HostedConnection:
+    location: Endpoint
+    identity: str = field(default_factory=_identity)
+    _closed: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
+
+    @property
+    def closed(self) -> bool:
+        return self._closed.get()
 
     def call(
         self,
@@ -255,7 +264,7 @@ class HostedConnection:
 
     def close(self) -> None:
         if not self.closed:
-            self.closed = True
+            self._closed.set(True)
             with contextlib.suppress(OSError, ValueError):
                 self.location.exchange(ReleaseRequest(self.location.token, self.identity), threading.Event(), timeout=4)
 

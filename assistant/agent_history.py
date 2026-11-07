@@ -1,15 +1,18 @@
 """Volatile conversation storage; parsed SDK collections never remain shared."""
 
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 from pydantic import TypeAdapter
 
+from cell import Cell
 from contracts.json_value import Json
 
 _ITEM = TypeAdapter(Json)
 _ITEMS = TypeAdapter(tuple[Json, ...])
 
 
+@dataclass(frozen=True, slots=True)
 class History:
     """Own session IO across serialized executions, retaining immutable wire bytes.
 
@@ -20,28 +23,26 @@ class History:
     Durable checkpoints retain structural progress through their own adapter.
     """
 
-    __slots__ = ("_items",)
-
-    def __init__(self) -> None:
-        self._items: tuple[bytes, ...] = ()
+    _items: Cell[tuple[bytes, ...]] = field(default_factory=lambda: Cell[tuple[bytes, ...]](()), repr=False)
 
     def read(self, limit: int | None = None) -> list[Json]:
-        items = self._items if limit is None else self._items[-limit:] if limit > 0 else ()
+        held = self._items.get()
+        items = held if limit is None else held[-limit:] if limit > 0 else ()
         return [_ITEM.validate_json(item) for item in items]
 
     def replace(self, items: Iterable[Json]) -> None:
-        self._items = tuple(_ITEM.dump_json(item) for item in items)
+        self._items.set(tuple(_ITEM.dump_json(item) for item in items))
 
     def pop(self) -> Json:
-        item = self._items[-1]
-        self._items = self._items[:-1]
+        *kept, item = self._items.get()
+        self._items.set(tuple(kept))
         return _ITEM.validate_json(item)
 
     def clear(self) -> None:
-        self._items = ()
+        self._items.set(())
 
     def encoded(self) -> bytes:
         return _ITEMS.dump_json(tuple(self.read()))
 
     def __bool__(self) -> bool:
-        return bool(self._items)
+        return bool(self._items.get())

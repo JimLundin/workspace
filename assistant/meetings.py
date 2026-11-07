@@ -14,12 +14,13 @@ import time
 import traceback
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final, Protocol
 
 from assistant.llm import Failure, Settings, transcribe, wav
 from assistant.meeting_store import MeetingArchive, MeetingStore
+from cell import Cell
 from contracts.capture import AudioSource
 from contracts.recording_state import Exhausted, Phase, Publication, RecordingState, RetryPolicy, capture_report, published, source_name
 from usage import DIRECTORY
@@ -113,28 +114,25 @@ class Spool:
             return taken
 
 
+@dataclass(frozen=True, slots=True)
 class _Writer:
     """Cut handed-over audio into the journal's one-second blocks."""
 
-    __slots__ = ("buffer", "store")
-
-    def __init__(self, store: MeetingStore) -> None:
-        self.store = store
-        self.buffer = bytearray()
+    store: MeetingStore
+    _pending: Cell[bytes] = field(default_factory=lambda: Cell(b""), init=False, repr=False)
+    """Audio short of a whole block, held until more arrives."""
 
     def feed(self, pcm: bytes) -> bool:
-        self.buffer.extend(pcm)
-        appended = False
-        while len(self.buffer) >= RATE * 2:
-            block = bytes(self.buffer[: RATE * 2])
-            del self.buffer[: RATE * 2]
-            self.store.append(block)
-            appended = True
-        return appended
+        pending = self._pending.get() + pcm
+        whole = len(pending) - len(pending) % (RATE * 2)
+        self._pending.set(pending[whole:])
+        for start in range(0, whole, RATE * 2):
+            self.store.append(pending[start : start + RATE * 2])
+        return whole > 0
 
     def finish(self) -> None:
-        block = bytes(self.buffer)
-        self.buffer.clear()
+        block = self._pending.get()
+        self._pending.set(b"")
         self.store.append(block)
 
 

@@ -3,10 +3,11 @@
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from assistant.state_store import SavedState
+from cell import Cell
 from contracts.capture import AudioSource
 from contracts.meeting_detection import (
     AutomaticPreference,
@@ -43,6 +44,14 @@ class Recorder(Protocol):
     def stop(self) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class _Attended:
+    notice: NoticeState = Available.MONITOR
+    status: AutomaticStatus | None = None
+    """The last status published."""
+
+
+@dataclass(frozen=True, slots=True)
 class AutomaticAttention:
     """Own status publication, the monotonic clock and desktop warning effects.
 
@@ -50,18 +59,16 @@ class AutomaticAttention:
     repeated poll samples assess recovery without repainting the unchanged status.
     """
 
-    __slots__ = ("_state", "_status", "clock", "publish", "warn")
-
-    def __init__(self, publish: Callable[[AutomaticStatus], None], warn: Callable[[], None], clock: Callable[[], float] = time.monotonic) -> None:
-        self.publish, self.warn, self.clock = publish, warn, clock
-        self._state: NoticeState = Available.MONITOR
-        self._status: AutomaticStatus | None = None
+    publish: Callable[[AutomaticStatus], None]
+    warn: Callable[[], None]
+    clock: Callable[[], float] = time.monotonic
+    _attended: Cell[_Attended] = field(default_factory=lambda: Cell(_Attended()), init=False, repr=False)
 
     def changed(self, status: AutomaticStatus) -> None:
-        decision = monitor_attention(self._state, MonitorSample(status, self.clock()))
-        self._state = decision.state
-        if status is not self._status:
-            self._status = status
+        attended = self._attended.get()
+        decision = monitor_attention(attended.notice, MonitorSample(status, self.clock()))
+        self._attended.set(_Attended(decision.state, status))
+        if status is not attended.status:
             self.publish(status)
         if decision.warning is Warning.SHOW:
             self.warn()

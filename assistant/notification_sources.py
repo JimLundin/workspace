@@ -17,6 +17,7 @@ from assistant.communications import (
 )
 from assistant.communications_state import StoredAcknowledgement
 from assistant.state_store import SavedState
+from cell import Cell
 from winapi.system_notices import Notice, Observed
 
 MAX_HIDDEN_APPS = 256
@@ -71,14 +72,16 @@ def observed(state: Notices, observation: Observed) -> Notices:
     return merged(state, (notice_update(notice) for notice in observation.notices))
 
 
+@dataclass(frozen=True, slots=True)
 class NotificationSources:
     """Qt's thread owns the latest immutable notices and their loaded attention choices."""
 
-    __slots__ = ("state", "store")
+    store: SavedState[NotificationState]
+    _state: Cell[Notices] = field(default_factory=lambda: Cell(Notices()), init=False, repr=False)
 
-    def __init__(self, store: SavedState[NotificationState]) -> None:
-        self.store: SavedState[NotificationState] = store
-        self.state: Notices = Notices()
+    @property
+    def state(self) -> Notices:
+        return self._state.get()
 
     def load(self) -> None:
         try:
@@ -86,11 +89,13 @@ class NotificationSources:
         except OSError, ValueError:
             # Unreadable choices start empty: notices re-alert rather than stopping startup.
             return
-        self.state = Notices(
-            handled=tuple(Acknowledgement((mark.source, mark.identity), mark.fingerprint) for mark in saved.handled),
-            filter=NotificationFilter(frozenset(saved.hidden_apps)),
+        self._state.set(
+            Notices(
+                handled=tuple(Acknowledgement((mark.source, mark.identity), mark.fingerprint) for mark in saved.handled),
+                filter=NotificationFilter(frozenset(saved.hidden_apps)),
+            )
         )
 
     def observe(self, observation: Observed) -> bool:
-        before, self.state = self.state, observed(self.state, observation)
-        return self.state != before
+        before = self._state.get()
+        return self._state.update(lambda state: observed(state, observation)) != before

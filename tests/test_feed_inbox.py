@@ -26,7 +26,7 @@ def test_app_arrivals_reach_triage_joined(tmp_path: Path) -> None:
     # Defect: triage sees Teams work without the Windows notices it must assess
     # with it, or an unchanged notice observation is triaged again.
     triage = Triaged()
-    inbox = FeedInbox(SavedState(tmp_path / "notifications.bin", NOTIFICATION_STATE, cipher=LocalCipher()), triage.assess)
+    inbox = FeedInbox.load(SavedState(tmp_path / "notifications.bin", NOTIFICATION_STATE, cipher=LocalCipher()), triage.assess)
     notice = Notice(NoticeKey(11, 100), "owned", "Mail", "Review this", "Immediate fictional notice")
     inbox.notices(Observed((notice,)))
     inbox.communications(communication_feed())

@@ -15,6 +15,7 @@ from typing import Final, Literal, Protocol, assert_never
 
 from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, transcribe, wav
 from assistant.text import typed_text
+from cell import Cell
 from contracts.hotkeys import Route, needs_settings, route
 from contracts.status import Job, State
 from diagnostics import failure_info
@@ -57,6 +58,7 @@ class Controls(Protocol):
     def toggle_meeting(self) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class Progress:
     """A job's diagnostic details so far, kept for `Features.timed` even when the job raises.
 
@@ -64,13 +66,18 @@ class Progress:
     `frozendict`, so a reader never sees one change partway through.
     """
 
-    __slots__ = ("details",)
+    _details: Cell[frozendict[str, Detail]]
 
-    def __init__(self, details: Mapping[str, Detail]) -> None:
-        self.details = frozendict(details)
+    @classmethod
+    def of(cls, details: Mapping[str, Detail]) -> Progress:
+        return cls(Cell(frozendict(details)))
+
+    @property
+    def details(self) -> frozendict[str, Detail]:
+        return self._details.get()
 
     def note(self, **details: Detail) -> None:
-        self.details = self.details | details
+        self._details.update(lambda noted: noted | details)
 
 
 def submit_voice_text(text: str, send: Callable[[str], None], progress: Progress) -> None:
@@ -301,7 +308,7 @@ class Assistant:
         tool = capture.tool
         self.record("voice_capture", {**lengths, "phase": "queued"})
         try:
-            progress = Progress(lengths)
+            progress = Progress.of(lengths)
             self.submit(lambda: self.timed(tool.name.lower(), lambda: self.heard(tool, pcm, progress), progress=progress))
         except Exception as error:
             self.capture_problem(capture, "queueing", error)
