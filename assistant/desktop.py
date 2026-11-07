@@ -2,7 +2,7 @@
 Windows, and callbacks for what the desktop process should show."""
 
 from collections.abc import Callable
-from dataclasses import KW_ONLY, dataclass
+from dataclasses import dataclass, field
 
 from winapi import audio, clipboard, inputs
 lazy from contracts.status import Job, State
@@ -16,11 +16,10 @@ class WinDesktop:
     mic: audio.Microphone
     mic_follower: audio.DefaultFollower
     """Keeps dictation and the level meter on the current default capture device."""
-    _: KW_ONLY
-    on_state: Callable[[State], None]
-    on_job: Callable[[Job | None], None]
-    on_notify: Callable[[str, str], None]
-    on_problem: Callable[[str], None]
+    on_state: Callable[[State], None] = field(kw_only=True)
+    on_job: Callable[[Job | None], None] = field(kw_only=True)
+    on_notify: Callable[[str, str], None] = field(kw_only=True)
+    on_problem: Callable[[str], None] = field(kw_only=True)
 
     @classmethod
     def following(  # noqa: PLR0913 - native owner, device and event callbacks

@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Annotated, Protocol, assert_never
@@ -384,11 +384,10 @@ class Connector(Protocol):
 @dataclass(frozen=True, slots=True)
 class NativeSessions:
     profile: Path
-    _: KW_ONLY
-    executable: Path | None = None
-    profiles: Callable[[Product], Path] = user_data_root
-    connect: Connector = Cdp.connect
-    persistent: bool = False
+    executable: Path | None = field(default=None, kw_only=True)
+    profiles: Callable[[Product], Path] = field(default=user_data_root, kw_only=True)
+    connect: Connector = field(default=Cdp.connect, kw_only=True)
+    persistent: bool = field(default=False, kw_only=True)
 
     def open(self, source: Source, cancel: threading.Event, *, visible: bool = False) -> BrowserSession:
         match source:

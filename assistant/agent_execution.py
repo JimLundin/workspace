@@ -4,7 +4,7 @@ import contextlib
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from assistant.agent import Agent
@@ -32,11 +32,10 @@ class AgentExecution:
     settings: Settings
     machine: Machine
     profiles: Profiles
-    _: KW_ONLY
-    record: Callable[[Mapping[str, Detail]], None]
-    report_error: Callable[[str], None]
-    close_background: BackgroundCleanup
-    resources: Resources = field(default_factory=Resources)
+    record: Callable[[Mapping[str, Detail]], None] = field(kw_only=True)
+    report_error: Callable[[str], None] = field(kw_only=True)
+    close_background: BackgroundCleanup = field(kw_only=True)
+    resources: Resources = field(default_factory=Resources, kw_only=True)
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
         """Execute one durable claim; the controller commits the returned disposition."""

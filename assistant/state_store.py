@@ -1,6 +1,6 @@
 """Atomic encrypted IO over the caller's typed storage contract."""
 
-from dataclasses import KW_ONLY, dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -18,8 +18,7 @@ class StateProtection(Protocol):
 class SavedState[T]:
     path: Path
     adapter: TypeAdapter[T]
-    _: KW_ONLY
-    cipher: StateProtection
+    cipher: StateProtection = field(kw_only=True)
 
     def read(self) -> T:
         if not self.path.exists():

@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import KW_ONLY, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path
 from typing import Protocol
@@ -98,12 +98,11 @@ class NativeNotifications:
 class NotificationObserver:
     """WinRT lives on one MTA worker; no notification content is logged or saved."""
 
-    _: KW_ONLY
-    source: NotificationSource
-    banner_policy: BannerLease
-    results: queue.Queue[Observation] = field(default_factory=lambda: queue.Queue[Observation](maxsize=1))
-    stopped: threading.Event = field(default_factory=threading.Event)
-    finished: threading.Event = field(default_factory=threading.Event)
+    source: NotificationSource = field(kw_only=True)
+    banner_policy: BannerLease = field(kw_only=True)
+    results: queue.Queue[Observation] = field(default_factory=lambda: queue.Queue[Observation](maxsize=1), kw_only=True)
+    stopped: threading.Event = field(default_factory=threading.Event, kw_only=True)
+    finished: threading.Event = field(default_factory=threading.Event, kw_only=True)
     """Set when the worker thread exits."""
 
     @classmethod

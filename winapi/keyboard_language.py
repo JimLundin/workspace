@@ -4,7 +4,7 @@ import ctypes
 import os
 import winreg
 from ctypes import wintypes
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from cell import Cell
@@ -86,8 +86,7 @@ class NativeLanguageDesktop:
 @dataclass(frozen=True, slots=True)
 class _Enforced:
     active: int | None = None
-    _: KW_ONLY
-    firmware_connected: bool = False
+    firmware_connected: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)

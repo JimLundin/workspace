@@ -3,7 +3,7 @@
 import asyncio
 import threading
 from collections.abc import Callable
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from itertools import islice
 from pathlib import Path
@@ -94,8 +94,7 @@ class Research:
     settings: Settings
     context: Callable[[str], str] | None = None
     conversation: Callable[[str], str] | None = None
-    _: KW_ONLY
-    stop: threading.Event = field(default_factory=threading.Event)
+    stop: threading.Event = field(default_factory=threading.Event, kw_only=True)
 
     def review(self, request: ReviewInput, instructions: str) -> str:
         return asyncio.run(self.run(request, instructions))

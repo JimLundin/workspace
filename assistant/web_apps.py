@@ -203,7 +203,7 @@ class TaskEdited:
     task_id: str
     field: str
     value: str
-    _: KW_ONLY
+    _: KW_ONLY  # The `field` attribute shadows dataclasses.field in this class body.
     verified: Literal[True]
 
 

@@ -8,7 +8,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Generator, Mapping
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Protocol
@@ -191,10 +191,9 @@ class Actions:
     journal: ActionJournal
     run: RunRef
     resources: Resources
-    _: KW_ONLY
-    clock: Callable[[], float] = time.time
-    identity: Callable[[], str] = _identity
-    verifier: FileVerifier = field(default_factory=FileVerifier)
+    clock: Callable[[], float] = field(default=time.time, kw_only=True)
+    identity: Callable[[], str] = field(default=_identity, kw_only=True)
+    verifier: FileVerifier = field(default_factory=FileVerifier, kw_only=True)
 
     def unresolved(self) -> tuple[Action, ...]:
         return self.journal.unresolved_actions(self.run.task_id)

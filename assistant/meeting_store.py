@@ -9,7 +9,7 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import KW_ONLY, dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Final
@@ -63,10 +63,9 @@ class MeetingStore:
     # Location, storage bound, publication and connection lifetime are the
     # cohesive journal policy. Readers and writers use the same interface.
     folder: Path
-    _: KW_ONLY
-    max_pending_bytes: int = MAX_PENDING_BYTES
-    publish: Callable[[Path, Path], None] = _replace_transcript
-    connect: journal.Connect = journal.open_journal
+    max_pending_bytes: int = field(default=MAX_PENDING_BYTES, kw_only=True)
+    publish: Callable[[Path, Path], None] = field(default=_replace_transcript, kw_only=True)
+    connect: journal.Connect = field(default=journal.open_journal, kw_only=True)
 
     @property
     def transcript(self) -> Path:
@@ -321,9 +320,8 @@ class MeetingArchive:
     """Create and reopen journals with the same storage and publication policy."""
 
     root: Path
-    _: KW_ONLY
-    max_pending_bytes: int = MAX_PENDING_BYTES
-    publish: Callable[[Path, Path], None] = _replace_transcript
+    max_pending_bytes: int = field(default=MAX_PENDING_BYTES, kw_only=True)
+    publish: Callable[[Path, Path], None] = field(default=_replace_transcript, kw_only=True)
 
     def create(self, source: AudioSource, title: str = "Meeting") -> MeetingStore:
         return MeetingStore.create(self.root, source, title, max_pending_bytes=self.max_pending_bytes, publish=self.publish)

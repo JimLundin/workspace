@@ -8,7 +8,7 @@ bridges only the interactions whose owner remains in the assistant process.
 import os
 import threading
 from collections.abc import Callable
-from dataclasses import KW_ONLY, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
 from pydantic import TypeAdapter
@@ -151,11 +151,10 @@ class WinMachine:
     # capture observation, file opening). The worker selects each transport
     # separately; no record groups them more truthfully.
     desktop: DesktopAccess
-    _: KW_ONLY
-    browser: BrowserControl = field(default_factory=_background_browser)
-    meetings: MeetingControl | None = None
-    capture_sources: CaptureObservation = field(default_factory=NativeCaptureObservation)
-    open_target: Callable[[str], None] = open_file
+    browser: BrowserControl = field(default_factory=_background_browser, kw_only=True)
+    meetings: MeetingControl | None = field(default=None, kw_only=True)
+    capture_sources: CaptureObservation = field(default_factory=NativeCaptureObservation, kw_only=True)
+    open_target: Callable[[str], None] = field(default=open_file, kw_only=True)
 
     def meeting(self, operation: MeetingOperation) -> str:
         if self.meetings is None:
