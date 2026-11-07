@@ -56,7 +56,7 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import (
 
 from winapi import windows
 from winapi._core import NativeFunction
-from winapi.shapes import Pane, Rect
+from winapi.shapes import Pane, Rect, Size
 
 
 def _check(result: object) -> None:
@@ -96,6 +96,14 @@ def glass_host(title: str) -> int:
         windows.destroy(handle)
         raise ctypes.WinError(error)
     return handle
+
+
+@dataclass(frozen=True, slots=True)
+class Extent:
+    """A glass surface's pixel size and the display scale it was drawn at."""
+
+    size: Size
+    scale: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,7 +198,7 @@ class Glass:
         self.handle = glass_host("Workspace · Glass")
         self.closed = self.visible = False
         self.bounds: Rect | None = None
-        self.size: tuple[int, int, float] | None = None
+        self.size: Extent | None = None
         self.opacity = 1.0
         try:
             enabled = ctypes.c_int(1)
@@ -260,8 +268,8 @@ class Glass:
         if self.bounds != outer:
             self.bounds = outer
             windows.move(self.handle, outer)
-        if self.size != (bounds.width, bounds.height, scale):
-            self.size = (bounds.width, bounds.height, scale)
+        if self.size != (extent := Extent(bounds.size, scale)):
+            self.size = extent
             radius = min(22 * scale, bounds.height / 2, bounds.width / 2)  # the feed card's 22 px corners
             size = Vector2(bounds.width, bounds.height)
             self.bindings.rounded.Size = size

@@ -13,7 +13,7 @@ neighbours' pixel edges are computed from the same value and meet without
 overlapping.
 """
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
@@ -21,7 +21,7 @@ from itertools import count
 
 from desktop_ui.shell_items import PinnedApp, Shelf
 from winapi.screen import Monitor
-from winapi.shapes import Rect, Window
+from winapi.shapes import Point, Rect, Size, Window
 
 
 class Role(Enum):
@@ -40,13 +40,13 @@ class Setup(Enum):
     WORK = auto()
 
 
-NO_EXTERNALS: frozendict[tuple[int, int], Role] = frozendict()
-EXTERNALS: frozendict[Setup, frozendict[tuple[int, int], Role]] = frozendict(
+NO_EXTERNALS: frozendict[Size, Role] = frozendict()
+EXTERNALS: frozendict[Setup, frozendict[Size, Role]] = frozendict(
     {
         Setup.LAPTOP_ONLY: NO_EXTERNALS,
-        Setup.HOME: frozendict({(3840, 2160): Role.MAIN}),
+        Setup.HOME: frozendict({Size(3840, 2160): Role.MAIN}),
         # Orientation, not arrangement, tells the two work screens apart.
-        Setup.WORK: frozendict({(2560, 1440): Role.ABOVE, (1440, 2560): Role.SIDE}),
+        Setup.WORK: frozendict({Size(2560, 1440): Role.ABOVE, Size(1440, 2560): Role.SIDE}),
     }
 )
 """Each setup's external screens beside the laptop's own panel, by physical size."""
@@ -64,6 +64,10 @@ class Screens:
     roles: frozendict[Role, Rect]
 
 
+def _ordered(sizes: Iterable[Size]) -> tuple[Size, ...]:
+    return tuple(sorted(sizes, key=lambda size: (size.width, size.height)))
+
+
 def assigned(monitors: Sequence[Monitor]) -> tuple[Setup, frozendict[Role, Monitor]] | None:
     """Match the connected monitors to a setup; any other set is the laptop alone, on its panel or the primary monitor."""
     if not monitors:
@@ -71,14 +75,14 @@ def assigned(monitors: Sequence[Monitor]) -> tuple[Setup, frozendict[Role, Monit
     panels = tuple(index for index, monitor in enumerate(monitors) if monitor.internal)
     laptop = panels[0] if len(panels) == 1 else next((index for index, monitor in enumerate(monitors) if monitor.primary), 0)
     externals = tuple(monitor for index, monitor in enumerate(monitors) if index != laptop)
-    sizes = tuple(sorted((monitor.area.width, monitor.area.height) for monitor in externals))
+    sizes = _ordered(monitor.area.size for monitor in externals)
     alone = (Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: monitors[laptop]}))
     if len(panels) != 1:
         return alone
-    setup = next((setup for setup, wanted in EXTERNALS.items() if sizes == tuple(sorted(wanted))), None)
+    setup = next((setup for setup, wanted in EXTERNALS.items() if sizes == _ordered(wanted)), None)
     if setup is None:
         return alone
-    roles = {EXTERNALS[setup][(monitor.area.width, monitor.area.height)]: monitor for monitor in externals}
+    roles = {EXTERNALS[setup][monitor.area.size]: monitor for monitor in externals}
     return setup, frozendict({Role.LAPTOP: monitors[laptop], **roles})
 
 
@@ -251,23 +255,34 @@ def place(where: Screens, apps: Sequence[Group], previous: Placement) -> Placeme
     return frozendict(pair for group in apps for pair in targets(group))
 
 
+def _corner(rects: Iterable[Rect]) -> Point | None:
+    """The top-left corner of the leftmost rectangle, then the topmost; None for none."""
+    return min((Point(rect.left, rect.top) for rect in rects), key=lambda point: (point.x, point.y), default=None)
+
+
+def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
+    """Where each app the setup declares on this desktop first sits."""
+    return frozendict(
+        (app, corner)
+        for app, places in LAYOUTS[where.setup].items()
+        if (corner := _corner(pixels(where.roles[place.role], place.region) for place in places if place.desktop == desktop)) is not None
+    )
+
+
 def reading_order(where: Screens | None, windows: Mapping[App, Sequence[int]], placement: Placement, desktop: int) -> tuple[App, ...]:
     """The desktop's apps as they read on screen, by their leftmost window and then its top.
 
     An app the setup declares on the desktop is listed even when it isn't running,
     at its first place there, so every desktop shows what belongs on it.
     """
-    corners: dict[App, tuple[int, int]] = {}
-    for app, handles in windows.items():
-        placed = [(t.rect.left, t.rect.top) for h in handles if (t := placement.get(h)) is not None and t.desktop == desktop]
-        if placed:
-            corners[app] = min(placed)
-    if where is not None:
-        for app, places in LAYOUTS[where.setup].items():
-            declared = [(r.left, r.top) for p in places if p.desktop == desktop for r in (pixels(where.roles[p.role], p.region),)]
-            if declared and app not in corners:
-                corners[app] = min(declared)
-    return tuple(app for app, _ in sorted(corners.items(), key=lambda item: item[1]))
+    placed: frozendict[App, Point] = frozendict(
+        (app, corner)
+        for app, handles in windows.items()
+        if (corner := _corner(t.rect for h in handles if (t := placement.get(h)) is not None and t.desktop == desktop)) is not None
+    )
+    declared = _declared_corners(where, desktop) if where is not None else frozendict[App, Point]()
+    corners = frozendict({**placed, **{app: corner for app, corner in declared.items() if app not in placed}})
+    return tuple(sorted(corners, key=lambda app: (corners[app].x, corners[app].y)))
 
 
 def overflow(apps: Sequence[Group], previous: Placement, first: int) -> frozendict[App, int]:

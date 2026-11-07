@@ -70,14 +70,25 @@ def source_files(root: Path = ROOT) -> dict[str, str]:
     return {name: sha(path) for name in source_paths(root) if (path := file_at(root, name)).is_file()}
 
 
-def source_stamps(root: Path = ROOT) -> frozendict[str, tuple[int, int]]:
-    """Each source file's size and modification time: a cheap identity for the final binding."""
-    stamps: dict[str, tuple[int, int]] = {}
-    for name in source_paths(root):
-        with contextlib.suppress(FileNotFoundError):
-            observed = os.stat(file_at(root, name))
-            stamps[name] = (observed.st_size, observed.st_mtime_ns)
-    return frozendict(stamps)
+@dataclass(frozen=True, slots=True)
+class SourceStamp:
+    """A source file's size and modification time: a cheap identity for the final binding."""
+
+    size: int
+    modified_ns: int
+
+
+def source_stamp(path: Path) -> SourceStamp | None:
+    try:
+        observed = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return SourceStamp(observed.st_size, observed.st_mtime_ns)
+
+
+def source_stamps(root: Path = ROOT) -> frozendict[str, SourceStamp]:
+    """Each present source file's stamp."""
+    return frozendict((name, stamp) for name in source_paths(root) if (stamp := source_stamp(file_at(root, name))) is not None)
 
 
 def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], *, full: bool = False, native: bool = False) -> Selection:

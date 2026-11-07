@@ -58,8 +58,8 @@ class NativeDesktop:
         self.owner = owner
 
     def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
-        width, height = fit(area.width, area.height, longest)
-        return encode_png(width, height, screen.capture(area, width, height)), Shot(area, width, height)
+        size = fit(area.size, longest)
+        return encode_png(size.width, size.height, screen.capture(area, size.width, size.height)), Shot(area, size.width, size.height)
 
 
 @dataclass(frozen=True, slots=True)

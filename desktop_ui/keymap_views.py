@@ -12,7 +12,7 @@ lazy from PySide6.QtCore import Qt
 from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
-from winapi.shapes import Rect
+from winapi.shapes import Point, Rect, Size
 lazy from desktop_ui.components import typeface
 lazy from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
@@ -148,10 +148,10 @@ class OverlayDrag:
 class OverlayHandle(QtWidgets.QWidget):
     """A small capsule above the overlay; the overlay itself lets clicks through."""
 
-    def __init__(self, drag: OverlayDrag, cursor: Callable[[], tuple[int, int]]) -> None:
+    def __init__(self, drag: OverlayDrag, cursor: Callable[[], Point]) -> None:
         super().__init__()
         self.drag: OverlayDrag = drag
-        self.read_cursor: Callable[[], tuple[int, int]] = cursor
+        self.read_cursor: Callable[[], Point] = cursor
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAccessibleName("Drag to move the keyboard overlay")
@@ -169,12 +169,14 @@ class OverlayHandle(QtWidgets.QWidget):
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
-            self.drag.start(QtCore.QPoint(*self.read_cursor()))
+            cursor = self.read_cursor()
+            self.drag.start(QtCore.QPoint(cursor.x, cursor.y))
             self.grabMouse()
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         # The saved overlay position and native moves use physical pixels.
-        self.drag.move(QtCore.QPoint(*self.read_cursor()))
+        cursor = self.read_cursor()
+        self.drag.move(QtCore.QPoint(cursor.x, cursor.y))
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         self.releaseMouse()
@@ -248,7 +250,7 @@ class KeymapOverlay:
         self.set_pressed(pressed)
         self._window.adjustSize()
         if self._position is None:
-            self._position = (work.left + work.width // 2, work.bottom - round((self._window.height() + self._handle.height() + 90) * density))
+            self._position = Point(work.left + work.width // 2, work.bottom - round((self._window.height() + self._handle.height() + 90) * density))
         self._move(self._position)
         self._desktop.present(self._window)
         self._desktop.present(self._handle)
@@ -268,9 +270,9 @@ class KeymapOverlay:
         if (delay := self._highlights.delay(now)) is not None:
             self._highlight_timer = later(self._window, delay, self._paint_highlights)
 
-    def _move(self, position: tuple[int, int]) -> None:
+    def _move(self, position: Point) -> None:
         self._position = position
-        x, y = position
+        x, y = position.x, position.y
         scale = self._window.devicePixelRatioF()
         width, height = round(self._window.width() * scale), round(self._window.height() * scale)
         handle_width, handle_height = round(self._handle.width() * scale), round(self._handle.height() * scale)
@@ -281,12 +283,12 @@ class KeymapOverlay:
 
     def _start_drag(self, point: QtCore.QPoint) -> None:
         if self._position is not None and self._view is not None:
-            self._drag = point - QtCore.QPoint(*self._position)
+            self._drag = point - QtCore.QPoint(self._position.x, self._position.y)
 
     def _drag_to(self, point: QtCore.QPoint) -> None:
         if self._drag is not None:
             value = point - self._drag
-            self._move((value.x(), value.y()))
+            self._move(Point(value.x(), value.y()))
 
     def _finish_drag(self) -> None:
         if self._drag is None:
@@ -299,7 +301,7 @@ class KeymapOverlay:
                 self._move(
                     fit_position(
                         self._position,
-                        (round(self._window.width() * scale), round((self._window.height() + self._handle.height() + 4) * scale)),
+                        Size(round(self._window.width() * scale), round((self._window.height() + self._handle.height() + 4) * scale)),
                         nearest_work_area(self._position, areas),
                     )
                 )

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from winapi.shapes import Rect
+from winapi.shapes import Rect, Size
 
 
 def half(work: Rect, side: Literal["left", "right"], outer: Rect, visible: Rect) -> Rect:
@@ -26,10 +26,10 @@ def framed(target: Rect, outer: Rect, visible: Rect) -> Rect:
     )
 
 
-def fit(width: int, height: int, longest: int) -> tuple[int, int]:
+def fit(size: Size, longest: int) -> Size:
     """A size no wider or taller than `longest`, same shape; never enlarged."""
-    scale = min(1.0, longest / max(width, height))
-    return max(1, round(width * scale)), max(1, round(height * scale))
+    scale = min(1.0, longest / max(size.width, size.height))
+    return Size(max(1, round(size.width * scale)), max(1, round(size.height * scale)))
 
 
 @dataclass(frozen=True, slots=True)

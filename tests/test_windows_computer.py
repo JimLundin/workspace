@@ -151,7 +151,8 @@ def test_screenshot_sources_use_physical_bounds_and_scale_only_the_image() -> No
 
     class CaptureDesktop(Desktop):
         def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
-            return b"fixture", Shot(area, *fit(area.width, area.height, longest))
+            size = fit(area.size, longest)
+            return b"fixture", Shot(area, size.width, size.height)
 
     class Sources:
         # The fixture owns its current observation so availability can change

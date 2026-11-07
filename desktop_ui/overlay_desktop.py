@@ -12,17 +12,17 @@ lazy from PySide6 import QtWidgets
 from desktop_ui.overlay import load_position, save_position
 from desktop_ui.qt_runtime import prepare
 from winapi import inputs, screen, windows
-from winapi.shapes import Rect
+from winapi.shapes import Point, Rect
 
 prepare()
 
 
 class OverlayDesktop(Protocol):
     def clock(self) -> float: ...
-    def cursor(self) -> tuple[int, int]: ...
+    def cursor(self) -> Point: ...
     def work_areas(self) -> tuple[Rect, ...]: ...
-    def load_position(self) -> tuple[int, int] | None: ...
-    def save_position(self, position: tuple[int, int]) -> None: ...
+    def load_position(self) -> Point | None: ...
+    def save_position(self, position: Point) -> None: ...
     def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int: ...
     def present(self, window: QtWidgets.QWidget) -> None: ...
     def move(self, frame: int, area: Rect) -> None: ...
@@ -32,16 +32,16 @@ class NativeOverlayDesktop:
     def clock(self) -> float:
         return time.monotonic()
 
-    def cursor(self) -> tuple[int, int]:
+    def cursor(self) -> Point:
         return inputs.cursor_position()
 
     def work_areas(self) -> tuple[Rect, ...]:
         return tuple(monitor.work for monitor in screen.monitors())
 
-    def load_position(self) -> tuple[int, int] | None:
+    def load_position(self) -> Point | None:
         return load_position()
 
-    def save_position(self, position: tuple[int, int]) -> None:
+    def save_position(self, position: Point) -> None:
         save_position(position)
 
     def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int:

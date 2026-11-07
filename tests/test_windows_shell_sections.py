@@ -38,8 +38,8 @@ from desktop_ui.window_layout import EDGE, TERMINAL, App, Program, WorkspaceView
 from tests.desktop_fixture import Unreachable
 from winapi import appearance, desktop_shell, shell, windows
 from winapi.icon_pixels import Pixels, pixels
-from winapi.shapes import Rect, Window
-from winapi.tray_host import Click, Entry, Located, Registration, TrayHost, callbacks, registration, update
+from winapi.shapes import Point, Rect, Window
+from winapi.tray_host import Click, Entry, Located, Notify, Registration, TrayHost, callbacks, registration, update
 
 prepare()
 
@@ -150,7 +150,7 @@ def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explore
         host.locate((Located(entry, Rect(42, 50, 64, 72)),))
         observed_bounds = tray.bounds()
         assert observed_bounds == Rect(42, 50, 64, 72), (observed_bounds, owner.handle)
-        host.click(entry, Click.RIGHT, (42, 84))
+        host.click(entry, Click.RIGHT, Point(42, 84))
         app.processEvents()
         assert received == [(1, 0x204), (1, 0x205)]
         tray.update(image, "Updated fixture")
@@ -176,8 +176,8 @@ def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explore
 def test_tray_version_four_packs_identity_and_signed_screen_coordinates() -> None:
     # Defect: Workspace sends the legacy callback arguments after version negotiation.
     entry = Entry(1, 17, b"", 0x8001, None, "Tray", version=4)
-    assert callbacks(entry, Click.LEFT, (-20, 40)) == tuple((0x0028FFEC, (17 << 16) | event) for event in (0x201, 0x202, 0x400))
-    assert callbacks(entry, Click.RIGHT, (20, -40))[-1] == (0xFFD80014, (17 << 16) | 0x7B)
+    assert callbacks(entry, Click.LEFT, Point(-20, 40)) == tuple(Notify(0x0028FFEC, (17 << 16) | event) for event in (0x201, 0x202, 0x400))
+    assert callbacks(entry, Click.RIGHT, Point(20, -40))[-1] == Notify(0xFFD80014, (17 << 16) | 0x7B)
     assert registration(b"invalid") is None
 
 

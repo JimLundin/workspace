@@ -91,6 +91,15 @@ class Presented:
     shell_look: Look = field(kw_only=True)
 
 
+@dataclass(frozen=True, slots=True)
+class Publication:
+    """The last frame applied natively, where on screen and at which scale."""
+
+    presented: Presented
+    area: Rect
+    scale: float
+
+
 def radius(height: float, sizes: ui_spec.Sizes) -> float:
     """The menu keeps a larger radius, concentric with its rows."""
     return sizes.menu.radius if expanded(height, sizes) else sizes.bar.radius
@@ -830,7 +839,7 @@ class BarWindow(QtWidgets.QWidget):
         self.wave_progress = 1.0
         # This UI owner retains the immutable last application frame to avoid
         # native layout and glass work for unchanged indicator-only redraws.
-        self.presentation: tuple[Presented, tuple[int, int, int, int], float] | None = None
+        self.presentation: Publication | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
         self.shell_sections = ShellSections(self, sizes)
@@ -929,7 +938,7 @@ class BarWindow(QtWidgets.QWidget):
         """Show exactly these capsules where their frames put them; other pooled capsules hide."""
         area = QtGui.QGuiApplication.primaryScreen().geometry()
         scale = self.devicePixelRatioF()
-        publication = (presented, (area.x(), area.y(), area.width(), area.height()), scale)
+        publication = Publication(presented, Rect(area.x(), area.y(), area.x() + area.width(), area.y() + area.height()), scale)
         if publication == self.presentation:
             return
         self.use(presented.sizes)

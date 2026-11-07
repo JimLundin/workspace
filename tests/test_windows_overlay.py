@@ -16,7 +16,7 @@ from desktop_ui.keymap_views import KeymapCanvas, KeymapOverlay
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from miryoku.layout import Layer, Scancode
-from winapi.shapes import Rect
+from winapi.shapes import Point, Rect
 
 prepare()
 
@@ -34,24 +34,24 @@ class HiddenDesktop:
 
     def __init__(self) -> None:
         self.now: float | None = 1.0
-        self.point: tuple[int, int] = (0, 0)
-        self.position: tuple[int, int] | None = (1000, 600)
+        self.point = Point(0, 0)
+        self.position: Point | None = Point(1000, 600)
         self.windows: list[QtWidgets.QWidget] = []
         self.moves: tuple[tuple[int, Rect], ...] = ()
 
     def clock(self) -> float:
         return time.monotonic() if self.now is None else self.now
 
-    def cursor(self) -> tuple[int, int]:
+    def cursor(self) -> Point:
         return self.point
 
     def work_areas(self) -> tuple[Rect, ...]:
         return ()
 
-    def load_position(self) -> tuple[int, int] | None:
+    def load_position(self) -> Point | None:
         return self.position
 
-    def save_position(self, position: tuple[int, int]) -> None:
+    def save_position(self, position: Point) -> None:
         self.position = position
 
     def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int:
@@ -100,12 +100,12 @@ def test_overlay_drag_retains_physical_pixels_at_fractional_display_scale() -> N
             event = QtGui.QMouseEvent(
                 kind, QtCore.QPointF(5, 5), QtCore.QPointF(*logical), Qt.MouseButton.LeftButton, pressed, Qt.KeyboardModifier.NoModifier
             )
-            desktop.point = physical
+            desktop.point = Point(*physical)
             QtWidgets.QApplication.sendEvent(desktop.windows[1], event)
-        assert desktop.position == (1025, 625)
+        assert desktop.position == Point(1025, 625)
         assert all(not window.isVisible() for window in desktop.windows)
         released = desktop.moves
-        desktop.point = (1050, 650)
+        desktop.point = Point(1050, 650)
         event = QtGui.QMouseEvent(
             QtCore.QEvent.Type.MouseMove,
             QtCore.QPointF(5, 5),

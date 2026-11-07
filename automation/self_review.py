@@ -129,16 +129,30 @@ def daily_review(day: date) -> Submission:
     return Submission("self-review:day:" + subject, f"Daily review: {subject}", prompt, RequestSource(REVIEW_CONVERSATION, SelfReview(subject)))
 
 
-def day_window(day: date) -> tuple[float, float]:
-    """The local day's start and end as UTC seconds."""
+@dataclass(frozen=True, slots=True)
+class LocalDay:
+    """A local calendar day as UTC seconds: from `start`, up to but excluding `end`."""
+
+    start: float
+    end: float
+
+    def __post_init__(self) -> None:
+        if self.end <= self.start:
+            raise ValueError("A day must end after it starts.")
+
+    def contains(self, moment: float) -> bool:
+        return self.start <= moment < self.end
+
+
+def day_window(day: date) -> LocalDay:
     start = datetime.combine(day, time()).astimezone()
-    return start.timestamp(), (start + timedelta(days=1)).timestamp()
+    return LocalDay(start.timestamp(), (start + timedelta(days=1)).timestamp())
 
 
 def worked_on(tasks: Iterable[Task], day: date) -> tuple[Task, ...]:
     """The reviewable tasks updated during the local day."""
-    start, end = day_window(day)
-    return tuple(task for task in tasks if reviewable(task) and start <= task.updated_at < end)
+    window = day_window(day)
+    return tuple(task for task in tasks if reviewable(task) and window.contains(task.updated_at))
 
 
 @dataclass(frozen=True, slots=True)

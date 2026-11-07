@@ -15,6 +15,7 @@ from miryoku.win import Keyboard, maintain_keyboard
 from protocol import WM_TOGGLE_LAYOUT
 from tests.test_windows_bindings import KeyboardFixture
 from winapi import keyboard_language
+from winapi.keyboard_language import Foreground
 lazy from desktop_ui.window_switcher import WindowSwitcher
 lazy from winapi.shapes import Window
 
@@ -103,7 +104,7 @@ class LanguageDesktop:
     """Own changing foreground observations and language requests in this scenario."""
 
     def __init__(self) -> None:
-        self.observations = iter(((11, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
+        self.observations = iter(Foreground(*pair) for pair in ((11, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
         self.loads: tuple[str, ...] = ()
         self.activations: tuple[int, ...] = ()
         self.requests: tuple[tuple[int, int], ...] = ()
@@ -118,7 +119,7 @@ class LanguageDesktop:
     def activate(self, layout: int) -> None:
         self.activations += (layout,)
 
-    def foreground(self) -> tuple[int, int]:
+    def foreground(self) -> Foreground:
         return next(self.observations)
 
     def request(self, hwnd: int, layout: int) -> None:
@@ -139,7 +140,7 @@ def test_keyboard_language_rechecks_each_foreground_and_both_toggle_states() -> 
 def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown() -> None:
     """Detect Colemak being applied a second time to firmware-generated output."""
     desktop = LanguageDesktop()
-    desktop.observations = iter(((11, 0x4090409), (11, 0xF002041D), (22, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
+    desktop.observations = iter(Foreground(*pair) for pair in ((11, 0x4090409), (11, 0xF002041D), (22, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
     languages = keyboard_language.KeyboardLanguages(desktop)
     driver = KeyboardFixture()
     keyboard = Keyboard(driver)

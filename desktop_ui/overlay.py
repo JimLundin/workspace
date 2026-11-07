@@ -6,12 +6,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
 
-from pydantic import StrictBool, StrictInt, TypeAdapter
+from pydantic import StrictBool, TypeAdapter
 
 from desktop_ui.keymap import PHYSICAL_NAMES
 from miryoku.layout import Layer, Scancode
 from usage import DIRECTORY
-from winapi.shapes import Rect
+from winapi.shapes import Point, Rect, Size
 
 PREFERENCE: Final = DIRECTORY / "overlay.json"
 POSITION: Final = DIRECTORY / "overlay-position.json"
@@ -23,19 +23,13 @@ class Preference:
     enabled: StrictBool = field(kw_only=True)
 
 
-@dataclass(frozen=True, slots=True)
-class Position:
-    x: StrictInt
-    y: StrictInt
-
-
 _PREFERENCE = TypeAdapter(Preference)
-_POSITION = TypeAdapter(Position)
+_POSITION = TypeAdapter(Point)
 
 
 def _read[T](path: Path, adapter: TypeAdapter[T]) -> T | None:
     try:
-        return adapter.validate_json(path.read_bytes())
+        return adapter.validate_json(path.read_bytes(), strict=True)
     except OSError, ValueError:
         return None
 
@@ -60,20 +54,18 @@ def save_enabled(*, enabled: bool, path: Path = PREFERENCE) -> None:
     _save(Preference(enabled=enabled), path, _PREFERENCE)
 
 
-def load_position(path: Path = POSITION) -> tuple[int, int] | None:
+def load_position(path: Path = POSITION) -> Point | None:
     """The drag handle's horizontal centre and top, in physical screen pixels."""
-    position = _read(path, _POSITION)
-    return (position.x, position.y) if position is not None else None
+    return _read(path, _POSITION)
 
 
-def save_position(position: tuple[int, int], path: Path = POSITION) -> None:
-    x, y = position
-    _save(Position(x, y), path, _POSITION)
+def save_position(position: Point, path: Path = POSITION) -> None:
+    _save(position, path, _POSITION)
 
 
-def nearest_work_area(position: tuple[int, int], areas: Sequence[Rect]) -> Rect:
+def nearest_work_area(position: Point, areas: Sequence[Rect]) -> Rect:
     """The monitor under the handle, or the nearest remaining one after unplugging."""
-    x, y = position
+    x, y = position.x, position.y
 
     def distance(area: Rect) -> int:
         return max(area.left - x, 0, x - (area.right - 1)) ** 2 + max(area.top - y, 0, y - (area.bottom - 1)) ** 2
@@ -81,14 +73,12 @@ def nearest_work_area(position: tuple[int, int], areas: Sequence[Rect]) -> Rect:
     return min(areas, key=distance)
 
 
-def fit_position(position: tuple[int, int], size: tuple[int, int], work: Rect) -> tuple[int, int]:
+def fit_position(position: Point, size: Size, work: Rect) -> Point:
     """Keep the keyboard and handle on this monitor, with the handle always reachable."""
-    x, y = position
-    width, height = size
-    visible_width = min(width, work.width)
-    x = max(work.left + visible_width // 2, min(x, work.right - (visible_width - visible_width // 2)))
-    y = max(work.top, min(y, work.bottom - height))
-    return x, y
+    visible_width = min(size.width, work.width)
+    x = max(work.left + visible_width // 2, min(position.x, work.right - (visible_width - visible_width // 2)))
+    y = max(work.top, min(position.y, work.bottom - size.height))
+    return Point(x, y)
 
 
 class KeyHighlights:

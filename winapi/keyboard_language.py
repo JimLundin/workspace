@@ -4,6 +4,7 @@ import ctypes
 import os
 import winreg
 from ctypes import wintypes
+from dataclasses import dataclass
 from typing import Protocol
 
 from winapi._core import fn, user32
@@ -42,11 +43,19 @@ def colemak_layout() -> str:
     raise OSError("No configured Colemak keyboard was found. Set WORKSPACE_COLEMAK_LAYOUT to its installed Windows layout ID.")
 
 
+@dataclass(frozen=True, slots=True)
+class Foreground:
+    """The foreground window, 0 when there is none, and the keyboard layout its thread uses."""
+
+    window: int
+    layout: int
+
+
 class LanguageDesktop(Protocol):
     def load(self, identity: str) -> int: ...
     def colemak(self) -> str: ...
     def activate(self, layout: int) -> None: ...
-    def foreground(self) -> tuple[int, int]: ...
+    def foreground(self) -> Foreground: ...
     def request(self, hwnd: int, layout: int) -> None: ...
 
 
@@ -65,10 +74,9 @@ class NativeLanguageDesktop:
         if not _ActivateKeyboardLayout(layout, 0):
             raise OSError("Windows refused to activate the requested input keyboard.")
 
-    def foreground(self) -> tuple[int, int]:
+    def foreground(self) -> Foreground:
         hwnd = int(_GetForegroundWindow() or 0)
-        current = int(_GetKeyboardLayout(_GetWindowThreadProcessId(hwnd, None)) or 0) if hwnd else 0
-        return hwnd, current
+        return Foreground(hwnd, int(_GetKeyboardLayout(_GetWindowThreadProcessId(hwnd, None)) or 0) if hwnd else 0)
 
     def request(self, hwnd: int, layout: int) -> None:
         if not _PostMessage(hwnd, 0x0050, 0, layout):
@@ -95,9 +103,9 @@ class KeyboardLanguages:
         if self.active != target:
             self.desktop.activate(target)
             self.active = target
-        hwnd, current = self.desktop.foreground()
-        if hwnd and current != target:
-            self.desktop.request(hwnd, target)
+        foreground = self.desktop.foreground()
+        if foreground.window and foreground.layout != target:
+            self.desktop.request(foreground.window, target)
 
     def close(self) -> None:
         self.enforce(enabled=False, firmware_connected=self.firmware_connected)

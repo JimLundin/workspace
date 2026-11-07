@@ -46,6 +46,7 @@ from protocol import (
 from usage import Detail
 from winapi import inputs, shell, system, windows
 from winapi._core import LRESULT, fn, user32
+from winapi.shapes import Point
 
 _SendMessage = fn(user32, "SendMessageW", LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 _GetWindowLong = fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int)
@@ -85,8 +86,8 @@ class KeyboardFixture:
         if down and key is self.reject_down:
             raise OSError("Sensitive content must not enter recovery logs")
 
-    def cursor_position(self) -> tuple[int, int]:
-        return 0, 0
+    def cursor_position(self) -> Point:
+        return Point(0, 0)
 
     def keyboard_devices(self) -> tuple[str, ...]:
         return self.devices

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from winapi._core import LRESULT, ULONG_PTR, fn, kernel32, user32
-from winapi.shapes import require_input_count, utf16_units
+from winapi.shapes import Point, require_input_count, utf16_units
 
 
 class KBDLLHOOKSTRUCT(ctypes.Structure):
@@ -173,7 +173,7 @@ def type_text(text: str, extra: int) -> None:
         _send(events)
 
 
-def cursor_position() -> tuple[int, int]:
+def cursor_position() -> Point:
     point = wintypes.POINT()
     _GetCursorPos(ctypes.byref(point))
-    return int(point.x), int(point.y)
+    return Point(int(point.x), int(point.y))

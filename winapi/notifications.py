@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from itertools import islice
 from pathlib import Path
 from typing import Protocol
@@ -20,8 +20,17 @@ lazy from win32more.Windows.Win32.System.WinRT import RO_INIT_MULTITHREADED, RoI
 from winapi.notification_banners import BannerPolicy, Coverage
 from winapi.system_notices import Access, Banners, Notice, NoticeKey, Observation, Observed, Unavailable, creation_time
 
-# Modification time and size of Windows' notification database files; None when they cannot be read.
-type Stamp = tuple[tuple[int, int], ...] | None
+
+@dataclass(frozen=True, slots=True)
+class FileStamp:
+    """A file's modification time and size: a cheap sign that it changed."""
+
+    modified_ns: int
+    size: int
+
+
+type Stamp = tuple[FileStamp, ...] | None
+"""Each of Windows' notification database files' stamps; None when they cannot be read."""
 
 DATABASE = ("wpndatabase.db", "wpndatabase.db-wal")
 
@@ -57,7 +66,7 @@ class NativeNotifications:
         if self.store is None:
             return None
         try:
-            return tuple((status.st_mtime_ns, status.st_size) for status in (os.stat(self.store / name) for name in DATABASE))
+            return tuple(FileStamp(status.st_mtime_ns, status.st_size) for status in (os.stat(self.store / name) for name in DATABASE))
         except OSError:
             return None
 

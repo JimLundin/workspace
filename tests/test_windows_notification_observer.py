@@ -9,7 +9,7 @@ if sys.platform != "win32":
     raise unittest.SkipTest("Native notification observer")
 
 from winapi.notification_banners import Coverage
-from winapi.notifications import NotificationObserver, Stamp
+from winapi.notifications import FileStamp, NotificationObserver, Stamp
 from winapi.system_notices import Banners, Notice, NoticeKey, Observation, Observed, Unavailable
 
 
@@ -47,7 +47,7 @@ class Source:
     def stamp(self) -> Stamp:
         if self.writing:
             self.version += 1
-        return ((self.version, 0),)
+        return (FileStamp(self.version, 0),)
 
     def read(self, stopped: threading.Event, known: Mapping[NoticeKey, Notice]) -> Observation:
         self.known.append(dict(known))

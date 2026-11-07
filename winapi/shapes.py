@@ -4,6 +4,26 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
+class Point:
+    """A screen position in physical pixels; negative left of or above the primary monitor."""
+
+    x: int
+    y: int
+
+
+@dataclass(frozen=True, slots=True)
+class Size:
+    """A width and height in physical pixels, neither negative."""
+
+    width: int
+    height: int
+
+    def __post_init__(self) -> None:
+        if self.width < 0 or self.height < 0:
+            raise ValueError(f"A size cannot be negative: {self.width} x {self.height}.")
+
+
+@dataclass(frozen=True, slots=True)
 class Rect:
     """A screen rectangle in physical pixels; `right` and `bottom` are exclusive."""
 
@@ -19,6 +39,10 @@ class Rect:
     @property
     def height(self) -> int:
         return self.bottom - self.top
+
+    @property
+    def size(self) -> Size:
+        return Size(self.width, self.height)
 
     def contains(self, x: int, y: int) -> bool:
         return self.left <= x < self.right and self.top <= y < self.bottom

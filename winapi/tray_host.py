@@ -13,7 +13,7 @@ from enum import Enum
 from winapi import desktop_shell, windows
 from winapi._core import LRESULT, ULONG_PTR, fn, user32
 from winapi.icon_pixels import Pixels, native_pixels
-from winapi.shapes import Rect
+from winapi.shapes import Point, Rect
 from winapi.shell import TASKBAR_CREATED, AppWindow
 
 _SetProp = fn(user32, "SetPropW", wintypes.BOOL, wintypes.HWND, wintypes.LPCWSTR, wintypes.HANDLE)
@@ -152,14 +152,22 @@ def update(entries: tuple[Entry, ...], observed: Registration, image: Pixels | N
     return tuple(changed if entry is previous else entry for entry in entries)
 
 
-def callbacks(entry: Entry, click: Click, point: tuple[int, int]) -> tuple[tuple[int, int], ...]:
+@dataclass(frozen=True, slots=True)
+class Notify:
+    """One callback message's parameters, as the icon's owner expects them."""
+
+    wparam: int
+    lparam: int
+
+
+def callbacks(entry: Entry, click: Click, point: Point) -> tuple[Notify, ...]:
     events = {Click.LEFT: (0x201, 0x202), Click.RIGHT: (0x204, 0x205), Click.DOUBLE: (0x203,)}[click]
     if entry.version >= 3:
         events = (*events, 0x400 if click is Click.LEFT else 0x7B) if click is not Click.DOUBLE else events
     if entry.version >= 4:
-        x, y = point
-        return tuple(((x & 0xFFFF) | ((y & 0xFFFF) << 16), event | ((entry.identity & 0xFFFF) << 16)) for event in events)
-    return tuple((entry.identity, event) for event in events)
+        coordinates = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)
+        return tuple(Notify(coordinates, event | ((entry.identity & 0xFFFF) << 16)) for event in events)
+    return tuple(Notify(entry.identity, event) for event in events)
 
 
 class TrayHost:
@@ -215,12 +223,12 @@ class TrayHost:
             return 0
         return None
 
-    def click(self, entry: Entry, click: Click, point: tuple[int, int]) -> None:
+    def click(self, entry: Entry, click: Click, point: Point) -> None:
         # The three inputs are the registered owner, action, and native click coordinates.
         if entry in self.entries and windows.exists(entry.window):
             _AllowSetForegroundWindow(windows.process_id(entry.window))
-            for wparam, lparam in callbacks(entry, click, point):
-                _SendNotifyMessage(entry.window, entry.callback, wparam, lparam)
+            for notify in callbacks(entry, click, point):
+                _SendNotifyMessage(entry.window, entry.callback, notify.wparam, notify.lparam)
 
     def close(self) -> None:
         self.closed = True

@@ -1,7 +1,7 @@
 """Window placement and screenshot coordinates."""
 
 from contracts.geometry import fit, half
-from winapi.shapes import Rect
+from winapi.shapes import Rect, Size
 
 WORK = Rect(0, 0, 1920, 1040)  # a 1080p monitor, minus the taskbar
 
@@ -14,5 +14,5 @@ def test_half_fills_one_side_of_the_work_area_counting_invisible_borders() -> No
 
 
 def test_fit_shrinks_to_a_maximum_and_keeps_the_shape() -> None:
-    assert fit(2560, 1440, 1280) == (1280, 720)
-    assert fit(800, 600, 1280) == (800, 600)
+    assert fit(Size(2560, 1440), 1280) == Size(1280, 720)
+    assert fit(Size(800, 600), 1280) == Size(800, 600)

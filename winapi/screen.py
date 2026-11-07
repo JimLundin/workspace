@@ -252,7 +252,7 @@ def attached() -> tuple[tuple[int, Monitor], ...]:
 
 def monitors() -> list[Monitor]:
     """All monitors, left to right."""
-    return sorted((monitor for _handle, monitor in attached()), key=monitor_position)
+    return sorted((monitor for _handle, monitor in attached()), key=lambda monitor: (monitor.area.left, monitor.area.top))
 
 
 def monitor_of(hwnd: int) -> Monitor:
@@ -281,7 +281,3 @@ def capture(area: Rect, width: int, height: int) -> bytes:
         _DeleteObject(bitmap)
         _DeleteDC(memory)
         _ReleaseDC(None, screen)
-
-
-def monitor_position(monitor: Monitor) -> tuple[int, int]:
-    return monitor.area.left, monitor.area.top

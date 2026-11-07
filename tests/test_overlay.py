@@ -5,7 +5,7 @@ from pathlib import Path
 
 from desktop_ui.overlay import KeyHighlights, OverlayState, fit_position, load_enabled, load_position, nearest_work_area, save_enabled, save_position
 from miryoku.layout import Layer, Scancode
-from winapi.shapes import Rect
+from winapi.shapes import Point, Rect, Size
 
 Q, M = Scancode(0x10), Scancode(0x32)
 
@@ -162,11 +162,11 @@ def test_drag_position_and_tray_visibility_are_saved_independently(tmp_path: Pat
     position = preference.with_name("overlay-position.json")
     assert load_position(position) is None
     save_enabled(enabled=False, path=preference)
-    save_position((-730, -1200), position)
+    save_position(Point(-730, -1200), position)
     assert not load_enabled(preference)
-    assert load_position(position) == (-730, -1200)
+    assert load_position(position) == Point(-730, -1200)
     save_enabled(enabled=True, path=preference)
-    assert load_position(position) == (-730, -1200)
+    assert load_position(position) == Point(-730, -1200)
     assert not position.with_suffix(".tmp").exists()
 
 
@@ -182,15 +182,15 @@ def test_overlay_can_be_placed_on_monitors_left_of_and_above_primary() -> None:
     above = Rect(0, -1440, 2560, 0)
     primary = Rect(0, 0, 1920, 1200)
     areas = (left, above, primary)
-    for position, expected in (((-720, -1000), left), ((1000, -800), above), ((960, 600), primary)):
+    for position, expected in ((Point(-720, -1000), left), (Point(1000, -800), above), (Point(960, 600), primary)):
         assert nearest_work_area(position, areas) == expected
-        assert fit_position(position, (780, 300), expected) == position
+        assert fit_position(position, Size(780, 300), expected) == position
 
 
 def test_overlay_keeps_its_handle_reachable_after_monitor_is_unplugged() -> None:
     primary = Rect(0, 0, 1920, 1200)
-    saved = (-720, -1000)
+    saved = Point(-720, -1000)
     work = nearest_work_area(saved, (primary,))
-    assert fit_position(saved, (780, 300), work) == (390, 0)
-    assert fit_position((1910, 1190), (780, 300), work) == (1530, 900)
-    assert fit_position(saved, (2400, 1400), work) == (960, 0)
+    assert fit_position(saved, Size(780, 300), work) == Point(390, 0)
+    assert fit_position(Point(1910, 1190), Size(780, 300), work) == Point(1530, 900)
+    assert fit_position(saved, Size(2400, 1400), work) == Point(960, 0)
