@@ -3,6 +3,7 @@
 import sys
 import threading
 import unittest
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -146,7 +147,7 @@ class TracedConnection:
 
     # The native protocol requires method, parameters, cancellation, session and
     # deadline together; this adapter preserves its complete calling contract.
-    def call(self, method: str, params: dict[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15) -> dict[str, Json]:
+    def call(self, method: str, params: Mapping[str, Json], cancel: threading.Event, *, session: str = "", timeout: float = 15) -> dict[str, Json]:
         self.trace.commands += ((method, frozendict(params)),)
         return self.connection.call(method, params, cancel, session=session, timeout=timeout)
 

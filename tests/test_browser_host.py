@@ -2,6 +2,7 @@
 
 import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from unittest import TestCase
 
@@ -25,7 +26,7 @@ class Connection:
     def call(
         self,
         method: str,
-        params: dict[str, Json],
+        params: Mapping[str, Json],
         cancel: threading.Event,
         *,
         session: str = "",
@@ -48,7 +49,7 @@ class Connection:
         if method == "disconnect":
             raise DisconnectedError("Browser closed")
         if method == "Runtime.evaluate":
-            return params
+            return dict(params)
         return {"value": "observed"}
 
     def close(self) -> None:

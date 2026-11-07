@@ -5,7 +5,7 @@ import base64
 import copy
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Annotated, Protocol, runtime_checkable
 
@@ -110,7 +110,7 @@ class MemorySession:
         self,
         items: History,
         *,
-        checkpoint: Callable[[list[Json]], None],
+        checkpoint: Callable[[Sequence[Json]], None],
         session_id: str,
     ) -> None:
         self.items = items
@@ -328,7 +328,7 @@ def _is_image(part: Json) -> bool:
     return isinstance(part, dict) and part.get("type") == "input_image"
 
 
-def _image_key(item: dict[str, Json]) -> str:
+def _image_key(item: Mapping[str, Json]) -> str:
     return "output" if item.get("type") == "function_call_output" else "content"
 
 

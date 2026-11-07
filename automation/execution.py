@@ -3,7 +3,7 @@
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Annotated, Protocol, assert_never
@@ -193,7 +193,7 @@ class WorkExecution:
     def block(self, reason: str) -> None:
         self.disposition = Waiting(Blocked(reason[:8_000] or "The task needs attention."))
 
-    def checkpoint(self, items: list[Json]) -> None:
+    def checkpoint(self, items: Sequence[Json]) -> None:
         """Checkpoint structural progress, never raw SDK or integration payloads."""
         names = tuple(
             dict.fromkeys(

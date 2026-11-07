@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal, assert_never
@@ -242,7 +242,7 @@ class HostedConnection:
     def call(
         self,
         method: str,
-        params: dict[str, Json],
+        params: Mapping[str, Json],
         cancel: threading.Event,
         *,
         session: str = "",

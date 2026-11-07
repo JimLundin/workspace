@@ -427,7 +427,7 @@ def _test_result(name: str, module: str, label: str, test: Test) -> Results:
     return Results(passed, skipped, failures, ((elapsed, f"phase:first SDK load in {module}.{label}" if first_load else module + "." + label),))
 
 
-def check_architecture(root: Path, current: dict[str, str], cache: Cache) -> Report:
+def check_architecture(root: Path, current: Mapping[str, str], cache: Cache) -> Report:
     started = time.perf_counter()
     try:
         report = review(root, current, cache=cache)

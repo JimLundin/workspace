@@ -5,7 +5,7 @@ local to that test's browser lifetime; observations and receipts are tuples.
 """
 
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
 from pydantic import TypeAdapter
@@ -27,7 +27,7 @@ class Connection:
     def call(
         self,
         method: str,
-        params: dict[str, Json],
+        params: Mapping[str, Json],
         cancel: threading.Event,
         *,
         session: str = "",

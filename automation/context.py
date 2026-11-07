@@ -1,7 +1,7 @@
 """Explicit saved preferences and project notes, with pure bounded retrieval."""
 
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Set
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, assert_never
@@ -174,15 +174,15 @@ def select_context(
     )
 
 
-def _names_project(project: str, words: set[str], query: str) -> bool:
+def _names_project(project: str, words: Set[str], query: str) -> bool:
     project_words = _terms(project)
     return bool(project_words and project_words <= words) or (not project_words and project.casefold() in query.casefold())
 
 
 def _ranking(
     record: ContextRecord,
-    words: set[str],
-    terms: set[str],
+    words: Set[str],
+    terms: Set[str],
     named_projects: frozenset[str],
 ) -> tuple[int, float, str, ContextRecord] | None:
     match record:

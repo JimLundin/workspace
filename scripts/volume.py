@@ -62,7 +62,7 @@ def tracked(root: Path) -> list[str]:
     return listing.stdout.split()
 
 
-def report(measures: list[Measure], top: int) -> str:
+def report(measures: Sequence[Measure], top: int) -> str:
     by_area = sorted(measures, key=lambda m: area(m.path))
     sums = frozendict((name, sum(m.nodes for m in group)) for name, group in groupby(by_area, key=lambda m: area(m.path)))
     # In first-seen order, so most_common breaks ties as it always has.

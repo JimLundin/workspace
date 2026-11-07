@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -216,7 +216,7 @@ class Browser:
     def _call(
         self,
         method: str,
-        params: dict[str, Json],
+        params: Mapping[str, Json],
         cancel: threading.Event,
         *,
         session: str = "",
@@ -510,7 +510,7 @@ class Browser:
             session = self._session(request.target_id, cancel)
             frame = self._frames(session, cancel).frame.id
 
-            def transport(method: str, arguments: dict[str, Json]) -> dict[str, Json]:
+            def transport(method: str, arguments: Mapping[str, Json]) -> dict[str, Json]:
                 options = {**arguments, "frameId": frame} if method == "Network.loadNetworkResource" else arguments
                 return self._call(method, options, threading.Event() if method == "IO.close" else cancel, session=session)
 

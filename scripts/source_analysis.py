@@ -13,7 +13,7 @@ import importlib.metadata
 import os
 import sys
 import tempfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -113,7 +113,7 @@ def import_aliases(tree: ast.AST) -> frozendict[str, str]:
     return frozendict(pair for node in ast.walk(tree) for pair in _bound_names(node))
 
 
-def _imported(node: ast.AST, package: list[str], aliases: Mapping[str, str]) -> Iterator[str]:
+def _imported(node: ast.AST, package: Sequence[str], aliases: Mapping[str, str]) -> Iterator[str]:
     match node:
         case ast.Import(names=names):
             yield from (alias.name for alias in names)

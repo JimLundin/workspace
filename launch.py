@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
 from ctypes import wintypes
 from pathlib import Path
 from typing import Final
@@ -101,7 +102,7 @@ def terminate(pid: int) -> None:
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, creationflags=0x0800_0000)
 
 
-def selected(names: list[str]) -> tuple[Entry, ...]:
+def selected(names: Sequence[str]) -> tuple[Entry, ...]:
     unknown = frozenset(names) - CATALOGUE.keys()
     if unknown:
         raise SystemExit(f"Unknown program: {', '.join(sorted(unknown))}. Choose from {', '.join(CATALOGUE)}.")
@@ -109,7 +110,7 @@ def selected(names: list[str]) -> tuple[Entry, ...]:
     return tuple(entry for name, entry in CATALOGUE.items() if name in chosen)
 
 
-def main(arguments: list[str]) -> None:
+def main(arguments: Sequence[str]) -> None:
     command, *names = arguments or ["start"]
     entries = selected(names)
     if command not in ("start", "stop", "restart"):

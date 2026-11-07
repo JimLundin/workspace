@@ -1,6 +1,6 @@
 """Agent canvas capabilities with exact local-owner receipts."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Final
 
 from pydantic import ValidationError
@@ -84,7 +84,7 @@ SPECS: Final = (
 )
 
 
-def validated(tool: str, arguments: dict[str, Json]) -> CanvasCommand:
+def validated(tool: str, arguments: Mapping[str, Json]) -> CanvasCommand:
     payload: dict[str, Json] = {**arguments, "operation": tool}
     command = CANVAS_COMMAND.validate_python(payload)
     if len(CANVAS_COMMAND.dump_json(command)) > 64000:

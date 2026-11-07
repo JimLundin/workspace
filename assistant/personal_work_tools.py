@@ -133,7 +133,7 @@ def source_request(source: WorkSource) -> str:
     )
 
 
-def validated(tool: str, arguments: dict[str, Json]) -> PersonalRequest:
+def validated(tool: str, arguments: Mapping[str, Json]) -> PersonalRequest:
     payload: dict[str, Json] = {**arguments, "operation": tool}
     return PERSONAL_REQUEST.validate_python(payload)
 

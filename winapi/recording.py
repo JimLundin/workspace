@@ -8,7 +8,7 @@ import contextlib
 import ctypes
 import threading
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from ctypes import wintypes
 from typing import Final, Protocol
 
@@ -311,7 +311,7 @@ class MeetingAudio:
             _release(enumerator, self.api)
             self.api.uninitialize()
 
-    def _capture(self, streams: list[Stream], mixer: Mixer, origin: float, stop: threading.Event, consume: Callable[[bytes], None]) -> None:
+    def _capture(self, streams: Sequence[Stream], mixer: Mixer, origin: float, stop: threading.Event, consume: Callable[[bytes], None]) -> None:
         latest = 0
 
         def drain() -> None:

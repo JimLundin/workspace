@@ -4,6 +4,7 @@ import ctypes
 import os
 import subprocess
 import time
+from collections.abc import Sequence
 from ctypes import wintypes
 from pathlib import Path
 
@@ -231,7 +232,7 @@ class ProcessJob:
         finally:
             _CloseHandle(process)
 
-    def start(self, arguments: list[str]) -> Process:
+    def start(self, arguments: Sequence[str]) -> Process:
         """Assign the suspended process before it can create any browser children."""
         startup, info = _Startup(), _ProcessInfo()
         startup.cb = ctypes.sizeof(startup)

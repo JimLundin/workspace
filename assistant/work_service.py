@@ -1,5 +1,6 @@
 """Journal effects and worker notifications, owned by the frontend's observer."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from itertools import chain, islice
 from typing import Protocol, assert_never
@@ -162,7 +163,7 @@ class WorkService:
 
     def _submission_problems(
         self,
-        current: dict[str, Task],
+        current: Mapping[str, Task],
         watched: frozenset[str],
         pending: frozenset[str],
         *,
@@ -193,7 +194,7 @@ class WorkService:
             reply_problems=(),
         )
 
-    def _confirmed_reply_problems(self, current: dict[str, Task], watched: frozenset[str]) -> tuple[ReplyProblem, ...]:
+    def _confirmed_reply_problems(self, current: Mapping[str, Task], watched: frozenset[str]) -> tuple[ReplyProblem, ...]:
         self._pending_inputs = frozenset(
             (task.id, task.state.reason.id)
             for task in current.values()

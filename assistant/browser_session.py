@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
@@ -117,7 +117,7 @@ class BrowserConnection(Protocol):
     def call(
         self,
         method: str,
-        params: dict[str, Json],
+        params: Mapping[str, Json],
         cancel: threading.Event,
         *,
         session: str = "",
@@ -241,7 +241,7 @@ class Cdp:
     def call(
         self,
         method: str,
-        params: dict[str, Json],
+        params: Mapping[str, Json],
         cancel: threading.Event,
         *,
         session: str = "",
