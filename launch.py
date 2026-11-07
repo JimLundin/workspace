@@ -6,8 +6,10 @@
 
 Each program is `python -m <module>` from `components.CATALOGUE`, started in its
 order and stopped in reverse. A program is running when its control window
-exists; stopping posts its quit message and ends it after its grace period.
-Nothing supervises the programs: a crashed one stays down until the next start.
+exists or the process this launcher started (`state/<name>.pid`) is alive; the
+gateway has no window. Stopping posts the quit message to the window, then ends
+the process tree after its grace period. Nothing supervises the programs: a
+crashed one stays down until the next start.
 """
 
 import ctypes
@@ -32,8 +34,10 @@ _find = ctypes.WINFUNCTYPE(wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)(("
 _post = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)(("PostMessageW", _user32))
 _window_process = ctypes.WINFUNCTYPE(wintypes.DWORD, wintypes.HWND, ctypes.POINTER(wintypes.DWORD))(("GetWindowThreadProcessId", _user32))
 _open = ctypes.WINFUNCTYPE(wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)(("OpenProcess", _kernel32))
-_terminate = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HANDLE, wintypes.UINT)(("TerminateProcess", _kernel32))
 _close = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HANDLE)(("CloseHandle", _kernel32))
+_wait = ctypes.WINFUNCTYPE(wintypes.DWORD, wintypes.HANDLE, wintypes.DWORD)(("WaitForSingleObject", _kernel32))
+SYNCHRONIZE: Final = 0x0010_0000
+WAIT_TIMEOUT: Final = 0x0000_0102
 
 
 def pythonw() -> Path:
@@ -46,31 +50,55 @@ def window(entry: Entry) -> int:
     return int(_find(entry.window.window_class, entry.window.title) or 0)
 
 
+def started(entry: Entry) -> int | None:
+    """The process this launcher started for the program, while it's alive."""
+    try:
+        pid = int((STATE / f"{entry.name}.pid").read_text(encoding="ascii"))
+    except OSError, ValueError:
+        return None
+    handle = _open(SYNCHRONIZE, False, pid)
+    if not handle:
+        return None
+    try:
+        return pid if _wait(handle, 0) == WAIT_TIMEOUT else None
+    finally:
+        _close(handle)
+
+
+def running(entry: Entry) -> bool:
+    return bool(window(entry)) or started(entry) is not None
+
+
 def start(entry: Entry) -> None:
-    if window(entry):
+    if running(entry):
         return
     STATE.mkdir(parents=True, exist_ok=True)
     environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"} | {STATE_VARIABLE: str(STATE)}
     with (STATE / f"{entry.name}.log").open("ab") as errors:
-        subprocess.Popen([str(pythonw()), "-m", entry.module], cwd=ROOT, env=environment, stdout=errors, stderr=errors, creationflags=DETACHED)
+        process = subprocess.Popen(
+            [str(pythonw()), "-m", entry.module], cwd=ROOT, env=environment, stdout=errors, stderr=errors, creationflags=DETACHED
+        )
+    (STATE / f"{entry.name}.pid").write_text(str(process.pid), encoding="ascii")
 
 
 def stop(entry: Entry) -> None:
     """Ask the program to quit (the layout lets go of held keys first), then end it after its grace period."""
-    handle = window(entry)
-    if not handle:
-        return
-    process = wintypes.DWORD()
-    _window_process(handle, ctypes.byref(process))
-    _post(handle, entry.quit_message, 0, 0)
+    if handle := window(entry):
+        _post(handle, entry.quit_message, 0, 0)
     deadline = time.monotonic() + entry.shutdown_s
-    while window(entry) and time.monotonic() < deadline:
+    while running(entry) and time.monotonic() < deadline:
         time.sleep(0.1)
-    if window(entry) and (owner := _open(0x0001, False, process.value)):  # PROCESS_TERMINATE
-        try:
-            _terminate(owner, 1)
-        finally:
-            _close(owner)
+    if handle := window(entry):
+        owner = wintypes.DWORD()
+        _window_process(handle, ctypes.byref(owner))
+        terminate(owner.value)
+    if (pid := started(entry)) is not None:
+        terminate(pid)
+
+
+def terminate(pid: int) -> None:
+    """End the process and everything it started (the environment's interpreter runs the program as a child)."""
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, creationflags=0x0800_0000)
 
 
 def selected(names: list[str]) -> tuple[Entry, ...]:
