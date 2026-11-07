@@ -269,7 +269,7 @@ class DesktopBar:
             session.subscribe(self.controls.handle)
         except OSError as error:
             self.errors.put(f"Screens can't go dark when locked: {error}")
-        self.tray_host = TrayHost()
+        self.tray_host = TrayHost.start()
         self.application_service = ApplicationObserver.start(self.errors.put)
         self.hints = KeyHintOverlay(NativeOverlayDesktop())
         self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)

@@ -10,6 +10,7 @@ from ctypes import wintypes
 from dataclasses import dataclass, field, replace
 from enum import Enum
 
+from cell import Cell
 from winapi import desktop_shell, windows
 from winapi._core import LRESULT, ULONG_PTR, fn, user32
 from winapi.icon_pixels import Pixels, native_pixels
@@ -170,58 +171,80 @@ def callbacks(entry: Entry, click: Click, point: Point) -> tuple[Notify, ...]:
     return tuple(Notify(entry.identity, event) for event in events)
 
 
+@dataclass(frozen=True, slots=True)
+class _Hosted:
+    entries: tuple[Entry, ...] = ()
+    locations: tuple[Located, ...] = ()
+    explorer: int = 0
+    """Explorer's taskbar, which receives every message the proxy does not answer itself."""
+    closed: bool = False
+
+
+def _proxied(hosted: Cell[_Hosted], message: int, wparam: int, lparam: int) -> int | None:
+    """The proxy window's procedure: answer icon positions and registrations, forward the rest to Explorer."""
+    # Required Windows WNDPROC ABI; WM_COPYDATA pointers exist only during this callback.
+    if hosted.get().closed:
+        return None
+    if message == 0x4A and lparam:
+        copy = CopyData.from_address(lparam)
+        if copy.kind == 3 and copy.data and 40 <= copy.size <= 128:
+            reply = position_reply(ctypes.string_at(copy.data, copy.size), hosted.get().locations)
+            if reply is not None:
+                return reply
+        if copy.kind == 1 and copy.data and 296 <= copy.size <= 4096:
+            observed = registration(ctypes.string_at(copy.data, copy.size))
+            if observed is not None:
+                pixels = native_pixels(observed.icon) if observed.flags & 2 and observed.operation in (0, 1) else None
+                hosted.update(lambda current: replace(current, entries=update(current.entries, observed, pixels)))
+    if message == TASKBAR_CREATED:
+        return 0
+    if message == 0x4A or message >= 0x400:
+        if not windows.exists(hosted.get().explorer):
+            explorer = next(iter(desktop_shell.taskbars()), 0)
+            hosted.update(lambda current: replace(current, explorer=explorer))
+        if explorer := hosted.get().explorer:
+            result = ULONG_PTR()
+            if _SendMessageTimeout(explorer, message, wparam, lparam, 2, 100, ctypes.byref(result)):
+                return ctypes.c_ssize_t(result.value).value
+        return 0
+    return None
+
+
+@dataclass(frozen=True, slots=True)
 class TrayHost:
     """The Qt-thread effect owner publishes immutable registrations and pixel copies."""
 
-    __slots__ = ("closed", "created", "entries", "explorer", "locations", "window")
+    window: AppWindow
+    _hosted: Cell[_Hosted]
 
-    def __init__(self) -> None:
-        self.entries: tuple[Entry, ...] = ()
-        self.locations: tuple[Located, ...] = ()
-        self.closed = False
-        self.explorer = next(iter(desktop_shell.taskbars()), 0)
-        self.created = TASKBAR_CREATED
-        self.window = AppWindow.create("workspace tray proxy", self.message, class_name="Shell_TrayWnd")
-        _SetProp(self.window.handle, "workspace tray proxy", 1)
-        _SetProp(self.window.handle, "TaskbandHWND", self.window.handle)
-        self.poll()
-        _SendNotifyMessage(0xFFFF, self.created, 0, 0)
+    @classmethod
+    def start(cls) -> TrayHost:
+        hosted = Cell(_Hosted(explorer=next(iter(desktop_shell.taskbars()), 0)))
+
+        def message(_hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
+            return _proxied(hosted, message, wparam, lparam)
+
+        window = AppWindow.create("workspace tray proxy", message, class_name="Shell_TrayWnd")
+        host = cls(window, hosted)
+        _SetProp(window.handle, "workspace tray proxy", 1)
+        _SetProp(window.handle, "TaskbandHWND", window.handle)
+        host.poll()
+        _SendNotifyMessage(0xFFFF, TASKBAR_CREATED, 0, 0)
+        return host
+
+    @property
+    def entries(self) -> tuple[Entry, ...]:
+        return self._hosted.get().entries
 
     def poll(self) -> tuple[Entry, ...]:
         _SetWindowPos(self.window.handle, -1, 0, 0, 0, 0, 0x13)
-        self.entries = tuple(entry for entry in self.entries if windows.exists(entry.window))
-        return tuple(entry for entry in self.entries if not entry.hidden and entry.callback)
+        hosted = self._hosted.update(
+            lambda current: replace(current, entries=tuple(entry for entry in current.entries if windows.exists(entry.window)))
+        )
+        return tuple(entry for entry in hosted.entries if not entry.hidden and entry.callback)
 
     def locate(self, locations: tuple[Located, ...]) -> None:
-        self.locations = locations
-
-    def message(self, hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
-        # Required Windows WNDPROC ABI; WM_COPYDATA pointers exist only during this callback.
-        if self.closed:
-            return None
-        if message == 0x4A and lparam:
-            copy = CopyData.from_address(lparam)
-            if copy.kind == 3 and copy.data and 40 <= copy.size <= 128:
-                reply = position_reply(ctypes.string_at(copy.data, copy.size), self.locations)
-                if reply is not None:
-                    return reply
-            if copy.kind == 1 and copy.data and 296 <= copy.size <= 4096:
-                observed = registration(ctypes.string_at(copy.data, copy.size))
-                if observed is not None:
-                    self.entries = update(
-                        self.entries, observed, native_pixels(observed.icon) if observed.flags & 2 and observed.operation in (0, 1) else None
-                    )
-        if message == self.created:
-            return 0
-        if message == 0x4A or message >= 0x400:
-            if not windows.exists(self.explorer):
-                self.explorer = next(iter(desktop_shell.taskbars()), 0)
-            if self.explorer:
-                result = ULONG_PTR()
-                if _SendMessageTimeout(self.explorer, message, wparam, lparam, 2, 100, ctypes.byref(result)):
-                    return ctypes.c_ssize_t(result.value).value
-            return 0
-        return None
+        self._hosted.update(lambda current: replace(current, locations=locations))
 
     def click(self, entry: Entry, click: Click, point: Point) -> None:
         # The three inputs are the registered owner, action, and native click coordinates.
@@ -231,7 +254,7 @@ class TrayHost:
                 _SendNotifyMessage(entry.window, entry.callback, notify.wparam, notify.lparam)
 
     def close(self) -> None:
-        self.closed = True
+        self._hosted.update(lambda current: replace(current, closed=True))
         self.window.destroy()
-        self.entries = ()
-        _SendNotifyMessage(0xFFFF, self.created, 0, 0)
+        self._hosted.update(lambda current: replace(current, entries=()))
+        _SendNotifyMessage(0xFFFF, TASKBAR_CREATED, 0, 0)

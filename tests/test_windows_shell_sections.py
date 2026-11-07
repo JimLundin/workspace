@@ -136,7 +136,7 @@ def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explore
 
     owner = shell.AppWindow.create("workspace test tray owner", message)
     image = shell.Icon.draw(16, bytes((80, 160, 240, 255)) * 256)
-    host = TrayHost()
+    host = TrayHost.start()
     tray = shell.TrayIcon.add(owner.handle, 0x8123, image, "Workspace fixture")
     try:
         deadline = time.monotonic() + 2
