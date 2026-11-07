@@ -31,11 +31,9 @@ Left:
 
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
   three meeting tests from the slow lists.
-- **Investigate the four largest native tests:**
+- **Investigate the three largest native tests:**
   - UIA (30 s);
   - managed Edge (26 s);
-  - copied bundle (24 s), which changes anyway with the install-time
-    dependencies task below;
   - attached Edge (19 s).
 - **Dependencies are installed, not bundled** (done 2026-11-07).
   `environments.py` builds one venv per lock from PyPI with uv; the keeper and every
