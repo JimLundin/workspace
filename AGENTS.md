@@ -72,8 +72,10 @@ their tests. Legacy data and backwards compatibility are not requirements.
   space its own types (screen pixels, canvas scene, bar layout) and cross spaces
   with a named method, never an operator.
 - Prefer immutable values; mutate only inside the owner that needs it. Build
-  collections with comprehensions, generator expressions and tuples, never by
-  appending to a mutable container in a loop.
+  collections with comprehensions, generator expressions, generator functions and
+  tuples, never by filling a mutable container in a loop (nor by rebinding an
+  accumulator there). A loop is for a side effect, which has no place in a
+  comprehension; even then, keep side effects out of loops where you can.
 - No function requires mutable data. Parameters take immutable types (tuples,
   `frozendict`, frozen dataclasses, or `Sequence`/`Mapping`/`Iterable`), never
   `list`, `dict`, `set` or another mutable container.
