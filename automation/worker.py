@@ -121,13 +121,12 @@ class LiveLog:
         pass
 
 
+@dataclass(frozen=True, slots=True)
 class BoundRunner:
     """Bind owner calls to the claimed run for the length of its execution."""
 
-    __slots__ = ("calls", "runner")
-
-    def __init__(self, runner: Runner, calls: OwnerCalls) -> None:
-        self.runner, self.calls = runner, calls
+    runner: Runner
+    calls: OwnerCalls
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
         self.calls.current = CallOwner(claim.run, stop)
