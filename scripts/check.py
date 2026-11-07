@@ -567,9 +567,13 @@ def publish_check(options: Options, run: CheckRun) -> bool:
 
 
 def editing_budget(args: Options, selection: Selection, results: Results) -> tuple[Failure, ...]:
-    """Budget failures for a narrow automatic editing check; --tests may name slow tests."""
+    """Budget failures: a narrow automatic editing check holds every test to the editing
+    budget, and any run with native modules holds them to the native budget. --tests
+    names tests on purpose, so it is exempt."""
     narrow = not args.native and not args.tests and selection.reason == DIRECT and len(modules(selection.tests)) < POOL_MINIMUM
-    return check_tiers.over_budget(results.durations) if narrow else ()
+    editing = check_tiers.over_budget(results.durations) if narrow else ()
+    native = check_tiers.over_native_budget(results.durations) if args.native and not args.tests else ()
+    return (*editing, *native)
 
 
 def main() -> None:

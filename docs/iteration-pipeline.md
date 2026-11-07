@@ -68,8 +68,10 @@ Checks have two tiers. The editing tier, the default, runs only portable tests:
 it leaves out native modules (`tests/test_windows_*.py`) and the slow portable
 tests listed in `SLOW` in `scripts/check_tiers.py`. In a narrow editing check
 (direct imports, fewer than ten modules) a test that takes over 1.5 s fails the
-check by name; make it faster or add it to `SLOW`. `--native` adds the affected
-native modules and the slow tests. `--full` runs everything, natively, and types
+check by name; make it faster or list it, with its reason, in `SLOW`. A native
+test over 3 s fails `--native` and `--full` by name unless `NATIVE_SLOW` lists
+it. Both lists have caps, so a new slow test means fixing another. `--native`
+adds the affected native modules and the slow tests. `--full` runs everything, natively, and types
 the whole tree: run it after broad native changes or before a merge.
 CI and the keeper also run the protected `selfcheck.py` full suite.
 

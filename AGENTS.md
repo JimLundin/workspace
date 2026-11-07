@@ -25,6 +25,14 @@ their tests. Legacy data and backwards compatibility are not requirements.
   resources or concrete adapters. The architecture review enforces the ban.
 - Use Hypothesis with bounded valid inputs for generated properties, in
   `tests/properties/`. Test our adapters, not a dependency's algorithms.
+- A native test (`tests/test_windows_*.py`) must catch a defect only real
+  Windows, Qt or a child process can show. A decision you can check with values
+  is a portable test, even when the code it lives in is native.
+- Tests have a time budget: 1.5 s in the editing check, 3 s for native tests.
+  Before listing a slow test in `scripts/check_tiers.py` (with its reason, under
+  the cap), remove the cause: real waits, sleeps and retry backoff have seams, and
+  an expensive launch (Edge, a fixture window, a fresh interpreter) can be shared
+  with the neighbouring test that starts the same thing.
 
 # Design
 

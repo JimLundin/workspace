@@ -3,7 +3,17 @@
 from pathlib import Path
 
 from scripts.check_results import Selection
-from scripts.check_tiers import SLOW, editing, over_budget, test_functions
+from scripts.check_tiers import (
+    NATIVE_BUDGET_S,
+    NATIVE_SLOW,
+    NATIVE_SLOW_CAP,
+    SLOW,
+    SLOW_CAP,
+    editing,
+    over_budget,
+    over_native_budget,
+    test_functions,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -37,7 +47,27 @@ def test_a_test_over_budget_fails_by_name_and_phases_never_do() -> None:
     ]
 
 
-def test_every_slow_entry_names_an_existing_test() -> None:
-    # Defect: a renamed or deleted test leaves a stale entry that no longer defers anything.
-    missing = [entry for entry in SLOW if entry.partition("::")[2] not in test_functions(ROOT / entry.partition("::")[0])]
-    assert not missing, missing
+def test_every_slow_entry_names_an_existing_test_with_a_reason_within_its_cap() -> None:
+    # Defects: a renamed or deleted test leaves a stale entry that no longer
+    # defers anything, an entry carries no reason for being slow, or the lists
+    # grow past their caps instead of a slow test being fixed.
+    for entries, cap in ((SLOW, SLOW_CAP), (NATIVE_SLOW, NATIVE_SLOW_CAP)):
+        missing = [entry for entry in entries if entry.partition("::")[2] not in test_functions(ROOT / entry.partition("::")[0])]
+        assert not missing, missing
+        assert all(reason.strip() for reason in entries.values())
+        assert len(entries) <= cap, f"{len(entries)} slow tests, over the cap of {cap}"
+    assert all(Path(entry).name.startswith("test_windows_") for entry in NATIVE_SLOW)
+    assert not any(Path(entry.partition("::")[0]).name.startswith("test_windows_") for entry in SLOW)
+
+
+def test_a_native_test_over_its_budget_fails_by_name_unless_listed() -> None:
+    # Defects: a slow native test passes unnoticed, a listed exception fails
+    # anyway, or a portable test is held to the native budget.
+    listed = sorted(NATIVE_SLOW)[0].replace("/", ".").replace(".py::", ".")
+    durations = (
+        (NATIVE_BUDGET_S + 1, "worker:tests.test_windows_bar.test_slow"),
+        (NATIVE_BUDGET_S + 9, listed),
+        (NATIVE_BUDGET_S - 1, "tests.test_windows_bar.test_quick"),
+        (NATIVE_BUDGET_S + 1, "tests.test_agent.test_portable"),
+    )
+    assert [failure.node for failure in over_native_budget(durations)] == ["tests/test_windows_bar.py::test_slow"]
