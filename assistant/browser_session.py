@@ -26,6 +26,7 @@ from assistant.browser_values import (
     NavigationContextError,
     navigation_context_error,
 )
+from cell import Cell
 from contracts.json_value import Json
 lazy from assistant.browser_host import connect_shared
 lazy from usage import DIRECTORY
@@ -173,14 +174,14 @@ _COMMAND = TypeAdapter(Command)
 _REPLY = TypeAdapter(Reply)
 
 
+@dataclass(frozen=True, slots=True)
 class Cdp:
     """One serialized connection; events never get mistaken for command replies."""
 
-    __slots__ = ("channel", "clock", "sequence")
-
-    def __init__(self, channel: Channel, *, clock: Callable[[], float] = time.monotonic) -> None:
-        self.channel, self.sequence = channel, 0
-        self.clock = clock
+    channel: Channel
+    clock: Callable[[], float] = field(default=time.monotonic, kw_only=True)
+    _sequence: Cell[int] = field(default_factory=lambda: Cell(0), init=False, repr=False)
+    """The last command's identity."""
 
     @classmethod
     def connect(
@@ -249,8 +250,7 @@ class Cdp:
     ) -> dict[str, Json]:
         if cancel.is_set():
             raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
-        self.sequence += 1
-        identity = self.sequence
+        identity = self._sequence.update(lambda sequence: sequence + 1)
         request = Command(identity, method, frozendict(params), session or None)
         deadline = self.clock() + timeout
         try:

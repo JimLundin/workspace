@@ -289,7 +289,7 @@ class AssistantApp:
         self.triage = self.create_feed(FeedWork(tasks, saved_context, context))
         self.feed = FeedInbox.load(windows_store(DIRECTORY / "notifications.bin", NOTIFICATION_STATE), self.triage.observe)
         self.communications = Communications(
-            TeamsWeb(BROWSER_PROFILE), windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE), self.feed.communications
+            TeamsWeb.at(BROWSER_PROFILE), windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE), self.feed.communications
         )
         self.work_owners = WorkOwners(self.triage.command, self.personal.handle, self.canvas.command)
         self.commands_handler = DesktopCommands(self.canvas, desktop, self)

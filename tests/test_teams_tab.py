@@ -12,7 +12,7 @@ from tests.teams_fixture import Browser
 
 def web(folder: Path) -> tuple[TeamsWeb, Browser]:
     browser = Browser((PageRow("existing", "", "https://teams.cloud.microsoft/v2/"),))
-    return TeamsWeb(folder, browser=browser), browser
+    return TeamsWeb.at(folder, browser=browser), browser
 
 
 def test_reconnect_reuses_existing_teams_when_saved_target_has_expired(tmp_path: Path) -> None:
@@ -44,7 +44,7 @@ def test_activity_and_open_share_the_selected_teams_tab(tmp_path: Path) -> None:
 def test_connect_without_an_existing_teams_tab_does_not_open_one(tmp_path: Path) -> None:
     # Automatic recovery must not turn a closed Teams tab into more tabs.
     browser = Browser()
-    current = TeamsWeb(tmp_path, browser=browser)
+    current = TeamsWeb.at(tmp_path, browser=browser)
     with TestCase().assertRaisesRegex(BrowserError, "Open Teams"):
         current.connect("", threading.Event())
     assert browser.opens == ()

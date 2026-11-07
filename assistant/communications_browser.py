@@ -3,7 +3,7 @@
 import contextlib
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal, Protocol
@@ -35,6 +35,7 @@ from assistant.communications import (
     UpdateKind,
 )
 from assistant.web_apps import ACTIVITY_OBSERVE, ACTIVITY_PAGE, OBSERVE, TEAMS_READ, ActivityItem, ActivityPage, ChatIdentity, TeamsPage, decoded
+from cell import Cell
 
 HOSTS = frozenset({"teams.microsoft.com", "teams.cloud.microsoft"})
 _CONFIRMED = TypeAdapter(Annotated[bool, Field(strict=True)])
@@ -141,15 +142,43 @@ def observation(page: TeamsPage, at: float) -> Observation:
     return Observation(page.current, page.title, chats, messages, editor_ready=page.editor_ready)
 
 
+@dataclass(frozen=True, slots=True)
+class _Teams:
+    target: str = ""
+    """The collector's Teams tab."""
+    opening: frozendict[str, str] = frozendict()
+    """The chat each tab is navigating to, until it is open."""
+
+
+@dataclass(frozen=True, slots=True)
 class TeamsWeb:
     """Reuse one existing Teams tab; pause collection while the user views it."""
 
-    __slots__ = ("browser", "opening", "target")
+    browser: BrowserPort
+    _state: Cell[_Teams] = field(default_factory=lambda: Cell(_Teams()), init=False, repr=False)
 
-    def __init__(self, folder: Path, *, browser: BrowserPort | None = None) -> None:
-        self.browser: BrowserPort = browser if browser is not None else Browser(folder, source=Product.EDGE)
-        self.target = ""
-        self.opening: dict[str, str] = {}
+    @classmethod
+    def at(cls, folder: Path, *, browser: BrowserPort | None = None) -> TeamsWeb:
+        return cls(browser if browser is not None else Browser(folder, source=Product.EDGE))
+
+    @property
+    def target(self) -> str:
+        return self._state.get().target
+
+    @property
+    def opening(self) -> frozendict[str, str]:
+        return self._state.get().opening
+
+    def adopt(self, target: str) -> None:
+        """Collect from this tab from now on."""
+        self._state.update(lambda state: replace(state, target=target))
+
+    def navigating(self, target: str, identity: str) -> None:
+        """Record that `target` is navigating to the chat `identity`, until it opens."""
+        self._state.update(lambda state: replace(state, opening=frozendict({**state.opening, target: identity})))
+
+    def _forget(self, target: str) -> None:
+        self._state.update(lambda state: replace(state, opening=frozendict((key, value) for key, value in state.opening.items() if key != target)))
 
     def activity(self, cancel: threading.Event) -> ActivityObservation:
         if not any(page.id == self.target for page in self.pages(cancel)):
@@ -306,7 +335,7 @@ class TeamsWeb:
         # page instead of allocating another collector whenever that happens.
         existing = next((page for page in teams if page.id == self.target), None)
         existing = existing or next((page for page in teams if page.id == saved_target), teams[0])
-        self.target = existing.id
+        self._state.update(lambda state: replace(state, target=existing.id))
         return self.target
 
     def available(self, cancel: threading.Event) -> bool:
@@ -362,7 +391,7 @@ class TeamsWeb:
 
     def _select(self, identity: str, cancel: threading.Event, *, target: str = "") -> Observation:
         current = self.read(cancel, target=target)
-        pending = self.opening.get(target or self.target)
+        pending = self._state.get().opening.get(target or self.target)
         if pending is not None and not current.editor_ready:
             current = self._reopen(pending, cancel, target=target)
         deadline = time.monotonic() + 15
@@ -374,7 +403,7 @@ class TeamsWeb:
                 raise BrowserError("Stopped while Teams was loading.")
             current = self.read(cancel, target=target)
         if current.current == identity and current.editor_ready:
-            self.opening.pop(target or self.target, None)
+            self._forget(target or self.target)
             return current
         encoded = _literal(identity)
         expression = f"""(() => {{
@@ -394,7 +423,7 @@ class TeamsWeb:
                 while not cancel.wait(0.3):
                     current = self.read(cancel, target=target)
                     if current.current == identity and current.editor_ready:
-                        self.opening.pop(target or self.target, None)
+                        self._forget(target or self.target)
                         return current
                     result = self.confirmed(expression, cancel, target=target)
                     if result or len(current.conversations) > 1 or time.monotonic() >= deadline:
@@ -405,7 +434,7 @@ class TeamsWeb:
         while not cancel.wait(0.3):
             current = self.read(cancel, target=target)
             if current.current == identity and current.editor_ready:
-                self.opening.pop(target or self.target, None)
+                self._forget(target or self.target)
                 return current
             if time.monotonic() >= deadline:
                 break
@@ -421,8 +450,8 @@ class TeamsWeb:
         if address.hostname not in HOSTS:
             raise ChatUnavailableError("missing")
         url = f"https://teams.cloud.microsoft/l/chat/{quote(chat_identity(identity), safe=':@')}/conversations?webjoin=true"
-        if self.opening.get(selected) != identity:
-            self.opening[selected] = identity
+        if self._state.get().opening.get(selected) != identity:
+            self.navigating(selected, identity)
             with contextlib.suppress(NavigationLoadingError):
                 self.browser.request(Open(url, selected), cancel)
         deadline = time.monotonic() + 20
@@ -440,7 +469,7 @@ class TeamsWeb:
                 )
                 current = self.read(cancel, target=target)
                 if current.current == identity and current.editor_ready:
-                    self.opening.pop(selected, None)
+                    self._forget(selected)
                     return current
             except NavigationContextError:
                 pass  # A redirect invalidated this read; the next observation uses its new context.
@@ -505,4 +534,4 @@ class TeamsWeb:
         try:
             self.browser.close()
         finally:
-            self.opening.clear()
+            self._state.update(lambda state: replace(state, opening=frozendict()))

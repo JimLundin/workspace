@@ -273,7 +273,7 @@ def verify_exact_chat_observation_and_reply(web: TeamsWeb, cancel: threading.Eve
     assert len(read.conversations) == 2
     assert read.messages[0].sender == "Anna"
     assert read.messages[0].text == "First chat: **plain** source Åäö"
-    web.opening[web.target] = "19:unavailable@thread.v2"
+    web.navigating(web.target, "19:unavailable@thread.v2")
     second = web.select("19:two@thread.v2", cancel)
     assert web.opening == {}
     assert read.messages[0].identity == second.messages[0].identity
@@ -317,7 +317,7 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
     cancel = threading.Event()
     url = adapter.origin
     opened = request(browser, "open", url=url + "activity", target_id=web.target)
-    web.target = cast(str, opened["target_id"])
+    web.adopt(cast(str, opened["target_id"]))
     assert len(web.read(cancel).conversations) == 1
     second = web.select("19:two@thread.v2", cancel)
     assert second.current == "19:two@thread.v2" and second.messages[0].sender == "Sam"
@@ -327,7 +327,7 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
     assert page_value(web, "document.body.dataset.navigation", cancel) == "2"
 
     opened = request(browser, "open", url=url + "delayed", target_id=web.target)
-    web.target = cast(str, opened["target_id"])
+    web.adopt(cast(str, opened["target_id"]))
     connection = browser.connection
     assert connection is not None
     attached = connection.call("Target.attachToTarget", {"targetId": web.target, "flatten": True}, cancel)
@@ -341,14 +341,14 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
         connection.call("Target.detachFromTarget", {"sessionId": session}, cancel)
 
     opened = request(browser, "open", url=url + "empty", target_id=web.target)
-    web.target = cast(str, opened["target_id"])
+    web.adopt(cast(str, opened["target_id"]))
     assert web.read(cancel).current == ""
     found = web.discover(cancel)
     assert len(found.conversations) == 2 and found.current == "19:one@thread.v2"
     assert web.select("19:two@thread.v2", cancel).messages[0].sender == "Sam"
 
     opened = request(browser, "open", url=url, target_id=web.target)
-    web.target = cast(str, opened["target_id"])
+    web.adopt(cast(str, opened["target_id"]))
     page_value(web, "(() => {for(const row of document.querySelectorAll('[role=treeitem]'))row.remove();return true;})()", cancel)
     restored = web.select("19:two@thread.v2", cancel)
     assert Open("https://teams.cloud.microsoft/l/chat/19:two@thread.v2/conversations?webjoin=true", web.target) in adapter.requests
@@ -359,28 +359,28 @@ def verify_chat_navigation_recovery(browser: Browser, web: TeamsWeb, adapter: Fi
 def verify_communications(browser: Browser, trace: NativeTrace) -> None:
     """Borrow a managed lifetime; reload documents and construct fresh Teams state."""
     unused = browser.profile.parent / "unused-teams-profile"
-    web = TeamsWeb(unused, browser=browser)
+    web = TeamsWeb.at(unused, browser=browser)
     pages = frozendict(
         {"/activity-feed": ACTIVITY_PAGE, "/chats": PAGE, "/activity": ACTIVITY_CHAT_PAGE, "/delayed": DELAYED_CHAT_PAGE, "/empty": EMPTY_CHAT_PAGE}
     )
     with fixture(LAUNCHER_PAGE, pages=pages) as url:
         opened = request(browser, "open", url=url + "activity-feed")
-        web.target = cast(str, opened["target_id"])
+        web.adopt(cast(str, opened["target_id"]))
         verify_activity_identity_dates_and_read_action(web, threading.Event())
 
         opened = request(browser, "open", url=url + "activity-feed", target_id=web.target)
-        web = TeamsWeb(unused, browser=browser)
-        web.target = cast(str, opened["target_id"])
+        web = TeamsWeb.at(unused, browser=browser)
+        web.adopt(cast(str, opened["target_id"]))
         verify_saved_activity_activation(browser, web, trace)
 
         opened = request(browser, "open", url=url + "chats", target_id=web.target)
         adapter = FixtureBrowser(browser, url)
-        web = TeamsWeb(unused, browser=adapter)
-        web.target = cast(str, opened["target_id"])
+        web = TeamsWeb.at(unused, browser=adapter)
+        web.adopt(cast(str, opened["target_id"]))
         verify_exact_chat_observation_and_reply(web, threading.Event())
 
         target = web.target
         adapter = FixtureBrowser(browser, url)
-        web = TeamsWeb(unused, browser=adapter)
-        web.target = target
+        web = TeamsWeb.at(unused, browser=adapter)
+        web.adopt(target)
         verify_chat_navigation_recovery(browser, web, adapter)

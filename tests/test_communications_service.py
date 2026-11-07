@@ -219,10 +219,10 @@ def chat_document(identity: str) -> dict[str, Json]:
 
 def test_rechecking_a_loading_exact_chat_does_not_restart_teams_navigation(tmp_path: Path) -> None:
     browser = Browser((PageRow("owned-page", "", "https://teams.cloud.microsoft/v2/"),))
-    web = TeamsWeb(tmp_path, browser=browser)
-    web.target = "owned-page"
+    web = TeamsWeb.at(tmp_path, browser=browser)
+    web.adopt("owned-page")
     identity = "19:one@thread.v2"
-    web.opening[web.target] = identity
+    web.navigating(web.target, identity)
     browser.documents = (browser.document, chat_document(identity))
     assert web.select(identity, threading.Event()).current == identity
     assert browser.opens == ()
@@ -231,8 +231,8 @@ def test_rechecking_a_loading_exact_chat_does_not_restart_teams_navigation(tmp_p
 
 def test_pending_navigation_keeps_observing_the_same_exact_chat_without_reopening(tmp_path: Path) -> None:
     browser = Browser((PageRow("owned-page", "", "https://teams.cloud.microsoft/v2/"),))
-    web = TeamsWeb(tmp_path, browser=browser)
-    web.target = "owned-page"
+    web = TeamsWeb.at(tmp_path, browser=browser)
+    web.adopt("owned-page")
     identity = "19:one@thread.v2"
     browser.documents = (chat_document("19:previous@thread.v2"), chat_document(identity))
     browser.navigation_failure = NavigationLoadingError("Navigation is still loading")
@@ -243,9 +243,9 @@ def test_pending_navigation_keeps_observing_the_same_exact_chat_without_reopenin
 
 def test_next_chat_waits_for_pending_navigation_instead_of_restarting_teams(tmp_path: Path) -> None:
     browser = Browser((PageRow("owned-page", "", "https://teams.cloud.microsoft/v2/"),))
-    web = TeamsWeb(tmp_path, browser=browser)
-    web.target = "owned-page"
-    web.opening[web.target] = "19:loading@thread.v2"
+    web = TeamsWeb.at(tmp_path, browser=browser)
+    web.adopt("owned-page")
+    web.navigating(web.target, "19:loading@thread.v2")
     browser.documents = (browser.document, chat_document("19:loading@thread.v2"), chat_document("19:one@thread.v2"))
     browser.sidebar_click = True
     assert web.select("19:one@thread.v2", threading.Event()).current == "19:one@thread.v2"

@@ -136,16 +136,20 @@ class _Writer:
         self.store.append(block)
 
 
+@dataclass(frozen=True, slots=True)
 class _Journal:
     """The capture's storage owner: writes spooled audio and paces its publication."""
 
-    __slots__ = ("changed", "log", "problem", "publish", "spool", "store")
+    store: MeetingStore
+    spool: Spool
+    changed: Callable[[], None]
+    publish: Callable[[], None]
+    log: Callable[[str], None]
+    _problem: Cell[str] = field(default_factory=lambda: Cell(""), init=False, repr=False)
 
-    def __init__(
-        self, store: MeetingStore, spool: Spool, changed: Callable[[], None], publish: Callable[[], None], log: Callable[[str], None]
-    ) -> None:
-        self.store, self.spool, self.changed, self.publish, self.log = store, spool, changed, publish, log
-        self.problem = ""
+    @property
+    def problem(self) -> str:
+        return self._problem.get()
 
     def run(self, stop: threading.Event) -> None:
         writer = _Writer(self.store)
@@ -174,9 +178,9 @@ class _Journal:
                     self.changed()
                     return
         except (OSError, ValueError, sqlite3.Error) as error:
-            self.problem = str(error)
+            self._problem.set(str(error))
         except Exception:
-            self.problem = "Recording stopped unexpectedly. The captured part is saved in the meetings folder."
+            self._problem.set("Recording stopped unexpectedly. The captured part is saved in the meetings folder.")
             self.log(traceback.format_exc())
         # Saving failed: end capture, and never store audio captured after the failure.
         stop.set()

@@ -55,7 +55,7 @@ def test_external_observation_rejects_missing_source_identity() -> None:
     browser = Browser()
     browser.documents = ({"current": "Anna", "title": "Anna", "conversations": [], "messages": [], "editor_ready": True},)
     try:
-        TeamsWeb(Path("unused"), browser=browser).read(threading.Event())
+        TeamsWeb.at(Path("unused"), browser=browser).read(threading.Event())
     except BrowserError:
         pass
     else:
@@ -66,7 +66,7 @@ def test_read_uses_a_fresh_observation_after_a_launcher_redirect_retires_its_con
     value: Json = {"current": "19:one@thread.v2", "title": "Anna", "conversations": [], "messages": [], "editor_ready": True}
     browser = Browser()
     browser.documents = (NavigationContextError("Cannot find context with specified id"), value)
-    web = TeamsWeb(Path("unused"), browser=browser)
+    web = TeamsWeb.at(Path("unused"), browser=browser)
     assert web.read(threading.Event()).current == "19:one@thread.v2"
     assert browser.reads == 2
 
