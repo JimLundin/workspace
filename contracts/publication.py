@@ -8,8 +8,11 @@ thread, reached through `post`.
 import threading
 import traceback
 from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Protocol
+
+from cell import Cell
 
 type Post = Callable[[Callable[[], None]], None]
 
@@ -24,16 +27,31 @@ class Unavailable(Enum):
     FAILED = auto()
 
 
-class ViewPublication[V: Closable]:
-    __slots__ = ("_create", "_lock", "_log", "_pending", "_post", "_render", "_view", "closed", "closed_ready", "ready")
+@dataclass(frozen=True, slots=True)
+class _Published[V]:
+    view: V | None = None
+    pending: bool = False
+    """A render is posted and has not run yet."""
+    closed: bool = False
 
-    def __init__(self, post: Post, create: Callable[[], V], render: Callable[[V | None], None], *, log: Callable[[str], None]) -> None:
-        self._post, self._create, self._render, self._log = post, create, render, log
-        self._lock = threading.Lock()
-        self._pending = self.closed = False
-        self._view: V | None = None
-        # Set while a created view is attached; closed_ready confirms the view thread released it.
-        self.ready, self.closed_ready = threading.Event(), threading.Event()
+
+@dataclass(frozen=True, slots=True)
+class ViewPublication[V: Closable]:
+    _post: Post
+    _create: Callable[[], V]
+    _render: Callable[[V | None], None]
+    log: Callable[[str], None] = field(kw_only=True)
+    _published: Cell[_Published[V]] = field(default_factory=lambda: Cell(_Published[V]()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    ready: threading.Event = field(default_factory=threading.Event, init=False)
+    """Set while a created view is attached."""
+    closed_ready: threading.Event = field(default_factory=threading.Event, init=False)
+    """Confirms the view thread released the view."""
+
+    @property
+    def closed(self) -> bool:
+        return self._published.get().closed
 
     def post(self, job: Callable[[], None]) -> None:
         """Any thread: run an owner job on the view's thread, unless the view has closed by then."""
@@ -47,38 +65,39 @@ class ViewPublication[V: Closable]:
     def changed(self) -> None:
         """Any thread: coalesce one render of the owner's latest state."""
         with self._lock:
-            if self.closed or self._pending:
+            published = self._published.get()
+            if published.closed or published.pending:
                 return
-            self._pending = True
+            self._published.set(replace(published, pending=True))
         self._post(self._deliver)
 
     def _deliver(self) -> None:
         with self._lock:
-            self._pending = False
-            view, closed = self._view, self.closed
-        if not closed:
-            self._render(view)
+            published = self._published.update(lambda published: replace(published, pending=False))
+        if not published.closed:
+            self._render(published.view)
 
     def holds(self, view: V) -> bool:
         with self._lock:
-            return self._view is view
+            return self._published.get().view is view
 
     def opened(self) -> V | Unavailable:
         """View thread: the view, created on first use and rendered with the latest state."""
         with self._lock:
-            if self.closed:
+            published = self._published.get()
+            if published.closed:
                 return Unavailable.CLOSED
-            view = self._view
+            view = published.view
         if view is None:
             try:
                 view = self._create()
             except Exception:
-                self._log(traceback.format_exc())
+                self.log(traceback.format_exc())
                 return Unavailable.FAILED
             with self._lock:
-                attached = not self.closed
+                attached = not self._published.get().closed
                 if attached:
-                    self._view = view
+                    self._published.update(lambda published: replace(published, view=view))
             if not attached:
                 # Creation may close the owner; a late view must not outlive it.
                 view.close()
@@ -90,9 +109,9 @@ class ViewPublication[V: Closable]:
     def close(self, release: Callable[[], None] | None = None) -> bool:
         """Any thread: stop publishing, then release and close the view on its thread once."""
         with self._lock:
-            if self.closed:
+            if self._published.get().closed:
                 return False
-            self.closed = True
+            self._published.update(lambda published: replace(published, closed=True))
         self.ready.clear()
 
         def destroy() -> None:
@@ -100,7 +119,8 @@ class ViewPublication[V: Closable]:
                 if release is not None:
                     release()
                 with self._lock:
-                    view, self._view = self._view, None
+                    view = self._published.get().view
+                    self._published.update(lambda published: replace(published, view=None))
                 if view is not None:
                     view.close()
             finally:

@@ -207,7 +207,7 @@ def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward:
 
 
 CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm", "winapi.system_notices"})
-"""Beyond the standard library, pydantic and each other, all a contract may import:
+"""Beyond the standard library, pydantic, `cell` and each other, all a contract may import:
 the wire protocol and the plain-Python winapi value modules."""
 
 
@@ -219,7 +219,7 @@ def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Fi
             # The graph also names imported attributes (`protocol.Tool`), so allowed modules match as prefixes.
             if (
                 top in sys.stdlib_module_names
-                or top in ("pydantic", "contracts")
+                or top in ("pydantic", "contracts", "cell")
                 or target == "winapi"
                 or any(_within(target, allowed) for allowed in CONTRACT_IMPORTS - {"winapi"})
             ):
