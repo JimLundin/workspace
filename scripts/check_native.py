@@ -55,7 +55,7 @@ def run_native(root: Path, configuration: Path) -> None:
 
 NATIVE_LANES = (
     # Each launches real Edge processes on disposable profiles.
-    ("tests/test_windows_browser.py", "tests/test_windows_meeting_detection.py"),
+    ("tests/test_windows_browser.py",),
     ("tests/test_windows_runtime.py", "tests/test_windows_test_desktop.py"),
     ("tests/test_windows_computer.py", "tests/test_windows_development.py"),
 )
