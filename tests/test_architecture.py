@@ -190,6 +190,61 @@ def test_a_function_cannot_require_a_mutable_container_unless_its_base_dictates_
     ]
 
 
+def test_a_class_that_only_holds_its_inputs_must_be_a_frozen_record(tmp_path: Path) -> None:
+    # Defect: a plain class whose __init__ only stores its parameters passes the review
+    # (nested in another class too), or an owner of changing state is flagged: one that
+    # rebinds an attribute later, builds a lock or container, starts work in __init__,
+    # derives from a base, or whose attribute another module assigns.
+    owner = """import threading
+
+class Holder:
+    \"\"\"Only inputs.\"\"\"
+
+    def __init__(self, path, publish=None):
+        self.path, self.publish = path, publish if publish is not None else path
+
+    def read(self):
+        self.publish.current = self.path
+        return self.path
+
+class Outer:
+    class Inner:
+        def __init__(self, value):
+            self.value: int = value
+
+class Counter:
+    def __init__(self, start):
+        self.count = start
+
+    def step(self):
+        self.count += 1
+
+class Guarded:
+    def __init__(self):
+        self.lock = threading.Lock()
+
+class Buffered:
+    def __init__(self, items):
+        self.items = list(items)
+
+class Started:
+    def __init__(self, thread):
+        self.thread = thread
+        thread.start()
+
+class Derived(Base):
+    def __init__(self, value):
+        self.value = value
+
+class Clock:
+    def __init__(self, now):
+        self.now = now
+"""
+    write_tree(tmp_path, {"owner.py": owner, "driver.py": "def step(clock):\n    clock.now += 1\n"})
+    found = [(finding.rule, finding.declaration) for finding in review(tmp_path).failures]
+    assert found == [("plain-record", "Holder"), ("plain-record", "Outer.Inner")]
+
+
 def test_exact_reflection_exception_survives_lines_but_cannot_cover_other_declarations(tmp_path: Path) -> None:
     write_tree(tmp_path, {"native.py": '\n\nclass Owner:\n    def read(self, error):\n        return getattr(error, "winerror", None)\n'})
     exception(tmp_path)

@@ -73,7 +73,7 @@ class Finding:
 
 @dataclass(frozen=True, slots=True)
 class ExceptionSpec:
-    rule: Literal["explicit-attributes", "immutable-data", "mutable-field", "mutable-parameter"]
+    rule: Literal["explicit-attributes", "immutable-data", "mutable-field", "mutable-parameter", "plain-record"]
     module: Text
     declaration: Text
     expression: Text
@@ -98,9 +98,20 @@ class Configuration:
 
 
 @dataclass(frozen=True, slots=True)
+class Candidate:
+    """A plain class whose `__init__` only stores its inputs, and the attributes it stores."""
+
+    finding: Finding
+    attributes: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     declarations: tuple[Finding, ...]
     dynamic_imports: tuple[Finding, ...]
+    records: tuple[Candidate, ...]
+    assigned: frozenset[str]
+    """Attribute names the module assigns through a receiver other than `self`."""
 
 
 CONFIGURATION = TypeAdapter[Configuration](Configuration)
@@ -528,6 +539,105 @@ def _finding_line(entry: tuple[str, int]) -> int:
     return line
 
 
+def _self_attributes(target: ast.expr) -> Iterator[str]:
+    """The `self` attributes an assignment target binds or deletes, at any depth."""
+    return (
+        node.attr
+        for node in ast.walk(target)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.ctx, ast.Store | ast.Del)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+    )
+
+
+def _targets(node: ast.AST) -> tuple[ast.expr, ...]:
+    match node:
+        case ast.Assign(targets=targets) | ast.Delete(targets=targets):
+            return tuple(targets)
+        case ast.AugAssign(target=target) | ast.AnnAssign(target=target):
+            return (target,)
+        case _:
+            return ()
+
+
+COMPUTED: Final = (
+    ast.Call,
+    ast.Await,
+    ast.Lambda,
+    ast.NamedExpr,
+    ast.List,
+    ast.Dict,
+    ast.Set,
+    ast.ListComp,
+    ast.DictComp,
+    ast.SetComp,
+    ast.GeneratorExp,
+)
+"""Expressions that build something new: an `__init__` holding one makes or owns state, not just inputs."""
+
+
+def _stored(statement: ast.stmt) -> frozenset[str] | None:
+    """The attributes a statement stores from its inputs, or None if it does anything else."""
+    match statement:
+        case ast.Expr(value=ast.Constant(value=str())):
+            return frozenset()
+        case ast.Assign(targets=[target], value=value) | ast.AnnAssign(target=target, value=ast.expr() as value):
+            pass
+        case _:
+            return None
+    names = target.elts if isinstance(target, ast.Tuple) else (target,)
+    stored = tuple(name.attr for name in names if isinstance(name, ast.Attribute) and isinstance(name.value, ast.Name) and name.value.id == "self")
+    built = any(isinstance(node, COMPUTED) or (isinstance(node, ast.Name) and node.id == "self") for node in ast.walk(value))
+    return frozenset(stored) if len(stored) == len(names) and not built else None
+
+
+def _record(node: ast.ClassDef) -> frozenset[str] | None:
+    """The attributes of a class that could be a frozen dataclass: no base or decorator,
+    an `__init__` that only stores its inputs, and no other method rebinding an attribute."""
+    if node.bases or node.keywords or node.decorator_list:
+        return None
+    methods = tuple(item for item in node.body if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef))
+    init = next((method for method in methods if method.name == "__init__"), None)
+    if init is None or any(
+        next(_self_attributes(target), None) is not None
+        for method in methods
+        if method is not init
+        for child in ast.walk(method)
+        for target in _targets(child)
+    ):
+        return None
+    stored = tuple(_stored(statement) for statement in init.body)
+    return frozenset[str]().union(*(item for item in stored if item is not None)) if all(item is not None for item in stored) else None
+
+
+def records(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Candidate]:
+    """Plain classes that only hold their inputs, which a frozen, slotted dataclass would model."""
+    for child in ast.iter_child_nodes(tree):
+        match child:
+            case ast.ClassDef(name=name):
+                inner = ".".join(part for part in (declaration, name) if part)
+                if (attributes := _record(child)) is not None:
+                    detail = "A class that only holds its inputs is a frozen, slotted dataclass, unless a protocol needs writable attributes."
+                    yield Candidate(Finding("plain-record", module, inner, name, child.lineno, detail), attributes)
+                yield from records(child, module, inner)
+            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                yield from records(child, module, ".".join(part for part in (declaration, name) if part))
+            case _:
+                yield from records(child, module, declaration)
+
+
+def assigned(tree: ast.AST) -> frozenset[str]:
+    """Attribute names assigned or deleted through any receiver but `self`: writes from outside an owner."""
+    return frozenset(
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.ctx, ast.Store | ast.Del)
+        and not (isinstance(node.value, ast.Name) and node.value.id == "self")
+    )
+
+
 def _static_import(call: ast.Call) -> bool:
     """A dynamic import of a literal absolute module name, which the keyboard graph can follow."""
     match call.args:
@@ -556,7 +666,7 @@ def observation(source: Source, cache: Cache | None) -> Observation:
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and call_name(node.func, aliases) in DYNAMIC_IMPORTS and not _static_import(node)
     )
-    result = Observation((*_declarations(tree, module), *value_shapes(tree, module)), dynamic)
+    result = Observation((*_declarations(tree, module), *value_shapes(tree, module)), dynamic, tuple(records(tree, module)), assigned(tree))
     if cache is not None:
         cache.write(key, result, OBSERVATION)
     return result
@@ -632,8 +742,11 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
     # Keyboard routes stop at the first application module they reach.
     keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "miryoku")), _keyboard)
+    # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
+    written = frozenset[str]().union(*(observed.assigned for observed in observations.values()))
     findings = (
         *(finding for observed in observations.values() for finding in observed.declarations),
+        *(record.finding for observed in observations.values() for record in observed.records if record.attributes.isdisjoint(written)),
         *(finding for source in all_source for finding in cached_testing_dependencies(source, cache)),
         *(
             finding

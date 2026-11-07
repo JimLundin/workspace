@@ -329,6 +329,13 @@ expression = "TextBuffer"
 reason = "Private streaming accumulators update growing fragment maps and completion sets; persistent copies per fragment add substantial cumulative work. Published timeline values remain immutable."
 
 [[tool.workspace.architecture.exceptions]]
+rule = "plain-record"
+module = "assistant.sdk"
+declaration = "MemorySession"
+expression = "MemorySession"
+reason = "The Agents SDK's Session protocol declares session_id and session_settings writable, so a frozen record does not satisfy it."
+
+[[tool.workspace.architecture.exceptions]]
 rule = "mutable-parameter"
 module = "assistant.sdk"
 declaration = "MemorySession.add_items.items"
