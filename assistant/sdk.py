@@ -393,7 +393,7 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
         reasoning = Reasoning.model_validate(reasoning_fields)
     except ValueError:
         reason = f"Invalid WORKSPACE_AGENT_REASONING_EFFORT: {local.settings.agent_reasoning_effort!r}."
-        local.report = InvalidConfiguration(reason)
+        local.reported(InvalidConfiguration(reason))
         local.log.problem(reason)
         return False
     # Let the SDK retry transient request failures with backoff and Retry-After.
@@ -434,28 +434,28 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
             async for event in stream(local, result, hooks):
                 timeline.accept(event)
         except StoppedError:
-            local.report = ReportStatus.STOPPED
+            local.reported(ReportStatus.STOPPED)
             local.log.done("Stopped.")
             return False
         except MaxTurnsExceeded:
             reason = f"Stopped after {local.max_steps} steps, not finished."
-            local.report = Incomplete(reason)
+            local.reported(Incomplete(reason))
             local.log.done(reason)
             return False
         except APIError as error:
             reason = f"Endpoint request failed: {error.message}"
-            local.report = Incomplete(reason)
+            local.reported(Incomplete(reason))
             local.log.problem(reason)
             return False
         except AgentsException as error:
             reason = f"Agent request failed: {error}"
-            local.report = Incomplete(reason)
+            local.reported(Incomplete(reason))
             local.log.problem(reason)
             return False
         finally:
             timeline.finish()
         output: object = result.final_output
         final = str(output or "Done.")
-        local.report = ReportStatus.STOPPED if local.stop.is_set() else Reported(final)
+        local.reported(ReportStatus.STOPPED if local.stop.is_set() else Reported(final))
         local.log.done("Stopped." if local.stop.is_set() else final)
         return not local.stop.is_set()

@@ -42,7 +42,7 @@ class AgentExecution:
         started = time.monotonic()
         profile = self.profiles.run(claim)
         work = WorkExecution.begin(claim, store, self.resources, context_text=profile.context.saved)
-        agent = Agent(
+        agent = Agent.of(
             self.settings,
             self.machine,
             log,
@@ -66,7 +66,7 @@ class AgentExecution:
             self.report_error(f"Agent execution failed: {fault.kind}; {' > '.join(fault.locations)}")
             reason = "Execution could not establish a durable result. Resume to inspect its state."
             log.problem(reason)
-            agent.report = Incomplete(str(error))
+            agent.reported(Incomplete(str(error)))
             return Waiting(Blocked(reason))
         except Exception as error:
             fault = failure_info(error)

@@ -42,7 +42,7 @@ def test_stopped_agent_cannot_start_recording(tmp_path: Path) -> None:
     # Defect: typed start dispatch bypasses cancellation and reaches the
     # recording owner after the user stopped the work.
     machine, cancel = FakeMachine(), threading.Event()
-    agent = Agent(
+    agent = Agent.of(
         Settings("", "", "", ""),
         machine,
         FakeWindow(),
@@ -82,7 +82,7 @@ def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -
     # Defect: a model can select the user's browser instead of its exclusive
     # instance through its arguments.
     machine = FakeMachine()
-    agent = Agent(
+    agent = Agent.of(
         Settings("", "", "", ""),
         machine,
         FakeWindow(),
@@ -103,7 +103,7 @@ def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -
 
 def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(tmp_path: Path) -> None:
     machine, window, cancel = FakeMachine(), FakeWindow(), threading.Event()
-    agent = Agent(
+    agent = Agent.of(
         Settings("", "", "", ""),
         machine,
         window,

@@ -240,7 +240,7 @@ class Rig:
             "",
             agent_reasoning_effort=effort,
         )
-        agent = Agent(
+        agent = Agent.of(
             settings,
             self.machine,
             self.window,
@@ -280,7 +280,7 @@ class ToolRig:
     ) -> None:
         self.machine = machine if machine is not None else FakeMachine()
         self.window = FakeWindow()
-        self.agent = Agent(
+        self.agent = Agent.of(
             Settings("", "", "", ""),
             self.machine,
             self.window,
@@ -377,7 +377,7 @@ def test_default_agent_model_with_low_reasoning_reaches_every_tool_turn(tmp_path
         rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."), work=durable(tmp_path))
         settings = settings_from({"OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k"})
         assert isinstance(settings, Settings)
-        agent = Agent(
+        agent = Agent.of(
             settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=lambda agent: General.of(agent, feed_request=no_feed)
         )
         agent.run("Read the clipboard.")
@@ -649,7 +649,7 @@ def test_stop_prevents_actions(tmp_path: Path) -> None:
     stopped = threading.Event()
     stopped.set()
     machine = FakeMachine()
-    agent = Agent(
+    agent = Agent.of(
         Settings("", "", "", ""),
         machine,
         FakeWindow(),

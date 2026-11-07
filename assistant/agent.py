@@ -13,7 +13,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Iterable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
 from pydantic import ConfigDict, TypeAdapter
@@ -24,10 +24,11 @@ from assistant.llm import Settings, ToolCall
 from automation.actions import ActionError, Change, Observation, Operation, UncertainEffectError
 from automation.activity import ContextSnapshot
 from automation.execution import Log, Proof, Report, ReportStatus, Targets, WorkExecution
+from cell import Cell
 from config import AGENT_MAX_STEPS
 from contracts import action_text
 from contracts.json_value import Json
-from contracts.presentation import Failed, Succeeded, ToolActivity, ToolStatus
+from contracts.presentation import Failed, LiveMessage, Succeeded, ToolActivity, ToolStatus
 from contracts.task import FileDigest, NoVerification
 lazy from assistant import sdk
 
@@ -60,31 +61,46 @@ class Toolset(Protocol):
     def instructions(self) -> str: ...
 
 
-class Agent:
-    __slots__ = (
-        "after_step",
-        "context",
-        "context_image",
-        "context_reader",
-        "context_text",
-        "history",
-        "log",
-        "machine",
-        "max_steps",
-        "report",
-        "screen",
-        "settings",
-        "started",
-        "stop",
-        "timings",
-        "tools",
-        "toolset",
-        "update",
-        "work",
-    )
+@dataclass(frozen=True, slots=True)
+class _Running:
+    started: float = 0.0
+    report: Report = ReportStatus.STARTING
+    context_text: str = ""
+    """The observed computer context sent with the request."""
+    context_image: bytes | None = None
+    timings: frozendict[str, float] = frozendict()
+    """The first time each stage was reached, in seconds from the start."""
 
-    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
-        self,
+
+@dataclass(frozen=True, slots=True)
+class _Tooling:
+    toolset: Toolset
+    tools: frozendict[str, Tool]
+
+
+@dataclass(frozen=True, slots=True)
+class Agent:
+    # The agent composes its task profile's toolset over the machine, durable
+    # work, history and starting context. Each varies independently.
+    settings: Settings
+    machine: Machine
+    log: Log
+    update: Callable[[LiveMessage], None]
+    stop: threading.Event
+    work: WorkExecution
+    max_steps: int
+    after_step: Callable[[], None] | None
+    history: History
+    """Execution-owned volatile session IO; the SDK publishes immutable item bytes."""
+    context: ContextSnapshot | None
+    context_reader: Callable[[], ContextSnapshot] | None
+    _state: Cell[_Running] = field(default_factory=lambda: Cell(_Running()), init=False, repr=False)
+    _tooling: Cell[_Tooling | None] = field(default_factory=lambda: Cell[_Tooling | None](None), init=False, repr=False)
+    """The task profile's tools, built from this agent once it exists."""
+
+    @classmethod
+    def of(  # noqa: PLR0913 - injected collaborators and test seams
+        cls,
         settings: Settings,
         machine: Machine,
         log: Log,
@@ -97,43 +113,62 @@ class Agent:
         history: History | None = None,
         context: ContextSnapshot | None = None,
         context_reader: Callable[[], ContextSnapshot] | None = None,
-    ) -> None:
-        # The agent composes its task profile's toolset over the machine, durable
-        # work, history and starting context. Each varies independently.
-        self.settings = settings
-        self.machine = machine
-        self.log = log
-        self.update = log.updates()
-        self.stop = stop
-        self.max_steps = max_steps
-        self.after_step = after_step
-        self.history = history if history is not None else History()
-        """Execution-owned volatile session IO; the SDK publishes immutable item bytes."""
-        self.started = 0.0
-        self.timings: dict[str, float] = {}
-        self.context, self.context_reader = context, context_reader
-        self.context_text = ""
-        self.context_image: bytes | None = None
-        self.work = work
-        self.report: Report = ReportStatus.STARTING
-        self.toolset = toolset(self)
-        self.tools = registry(self.toolset.tools)
+    ) -> Agent:
+        held = history if history is not None else History()
+        agent = cls(settings, machine, log, log.updates(), stop, work, max_steps, after_step, held, context, context_reader)
+        built = toolset(agent)
+        agent._tooling.set(_Tooling(built, registry(built.tools)))
+        return agent
+
+    def _tools(self) -> _Tooling:
+        tooling = self._tooling.get()
+        assert tooling is not None, "Agent.of builds the toolset before the agent is used."
+        return tooling
+
+    @property
+    def toolset(self) -> Toolset:
+        return self._tools().toolset
+
+    @property
+    def tools(self) -> frozendict[str, Tool]:
+        return self._tools().tools
+
+    @property
+    def report(self) -> Report:
+        return self._state.get().report
+
+    @property
+    def context_text(self) -> str:
+        return self._state.get().context_text
+
+    @property
+    def context_image(self) -> bytes | None:
+        return self._state.get().context_image
+
+    @property
+    def timings(self) -> frozendict[str, float]:
+        return self._state.get().timings
+
+    def reported(self, report: Report) -> None:
+        """Record how the run ended, which decides the task's outcome."""
+        self._state.set(replace(self._state.get(), report=report))
 
     def current_context(self) -> ContextSnapshot | None:
         return self.context_reader() if self.context_reader is not None else self.context
 
     def run(self, task: str) -> bool:
         """Works on the task; True if the model said it was done."""
-        self.started = time.monotonic()
-        self.report = ReportStatus.STARTING
+        self._state.set(replace(self._state.get(), started=time.monotonic(), report=ReportStatus.STARTING))
         if self.context is not None and self.context.state != "disabled" and not self.stop.is_set():
-            self.context_text = self.context.describe()
+            text = self.context.describe()
+            image: bytes | None = None
             if work := self.context.window:
                 try:
-                    self.context_image, shot = self.machine.screenshot(handle=work.handle)
-                    self.context_text += f"\nScreenshot captured now: {shot.width}x{shot.height}. {shot.area}"
+                    image, shot = self.machine.screenshot(handle=work.handle)
+                    text += f"\nScreenshot captured now: {shot.width}x{shot.height}. {shot.area}"
                 except OSError as error:
-                    self.context_text += f"\nScreen context unavailable: {error}"
+                    text += f"\nScreen context unavailable: {error}"
+            self._state.set(replace(self._state.get(), context_text=text, context_image=image))
         prompt = self.toolset.instructions()
         prompt += "\nExecute authorized work directly; do not invent a confirmation step."
         prompt += "\n\n" + self.work.instructions()
@@ -141,7 +176,13 @@ class Agent:
 
     def mark(self, name: str) -> None:
         """Record the first occurrence of a stage, without recording conversation content."""
-        self.timings.setdefault(name, round(time.monotonic() - self.started, 3))
+
+        def marked(state: _Running) -> _Running:
+            if name in state.timings:
+                return state
+            return replace(state, timings=frozendict({**state.timings, name: round(time.monotonic() - state.started, 3)}))
+
+        self._state.update(marked)
 
     def call(self, call: ToolCall) -> Output:
         tool = self.tools.get(call.name)

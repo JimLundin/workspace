@@ -90,7 +90,7 @@ def make_agent(
 ) -> Agent:
     window.begin("Read the workbook")
     settings = Settings(endpoint.url, "k", "transcribe", "")
-    return Agent(
+    return Agent.of(
         settings,
         machine if machine is not None else FakeMachine(),
         window,
@@ -295,7 +295,7 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_pat
                 release.set()
         endpoint.stream = None
         endpoint.replies = [says("It said clipped.")]
-        follow_up = Agent(
+        follow_up = Agent.of(
             agent.settings,
             agent.machine,
             FakeWindow(),

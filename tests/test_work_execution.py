@@ -134,7 +134,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         work = WorkExecution.begin(second, store, Resources())
         endpoint.replies = [calls(("get_clipboard", {}))]
         stop = threading.Event()
-        agent = Agent(
+        agent = Agent.of(
             settings, FakeMachine(), FakeWindow(), stop, work=work, toolset=lambda agent: General.of(agent, feed_request=no_feed), max_steps=1
         )
         assert not agent.run(second.task.prompt)
@@ -149,7 +149,7 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
     destination = tmp_path / "forbidden.txt"
     payload: dict[str, object] = {"path": str(destination), "content": "not written", "unexpected": float("nan")}
     args = json.dumps(payload)
-    agent = Agent(
+    agent = Agent.of(
         Settings("", "", "", ""),
         FakeMachine(),
         FakeWindow(),
