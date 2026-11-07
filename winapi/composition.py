@@ -10,7 +10,7 @@ panes move without moving any window.
 import ctypes
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Final
 
 from win32more import FAILED, WinError
@@ -22,6 +22,8 @@ from win32more.Windows.UI.Composition import (
     CompositionColorBrush,
     CompositionLinearGradientBrush,
     CompositionPropertySet,
+    CompositionRoundedRectangleGeometry,
+    CompositionVisualSurface,
     Compositor,
     ContainerVisual,
     DropShadow,
@@ -54,6 +56,7 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import (
     SetWindowPos,
 )
 
+from cell import Cell
 from winapi import windows
 from winapi._core import NativeFunction
 from winapi.shapes import Pane, Rect, Size
@@ -123,32 +126,40 @@ class VisualBindings:
     sized: tuple[IVisual, ...]
 
 
+@dataclass(frozen=True, slots=True)
 class DesktopComposition:
-    __slots__ = ("closed", "compositor", "interop", "queue")
+    queue: DispatcherQueueController
+    compositor: Compositor
+    interop: ICompositorDesktopInterop
+    _closed: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
 
-    def __init__(self) -> None:
+    @classmethod
+    def start(cls) -> DesktopComposition:
         _check(RoInitialize(RO_INIT_SINGLETHREADED))
-        self.closed = False
-        self.queue: DispatcherQueueController = DispatcherQueueController(own=True)
+        queue = DispatcherQueueController(own=True)
         try:
-            _check(CreateDispatcherQueueController(DispatcherQueueOptions(ctypes.sizeof(DispatcherQueueOptions), 2, 2), self.queue))
-            self.compositor: Compositor = Compositor()
-            self.interop: ICompositorDesktopInterop = self.compositor.as_(ICompositorDesktopInterop)
+            _check(CreateDispatcherQueueController(DispatcherQueueOptions(ctypes.sizeof(DispatcherQueueOptions), 2, 2), queue))
+            compositor = Compositor()
+            return cls(queue, compositor, compositor.as_(ICompositorDesktopInterop))
         except BaseException:
             RoUninitialize()
             raise
 
+    @property
+    def closed(self) -> bool:
+        return self._closed.get()
+
     def glass(self) -> Glass:
-        return Glass(self)
+        return Glass.create(self)
 
     def scene(self, title: str) -> GlassScene:
-        return GlassScene(self, title)
+        return GlassScene.create(self, title)
 
     def close(self, pump: Callable[[], None]) -> None:
         """Drain the native dispatcher before its owning UI thread can exit."""
         if self.closed:
             return
-        self.closed = True
+        self._closed.set(True)
         self.compositor.Close()
         shutdown = self.queue.ShutdownQueueAsync().as_(IAsyncInfo)
         deadline = time.monotonic() + 2
@@ -162,114 +173,104 @@ class DesktopComposition:
         RoUninitialize()
 
 
-class Glass:
-    __slots__ = (
-        "backdrop",
-        "bindings",
-        "bounds",
-        "clip",
-        "closed",
-        "compositor",
-        "geometry",
-        "group",
-        "handle",
-        "mask",
-        "mask_surface",
-        "mask_visual",
-        "opacity",
-        "root",
-        "shadow",
-        "shadow_visual",
-        "size",
-        "stack",
-        "target",
-        "tint",
-        "tint_brush",
-        "visible",
-    )
+@dataclass(frozen=True, slots=True)
+class _Shown:
+    """What a glass window last published to Windows, so unchanged frames write nothing."""
 
-    def __init__(
-        self,
-        owner: DesktopComposition,
-        *,
-        stack: Callable[[int, int], None] = stack_behind,
-    ) -> None:
-        self.stack = stack
-        self.handle = glass_host("Workspace · Glass")
-        self.closed = self.visible = False
-        self.bounds: Rect | None = None
-        self.size: Extent | None = None
-        self.opacity = 1.0
+    bounds: Rect | None = None
+    size: Extent | None = None
+    opacity: float = 1.0
+    visible: bool = False
+    closed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Glass:
+    stack: Callable[[int, int], None]
+    handle: int
+    target: DesktopWindowTarget
+    geometry: CompositionRoundedRectangleGeometry
+    """Its identity, and the clip's, lasts the window's lifetime: resizing changes their contents."""
+    group: ContainerVisual
+    mask_surface: CompositionVisualSurface
+    shadow: DropShadow
+    tint_brush: CompositionColorBrush
+    bindings: VisualBindings
+    _retained: tuple[object, ...]
+    """The rest of the native graph, kept alive with the window."""
+    _shown: Cell[_Shown] = field(default_factory=lambda: Cell(_Shown()), init=False, repr=False)
+
+    @classmethod
+    def create(cls, owner: DesktopComposition, *, stack: Callable[[int, int], None] = stack_behind) -> Glass:
+        handle = glass_host("Workspace · Glass")
         try:
             enabled = ctypes.c_int(1)
-            _check(DwmSetWindowAttribute(self.handle, 17, ctypes.byref(enabled), ctypes.sizeof(enabled)))
-            self.target: DesktopWindowTarget = DesktopWindowTarget(own=True)
-            _check(owner.interop.CreateDesktopWindowTarget(self.handle, False, self.target))
-            self.compositor = compositor = owner.compositor
-            borderless(self.handle)
-            self.root = compositor.CreateContainerVisual()
-            self.target.Root = self.root
+            _check(DwmSetWindowAttribute(handle, 17, ctypes.byref(enabled), ctypes.sizeof(enabled)))
+            target = DesktopWindowTarget(own=True)
+            _check(owner.interop.CreateDesktopWindowTarget(handle, False, target))
+            compositor = owner.compositor
+            borderless(handle)
+            root = compositor.CreateContainerVisual()
+            target.Root = root
             # Geometry and clip identities belong to this native owner; shape
             # setters update their contents without rebuilding the graph.
-            self.geometry = compositor.CreateRoundedRectangleGeometry()
-            self.group = compositor.CreateContainerVisual()
-            self.clip = compositor.CreateGeometricClipWithGeometry(self.geometry)
-            self.group.Clip = self.clip
+            geometry = compositor.CreateRoundedRectangleGeometry()
+            group = compositor.CreateContainerVisual()
+            clip = compositor.CreateGeometricClipWithGeometry(geometry)
+            group.Clip = clip
 
             # The shadow uses the same rounded silhouette as the glass. Its
             # source visual is offscreen; the compositor retains the mask.
-            mask_shape = compositor.CreateSpriteShapeWithGeometry(self.geometry)
+            mask_shape = compositor.CreateSpriteShapeWithGeometry(geometry)
             mask_shape.FillBrush = compositor.CreateColorBrushWithColor(_color("#ffffff", 1))
-            self.mask_visual = compositor.CreateShapeVisual()
-            self.mask_visual.Shapes.Append(mask_shape)
-            self.mask_surface = compositor.CreateVisualSurface()
-            self.mask_surface.SourceVisual = self.mask_visual
-            self.mask = compositor.CreateSurfaceBrushWithSurface(self.mask_surface)
-            self.shadow = compositor.CreateDropShadow()
-            self.shadow.Color = _color("#000000", 1)
-            self.shadow.Opacity = 0.28
-            self.shadow.Mask = self.mask
-            self.shadow_visual = compositor.CreateSpriteVisual()
-            self.shadow_visual.Shadow = self.shadow
-            self.root.Children.InsertAtTop(self.shadow_visual)
-            self.root.Children.InsertAtTop(self.group)
-            self.backdrop = compositor.CreateSpriteVisual()
-            self.backdrop.Brush = compositor.CreateHostBackdropBrush()
-            self.group.Children.InsertAtTop(self.backdrop)
-            self.tint_brush = compositor.CreateColorBrush()
-            self.tint = compositor.CreateSpriteVisual()
-            self.tint.Brush = self.tint_brush
-            self.group.Children.InsertAtTop(self.tint)
-            self.bindings: VisualBindings = self.bind_visuals()
+            mask_visual = compositor.CreateShapeVisual()
+            mask_visual.Shapes.Append(mask_shape)
+            mask_surface = compositor.CreateVisualSurface()
+            mask_surface.SourceVisual = mask_visual
+            mask = compositor.CreateSurfaceBrushWithSurface(mask_surface)
+            shadow = compositor.CreateDropShadow()
+            shadow.Color = _color("#000000", 1)
+            shadow.Opacity = 0.28
+            shadow.Mask = mask
+            shadow_visual = compositor.CreateSpriteVisual()
+            shadow_visual.Shadow = shadow
+            root.Children.InsertAtTop(shadow_visual)
+            root.Children.InsertAtTop(group)
+            backdrop = compositor.CreateSpriteVisual()
+            backdrop.Brush = compositor.CreateHostBackdropBrush()
+            group.Children.InsertAtTop(backdrop)
+            tint_brush = compositor.CreateColorBrush()
+            tint = compositor.CreateSpriteVisual()
+            tint.Brush = tint_brush
+            group.Children.InsertAtTop(tint)
+            # SDK convenience setters resolve annotations and QueryInterface on
+            # every call: size publication measured 0.50 ms through that route,
+            # versus 0.13 ms through the regular native interface. Retain native
+            # bindings inside this scene's owning UI thread/dispatcher lifetime.
+            group_visual, shadow_binding = group.as_(IVisual), shadow_visual.as_(IVisual)
+            bindings = VisualBindings(
+                root.as_(IVisual),
+                group_visual,
+                shadow_binding,
+                geometry.as_(ICompositionRoundedRectangleGeometry),
+                (group_visual, backdrop.as_(IVisual), tint.as_(IVisual), mask_visual.as_(IVisual), shadow_binding),
+            )
+            retained = (compositor, root, clip, mask_visual, mask, shadow_visual, backdrop, tint)
+            return cls(stack, handle, target, geometry, group, mask_surface, shadow, tint_brush, bindings, retained)
         except BaseException:
-            windows.destroy(self.handle)
+            windows.destroy(handle)
             raise
 
     def color(self, tint: str, opacity: float = 0.22) -> None:
         self.tint_brush.Color = _color(tint, opacity)
 
-    def bind_visuals(self) -> VisualBindings:
-        # SDK convenience setters resolve annotations and QueryInterface on
-        # every call: size publication measured 0.50 ms through that route,
-        # versus 0.13 ms through the regular native interface. Retain native
-        # bindings inside this scene's owning UI thread/dispatcher lifetime.
-        group, shadow = self.group.as_(IVisual), self.shadow_visual.as_(IVisual)
-        return VisualBindings(
-            self.root.as_(IVisual),
-            group,
-            shadow,
-            self.geometry.as_(ICompositionRoundedRectangleGeometry),
-            (group, self.backdrop.as_(IVisual), self.tint.as_(IVisual), self.mask_visual.as_(IVisual), shadow),
-        )
-
     def position(self, bounds: Rect, scale: float, opacity: float) -> None:
+        shown = self._shown.get()
         padding = round(28 * scale)
         outer = Rect(bounds.left - padding, bounds.top - padding, bounds.right + padding, bounds.bottom + padding)
-        if self.bounds != outer:
-            self.bounds = outer
+        if shown.bounds != outer:
             windows.move(self.handle, outer)
-        if self.size != (extent := Extent(bounds.size, scale)):
-            self.size = extent
+        if shown.size != (extent := Extent(bounds.size, scale)):
             radius = min(22 * scale, bounds.height / 2, bounds.width / 2)  # the feed card's 22 px corners
             size = Vector2(bounds.width, bounds.height)
             self.bindings.rounded.Size = size
@@ -282,14 +283,14 @@ class Glass:
             self.shadow.BlurRadius = 24 * scale
             self.shadow.Offset = Vector3(0, 8 * scale, 0)
         opacity = max(0, min(1, opacity))
-        if self.opacity != opacity:
+        if shown.opacity != opacity:
             self.bindings.root.Opacity = opacity
-            self.opacity = opacity
+        self._shown.set(replace(shown, bounds=outer, size=extent, opacity=opacity))
 
     def show(self, foreground: int) -> None:
-        if not self.visible:
+        if not self._shown.get().visible:
             windows.show_quietly(self.handle, visible=True)
-            self.visible = True
+            self._shown.update(lambda shown: replace(shown, visible=True))
         # Keep the native blur below the corresponding text, including after a
         # new bubble or a context menu changes the topmost window order.
         # Observe actual ordering: cached state would miss intervening windows.
@@ -297,14 +298,14 @@ class Glass:
             self.stack(self.handle, foreground)
 
     def hide(self) -> None:
-        if self.visible:
+        if self._shown.get().visible:
             windows.show_quietly(self.handle, visible=False)
-            self.visible = False
+            self._shown.update(lambda shown: replace(shown, visible=False))
 
     def close(self) -> None:
-        if self.closed:
+        if self._shown.get().closed:
             return
-        self.closed = True
+        self._shown.update(lambda shown: replace(shown, closed=True))
         self.target.Root = None
         self.target.Close()
         windows.destroy(self.handle)
@@ -361,6 +362,7 @@ class VisualWriter:
         _check(self.opacity(self.this, ctypes.c_float(opacity)))
 
 
+@dataclass(frozen=True, slots=True)
 class PaneGroup:
     """One pane's retained native visuals, reused each time its key reappears.
 
@@ -370,43 +372,52 @@ class PaneGroup:
     published state to live with the visuals it describes.
     """
 
-    __slots__ = ("compositor", "group", "properties", "published", "rim", "shadow", "tint", "visual", "writer")
+    compositor: Compositor
+    tint: CompositionColorBrush
+    rim: CompositionLinearGradientBrush
+    shadow: DropShadow
+    properties: CompositionPropertySet
+    visual: IVisual
+    writer: VisualWriter
+    _retained: tuple[object, ...]
+    """The rest of the native graph, kept alive with the pane."""
+    _published: Cell[Pane | None] = field(default_factory=lambda: Cell[Pane | None](None), init=False, repr=False)
 
-    def __init__(self, compositor: Compositor, root: ContainerVisual) -> None:
-        self.compositor = compositor
-        self.group = compositor.CreateContainerVisual()
+    @classmethod
+    def create(cls, compositor: Compositor, root: ContainerVisual) -> PaneGroup:
+        group = compositor.CreateContainerVisual()
         geometry = compositor.CreateRoundedRectangleGeometry()
-        self.group.Clip = compositor.CreateGeometricClipWithGeometry(geometry)
+        group.Clip = compositor.CreateGeometricClipWithGeometry(geometry)
         backdrop = compositor.CreateSpriteVisual()
         backdrop.Brush = compositor.CreateHostBackdropBrush()
-        self.tint: CompositionColorBrush = compositor.CreateColorBrush()
+        tint_brush: CompositionColorBrush = compositor.CreateColorBrush()
         tint = compositor.CreateSpriteVisual()
-        tint.Brush = self.tint
-        self.rim: CompositionLinearGradientBrush = compositor.CreateLinearGradientBrush()
-        self.rim.StartPoint, self.rim.EndPoint = Vector2(0.3, 0), Vector2(0.7, 1)
+        tint.Brush = tint_brush
+        rim_brush: CompositionLinearGradientBrush = compositor.CreateLinearGradientBrush()
+        rim_brush.StartPoint, rim_brush.EndPoint = Vector2(0.3, 0), Vector2(0.7, 1)
         stroke = compositor.CreateSpriteShapeWithGeometry(geometry)
-        stroke.StrokeBrush = self.rim
+        stroke.StrokeBrush = rim_brush
         stroke.StrokeThickness = 2  # Half lies outside the clip: one pixel of rim inside the edge.
         rim = compositor.CreateShapeVisual()
         rim.Shapes.Append(stroke)
         for child in (backdrop, tint, rim):
             child.RelativeSizeAdjustment = Vector2(1, 1)
-            self.group.Children.InsertAtTop(child)
+            group.Children.InsertAtTop(child)
         fill = compositor.CreateSpriteShapeWithGeometry(geometry)
         fill.FillBrush = compositor.CreateColorBrushWithColor(_color("#ffffff", 1))
         mask = compositor.CreateShapeVisual()
         mask.Shapes.Append(fill)
         surface = compositor.CreateVisualSurface()
         surface.SourceVisual = mask
-        self.shadow: DropShadow = compositor.CreateDropShadow()
-        self.shadow.Color = _color("#000000", 1)
-        self.shadow.Mask = compositor.CreateSurfaceBrushWithSurface(surface)
+        drop: DropShadow = compositor.CreateDropShadow()
+        drop.Color = _color("#000000", 1)
+        drop.Mask = compositor.CreateSurfaceBrushWithSurface(surface)
         shadow = compositor.CreateSpriteVisual()
-        shadow.Shadow = self.shadow
+        shadow.Shadow = drop
         root.Children.InsertAtTop(shadow)
-        root.Children.InsertAtTop(self.group)
-        self.properties: CompositionPropertySet = compositor.CreatePropertySet()
-        self.properties.InsertScalar("radius", 0)
+        root.Children.InsertAtTop(group)
+        properties: CompositionPropertySet = compositor.CreatePropertySet()
+        properties.InsertScalar("radius", 0)
         for target, name, expression in (
             (geometry, "Size", "g.Size"),
             (geometry, "CornerRadius", "Vector2(Min(g.Size.Y / 2, p.radius), Min(g.Size.Y / 2, p.radius))"),
@@ -417,17 +428,22 @@ class PaneGroup:
             (shadow, "Opacity", "g.Opacity"),
         ):
             animation = compositor.CreateExpressionAnimationWithExpression(expression)
-            animation.SetReferenceParameter("g", self.group)
-            animation.SetReferenceParameter("p", self.properties)
+            animation.SetReferenceParameter("g", group)
+            animation.SetReferenceParameter("p", properties)
             target.StartAnimation(name, animation)
-        self.visual: IVisual = self.group.as_(IVisual)
-        self.writer = VisualWriter.of(self.visual)
-        self.writer.fade(0)
-        self.published: Pane | None = None
+        visual: IVisual = group.as_(IVisual)
+        writer = VisualWriter.of(visual)
+        writer.fade(0)
+        retained = (group, geometry, backdrop, tint, stroke, rim, fill, mask, surface, shadow)
+        return cls(compositor, tint_brush, rim_brush, drop, properties, visual, writer, retained)
+
+    @property
+    def published(self) -> Pane | None:
+        return self._published.get()
 
     def publish(self, pane: Pane) -> None:
-        last = self.published
-        self.published = pane
+        last = self._published.get()
+        self._published.set(pane)
         if last is None or (last.bounds.left, last.bounds.top) != (pane.bounds.left, pane.bounds.top):
             self.writer.place(pane.bounds.left, pane.bounds.top)
         if last is None or (last.bounds.width, last.bounds.height) != (pane.bounds.width, pane.bounds.height):
@@ -445,11 +461,22 @@ class PaneGroup:
                 stops.Append(self.compositor.CreateColorGradientStopWithOffsetAndColor(stop.offset, _color(stop.color, stop.opacity)))
 
     def release(self) -> None:
-        if self.published is not None:
+        if self._published.get() is not None:
             self.writer.fade(0)
-            self.published = None
+            self._published.set(None)
 
 
+@dataclass(frozen=True, slots=True)
+class _Composed:
+    bounds: Rect | None = None
+    scale: float = 0.0
+    groups: frozendict[str, PaneGroup] = frozendict()
+    """Pane groups pooled by key for the scene's lifetime."""
+    visible: bool = False
+    closed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class GlassScene:
     """Several glass panes composed in one nonactivating window behind their Qt foreground.
 
@@ -457,50 +484,61 @@ class GlassScene:
     and returns reuses its native visuals instead of allocating new ones.
     """
 
-    __slots__ = ("bounds", "closed", "compositor", "groups", "handle", "root", "scale", "stack", "target", "visible")
+    stack: Callable[[int, int], None]
+    handle: int
+    target: DesktopWindowTarget
+    compositor: Compositor
+    root: ContainerVisual
+    _composed: Cell[_Composed] = field(default_factory=lambda: Cell(_Composed()), init=False, repr=False)
 
-    def __init__(self, owner: DesktopComposition, title: str, *, stack: Callable[[int, int], None] = stack_behind) -> None:
-        self.stack = stack
-        self.handle = glass_host(title)
-        self.closed = self.visible = False
-        self.bounds: Rect | None = None
-        self.scale = 0.0
-        self.groups: frozendict[str, PaneGroup] = frozendict()
+    @classmethod
+    def create(cls, owner: DesktopComposition, title: str, *, stack: Callable[[int, int], None] = stack_behind) -> GlassScene:
+        handle = glass_host(title)
         try:
             enabled = ctypes.c_int(1)
-            _check(DwmSetWindowAttribute(self.handle, 17, ctypes.byref(enabled), ctypes.sizeof(enabled)))
-            self.target: DesktopWindowTarget = DesktopWindowTarget(own=True)
-            _check(owner.interop.CreateDesktopWindowTarget(self.handle, False, self.target))
-            self.compositor: Compositor = owner.compositor
-            borderless(self.handle)
-            self.root = self.compositor.CreateContainerVisual()
-            self.target.Root = self.root
+            _check(DwmSetWindowAttribute(handle, 17, ctypes.byref(enabled), ctypes.sizeof(enabled)))
+            target = DesktopWindowTarget(own=True)
+            _check(owner.interop.CreateDesktopWindowTarget(handle, False, target))
+            compositor: Compositor = owner.compositor
+            borderless(handle)
+            root = compositor.CreateContainerVisual()
+            target.Root = root
         except BaseException:
-            windows.destroy(self.handle)
+            windows.destroy(handle)
             raise
+        return cls(stack, handle, target, compositor, root)
+
+    @property
+    def bounds(self) -> Rect | None:
+        return self._composed.get().bounds
+
+    @property
+    def groups(self) -> frozendict[str, PaneGroup]:
+        return self._composed.get().groups
 
     def place(self, bounds: Rect, scale: float) -> None:
         """Cover the screen area the panes can reach, in device pixels."""
-        if self.bounds != bounds:
-            self.bounds = bounds
+        composed = self._composed.get()
+        if composed.bounds != bounds:
             windows.move(self.handle, bounds)
             self.root.as_(IVisual).Size = Vector2(bounds.width, bounds.height)
-        if self.scale != scale:
-            self.scale = scale
-            for group in self.groups.values():
+        if composed.scale != scale:
+            for group in composed.groups.values():
                 group.shadow.BlurRadius = 24 * scale
                 group.shadow.Offset = Vector3(0, 8 * scale, 0)
+        self._composed.set(replace(composed, bounds=bounds, scale=scale))
 
     def publish(self, panes: tuple[Pane, ...]) -> None:
         """Show exactly these panes; any other pooled pane hides until its key returns."""
         keys = frozenset(pane.key for pane in panes)
         for pane in panes:
-            group = self.groups.get(pane.key)
+            composed = self._composed.get()
+            group = composed.groups.get(pane.key)
             if group is None:
-                group = PaneGroup(self.compositor, self.root)
-                group.shadow.BlurRadius = 24 * self.scale
-                group.shadow.Offset = Vector3(0, 8 * self.scale, 0)
-                self.groups = frozendict(self.groups | {pane.key: group})
+                group = PaneGroup.create(self.compositor, self.root)
+                group.shadow.BlurRadius = 24 * composed.scale
+                group.shadow.Offset = Vector3(0, 8 * composed.scale, 0)
+                self._composed.set(replace(composed, groups=frozendict(composed.groups | {pane.key: group})))
             if group.published != pane:
                 group.publish(pane)
         for key, group in self.groups.items():
@@ -508,25 +546,24 @@ class GlassScene:
                 group.release()
 
     def published(self) -> tuple[Pane, ...]:
-        return tuple(group.published for group in self.groups.values() if group.published is not None)
+        return tuple(published for group in self.groups.values() if (published := group.published) is not None)
 
     def show(self, foreground: int) -> None:
-        if not self.visible:
+        if not self._composed.get().visible:
             windows.show_quietly(self.handle, visible=True)
-            self.visible = True
+            self._composed.update(lambda composed: replace(composed, visible=True))
         if GetWindow(foreground, 2) != self.handle:  # GW_HWNDNEXT
             self.stack(self.handle, foreground)
 
     def hide(self) -> None:
-        if self.visible:
+        if self._composed.get().visible:
             windows.show_quietly(self.handle, visible=False)
-            self.visible = False
+            self._composed.update(lambda composed: replace(composed, visible=False))
 
     def close(self) -> None:
-        if self.closed:
+        if self._composed.get().closed:
             return
-        self.closed = True
-        self.groups = frozendict()
+        self._composed.update(lambda composed: replace(composed, closed=True, groups=frozendict()))
         self.target.Root = None
         self.target.Close()
         windows.destroy(self.handle)

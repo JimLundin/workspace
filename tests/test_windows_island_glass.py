@@ -111,7 +111,7 @@ def test_scene_reuses_a_returning_panes_visuals_and_hides_departed_ones() -> Non
     if owner.composition is None:
         owner.close()
         raise unittest.SkipTest("Desktop composition is unavailable.")
-    scene = GlassScene(owner.composition, "Workspace scene regression")
+    scene = GlassScene.create(owner.composition, "Workspace scene regression")
     try:
         scene.place(Rect(0, 0, 800, 120), 1.0)
         island, inbox = Pane("ISLAND", Rect(300, 8, 412, 42), 17, 1, VEIL), Pane("INBOX", Rect(418, 8, 452, 42), 17, 1, VEIL)
@@ -145,7 +145,7 @@ def test_glass_stacks_only_when_real_window_order_needs_correction() -> None:
         placements = (*placements, (handle, front))
         stack_behind(handle, front)
 
-    layer = Glass(owner.composition, stack=observe_stack)
+    layer = Glass.create(owner.composition, stack=observe_stack)
     try:
         front_window.show()
         other_window.show()
@@ -179,7 +179,7 @@ def test_glass_resizes_its_retained_geometry_and_shadow_mask_across_dpi_changes(
     if owner.composition is None:
         owner.close()
         raise unittest.SkipTest("Desktop composition is unavailable.")
-    layer = Glass(owner.composition)
+    layer = Glass.create(owner.composition)
     try:
         layer.position(Rect(40, 60, 260, 88), 1.0, 1.0)
         geometry, clip = layer.geometry, layer.group.Clip.value

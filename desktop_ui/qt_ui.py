@@ -66,7 +66,7 @@ class EventLoop:
         EventLoop._users += 1
         if EventLoop._users == 1:
             try:
-                EventLoop._composition = DesktopComposition()
+                EventLoop._composition = DesktopComposition.start()
             except OSError as error:
                 log_view(f"Desktop glass unavailable; using the solid material: {error}")
         self.composition = EventLoop._composition
