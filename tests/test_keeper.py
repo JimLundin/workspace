@@ -121,6 +121,9 @@ class World:
     def notify(self, text: str) -> None:
         self.log.append(f"notify {text.splitlines()[0]}")
 
+    def kept(self, version: str) -> None:
+        self.log.append(f"kept {version}")
+
     def note(self, text: str) -> None:
         self.log.append(f"note {text.splitlines()[0]}")
 
@@ -384,7 +387,8 @@ def test_the_trial_ends_after_ten_minutes_and_the_change_stays(tmp_path: Path) -
     world.take()
     assert recovery.read() == Pending("v1")
     keeper.tick(now=21 + 601)
-    assert world.take() == []
+    # Defect: a passed trial never lets go of dependency environments no version needs.
+    assert world.take() == ["kept v1"]
     assert keeper.stage is Stage.RUNNING
     assert recovery.read() == Kept("v1")
 

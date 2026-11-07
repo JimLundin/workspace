@@ -38,6 +38,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Final, Protocol, assert_never
 
+import environments
 from components import CATALOGUE, STATE_VARIABLE, Component, Entry, read_marker
 
 if sys.platform == "win32":
@@ -89,7 +90,17 @@ VERSIONS: Final = versions_for(WORKSPACE)
 ROLLBACK_FILE: Final = "rollback.json"
 
 PROTECTED: Final = frozenset(
-    {"keeper.py", "selfcheck.py", "workspace.pyw", "runtime.py", "keeper_ui.py", "keeper_control.py", "components.py", "restart_plan.py"}
+    {
+        "keeper.py",
+        "selfcheck.py",
+        "workspace.pyw",
+        "runtime.py",
+        "keeper_ui.py",
+        "keeper_control.py",
+        "components.py",
+        "restart_plan.py",
+        "environments.py",
+    }
 )
 """Files the agent can't change; a deploy that changes one relaunches the keeper."""
 
@@ -370,6 +381,10 @@ class World(Protocol):
         """Interrupt the user: only when Workspace can't run without them."""
         ...
 
+    def kept(self, version: str) -> None:
+        """A trial passed: `version` is what undo returns to; dependencies neither needs can go."""
+        ...
+
     def note(self, text: str) -> None:
         """Record an outcome without interrupting the user."""
         ...
@@ -556,6 +571,8 @@ class Keeper:
                 self.running(now)  # quitting on purpose is handled as usual
                 if now > self.deadline and not self.done:
                     self.persist(Kept(self.undoable))
+                    if self.undoable is not None:
+                        self.world.kept(self.undoable)
                     self.stage = Stage.RUNNING
             case Stage.RUNNING:
                 self.running(now)
@@ -774,8 +791,17 @@ class Process:
             self.process.wait()
 
 
+def clean_environment() -> dict[str, str]:
+    """This process's environment without the variables that graft other packages onto an interpreter."""
+    return {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "WORKSPACE_BUNDLED_RUNTIME")}
+
+
 class _Check:
-    __slots__ = ("candidate", "deadline", "digest", "output", "process")
+    """The candidate's environment (built first, when its lock is new), then its selfcheck in that environment.
+
+    Each stage is one process the keeper owns, so cancelling ends whichever runs."""
+
+    __slots__ = ("building", "candidate", "deadline", "digest", "environment", "output", "process", "profile")
 
     def __init__(self, candidate: Path, checked: str | None) -> None:
         self.candidate = candidate
@@ -794,13 +820,25 @@ class _Check:
         # An install needs only a yes or no: what failed last time runs first, and the first failure ends the check.
         profile = (*profile, "--previous", str(previous), "--stop-at-first-failure")
         _log("checking the workspace: " + ("native modules after its passing fast check" if fast_checked else "the tests the change affects"))
-        with self.output.open("wb") as out:
-            self.process = subprocess.Popen(
-                [console_python(), str(LIVE / "selfcheck.py"), str(candidate), *profile],
-                stdout=out,
-                stderr=subprocess.STDOUT,
-                creationflags=CREATE_NO_WINDOW,
-            )
+        self.profile = profile
+        lock = candidate / environments.LOCK
+        self.environment = environments.location(lock.read_bytes())
+        self.output.write_bytes(b"")
+        self.building = not environments.ready(self.environment)
+        """Whether the running process builds the dependencies, before the selfcheck."""
+        if not self.building:
+            self.process = self.selfcheck()
+        else:
+            _log(f"building the dependencies for the candidate's lock ({self.environment.name})")
+            self.process = self.started([console_python(), str(LIVE / "environments.py"), "ensure", str(lock)])
+
+    def started(self, command: list[str]) -> subprocess.Popen[bytes]:
+        with self.output.open("ab") as out:
+            return subprocess.Popen(command, stdout=out, stderr=subprocess.STDOUT, env=clean_environment(), creationflags=CREATE_NO_WINDOW)
+
+    def selfcheck(self) -> subprocess.Popen[bytes]:
+        """The protected selfcheck, run by the interpreter of the environment the candidate's lock names."""
+        return self.started([str(environments.python(self.environment)), str(LIVE / "selfcheck.py"), str(self.candidate), *self.profile])
 
     def cancel(self) -> None:
         if self.process.poll() is None:
@@ -813,6 +851,10 @@ class _Check:
             if time.monotonic() > self.deadline:
                 self.cancel()
                 return False, "Runtime checks timed out."
+            return None
+        if code == 0 and self.building:
+            self.building = False
+            self.process = self.selfcheck()  # the dependencies are ready: now the checks
             return None
         if source_digest(self.candidate) != self.digest:
             return False, "The candidate changed during its checks; prepare and check it again."
@@ -833,7 +875,7 @@ def main(ui: Ui) -> None:
             component = CATALOGUE[name]
             marker = component.marker(STATE)
             marker.unlink(missing_ok=True)
-            env = {**os.environ, "WORKSPACE_READY": str(marker), STATE_VARIABLE: str(STATE)}
+            env = {**clean_environment(), "WORKSPACE_READY": str(marker), STATE_VARIABLE: str(STATE)}
             with (DIRECTORY / f"{name}.log").open("ab") as errors:
                 process = subprocess.Popen([_pythonw(), "-m", component.module], cwd=LIVE, env=env, stderr=errors, creationflags=0x0800_0000)
             _log(f"started {name}")
@@ -868,7 +910,7 @@ def main(ui: Ui) -> None:
 
         def relaunch(self) -> None:
             _log("relaunching the keeper from the installed copy")
-            environment = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "WORKSPACE_BUNDLED_RUNTIME")}
+            environment = clean_environment()
             subprocess.Popen(
                 [_pythonw(), str(LIVE / "workspace.pyw"), RELAUNCH],
                 cwd=LIVE,
@@ -879,6 +921,19 @@ def main(ui: Ui) -> None:
         def notify(self, text: str) -> None:
             _log(text)
             ui.notify(text)
+
+        def kept(self, version: str) -> None:
+            """Keep the environments of the installed lock and of the undo version's; delete the rest."""
+            try:
+                with tempfile.TemporaryDirectory(prefix="workspace-version-") as folder:
+                    self.versions.export(version, Path(folder))
+                    undo = environments.location((Path(folder) / environments.LOCK).read_bytes())
+                live = environments.location((LIVE / environments.LOCK).read_bytes())
+            except OSError as error:
+                _log(f"kept every environment: couldn't read a lock ({error})")
+                return
+            for removed in environments.prune(frozenset({live, undo})):
+                _log(f"removed the unused environment {removed.name}")
 
         def note(self, text: str) -> None:
             _log(text)

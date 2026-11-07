@@ -139,15 +139,24 @@ def _packages(tree: Tree) -> frozenset[str]:
     return frozenset(name.split("/")[0] for name in tree.files if name.count("/") == 1 and name.endswith("/__init__.py"))
 
 
+DEPENDENCIES = "requirements/"
+"""The pinned dependency locks; each names its own environment."""
+
+
 def restart_plan(before: Tree, after: Tree, protected: frozenset[str]) -> RestartPlan:
     """Relaunch for protected files or the keeper's closure.
 
     Files a child reloads itself (`Entry.live_assets`, data or Python spec modules)
     restart nothing. A data file inside a package restarts the children that import
-    that package; any other (the lock, `pyproject.toml`) restarts every child.
+    that package; any other (`pyproject.toml`) restarts every child. A changed
+    dependency lock relaunches the keeper into the lock's environment.
     """
     names = changed(before, after)
     if names & protected:
+        return Relaunch.KEEPER
+    if any(name.startswith(DEPENDENCIES) for name in names):
+        # Another lock is another environment: every program, the keeper too
+        # (it imports pydantic), must start again from that environment's interpreter.
         return Relaunch.KEEPER
     live = tuple(prefix for entry in CATALOGUE.values() for prefix in entry.live_assets)
     names = frozenset(name for name in names if not name.startswith(live))

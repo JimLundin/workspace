@@ -118,6 +118,20 @@ def ensure(lock: Path, *, root: Path = ROOT, run: Runner = native_run, base: Pat
     return environment
 
 
+def main() -> None:
+    """`python environments.py ensure LOCK`: build the lock's environment; exit 1 with pip's reason if it can't be."""
+    match sys.argv[1:]:
+        case ["ensure", lock]:
+            try:
+                environment = ensure(Path(lock))
+            except DependencyError as error:
+                sys.stdout.write(f"{error}\n")
+                sys.exit(1)
+            sys.stdout.write(f"Dependencies ready: {environment}\n")
+        case _:
+            sys.exit("usage: python environments.py ensure LOCK")
+
+
 def prune(keep: frozenset[Path], root: Path = ROOT) -> tuple[Path, ...]:
     """Delete every environment except `keep`; the ones removed."""
     if not root.is_dir():
@@ -127,3 +141,7 @@ def prune(keep: frozenset[Path], root: Path = ROOT) -> tuple[Path, ...]:
     for path in removed:
         shutil.rmtree(path, ignore_errors=True)
     return removed
+
+
+if __name__ == "__main__":
+    main()
