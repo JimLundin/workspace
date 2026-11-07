@@ -7,7 +7,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Annotated, Protocol, runtime_checkable
+from typing import Annotated, Protocol, override, runtime_checkable
 
 import agents
 from agents import (
@@ -139,6 +139,7 @@ class Hooks(RunHooks["Agent"]):
     def __init__(self) -> None:
         self.awaiting_model = True
 
+    @override
     async def on_llm_start(
         self,
         context: RunContextWrapper[Agent],

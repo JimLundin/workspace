@@ -44,8 +44,17 @@ MUTABLE_TYPES = frozenset(
         "collections.abc.MutableMapping",
         "collections.abc.MutableSequence",
         "collections.abc.MutableSet",
+        "collections.defaultdict",
+        "collections.Counter",
+        "collections.OrderedDict",
+        "typing.DefaultDict",
+        "typing.Deque",
+        "typing.Counter",
+        "typing.OrderedDict",
     }
 )
+OVERRIDES: Final = frozenset({"typing.override", "typing_extensions.override"})
+"""Decorators marking a method whose signature its base class dictates."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +73,7 @@ class Finding:
 
 @dataclass(frozen=True, slots=True)
 class ExceptionSpec:
-    rule: Literal["explicit-attributes", "immutable-data", "mutable-field"]
+    rule: Literal["explicit-attributes", "immutable-data", "mutable-field", "mutable-parameter"]
     module: Text
     declaration: Text
     expression: Text
@@ -313,6 +322,27 @@ def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Ma
                                     pass
                     case _:
                         pass
+        case ast.FunctionDef(args=arguments, decorator_list=decorators) | ast.AsyncFunctionDef(args=arguments, decorator_list=decorators) if not any(
+            call_name(decorator, local) in OVERRIDES for decorator in decorators
+        ):
+            yield from (
+                Finding(
+                    "mutable-parameter",
+                    module,
+                    declaration + "." + parameter.arg,
+                    ast.unparse(parameter.annotation),
+                    parameter.lineno,
+                    "Take an immutable type (a tuple, frozendict, frozen record, or Sequence, Mapping, Set or Iterable), "
+                    "or declare the exact signature a dependency dictates.",
+                )
+                for parameter in (
+                    *arguments.posonlyargs,
+                    *arguments.args,
+                    *arguments.kwonlyargs,
+                    *(item for item in (arguments.vararg, arguments.kwarg) if item),
+                )
+                if parameter.annotation is not None and any(call_name(node, local) in MUTABLE_TYPES for node in ast.walk(parameter.annotation))
+            )
         case ast.Call(func=function) if call_name(function, local) in REFLECTION | {"builtins." + name for name in REFLECTION}:
             yield Finding(
                 "explicit-attributes",

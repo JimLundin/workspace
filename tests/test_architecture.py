@@ -168,6 +168,28 @@ def test_a_frozen_record_cannot_hide_a_mutable_collection(tmp_path: Path) -> Non
     assert [(finding.rule, finding.declaration) for finding in review(tmp_path).failures] == [("mutable-field", "Snapshot.values")]
 
 
+def test_a_function_cannot_require_a_mutable_container_unless_its_base_dictates_it(tmp_path: Path) -> None:
+    # Defect: a mutable parameter type hidden in a nested, aliased or variadic annotation passes,
+    # or an override, whose base class owns the signature, is rejected.
+    write_tree(
+        tmp_path,
+        {
+            "owner.py": "from collections.abc import Callable, Mapping\nfrom typing import List, override\n"
+            "def read(values: Mapping[str, int], *rest: tuple[int, ...]) -> None: ...\n"
+            "def fill(values: list[int], *, seen: Callable[[set[str]], None], **more: List[int]) -> None: ...\n"
+            "class Hook(Base):\n    @override\n    def receive(self, items: list[int]) -> None: ...\n"
+            "    async def gather(self, found: dict[str, int] | None = None) -> None: ...\n"
+        },
+    )
+    found = [(finding.rule, finding.declaration, finding.expression) for finding in review(tmp_path).failures]
+    assert found == [
+        ("mutable-parameter", "fill.values", "list[int]"),
+        ("mutable-parameter", "fill.seen", "Callable[[set[str]], None]"),
+        ("mutable-parameter", "fill.more", "List[int]"),
+        ("mutable-parameter", "Hook.gather.found", "dict[str, int] | None"),
+    ]
+
+
 def test_exact_reflection_exception_survives_lines_but_cannot_cover_other_declarations(tmp_path: Path) -> None:
     write_tree(tmp_path, {"native.py": '\n\nclass Owner:\n    def read(self, error):\n        return getattr(error, "winerror", None)\n'})
     exception(tmp_path)

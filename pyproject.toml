@@ -327,3 +327,31 @@ module = "assistant.sdk"
 declaration = "TextBuffer"
 expression = "TextBuffer"
 reason = "Private streaming accumulators update growing fragment maps and completion sets; persistent copies per fragment add substantial cumulative work. Published timeline values remain immutable."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-parameter"
+module = "assistant.sdk"
+declaration = "MemorySession.add_items.items"
+expression = "list[TResponseInputItem]"
+reason = "The Agents SDK's Session protocol dictates the signature; MemorySession implements it structurally and only reads the items."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-parameter"
+module = "assistant.sdk"
+declaration = "after_tools.results"
+expression = "list[FunctionToolResult]"
+reason = "The Agents SDK's ToolsToFinalOutputFunction, passed as tool_use_behavior, dictates the signature; the results are not read."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-parameter"
+module = "scripts.benchmark_keyboard"
+declaration = "measure_latencies.observe_gc.info"
+expression = "dict[str, int]"
+reason = "gc.callbacks dictates the callback's signature; the benchmark only reads the collection's generation."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "mutable-parameter"
+module = "scripts.benchmark_keyboard"
+declaration = "round_latencies.observe_gc"
+expression = "Callable[[str, dict[str, int]], None]"
+reason = "The callback is appended to gc.callbacks, whose element type dictates its signature."
