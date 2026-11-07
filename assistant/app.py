@@ -303,7 +303,7 @@ class AssistantApp:
             on_meeting=self.observe_meeting,
             log=log,
         )
-        self.automatic_meetings = AutomaticMeetings(
+        self.automatic_meetings = AutomaticMeetings.load(
             self.meetings,
             TeamsCalls(Browser.at(BROWSER_PROFILE, source=Product.EDGE)),
             windows_store(DIRECTORY / "automatic-meetings.bin", PREFERENCE),

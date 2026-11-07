@@ -74,6 +74,16 @@ class AutomaticAttention:
             self.warn()
 
 
+@dataclass(frozen=True, slots=True)
+class _Monitoring:
+    preference: AutomaticPreference
+    status: AutomaticStatus
+    watch: Watch = Idle.WAITING
+    revision: int = 0
+    """Manual commands invalidate an in-flight browser observation."""
+
+
+@dataclass(frozen=True, slots=True)
 class AutomaticMeetings:
     """The lock serializes manual commands with monitor decisions and their effects.
 
@@ -82,81 +92,90 @@ class AutomaticMeetings:
     outside the lock. Five-second polling avoids animation/key-event workloads.
     """
 
-    __slots__ = ("_lock", "_preference", "_quit", "_revision", "_status", "_thread", "_wake", "_watch", "observer", "publish", "recorder", "store")
-
     # Recording, browser observation, saved opt-in and UI publication have
     # independent ownership and lifecycle; these are composition dependencies.
-    def __init__(
-        self,
+    recorder: Recorder
+    observer: CallObserver
+    store: SavedState[AutomaticPreference]
+    _state: Cell[_Monitoring]
+    """Replaced whole under the lock."""
+    publish: Callable[[AutomaticStatus], None] = field(kw_only=True)
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
+    _quit: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _wake: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
+
+    @classmethod
+    def load(
+        cls,
         recorder: Recorder,
         observer: CallObserver,
         store: SavedState[AutomaticPreference],
         *,
         publish: Callable[[AutomaticStatus], None],
-    ) -> None:
-        self.recorder, self.observer, self.store, self.publish = recorder, observer, store, publish
-        self._lock = threading.RLock()
-        self._quit, self._wake = threading.Event(), threading.Event()
-        self._thread: threading.Thread | None = None
-        self._watch: Watch = Idle.WAITING
-        self._revision = 0  # Manual commands invalidate an in-flight browser observation.
-        self._preference = store.read()
-        self._status = AutomaticStatus.CHECKING if self._preference.enabled else AutomaticStatus.OFF
+    ) -> AutomaticMeetings:
+        """The monitor with the saved opt-in."""
+        preference = store.read()
+        status = AutomaticStatus.CHECKING if preference.enabled else AutomaticStatus.OFF
+        return cls(recorder, observer, store, Cell(_Monitoring(preference, status)), publish=publish)
 
     def start(self) -> None:
         with self._lock:
-            self.publish(self._status)
-            if self._thread is None:
-                self._thread = threading.Thread(target=self._run, name="Teams meeting monitor", daemon=True)
-                self._thread.start()
+            self.publish(self._state.get().status)
+            if self._thread.get() is None:
+                thread = threading.Thread(target=self._run, name="Teams meeting monitor", daemon=True)
+                self._thread.set(thread)
+                thread.start()
 
     def toggle(self) -> None:
         with self._lock:
-            preference = AutomaticPreference(enabled=not self._preference.enabled)
+            preference = AutomaticPreference(enabled=not self._state.get().preference.enabled)
             self.store.write(preference)
-            self._preference = preference
-            self._revision += 1
+            self._state.set(replace(self._state.get(), preference=preference))
+            self._state.set(replace(self._state.get(), revision=self._state.get().revision + 1))
             if not preference.enabled:
-                match self._watch:
+                match self._state.get().watch:
                     case Watching(ownership=Ownership.AUTOMATIC):
                         self.recorder.stop()
                     case _:
                         pass
-                self._watch = Idle.WAITING
-            self._status = AutomaticStatus.CHECKING if preference.enabled else AutomaticStatus.OFF
-            self.publish(self._status)
+                self._state.set(replace(self._state.get(), watch=Idle.WAITING))
+            self._state.set(replace(self._state.get(), status=AutomaticStatus.CHECKING if preference.enabled else AutomaticStatus.OFF))
+            self.publish(self._state.get().status)
         self._wake.set()
 
     def start_recording(self, source: AudioSource, title: str = "Meeting") -> None:
         with self._lock:
             self.recorder.start(source, title)
-            self._watch = suppressed(self._watch)
-            self._revision += 1
+            new_watch = suppressed(self._state.get().watch)
+            self._state.set(replace(self._state.get(), watch=new_watch))
+            self._state.set(replace(self._state.get(), revision=self._state.get().revision + 1))
 
     def stop_recording(self) -> None:
         with self._lock:
-            self._watch = suppressed(self._watch)
-            self._revision += 1
+            new_watch = suppressed(self._state.get().watch)
+            self._state.set(replace(self._state.get(), watch=new_watch))
+            self._state.set(replace(self._state.get(), revision=self._state.get().revision + 1))
             self.recorder.stop()
 
     def poll(self, at: float) -> None:
         """Observe outside the command lock, rechecking opt-in before any effect."""
         with self._lock:
-            if not self._preference.enabled or self._quit.is_set():
+            if not self._state.get().preference.enabled or self._quit.is_set():
                 return
-            preference = self._preference
-            revision = self._revision
+            preference = self._state.get().preference
+            revision = self._state.get().revision
         observation = self.observer.observe(self._quit)
         with self._lock:
-            if self._quit.is_set() or self._preference is not preference or self._revision != revision:
+            if self._quit.is_set() or self._state.get().preference is not preference or self._state.get().revision != revision:
                 return
             match observation:
                 case Calls():
                     status = AutomaticStatus.READY
                 case ObservationFailure.UNAVAILABLE:
                     status = AutomaticStatus.UNAVAILABLE
-            decision = decide(self._watch, Sample(observation, self.recorder.snapshot(), at))
-            self._watch = decision.watch
+            decision = decide(self._state.get().watch, Sample(observation, self.recorder.snapshot(), at))
+            self._state.set(replace(self._state.get(), watch=decision.watch))
             try:
                 match decision.effect:
                     case Start(call):
@@ -166,18 +185,18 @@ class AutomaticMeetings:
                     case Effect.NONE:
                         pass
             except OSError, ValueError:
-                match self._watch:
-                    case Watching():
-                        self._watch = replace(self._watch, ownership=Ownership.FAILED)
+                match self._state.get().watch:
+                    case Watching() as watching:
+                        self._state.set(replace(self._state.get(), watch=replace(watching, ownership=Ownership.FAILED)))
                     case Idle():
                         pass
                 status = AutomaticStatus.UNAVAILABLE
-            match self._watch:
+            match self._state.get().watch:
                 case Watching(ownership=Ownership.FAILED):
                     status = AutomaticStatus.UNAVAILABLE
                 case _:
                     pass
-            self._status = status
+            self._state.set(replace(self._state.get(), status=status))
             self.publish(status)
 
     def _run(self) -> None:
@@ -192,7 +211,7 @@ class AutomaticMeetings:
     def close(self) -> None:
         self._quit.set()
         self._wake.set()
-        thread = self._thread
+        thread = self._thread.get()
         if thread is not None:
             thread.join(20)
             if thread.is_alive():

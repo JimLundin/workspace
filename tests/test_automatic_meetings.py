@@ -127,7 +127,7 @@ class PlainStorage:
 def monitor(folder: Path) -> tuple[AutomaticMeetings, LocalRecording, LocalCalls]:
     recorder, observer = LocalRecording(), LocalCalls()
     saved = SavedState(folder / "automatic.bin", PREFERENCE, cipher=PlainStorage())
-    owner = AutomaticMeetings(recorder, observer, saved, publish=lambda _: None)
+    owner = AutomaticMeetings.load(recorder, observer, saved, publish=lambda _: None)
     return owner, recorder, observer
 
 
@@ -139,7 +139,7 @@ def test_opt_in_is_saved_and_disabled_monitor_does_not_read_browser(tmp_path: Pa
         assert observer.reads == 0 and recorder.history() == ()
         owner.toggle()
         assert owner.store.read() == AutomaticPreference(enabled=True)
-        restarted = AutomaticMeetings(recorder, observer, owner.store, publish=lambda _: None)
+        restarted = AutomaticMeetings.load(recorder, observer, owner.store, publish=lambda _: None)
         restarted.poll(1)
         assert recorder.history() == (("both", "Workspace private meeting"),)
         restarted.close()
@@ -260,7 +260,7 @@ def test_monitor_reports_connection_and_start_failures(tmp_path: Path) -> None:
     # Defect: the menu claims monitoring is ready after a failed browser/device effect.
     owner, recorder, observer = monitor(tmp_path)
     status = StatusPublication()
-    reporting = AutomaticMeetings(recorder, observer, owner.store, publish=status)
+    reporting = AutomaticMeetings.load(recorder, observer, owner.store, publish=status)
     try:
         reporting.toggle()
         observer.current = ObservationFailure.UNAVAILABLE
