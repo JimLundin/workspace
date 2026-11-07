@@ -246,7 +246,7 @@ class Rig:
             self.window,
             self.stop,
             work=self.work,
-            toolset=lambda agent: General(agent, feed_request=no_feed),
+            toolset=lambda agent: General.of(agent, feed_request=no_feed),
             max_steps=max_steps,
             after_step=after_step,
             history=self.history,
@@ -286,7 +286,7 @@ class ToolRig:
             self.window,
             threading.Event(),
             work=work,
-            toolset=lambda agent: General(agent, clock=clock, feed_request=feed_request),
+            toolset=lambda agent: General.of(agent, clock=clock, feed_request=feed_request),
         )
 
     def call(self, name: str, **arguments: Json) -> Output:
@@ -377,7 +377,9 @@ def test_default_agent_model_with_low_reasoning_reaches_every_tool_turn(tmp_path
         rig = Rig(endpoint, calls(("get_clipboard", {})), says("Read it."), work=durable(tmp_path))
         settings = settings_from({"OPENAI_BASE_URL": endpoint.url, "OPENAI_API_KEY": "k"})
         assert isinstance(settings, Settings)
-        agent = Agent(settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=lambda agent: General(agent, feed_request=no_feed))
+        agent = Agent(
+            settings, rig.machine, rig.window, rig.stop, work=durable(tmp_path), toolset=lambda agent: General.of(agent, feed_request=no_feed)
+        )
         agent.run("Read the clipboard.")
         assert len(endpoint.received) == 2
         for request in endpoint.received:
@@ -653,7 +655,7 @@ def test_stop_prevents_actions(tmp_path: Path) -> None:
         FakeWindow(),
         stopped,
         work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
     )
     target = tmp_path / "not-written.txt"
     for name, args in (

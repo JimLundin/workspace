@@ -1,6 +1,7 @@
 """Transactional, validated persistence for tasks, inputs, and action outcomes."""
 
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ConfigDict, TypeAdapter
@@ -209,6 +210,7 @@ _SCHEMA = journal.Schema(
 )
 
 
+@dataclass(frozen=True, slots=True)
 class TaskStore:
     """One durable work database, shared by the exclusive worker and its clients.
 
@@ -219,10 +221,9 @@ class TaskStore:
     from a timeout or periodically sweeps another worker.
     """
 
-    __slots__ = ("path",)
+    path: Path
 
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __post_init__(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with journal.writing(self.path) as connection:
             journal.prepare(connection, _SCHEMA)

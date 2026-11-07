@@ -38,7 +38,7 @@ def execution(settings: Settings, errors: list[str]) -> AgentExecution:
     return AgentExecution(
         settings,
         machine,
-        Profiles(GeneralEffects(unseen, no_feed)),
+        Profiles.of(GeneralEffects(unseen, no_feed)),
         record=lambda record: None,
         report_error=errors.append,
         close_background=machine.close_background,
@@ -65,7 +65,7 @@ def test_every_execution_releases_research_pages_and_stop_releases_the_browser(t
         adapter = AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", ""),
             FakeMachine(),
-            Profiles(GeneralEffects(unseen, no_feed)),
+            Profiles.of(GeneralEffects(unseen, no_feed)),
             record=lambda record: None,
             report_error=errors.append,
             close_background=cleanup,
@@ -134,7 +134,9 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         work = WorkExecution(second, store, Resources())
         endpoint.replies = [calls(("get_clipboard", {}))]
         stop = threading.Event()
-        agent = Agent(settings, FakeMachine(), FakeWindow(), stop, work=work, toolset=lambda agent: General(agent, feed_request=no_feed), max_steps=1)
+        agent = Agent(
+            settings, FakeMachine(), FakeWindow(), stop, work=work, toolset=lambda agent: General.of(agent, feed_request=no_feed), max_steps=1
+        )
         assert not agent.run(second.task.prompt)
         result = work.outcome(agent.report, stop)
         assert isinstance(result, Waiting) and isinstance(result.reason, Blocked)
@@ -153,7 +155,7 @@ def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> 
         FakeWindow(),
         threading.Event(),
         work=work,
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
     )
     result = agent.call(ToolCall("invalid", "write_file", args))
     assert not result.ok and not destination.exists() and not store.actions("task")

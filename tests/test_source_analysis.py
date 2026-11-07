@@ -24,7 +24,7 @@ def test_cached_policy_review_recomputes_changed_imports(tmp_path: Path) -> None
             "assistant/model.py": "",
         },
     )
-    cache = Cache(root, folder=tmp_path / "cache")
+    cache = Cache.bound(root, folder=tmp_path / "cache")
     assert review(root, cache=cache) == review(root) and not review(root, cache=cache).failures
     (root / "bridge.py").write_text("from assistant import model\nvalue = 2\n")
     report = review(root, cache=cache)
@@ -40,7 +40,7 @@ def test_cached_quality_cannot_accept_changed_boolean_signature_or_import_owners
     # signature or forwarding import, including a move that changes source lines.
     development_lint()
     source_tree(tmp_path, "def update(*, enabled: bool):\n    pass\n")
-    cache = Cache(tmp_path, folder=tmp_path / "cache")
+    cache = Cache.bound(tmp_path, folder=tmp_path / "cache")
     assert not scan(tmp_path, cache=cache)
     path = tmp_path / "assistant" / "api.py"
     path.write_text("\n\ndef update(enabled: bool):\n    from owner import Event\n")

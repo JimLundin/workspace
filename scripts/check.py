@@ -102,7 +102,7 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
     if full or not previous or "uv.lock" in changed:
         return Selection(all_tests, changed, "full source checks" if full else "dependency pins or missing baseline")
     # Minimal source fixtures need no project/cache configuration.
-    cache = Cache(root) if (root / "pyproject.toml").is_file() else None
+    cache = Cache.bound(root) if (root / "pyproject.toml").is_file() else None
     tests = {
         name: dependencies(name, file_at(root, name).read_text(encoding="utf-8"), cache=cache)
         for name in current
@@ -182,6 +182,7 @@ class SourceRuntime(Protocol):
     def load(self, module: str) -> object: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeSourceRuntime:
     def activate(self) -> None:
         if sys.platform == "win32":
@@ -660,7 +661,7 @@ def main() -> None:
     with overhead.timed("phase:initial source manifest"):
         stamps = source_stamps()
         current = source_files()
-    cache = Cache(ROOT)
+    cache = Cache.bound(ROOT)
     if args.standards:
         with overhead.timed("phase:lint standards"):
             check_lint(ROOT)

@@ -8,7 +8,7 @@ bridges only the interactions whose owner remains in the assistant process.
 import os
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import KW_ONLY, dataclass, field, replace
 from typing import Literal, Protocol
 
 from pydantic import TypeAdapter
@@ -123,6 +123,7 @@ class CaptureObservation(Protocol):
     def observe(self, handle: int) -> CaptureSources: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeCaptureObservation:
     def observe(self, handle: int) -> CaptureSources:
         foreground = windows.foreground()
@@ -138,28 +139,23 @@ def open_file(target: str) -> None:
     os.startfile(target)
 
 
+def _background_browser() -> BrowserControl:
+    return Browser(BROWSER_PROFILE, source=Separate.PROFILE)
+
+
+@dataclass(frozen=True, slots=True)
 class WinMachine:
     """What the agent's tools act on, done with Windows calls."""
 
-    __slots__ = ("background_browser", "capture_sources", "desktop", "meetings", "open_target")
-
-    def __init__(
-        self,
-        desktop: DesktopAccess,
-        *,
-        browser: BrowserControl | None = None,
-        meetings: MeetingControl | None = None,
-        capture_sources: CaptureObservation | None = None,
-        open_target: Callable[[str], None] = open_file,
-    ) -> None:
-        # Interface: each keyword is an independent effect owner (browser,
-        # meeting capture, capture observation, file opening). The worker selects
-        # each transport separately; no record groups them more truthfully.
-        self.desktop = desktop
-        self.capture_sources: CaptureObservation = NativeCaptureObservation() if capture_sources is None else capture_sources
-        self.open_target = open_target
-        self.background_browser: BrowserControl = Browser(BROWSER_PROFILE, source=Separate.PROFILE) if browser is None else browser
-        self.meetings = meetings
+    # Each keyword is an independent effect owner (browser, meeting capture,
+    # capture observation, file opening). The worker selects each transport
+    # separately; no record groups them more truthfully.
+    desktop: DesktopAccess
+    _: KW_ONLY
+    browser: BrowserControl = field(default_factory=_background_browser)
+    meetings: MeetingControl | None = None
+    capture_sources: CaptureObservation = field(default_factory=NativeCaptureObservation)
+    open_target: Callable[[str], None] = open_file
 
     def meeting(self, operation: MeetingOperation) -> str:
         if self.meetings is None:
@@ -167,14 +163,14 @@ class WinMachine:
         return self.meetings.request(operation)
 
     def browse(self, request: BrowserRequest, cancel: threading.Event) -> tuple[str, bytes | None]:
-        result = self.background_browser.request(request, cancel)
+        result = self.browser.request(request, cancel)
         return result.text, result.image
 
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
-        return self.background_browser.web_app(operation, query, cancel)
+        return self.browser.web_app(operation, query, cancel)
 
     def close_background(self, *, keep_browser: bool = False) -> None:
-        self.background_browser.close(keep_browser=keep_browser)
+        self.browser.close(keep_browser=keep_browser)
 
     def run_powershell(
         self,

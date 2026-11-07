@@ -6,9 +6,8 @@ Profiles selects one run and owns its dependencies and conversations.
 import hashlib
 import os
 import threading
-from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Final, assert_never
@@ -30,6 +29,7 @@ from assistant.work_canvas_tools import Canvas
 from automation.activity import ContextSnapshot
 from automation.context import ContextStore
 from automation.execution import WorkExecution
+from cell import Cell
 from contracts.task import (
     Claim,
     FeedHandoff,
@@ -128,31 +128,37 @@ def instructions() -> str:
     )
 
 
+@dataclass(frozen=True, slots=True)
 class General:
     """A general request's toolset: the whole desktop and its applications, the task's records and,
     with saved lessons, self-review."""
 
-    __slots__ = ("self_review", "tools")
+    self_review: SelfReviewTools | None
+    tools: tuple[Tool, ...]
 
-    def __init__(
-        self,
+    @classmethod
+    def of(
+        cls,
         agent: Agent,
         *,
         lessons: ContextStore | None = None,
         clock: Callable[[], datetime] = datetime.now,
         feed_request: Callable[[BridgeCommand], str],
-    ) -> None:
-        self.self_review = SelfReviewTools(agent, agent.work, lessons) if lessons is not None else None
-        self.tools: tuple[Tool, ...] = (
-            *Desktop(agent, agent.current_context).tools(),
-            *Browser(agent).tools(),
-            *Business(agent).tools(),
-            *PersonalWork(agent, feed_request).tools(),
-            *Canvas(agent, feed_request).tools(),
-            *MeetingCapture(agent).tools(),
-            *Feed(agent, feed_request).tools(),
-            *TaskTools(agent, agent.work, clock).tools(agent.proof, Display.PUBLIC),
-            *(self.self_review.tools() if self.self_review is not None else ()),
+    ) -> General:
+        self_review = SelfReviewTools(agent, agent.work, lessons) if lessons is not None else None
+        return cls(
+            self_review,
+            (
+                *Desktop(agent, agent.current_context).tools(),
+                *Browser(agent).tools(),
+                *Business(agent).tools(),
+                *PersonalWork(agent, feed_request).tools(),
+                *Canvas(agent, feed_request).tools(),
+                *MeetingCapture(agent).tools(),
+                *Feed(agent, feed_request).tools(),
+                *TaskTools(agent, agent.work, clock).tools(agent.proof, Display.PUBLIC),
+                *(self_review.tools() if self_review is not None else ()),
+            ),
         )
 
     def instructions(self) -> str:
@@ -171,45 +177,47 @@ class GeneralRun:
     tools: GeneralTools
 
     def toolset(self, agent: Agent) -> Toolset:
-        return General(agent, lessons=self.tools.lessons, feed_request=self.tools.feed_request)
+        return General.of(agent, lessons=self.tools.lessons, feed_request=self.tools.feed_request)
 
     def recover(self, work: WorkExecution, stop: threading.Event) -> Waiting | None:
         """A general run leaves nothing to finish after a restart."""
         return None
 
 
+def _touched(recent: frozendict[str, Conversation], key: str) -> frozendict[str, Conversation]:
+    """`recent` with `key` moved (or added) last, keeping the eight most recent."""
+    current = recent[key] if key in recent else Conversation(History())
+    kept = tuple((name, conversation) for name, conversation in recent.items() if name != key)[-7:]
+    return frozendict((*kept, (key, current)))
+
+
+@dataclass(frozen=True, slots=True)
 class Conversations:
     """SDK history per conversation, retaining the eight most recent.
 
-    Mutable owner: each SDK session writes the retained History handle across
-    serialized runs. The private bounded LRU preserves those live handles and
-    releases evicted histories; callers receive a frozen conversation holder.
+    Each SDK session writes the retained History handle across serialized runs.
+    The bounded, oldest-first mapping preserves those live handles and releases
+    evicted histories; callers receive a frozen conversation holder.
     """
 
-    __slots__ = ("_recent",)
-
-    def __init__(self) -> None:
-        self._recent: OrderedDict[str, Conversation] = OrderedDict()
+    _recent: Cell[frozendict[str, Conversation]] = field(default_factory=lambda: Cell(frozendict()), init=False, repr=False)
 
     def named(self, name: str) -> Conversation:
         key = hashlib.sha256(name.encode("utf-8")).hexdigest()
-        if key not in self._recent:
-            self._recent[key] = Conversation(History())
-        self._recent.move_to_end(key)
-        while len(self._recent) > 8:
-            self._recent.popitem(last=False)
-        return self._recent[key]
+        return self._recent.update(lambda recent: _touched(recent, key))[key]
 
 
+@dataclass(frozen=True, slots=True)
 class Profiles:
     """Select one claim's profile run and own its profile-specific dependencies."""
 
-    __slots__ = ("conversations", "general", "tools")
+    general: GeneralEffects
+    tools: GeneralTools
+    conversations: Conversations = field(default_factory=Conversations)
 
-    def __init__(self, general: GeneralEffects) -> None:
-        self.conversations = Conversations()
-        self.general = general
-        self.tools = GeneralTools(general.feed_request, general.lessons)
+    @classmethod
+    def of(cls, general: GeneralEffects) -> Profiles:
+        return cls(general, GeneralTools(general.feed_request, general.lessons))
 
     def run(self, claim: Claim) -> GeneralRun:
         match profile := claim.task.source.profile:

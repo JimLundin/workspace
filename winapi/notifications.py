@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from itertools import islice
 from pathlib import Path
 from typing import Protocol
@@ -49,14 +49,16 @@ class BannerLease(Protocol):
     def close(self) -> None: ...
 
 
+def _notification_store() -> Path | None:
+    local = os.environ.get("LOCALAPPDATA")
+    return None if local is None else Path(local) / "Microsoft" / "Windows" / "Notifications"
+
+
+@dataclass(frozen=True, slots=True)
 class NativeNotifications:
     """Windows offers change events only to packaged apps, so reads follow database writes instead."""
 
-    __slots__ = ("store",)
-
-    def __init__(self) -> None:
-        local = os.environ.get("LOCALAPPDATA")
-        self.store = None if local is None else Path(local) / "Microsoft" / "Windows" / "Notifications"
+    store: Path | None = field(default_factory=_notification_store)
 
     def open(self) -> bool:
         return not FAILED(RoInitialize(RO_INIT_MULTITHREADED))

@@ -140,10 +140,9 @@ def percentile(values: Sequence[int], fraction: float) -> float:
     return values[min(len(values) - 1, int(len(values) * fraction))] / 1000
 
 
+@dataclass(frozen=True, slots=True)
 class Host:
     """No output log or OS calls whose allocations could obscure the engine."""
-
-    __slots__ = ()
 
     def send(self, key: Key | Mod, *, down: object) -> None:
         pass

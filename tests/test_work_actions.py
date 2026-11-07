@@ -66,7 +66,7 @@ def families(work: WorkExecution) -> Agent:
         FakeWindow(),
         threading.Event(),
         work=work,
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
     )
 
 

@@ -56,7 +56,7 @@ def test_request_context_includes_the_work_window_and_one_current_screenshot(tmp
             rig.window,
             rig.stop,
             work=durable(tmp_path),
-            toolset=lambda agent: General(agent, feed_request=no_feed),
+            toolset=lambda agent: General.of(agent, feed_request=no_feed),
             history=rig.history,
             context=context(),
         )
@@ -80,7 +80,7 @@ def test_automatic_and_explicit_screenshots_share_the_same_history_limit(tmp_pat
                 rig.window,
                 rig.stop,
                 work=durable(tmp_path),
-                toolset=lambda agent: General(agent, feed_request=no_feed),
+                toolset=lambda agent: General.of(agent, feed_request=no_feed),
                 history=rig.history,
                 context=context(),
             )
@@ -99,7 +99,7 @@ def test_disabled_context_does_not_capture_or_add_observations_to_the_request(tm
             rig.window,
             rig.stop,
             work=durable(tmp_path),
-            toolset=lambda agent: General(agent, feed_request=no_feed),
+            toolset=lambda agent: General.of(agent, feed_request=no_feed),
             context=ContextSnapshot(time.time(), "disabled"),
         )
         assert agent.run("Do the task")
@@ -120,7 +120,7 @@ def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_pa
             rig.window,
             rig.stop,
             work=durable(tmp_path),
-            toolset=lambda agent: General(agent, feed_request=no_feed),
+            toolset=lambda agent: General.of(agent, feed_request=no_feed),
             context=context(),
         )
         assert agent.run("Find this workbook")
@@ -138,7 +138,7 @@ def test_context_tool_refreshes_the_current_app_without_taking_a_screenshot(tmp_
         FakeWindow(),
         threading.Event(),
         work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
         context=context(),
         context_reader=lambda: context("Report.docx - Word"),
     )
@@ -194,7 +194,7 @@ def test_inspection_defaults_to_the_work_window(tmp_path: Path) -> None:
         FakeWindow(),
         threading.Event(),
         work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
         context=context(),
         context_reader=context,
     )

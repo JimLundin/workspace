@@ -89,6 +89,7 @@ def indicator_area() -> Rect:
     return next((m.work for m in monitors if m.primary), monitors[0].work)
 
 
+@dataclass(frozen=True, slots=True)
 class Offline:
     """The assistant when the desktop runs outside the keeper: never reachable."""
 
@@ -384,6 +385,7 @@ class DesktopApp:
         self.ui.close()
 
 
+@dataclass(frozen=True, slots=True)
 class Native:
     """The layout's window, for toggling it from the tray."""
 

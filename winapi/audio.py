@@ -6,6 +6,7 @@ import threading
 import time
 from array import array
 from ctypes import wintypes
+from dataclasses import dataclass
 from typing import Final, Protocol
 
 from winapi._core import ULONG_PTR, fn, winmm
@@ -118,10 +119,9 @@ class InputDriver(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
 class WaveInput:
     """Adapts typed capture operations to Windows' positional waveIn contract."""
-
-    __slots__ = ()
 
     def open(self, format: WAVEFORMATEX, event: EventHandle) -> tuple[int, wintypes.HANDLE]:
         handle = _HWAVEIN()

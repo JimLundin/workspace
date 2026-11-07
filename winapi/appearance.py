@@ -106,9 +106,8 @@ class TimerPeriod(Protocol):
     def release(self) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeTimerPeriod:
-    __slots__ = ()
-
     def request(self) -> bool:
         return bool(_TimeBeginPeriod(1) == 0)
 

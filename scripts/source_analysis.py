@@ -34,12 +34,15 @@ def parse(source: Source) -> ast.Module:
     return ast.parse(source.text, filename=source.name)
 
 
+@dataclass(frozen=True, slots=True)
 class Cache:
     """Optional storage of immutable observations, bound to the analysis engine."""
 
-    __slots__ = ("folder",)
+    folder: Path
 
-    def __init__(self, root: Path, *, folder: Path = PROFILE / "development" / "analysis") -> None:
+    @classmethod
+    def bound(cls, root: Path, *, folder: Path = PROFILE / "development" / "analysis") -> Cache:
+        """The cache for root's sources under this interpreter, pydantic and analysis engine."""
         engine = Path(__file__).resolve().parent
         digest = hashlib.sha256(sys.version.encode())
         digest.update(importlib.metadata.version("pydantic").encode())
@@ -47,7 +50,7 @@ class Cache:
         for name in ("source_analysis.py", "architecture.py", "quality.py", "check.py"):
             digest.update((engine / name).read_bytes())
         digest.update((root / "pyproject.toml").read_bytes())
-        self.folder = folder / digest.hexdigest()
+        return cls(folder / digest.hexdigest())
 
     def key(self, namespace: str, source: Source, *, extra: bytes = b"") -> str:
         digest = hashlib.sha256(namespace.encode() + b"\0" + source.name.encode() + b"\0" + source.text.encode())

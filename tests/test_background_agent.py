@@ -48,7 +48,7 @@ def test_stopped_agent_cannot_start_recording(tmp_path: Path) -> None:
         FakeWindow(),
         cancel,
         work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
     )
     cancel.set()
     assert not agent.call(ToolCall("stopped", "meeting_start", "{}")).ok
@@ -88,7 +88,7 @@ def test_agent_cannot_attach_to_or_manage_the_personal_browser(tmp_path: Path) -
         FakeWindow(),
         threading.Event(),
         work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
     )
     for name, arguments in (
         ("browser_attach", {"browser": "edge"}),
@@ -109,7 +109,7 @@ def test_stopped_agent_does_not_start_background_tools_or_show_their_arguments(t
         window,
         cancel,
         work=durable(tmp_path),
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
     )
     cancel.set()
     for name in ("browser_action", "kanban_comment"):

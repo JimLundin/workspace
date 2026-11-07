@@ -1,6 +1,6 @@
 """Desktop-owned transactional persistence for the personal-work catalog."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import assert_never
 
@@ -43,6 +43,7 @@ from contracts.personal_work import (
 from contracts.work_documents import document_identity
 
 
+@dataclass(frozen=True, slots=True)
 class PersonalStore:
     """Each call owns one real SQLite transaction; observations are immutable.
 
@@ -50,10 +51,10 @@ class PersonalStore:
     revision. Each write transaction protects edits from concurrent model results.
     """
 
-    __slots__ = ("path",)
+    path: Path
 
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __post_init__(self) -> None:
+        path = self.path
         path.parent.mkdir(parents=True, exist_ok=True)
         with journal.writing(self.path) as connection:
             connection.execute("CREATE TABLE IF NOT EXISTS personal_work (id INTEGER PRIMARY KEY CHECK(id=1), payload BLOB NOT NULL)")

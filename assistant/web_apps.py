@@ -912,12 +912,10 @@ _HELPERS: Final = every_member(App, {App.KANBAN: _KANBAN, App.OUTLOOK: _MAIL, Ap
 """The page helpers each application's scripts call."""
 
 
+@dataclass(frozen=True, slots=True)
 class WebApps:
-    __slots__ = ("browser", "origins")
-
-    def __init__(self, browser: Browser, origins: Origins | None = None) -> None:
-        self.browser = browser
-        self.origins = Origins() if origins is None else origins
+    browser: Browser
+    origins: Origins = field(default_factory=Origins)
 
     def run[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         if cancel.is_set():

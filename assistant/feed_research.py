@@ -3,7 +3,7 @@
 import asyncio
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass, field
 from enum import Enum, auto
 from itertools import islice
 from pathlib import Path
@@ -81,6 +81,7 @@ def directory(path: str) -> str:
         return "Unavailable: this local directory could not be read."
 
 
+@dataclass(frozen=True, slots=True)
 class Research:
     """Own one model session, its restricted observations and cancellation.
 
@@ -88,22 +89,13 @@ class Research:
     no general agent, desktop controller or write tool is available here.
     """
 
-    __slots__ = ("context", "conversation", "settings", "stop")
-
-    def __init__(
-        self,
-        settings: Settings,
-        context: Callable[[str], str] | None = None,
-        conversation: Callable[[str], str] | None = None,
-        *,
-        stop: threading.Event | None = None,
-    ) -> None:
-        # Provider settings, two independently owned source readers and the
-        # lifecycle signal compose this background investigation boundary.
-        self.settings: Settings = settings
-        self.context: Callable[[str], str] | None = context
-        self.conversation: Callable[[str], str] | None = conversation
-        self.stop: threading.Event = stop if stop is not None else threading.Event()
+    # Provider settings, two independently owned source readers and the
+    # lifecycle signal compose this background investigation boundary.
+    settings: Settings
+    context: Callable[[str], str] | None = None
+    conversation: Callable[[str], str] | None = None
+    _: KW_ONLY
+    stop: threading.Event = field(default_factory=threading.Event)
 
     def review(self, request: ReviewInput, instructions: str) -> str:
         return asyncio.run(self.run(request, instructions))

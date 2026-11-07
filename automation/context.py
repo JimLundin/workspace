@@ -230,13 +230,14 @@ def _decode(row: tuple[object, ...]) -> ContextRecord:
             raise ValueError("The saved context has an unknown kind or invalid expiry.")
 
 
+@dataclass(frozen=True, slots=True)
 class ContextStore:
     """Own bounded user-authored records; reading context never samples the desktop."""
 
-    __slots__ = ("path",)
+    path: Path
 
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __post_init__(self) -> None:
+        path = self.path
         TaskStore(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with journal.writing(self.path) as connection:

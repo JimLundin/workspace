@@ -94,7 +94,7 @@ def test_machine_uses_explicit_desktop_and_meeting_owners() -> None:
 def test_default_agent_browser_owns_an_exclusive_profile_without_launching() -> None:
     # Defect: composition silently attaches the agent to the user's Edge.
     machine = WinMachine(Desktop())
-    match machine.background_browser:
+    match machine.browser:
         case browser.Browser(source=Separate.PROFILE, connection=None):
             pass
         case _:

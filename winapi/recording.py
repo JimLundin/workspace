@@ -10,6 +10,7 @@ import threading
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from ctypes import wintypes
+from dataclasses import KW_ONLY, dataclass, field
 from typing import Final, Protocol
 
 from winapi._core import fn, kernel32
@@ -75,9 +76,8 @@ class WasapiApi(Protocol):
     def wait(self, stop: threading.Event, timeout: float) -> bool: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeWasapi:
-    __slots__ = ()
-
     def initialize(self) -> int:
         return _CoInitializeEx(None, 0)
 
@@ -252,17 +252,13 @@ class Stream:
                 _release(pointer, self.api)
 
 
+@dataclass(frozen=True, slots=True)
 class MeetingAudio:
     """Capture only between explicit Start and Stop; never opens a device at import."""
 
-    __slots__ = (
-        "api",
-        "computer_audio",
-    )
-
-    def __init__(self, api: WasapiApi | None = None, *, computer_audio: bool = True) -> None:
-        self.api = api if api is not None else NativeWasapi()
-        self.computer_audio = computer_audio
+    api: WasapiApi = field(default_factory=NativeWasapi)
+    _: KW_ONLY
+    computer_audio: bool = True
 
     def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
         """Capture until `stop`; `consume` and `report` run on this real-time thread and must not block."""

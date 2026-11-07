@@ -298,7 +298,7 @@ def native_runner(  # noqa: PLR0913 - the execution's independent owners
         execution = AgentExecution(
             usable,
             machine,
-            Profiles(GeneralEffects(request, calls.desktop, contexts)),
+            Profiles.of(GeneralEffects(request, calls.desktop, contexts)),
             record=lambda details: usage.record("automation", "agent", details),
             report_error=lambda detail: report(detail, folder=worker.folder),
             close_background=machine.close_background,

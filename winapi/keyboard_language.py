@@ -59,10 +59,9 @@ class LanguageDesktop(Protocol):
     def request(self, hwnd: int, layout: int) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeLanguageDesktop:
     """Adapt layout handles and foreground observations before language policy runs."""
-
-    __slots__ = ()
 
     def load(self, identity: str) -> int:
         return int(_LoadKeyboardLayout(identity, 0x82) or 0)

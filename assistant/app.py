@@ -159,6 +159,7 @@ def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
             return settings, None
 
 
+@dataclass(frozen=True, slots=True)
 class NativeStartup:
     """Native timer, layout replay and readiness for the control-thread lifetime."""
 
@@ -245,7 +246,7 @@ class AssistantApp:
         self.automatic_attention = AutomaticAttention(lambda status: self.desktop.send(AutomaticChanged(status)), self.warn_automatic_recording)
         self.mic_event = system.create_event()
         mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
-        self.machine = WinDesktop(
+        self.machine = WinDesktop.following(
             self.window.handle, mic, on_state=self.show, on_job=self.job_changed, on_notify=self.notify, on_problem=self.problem
         )
         self.levels = LevelFeed(mic.level, desktop)

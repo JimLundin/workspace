@@ -8,7 +8,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Generator, Mapping
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Protocol
@@ -126,6 +126,7 @@ def target(kind: str, value: object) -> str:
     return "target:" + kind + ":" + fingerprint(kind, {"value": value})
 
 
+@dataclass(frozen=True, slots=True)
 class Resources:
     """One process owns its effects; waiting for that owner is cancellable.
 
@@ -134,10 +135,7 @@ class Resources:
     operations. Resource names are retained for a later independent-work policy.
     """
 
-    __slots__ = ("_gate",)
-
-    def __init__(self) -> None:
-        self._gate = threading.Lock()
+    _gate: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     @contextlib.contextmanager
     def hold(self, selected: tuple[str, ...], cancel: threading.Event) -> Generator[None]:
@@ -157,15 +155,15 @@ class Resources:
             self._gate.release()
 
 
+@dataclass(frozen=True, slots=True)
 class FileVerifier:
     """Inspect bounded file contents without retaining the contents themselves."""
 
-    __slots__ = ("maximum",)
+    maximum: int = MAX_VERIFICATION_BYTES
 
-    def __init__(self, maximum: int = MAX_VERIFICATION_BYTES) -> None:
-        if maximum < 0:
+    def __post_init__(self) -> None:
+        if self.maximum < 0:
             raise ValueError("The verification bound cannot be negative.")
-        self.maximum = maximum
 
     def verify(self, expected: FileDigest) -> ActionVerified | ActionUncertain:
         try:
@@ -184,21 +182,19 @@ class FileVerifier:
             return ActionUncertain("The intended file could not be inspected; its previous write remains uncertain.")
 
 
-class Actions:
-    __slots__ = ("clock", "identity", "journal", "resources", "run", "verifier")
+def _identity() -> str:
+    return uuid.uuid4().hex
 
-    def __init__(
-        self,
-        journal: ActionJournal,
-        run: RunRef,
-        resources: Resources,
-        *,
-        clock: Callable[[], float] = time.time,
-        identity: Callable[[], str] = lambda: uuid.uuid4().hex,
-    ) -> None:
-        self.journal, self.run, self.resources = journal, run, resources
-        self.clock, self.identity = clock, identity
-        self.verifier = FileVerifier()
+
+@dataclass(frozen=True, slots=True)
+class Actions:
+    journal: ActionJournal
+    run: RunRef
+    resources: Resources
+    _: KW_ONLY
+    clock: Callable[[], float] = time.time
+    identity: Callable[[], str] = _identity
+    verifier: FileVerifier = field(default_factory=FileVerifier)
 
     def unresolved(self) -> tuple[Action, ...]:
         return self.journal.unresolved_actions(self.run.task_id)

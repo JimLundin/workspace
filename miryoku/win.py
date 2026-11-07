@@ -10,6 +10,7 @@ import contextlib
 import gc
 import traceback
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
@@ -75,10 +76,9 @@ class KeyboardSystem(Protocol):
     def post_quit(self) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeKeyboardSystem:
     """The live Windows adapter; constructing it starts no hook or timer."""
-
-    __slots__ = ()
 
     def send_key(self, key: Key | Mod, *, down: bool) -> None:
         flags = (0 if down else inputs.KEYEVENTF_KEYUP) | (inputs.KEYEVENTF_EXTENDEDKEY if key.extended else 0)

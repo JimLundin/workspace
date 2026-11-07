@@ -5,6 +5,7 @@ physical cursor observations and its persisted position.
 """
 
 import time
+from dataclasses import dataclass
 from typing import Protocol
 
 lazy from PySide6 import QtWidgets
@@ -28,6 +29,7 @@ class OverlayDesktop(Protocol):
     def move(self, frame: int, area: Rect) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class NativeOverlayDesktop:
     def clock(self) -> float:
         return time.monotonic()

@@ -58,7 +58,7 @@ def make_agent(
         window,
         stop,
         work=work,
-        toolset=lambda agent: General(agent, feed_request=no_feed),
+        toolset=lambda agent: General.of(agent, feed_request=no_feed),
     )
 
 
@@ -263,7 +263,7 @@ def test_stop_closes_a_stalled_stream_and_preserves_earlier_tool_results(tmp_pat
             FakeWindow(),
             threading.Event(),
             work=agent.work,
-            toolset=lambda agent: General(agent, feed_request=no_feed),
+            toolset=lambda agent: General.of(agent, feed_request=no_feed),
             history=agent.history,
         )
         assert follow_up.run("What did it say?")
