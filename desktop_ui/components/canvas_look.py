@@ -36,16 +36,6 @@ PANEL_RADIUS: Final = 21  # the toolbar grown into its sections, as the island b
 SHADOW: Final = QtCore.QMargins(10, 4, 10, 12)
 
 
-class Role(Enum):
-    """Inter at the kit's sizes and weights, tightened as Apple's tracking table does."""
-
-    TITLE = auto()  # a card's title: 14 px semibold
-    GROUP = auto()  # an open group's title: 15 px semibold
-    META = auto()  # the meta line under a title: 11.5 px
-    BODY = auto()  # previews and details: 13 px
-    CONTROL = auto()  # control captions and counts: 12 px medium
-
-
 @dataclass(frozen=True, slots=True)
 class RoleType:
     size: float  # px
@@ -53,21 +43,19 @@ class RoleType:
     tracking: float  # absolute letter spacing, px
 
 
-TYPES: Final = every_member(
-    Role,
-    {
-        Role.TITLE: RoleType(14.0, 600, -0.084),
-        Role.GROUP: RoleType(15.0, 600, -0.15),
-        Role.META: RoleType(11.5, 400, 0.0),
-        Role.BODY: RoleType(13.0, 400, -0.04),
-        Role.CONTROL: RoleType(12.0, 500, 0.0),
-    },
-)
+class Role(Enum):
+    """Inter at the kit's sizes and weights, tightened as Apple's tracking table does."""
+
+    TITLE = RoleType(14.0, 600, -0.084)  # a card's title, semibold
+    GROUP = RoleType(15.0, 600, -0.15)  # an open group's title, semibold
+    META = RoleType(11.5, 400, 0.0)  # the meta line under a title
+    BODY = RoleType(13.0, 400, -0.04)  # previews and details
+    CONTROL = RoleType(12.0, 500, 0.0)  # control captions and counts, medium
 
 
 @lru_cache(maxsize=8)
 def face(role: Role) -> QtGui.QFont:
-    style = TYPES[role]
+    style = role.value
     value = text.face(style.size, style.weight)
     value.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, style.tracking)
     return value
