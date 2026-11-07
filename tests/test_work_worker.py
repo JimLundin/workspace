@@ -132,7 +132,7 @@ def test_a_submission_runs_on_the_worker_and_its_output_reaches_the_conversation
             completed.set()
 
     worker = Worker.leasing(tasks, tmp_path)
-    agent = WorkAgent(
+    agent = WorkAgent.open(
         tasks,
         ContextStore(tasks.path),
         worker,

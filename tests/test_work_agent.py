@@ -89,7 +89,7 @@ class WorkRig:
         self.errors: list[str] = []
         self.started: list[bool] = []
         self.finished: list[bool] = []
-        self.agent = WorkAgent(
+        self.agent = WorkAgent.open(
             self.tasks,
             self.saved_context,
             self.worker,
@@ -168,7 +168,7 @@ def test_canvas_intake_and_questions_continue_when_presentation_is_unavailable(t
         raise RuntimeError("Fixture conversation presentation is unavailable")
 
     canvas = WorkCanvas(tmp_path / "canvas.sqlite3", submit, lambda _publication: None, autonomous=True)
-    agent = WorkAgent(
+    agent = WorkAgent.open(
         tasks,
         ContextStore(tasks.path),
         RecordingWorker(),

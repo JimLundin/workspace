@@ -10,10 +10,11 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import assert_never
 
 from assistant.conversation_output import ConversationOutput
+from cell import Cell
 lazy import contracts.presentation
 lazy from assistant.work_service import IdentifiedSubmission, Issued, Worker, WorkService
 lazy from automation.activity import ContextSnapshot
@@ -131,45 +132,66 @@ def _drained[T](source: queue.Queue[T] | queue.SimpleQueue[T], limit: int) -> It
         yield item
 
 
+def _identity() -> str:
+    return uuid.uuid4().hex
+
+
+@dataclass(frozen=True, slots=True)
+class _Frontend:
+    """The observer's state, replaced whole under the agent's lock."""
+
+    snapshot: WorkSnapshot = field(default_factory=WorkSnapshot)
+    conversation: str | None = None
+    window: ConversationOutput | None = None
+    thread: threading.Thread | None = None
+    ordinary_pending: int = 0
+    sequence: int = 0
+    last_stop: StopConversation | None = None
+    last_submission_source: str | None = None
+    reported_running: bool = False
+    pending: frozendict[str, str | None] = frozendict()
+    """Submissions not yet observed in the journal, and their conversation."""
+    queued: frozenset[str] = frozenset()
+    settled: frozendict[str, int] = frozendict()
+    """The revision of each task already presented."""
+    started: bool = False
+    """Whether this process has taken its first snapshot of existing work."""
+    displayed: Task | None = None
+    rejected_input: tuple[str, str] | None = None
+    watch_groups: frozendict[str, frozenset[str]] = frozendict()
+    watched: frozenset[str] = frozenset()
+    live: Callable[[contracts.presentation.LiveMessage], None] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class WorkAgent:
-    __slots__ = (
-        "_closed",
-        "_closing",
-        "_conversation",
-        "_create_window",
-        "_displayed",
-        "_events",
-        "_jobs",
-        "_last_stop",
-        "_last_submission_source",
-        "_live",
-        "_lock",
-        "_ordinary_pending",
-        "_pending",
-        "_queued",
-        "_rejected_input",
-        "_reported_running",
-        "_sequence",
-        "_service",
-        "_settled",
-        "_snapshot",
-        "_started",
-        "_thread",
-        "_wake",
-        "_watch_groups",
-        "_watched",
-        "clock",
-        "context",
-        "identity",
-        "on_done",
-        "on_snapshot",
-        "on_start",
-        "report_error",
-        "window",
+    # Journal and worker, view construction and independent frontend
+    # callbacks compose one observer lifetime.
+    _service: WorkService
+    _create_window: Callable[[WorkAgent], ConversationOutput]
+    on_snapshot: Callable[[WorkSnapshot], None] = field(kw_only=True)
+    on_done: Callable[[], None] = field(kw_only=True)
+    report_error: Callable[[str], None] = field(kw_only=True)
+    on_start: Callable[[], None] | None = field(default=None, kw_only=True)
+    context: Callable[[], ContextSnapshot] | None = field(default=None, kw_only=True)
+    clock: Callable[[], float] = field(default=time.time, kw_only=True)
+    identity: Callable[[], str] = field(default=_identity, kw_only=True)
+    _state: Cell[_Frontend] = field(default_factory=lambda: Cell(_Frontend()), init=False, repr=False)
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
+    # A Stop marker follows its accepted work in FIFO order. Between two
+    # distinct Stop markers there is at least one ordinary command, so
+    # 256 ordinary slots require at most 257 reserved control slots.
+    _jobs: queue.Queue[Job] = field(default_factory=lambda: queue.Queue[Job](maxsize=513), init=False, repr=False)
+    _wake: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _closing: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _events: queue.SimpleQueue[tuple[RunRef, PresentationEvent]] = field(
+        default_factory=queue.SimpleQueue[tuple[RunRef, PresentationEvent]], init=False, repr=False
     )
 
-    def __init__(  # noqa: PLR0913 - composition root for durable work
-        self,
+    @classmethod
+    def open(  # noqa: PLR0913 - composition root for durable work
+        cls,
         tasks: TaskStore,
         saved_context: ContextStore,
         worker: Worker,
@@ -181,66 +203,67 @@ class WorkAgent:
         on_start: Callable[[], None] | None = None,
         context: Callable[[], ContextSnapshot] | None = None,
         clock: Callable[[], float] = time.time,
-        identity: Callable[[], str] = lambda: uuid.uuid4().hex,
-    ) -> None:
-        # Journal and worker, view construction and independent frontend
-        # callbacks compose one observer lifetime.
-        self._service = WorkService(tasks, saved_context, worker)
-        self._create_window = create_window
-        self.on_snapshot, self.on_done, self.report_error, self.on_start = on_snapshot, on_done, report_error, on_start
-        self.context, self.clock, self.identity = context, clock, identity
-        self._lock = threading.RLock()
-        # A Stop marker follows its accepted work in FIFO order. Between two
-        # distinct Stop markers there is at least one ordinary command, so
-        # 256 ordinary slots require at most 257 reserved control slots.
-        self._jobs: queue.Queue[Job] = queue.Queue(maxsize=513)
-        self._ordinary_pending = self._sequence = 0
-        self._last_stop: StopConversation | None = None
-        self._last_submission_source: str | None = None
-        self._wake, self._closing, self._closed = threading.Event(), threading.Event(), threading.Event()
-        self._thread: threading.Thread | None = None
-        self._conversation: str | None = None
-        self._snapshot = WorkSnapshot()
-        self._reported_running = False
-        self._pending: dict[str, str | None] = {}
-        self._queued: set[str] = set()
-        self._settled: dict[str, int] = {}
-        self._started = False
-        """Whether this process has taken its first snapshot of existing work."""
-        self._displayed: Task | None = None
-        self._rejected_input: tuple[str, str] | None = None
-        self._watch_groups: dict[str, frozenset[str]] = {}
-        self._watched: frozenset[str] = frozenset()
-        self._live: Callable[[contracts.presentation.LiveMessage], None] | None = None
-        self._events: queue.SimpleQueue[tuple[RunRef, PresentationEvent]] = queue.SimpleQueue()
-        self.window: ConversationOutput | None = None
+        identity: Callable[[], str] = _identity,
+    ) -> WorkAgent:
+        service = WorkService(tasks, saved_context, worker)
+        return cls(
+            service,
+            create_window,
+            on_snapshot=on_snapshot,
+            on_done=on_done,
+            report_error=report_error,
+            on_start=on_start,
+            context=context,
+            clock=clock,
+            identity=identity,
+        )
+
+    @property
+    def window(self) -> ConversationOutput | None:
+        return self._state.get().window
+
+    @property
+    def conversation(self) -> str | None:
+        return self._state.get().conversation
+
+    @property
+    def displayed(self) -> Task | None:
+        return self._state.get().displayed
+
+    @property
+    def rejected_input(self) -> tuple[str, str] | None:
+        return self._state.get().rejected_input
 
     def start_worker(self) -> None:
         """Begin observation after the application has composed its callbacks."""
         with self._lock:
-            if self._thread is None and not self._closing.is_set():
-                self._thread = threading.Thread(target=self._observe, name="work frontend", daemon=True)
-                self._thread.start()
+            if self._state.get().thread is None and not self._closing.is_set():
+                thread = threading.Thread(target=self._observe, name="work frontend", daemon=True)
+                self._state.set(replace(self._state.get(), thread=thread))
+                thread.start()
 
     def _source(self, profile: Profile = RequestKind.GENERAL) -> RequestSource:
-        if self._conversation is None:
-            self._conversation = self.identity()
-        return RequestSource(self._conversation, profile)
+        if (conversation := self.conversation) is None:
+            conversation = self.identity()
+            self._state.set(replace(self._state.get(), conversation=conversation))
+        return RequestSource(conversation, profile)
 
     def _enqueue(self, job: Issued | IdentifiedSubmission | Observe) -> bool:
         with self._lock:
-            if self._closing.is_set() or self._ordinary_pending >= 256:
+            if self._closing.is_set() or self._state.get().ordinary_pending >= 256:
                 return False
             try:
                 self._jobs.put_nowait(job)
             except queue.Full:
                 return False
-            self._ordinary_pending += 1
-            self._sequence += 1
+            self._state.set(replace(self._state.get(), ordinary_pending=self._state.get().ordinary_pending + 1))
+            self._state.set(replace(self._state.get(), sequence=self._state.get().sequence + 1))
             match job:
                 case IdentifiedSubmission() | Issued(command=Submit()):
-                    self._pending[job.identity] = job.source.conversation_id
-                    self._last_submission_source = job.source.conversation_id
+                    self._state.set(
+                        replace(self._state.get(), pending=frozendict({**self._state.get().pending, job.identity: job.source.conversation_id}))
+                    )
+                    self._state.set(replace(self._state.get(), last_submission_source=job.source.conversation_id))
                 case _:
                     pass
             self._wake.set()
@@ -310,7 +333,7 @@ class WorkAgent:
         with self._lock:
             if self._closing.is_set():
                 raise ValueError("Work is closing.")
-            groups = self._watch_groups.copy()
+            groups = dict(self._state.get().watch_groups)
             if watched:
                 groups[owner] = watched
             else:
@@ -320,13 +343,13 @@ class WorkAgent:
             combined = frozenset(identity for group in groups.values() for identity in group)
             if len(combined) > 512:
                 raise ValueError("At most 512 saved tasks can be watched across all work views.")
-            self._watch_groups, self._watched = groups, combined
+            self._state.set(replace(self._state.get(), watch_groups=frozendict(groups), watched=combined))
             self._wake.set()
 
     def snapshot(self) -> WorkSnapshot:
         """Read the latest immutable committed projection without journal I/O."""
         with self._lock:
-            return self._snapshot
+            return self._state.get().snapshot
 
     def voice(self, text: str) -> None:
         if self.window is None or not self.window.reply_by_voice(text):
@@ -334,15 +357,16 @@ class WorkAgent:
 
     def running(self) -> bool:
         with self._lock:
-            return (self._conversation is not None and self._conversation in self._pending.values()) or any(
-                active(task) and in_conversation(task, self._conversation) for task in self._snapshot.tasks
+            return (self.conversation is not None and self.conversation in self._state.get().pending.values()) or any(
+                active(task) and in_conversation(task, self.conversation) for task in self._state.get().snapshot.tasks
             )
 
     def _panel(self) -> ConversationOutput:
         with self._lock:
-            if self.window is None:
-                self.window = self._create_window(self)
-            return self.window
+            if (window := self.window) is None:
+                window = self._create_window(self)
+                self._state.set(replace(self._state.get(), window=window))
+            return window
 
     def prepare(self) -> None:
         self._panel()
@@ -359,17 +383,17 @@ class WorkAgent:
 
     def stop(self) -> None:
         with self._lock:
-            if self._closing.is_set() or self._conversation is None:
+            if self._closing.is_set() or self.conversation is None:
                 return
-            if self._last_submission_source != self._conversation and not any(
-                in_conversation(task, self._conversation) and not terminal(task.state) for task in self._snapshot.tasks
+            if self._state.get().last_submission_source != self.conversation and not any(
+                in_conversation(task, self.conversation) and not terminal(task.state) for task in self._state.get().snapshot.tasks
             ):
                 return
-            stop = StopConversation(self._conversation, self._sequence)
-            if stop == self._last_stop:
+            stop = StopConversation(self.conversation, self._state.get().sequence)
+            if stop == self._state.get().last_stop:
                 return
             self._jobs.put_nowait(stop)
-            self._last_stop = stop
+            self._state.set(replace(self._state.get(), last_stop=stop))
             self._wake.set()
             if self.window is not None:
                 try:
@@ -381,12 +405,13 @@ class WorkAgent:
         with self._lock:
             if self._closing.is_set():
                 return False
-            was_running, self._reported_running = self._reported_running, False
-            self._conversation = self.identity()
-            self._displayed = self._live = None
-            self._rejected_input = None
-            self._settled.clear()
-            self._queued.clear()
+            was_running = self._state.get().reported_running
+            self._state.set(replace(self._state.get(), reported_running=False))
+            new_conversation = self.identity()
+            self._state.set(replace(self._state.get(), conversation=new_conversation))
+            self._state.set(replace(self._state.get(), displayed=None, live=None))
+            self._state.set(replace(self._state.get(), rejected_input=None))
+            self._state.set(replace(self._state.get(), settled=frozendict(), queued=frozenset()))
             if self.window is not None:
                 try:
                     self.window.reset()
@@ -409,17 +434,18 @@ class WorkAgent:
                     self.window.close()
                 except Exception:
                     self.report_error(traceback.format_exc())
-            if self._thread is None:
+            if self._state.get().thread is None:
                 # Commands may have arrived during composition, before startup.
-                self._thread = threading.Thread(target=self._observe, name="work frontend shutdown", daemon=True)
-                self._thread.start()
+                thread = threading.Thread(target=self._observe, name="work frontend shutdown", daemon=True)
+                self._state.set(replace(self._state.get(), thread=thread))
+                thread.start()
 
     def wait_closed(self, timeout: float | None = None) -> bool:
         return self._closed.wait(timeout)
 
     def _reply(self, task_id: str, request_id: str, reply: TextAnswer) -> bool:
         with self._lock:
-            task = next((task for task in self._snapshot.tasks if task.id == task_id), None)
+            task = next((task for task in self._state.get().snapshot.tasks if task.id == task_id), None)
             request = requested(task) if task is not None else None
             if request is None or request.id != request_id:
                 return False
@@ -439,22 +465,24 @@ class WorkAgent:
                 source: FeedRequest | None = FeedRequest(item, title, initiation=initiation)
             case _:
                 source = None
-        previous = self._displayed
+        previous = self.displayed
         if task == previous:
             return
         window = self._panel()
         if previous is None or previous.id != task.id:
             self._clear_input()
-            window.begin(source.title if source is not None else task.prompt, queued=task.id in self._queued, source=source)
-            self._queued.discard(task.id)
-            self._live = window.updates()
+            window.begin(source.title if source is not None else task.prompt, queued=task.id in self._state.get().queued, source=source)
+            self._state.set(replace(self._state.get(), queued=self._state.get().queued - {task.id}))
+            new_live = window.updates()
+            self._state.set(replace(self._state.get(), live=new_live))
         elif new_turn(previous, task):
             self._clear_input()
             if active(task):
                 window.finish()
                 window.begin(f"Continue: {task.title}", source=source)
-                self._live = window.updates()
-        self._displayed = task
+                new_live = window.updates()
+                self._state.set(replace(self._state.get(), live=new_live))
+        self._state.set(replace(self._state.get(), displayed=task))
         if task.checkpoint is not None and (previous is None or previous.checkpoint != task.checkpoint):
             window.step(task.checkpoint.summary)
         self._display_status(task)
@@ -487,7 +515,7 @@ class WorkAgent:
                 assert_never(task.state)
         if turn_ended(task):
             window.finish()
-            self._queued.clear()
+            self._state.set(replace(self._state.get(), queued=frozenset()))
 
     def _display_waiting(self, task: Task, reason: WaitReason) -> None:
         match reason:
@@ -508,14 +536,16 @@ class WorkAgent:
         with self._lock:
             if self._closing.is_set():
                 return
-            was_running = self._reported_running
-            self._snapshot = snapshot
-            if self._conversation is None:
-                self._conversation = next(
+            was_running = self._state.get().reported_running
+            self._state.set(replace(self._state.get(), snapshot=snapshot))
+            if self.conversation is None:
+                new_conversation = next(
                     (task.source.conversation_id for task in snapshot.tasks if not terminal(task.state)),
                     None,
                 )
-            is_running = self._reported_running = self.running()
+                self._state.set(replace(self._state.get(), conversation=new_conversation))
+            is_running = self.running()
+            self._state.set(replace(self._state.get(), reported_running=is_running))
         self.on_snapshot(snapshot)
         if not was_running and is_running and self.on_start is not None:
             self.on_start()
@@ -527,7 +557,7 @@ class WorkAgent:
             # A failed view must not change journal/transport availability or
             # prevent canvas intake. Retry presentation on the next observation.
             with self._lock:
-                self._displayed = self._live = None
+                self._state.set(replace(self._state.get(), displayed=None, live=None))
             self.report_error(traceback.format_exc())
 
     def _present(self, snapshot: WorkSnapshot) -> None:
@@ -535,47 +565,49 @@ class WorkAgent:
             if self._closing.is_set():
                 return
             self._restore_reply(snapshot)
-            tasks = sorted((task for task in snapshot.tasks if in_conversation(task, self._conversation)), key=chronological)
+            tasks = sorted((task for task in snapshot.tasks if in_conversation(task, self.conversation)), key=chronological)
             task_ids = {task.id for task in tasks}
-            self._settled = {identity: revision for identity, revision in self._settled.items() if identity in task_ids}
-            if not self._started:
+            new_settled = frozendict((identity, revision) for identity, revision in self._state.get().settled.items() if identity in task_ids)
+            self._state.set(replace(self._state.get(), settled=new_settled))
+            if not self._state.get().started:
                 # Finished work is history at startup, not news: presenting it
                 # replayed every old blocked or failed task as a warning balloon
                 # and beep each time Workspace restarted.
-                self._started = True
-                self._settled.update((task.id, task.revision) for task in tasks if not active(task))
-            if self._displayed is not None and self._displayed.id not in task_ids:
-                self._displayed = self._live = None
+                self._state.set(replace(self._state.get(), started=True))
+                finished = ((task.id, task.revision) for task in tasks if not active(task))
+                self._state.set(replace(self._state.get(), settled=frozendict({**self._state.get().settled, **dict(finished)})))
+            if self.displayed is not None and self.displayed.id not in task_ids:
+                self._state.set(replace(self._state.get(), displayed=None, live=None))
                 self._clear_input()
                 if self.window is not None:
                     self.window.finish()
-                self._queued.clear()
-            selected = next((task for task in tasks if self._displayed is not None and task.id == self._displayed.id), None)
-            candidates = [task for task in tasks if self._settled.get(task.id) != task.revision]
+                self._state.set(replace(self._state.get(), queued=frozenset()))
+            selected = next((task for task in tasks if self.displayed is not None and task.id == self.displayed.id), None)
+            candidates = [task for task in tasks if self._state.get().settled.get(task.id) != task.revision]
             while selected is not None or candidates:
                 selected = selected if selected is not None else candidates[0]
                 self._display(selected)
                 if active(selected):
                     break
-                self._settled[selected.id] = selected.revision
+                self._state.set(replace(self._state.get(), settled=frozendict({**self._state.get().settled, selected.id: selected.revision})))
                 candidates = [task for task in candidates if task.id != selected.id]
                 selected = None
-                self._displayed = None
+                self._state.set(replace(self._state.get(), displayed=None))
             for task in tasks:
                 if (
                     active(task)
-                    and (self._displayed is None or task.id != self._displayed.id)
-                    and task.id not in self._queued
-                    and len(self._queued) < 100
+                    and (self.displayed is None or task.id != self.displayed.id)
+                    and task.id not in self._state.get().queued
+                    and len(self._state.get().queued) < 100
                 ):
                     self._panel().queued(task.prompt)
-                    self._queued.add(task.id)
+                    self._state.set(replace(self._state.get(), queued=self._state.get().queued | {task.id}))
 
     def _restore_reply(self, snapshot: WorkSnapshot) -> None:
-        if self._rejected_input is None:
+        if (rejected := self.rejected_input) is None:
             return
-        task_id, request_id = self._rejected_input
-        self._rejected_input = None
+        task_id, request_id = rejected
+        self._state.set(replace(self._state.get(), rejected_input=None))
         task = next((task for task in snapshot.tasks if task.id == task_id), None)
         request = requested(task) if task is not None else None
         # A failure is only recorded for the displayed task, and publishing restores it before redisplaying.
@@ -586,19 +618,19 @@ class WorkAgent:
 
     def _observed_ids(self) -> tuple[frozenset[str], frozenset[str]]:
         with self._lock:
-            watched = self._watched
+            watched = self._state.get().watched
             # The displayed task owns any projected request; its reply needs that task observed.
-            if self._displayed is not None and requested(self._displayed) is not None:
-                watched = watched | {self._displayed.id}
-            return watched, frozenset(self._pending)
+            if self.displayed is not None and requested(self.displayed) is not None:
+                watched = watched | {self.displayed.id}
+            return watched, frozenset(self._state.get().pending)
 
     def _publish_unavailable(self) -> None:
         watched, pending = self._observed_ids()
         with self._lock:
             if self._closing.is_set():
                 return
-            snapshot = self._service.unavailable(self._snapshot, watched, pending)
-            self._snapshot = snapshot
+            snapshot = self._service.unavailable(self._state.get().snapshot, watched, pending)
+            self._state.set(replace(self._state.get(), snapshot=snapshot))
         self.on_snapshot(snapshot)
 
     def deliver(self, run: RunRef, event: PresentationEvent) -> None:
@@ -627,7 +659,7 @@ class WorkAgent:
 
     def _present_log(self, run: RunRef, event: PresentationEvent) -> bool:
         with self._lock:
-            task = self._displayed
+            task = self.displayed
             if task is None or not owns(task, run) or self.window is None or self._closing.is_set():
                 return False
             match event:
@@ -644,12 +676,12 @@ class WorkAgent:
                         self.window.problem(text)
                     return True
                 case contracts.presentation.Answer(text=text) | contracts.presentation.ReasoningSummary(text=text):
-                    live = self._live
+                    live = self._state.get().live
                     if live is None:
                         return True
                 case contracts.presentation.ToolActivity():
-                    if self._live is not None:
-                        self._live(event)
+                    if (live := self._state.get().live) is not None:
+                        live(event)
                     return True
                 case _:
                     assert_never(event)
@@ -672,7 +704,7 @@ class WorkAgent:
                     pass
                 case Issued() | IdentifiedSubmission() | Observe():
                     with self._lock:
-                        self._ordinary_pending -= 1
+                        self._state.set(replace(self._state.get(), ordinary_pending=self._state.get().ordinary_pending - 1))
             try:
                 match job:
                     case Issued() | IdentifiedSubmission():
@@ -695,9 +727,14 @@ class WorkAgent:
                 with self._lock:
                     match job:
                         case Issued() | IdentifiedSubmission():
-                            self._pending.pop(job.identity, None)
-                        case StopConversation() if self._last_stop == job:
-                            self._last_stop = None
+                            self._state.set(
+                                replace(
+                                    self._state.get(),
+                                    pending=frozendict((key, value) for key, value in self._state.get().pending.items() if key != job.identity),
+                                )
+                            )
+                        case StopConversation() if self._state.get().last_stop == job:
+                            self._state.set(replace(self._state.get(), last_stop=None))
                         case _:
                             pass
             if isinstance(job, Observe):
@@ -710,8 +747,8 @@ class WorkAgent:
             case Issued(command=AnswerTask(task_id=task_id, request_id=request_id)) as reply:
                 self._service.reply_failed(reply, self._service.problem, watched=watched)
                 with self._lock:
-                    if self._displayed is not None and self._displayed.id == task_id:
-                        self._rejected_input = task_id, request_id
+                    if self.displayed is not None and self.displayed.id == task_id:
+                        self._state.set(replace(self._state.get(), rejected_input=(task_id, request_id)))
             case _:
                 pass
 
