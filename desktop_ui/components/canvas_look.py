@@ -15,6 +15,7 @@ lazy from PySide6 import QtCore, QtGui
 lazy from PySide6.QtCore import Qt
 
 from contracts.feed_origin import Origin
+from contracts.members import every_member
 from desktop_ui.components import text
 from desktop_ui.components.appearance import ATTENTION, GLASS_ACCENT, GlassLook, Rim, Scheme, Shade, Tokens
 from desktop_ui.components.bubble import paint_badge, rim_gradient
@@ -45,23 +46,30 @@ class Role(Enum):
     CONTROL = auto()  # control captions and counts: 12 px medium
 
 
+@dataclass(frozen=True, slots=True)
+class RoleType:
+    size: float  # px
+    weight: int  # CSS weight, 100 to 900
+    tracking: float  # absolute letter spacing, px
+
+
+TYPES: Final = every_member(
+    Role,
+    {
+        Role.TITLE: RoleType(14.0, 600, -0.084),
+        Role.GROUP: RoleType(15.0, 600, -0.15),
+        Role.META: RoleType(11.5, 400, 0.0),
+        Role.BODY: RoleType(13.0, 400, -0.04),
+        Role.CONTROL: RoleType(12.0, 500, 0.0),
+    },
+)
+
+
 @lru_cache(maxsize=8)
 def face(role: Role) -> QtGui.QFont:
-    match role:
-        case Role.TITLE:
-            size, weight, tracking = 14.0, 600, -0.084
-        case Role.GROUP:
-            size, weight, tracking = 15.0, 600, -0.15
-        case Role.META:
-            size, weight, tracking = 11.5, 400, 0.0
-        case Role.BODY:
-            size, weight, tracking = 13.0, 400, -0.04
-        case Role.CONTROL:
-            size, weight, tracking = 12.0, 500, 0.0
-        case _:
-            assert_never(role)
-    value = text.face(size, weight)
-    value.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, tracking)
+    style = TYPES[role]
+    value = text.face(style.size, style.weight)
+    value.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, style.tracking)
     return value
 
 

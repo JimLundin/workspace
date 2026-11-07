@@ -9,6 +9,7 @@ from typing import Final, assert_never
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Rect
@@ -57,15 +58,12 @@ def _keycap(kind: Kind, theme: Tokens) -> tuple[str, str]:
             assert_never(kind)
 
 
+PRESSED: Final = every_member(Scheme, {Scheme.DARK: ("#f5f5f7", "#161618"), Scheme.LIGHT: ("#1d1d1f", "#ffffff")})
+"""A pressed key lights up in the scheme's ink, unlike any binding's tint."""
+
+
 def _pressed(theme: Tokens) -> tuple[str, str]:
-    """A pressed key lights up in the scheme's ink, unlike any binding's tint."""
-    match theme.scheme:
-        case Scheme.DARK:
-            return "#f5f5f7", "#161618"
-        case Scheme.LIGHT:
-            return "#1d1d1f", "#ffffff"
-        case _:
-            assert_never(theme.scheme)
+    return PRESSED[theme.scheme]
 
 
 _LAYERS: Final[tuple[tuple[str, Layer | None], ...]] = (("Base", None), *((layer.name.title(), layer) for layer in Layer))

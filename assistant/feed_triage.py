@@ -33,6 +33,7 @@ from assistant.feed_contracts import (
 from assistant.feed_history import Decision, restored_history
 from assistant.feed_sources import Candidate, chat_message
 from contracts.feed_origin import Origin
+from contracts.members import every_member
 
 # Triage owns these assessments; every other disposition is explicit user handling.
 AUTOMATIC: Final = frozenset({Disposition.ACTION, Disposition.QUIET})
@@ -179,15 +180,20 @@ def selected(board: Board, identity: str, revision: str, choice: str) -> tuple[A
     return item, option
 
 
+RECIPES: Final = every_member(
+    SolutionKind,
+    {
+        SolutionKind.DRAFT: "Prepare a concrete draft response for the user to review.",
+        SolutionKind.CHECK: "Investigate the relevant facts and recommend a concrete resolution.",
+        SolutionKind.PLAN: "Prepare a practical solution or plan with concrete next steps.",
+    },
+)
+"""Each solution's trusted recipe."""
+
+
 def solution_task(item: Assessment, option: Solution) -> tuple[str, str]:
     # The trusted recipe defines scope; model/source text cannot grant additional permissions.
-    match option.kind:
-        case SolutionKind.DRAFT:
-            recipe = "Prepare a concrete draft response for the user to review."
-        case SolutionKind.CHECK:
-            recipe = "Investigate the relevant facts and recommend a concrete resolution."
-        case SolutionKind.PLAN:
-            recipe = "Prepare a practical solution or plan with concrete next steps."
+    recipe = RECIPES[option.kind]
     context = SolutionContext(item.identity, item.title, item.summary, proposal_revision(item), option.detail, item.references)
     task = identity("feed-choice", proposal_revision(item) + ":" + option.identity)
     prompt = (

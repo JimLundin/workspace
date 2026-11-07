@@ -13,6 +13,7 @@ from functools import lru_cache
 from typing import Final, assert_never
 
 from contracts.feed_origin import App
+from contracts.members import every_member
 from desktop_ui.components import typeface
 from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance
@@ -286,6 +287,26 @@ def rim_stops(rim: Rim) -> tuple[Stop, ...]:
     return (Stop(0, "#ffffff", rim.high), Stop(0.34, "#ffffff", rim.low), Stop(0.72, "#ffffff", rim.low), Stop(1, "#ffffff", rim.end))
 
 
+GLASS_SCHEMES: Final = every_member(
+    appearance.Frost,
+    {appearance.Frost.BRIGHT: Scheme.LIGHT, appearance.Frost.LIGHT: Scheme.DARK, appearance.Frost.SMOKED: Scheme.DARK},
+)
+"""A glass capsule or menu's scheme follows the desktop behind it."""
+
+SMALL_VEILS: Final = every_member(
+    appearance.Frost,
+    {
+        appearance.Frost.BRIGHT: Shade("#ffffff", 0.2),
+        appearance.Frost.LIGHT: Shade("#1c1c20", 0.26),
+        # A mixed desktop needs a heavier veil to keep small text legible.
+        appearance.Frost.SMOKED: Shade("#1c1c20", 0.62),
+    },
+)
+CARD_VEILS: Final = every_member(Scheme, {Scheme.DARK: Shade("#222226", 0.64), Scheme.LIGHT: Shade("#fafafc", 0.66)})
+CANVAS_BAR_VEILS: Final = every_member(Scheme, {Scheme.DARK: Shade("#1e1e22", 0.84), Scheme.LIGHT: Shade("#fbfbfd", 0.86)})
+GLASS_RIMS: Final = every_member(Scheme, {Scheme.DARK: Rim(0.55, 0.06, 0.22), Scheme.LIGHT: Rim(0.95, 0.16, 0.42)})
+
+
 def _scheme(pane: Pane, material: appearance.Material) -> Scheme:
     match pane:
         case Capsule(frost=frost) | Menu(frost=frost):
@@ -297,55 +318,24 @@ def _scheme(pane: Pane, material: appearance.Material) -> Scheme:
                     pass
                 case _:
                     assert_never(material)
-            match frost:
-                case appearance.Frost.BRIGHT:
-                    return Scheme.LIGHT
-                case appearance.Frost.LIGHT | appearance.Frost.SMOKED:
-                    return Scheme.DARK
-                case _:
-                    assert_never(frost)
+            return GLASS_SCHEMES[frost]
         case Card(scheme=scheme) | CanvasBar(scheme=scheme):
             return scheme
         case _:
             assert_never(pane)
 
 
-def _small_veil(frost: appearance.Frost) -> Shade:
-    match frost:
-        case appearance.Frost.BRIGHT:
-            return Shade("#ffffff", 0.2)
-        case appearance.Frost.LIGHT:
-            return Shade("#1c1c20", 0.26)
-        case appearance.Frost.SMOKED:
-            # A mixed desktop needs a heavier veil to keep small text legible.
-            return Shade("#1c1c20", 0.62)
-        case _:
-            assert_never(frost)
-
-
 def _veil(pane: Pane) -> Shade:
     match pane:
         case Capsule(frost=frost):
-            return _small_veil(frost)
+            return SMALL_VEILS[frost]
         case Menu(frost=frost):
-            small = _small_veil(frost)
+            small = SMALL_VEILS[frost]
             return Shade(small.color, max(small.opacity, 0.64))
         case Card(scheme=scheme):
-            match scheme:
-                case Scheme.DARK:
-                    return Shade("#222226", 0.64)
-                case Scheme.LIGHT:
-                    return Shade("#fafafc", 0.66)
-                case _:
-                    assert_never(scheme)
+            return CARD_VEILS[scheme]
         case CanvasBar(scheme=scheme):
-            match scheme:
-                case Scheme.DARK:
-                    return Shade("#1e1e22", 0.84)
-                case Scheme.LIGHT:
-                    return Shade("#fbfbfd", 0.86)
-                case _:
-                    assert_never(scheme)
+            return CANVAS_BAR_VEILS[scheme]
         case _:
             assert_never(pane)
 
@@ -392,14 +382,7 @@ def look(preference: appearance.Preference, pane: Pane, tint: Tint) -> Look:
         case _:
             assert_never(tint)
     scheme = _scheme(pane, appearance.Material.GLASS)
-    match scheme:
-        case Scheme.DARK:
-            rim = Rim(0.55, 0.06, 0.22)
-        case Scheme.LIGHT:
-            rim = Rim(0.95, 0.16, 0.42)
-        case _:
-            assert_never(scheme)
-    return GlassLook(_veil(pane), rim, lettering(tokens(scheme)))
+    return GlassLook(_veil(pane), GLASS_RIMS[scheme], lettering(tokens(scheme)))
 
 
 def reading(lettering: Lettering, tone: Tone, *, contrast: bool) -> Shade:

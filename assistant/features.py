@@ -11,7 +11,7 @@ handed to the worker thread (`submit`), which does one job at a time, in order.
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Literal, Protocol, assert_never
+from typing import Final, Literal, Protocol, assert_never
 
 from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, transcribe, wav
 from assistant.text import typed_text
@@ -79,14 +79,12 @@ class Capture:
     started: float
 
 
+LISTENING_TOOLS: Final[frozendict[Tool, Tool]] = frozendict({Tool.DICTATE_TOGGLE: Tool.DICTATE, Tool.AGENT_VOICE_TOGGLE: Tool.AGENT_VOICE})
+"""A toggle listens as its hold tool; every other tool listens as itself."""
+
+
 def listening_tool(source: Tool) -> Tool:
-    match source:
-        case Tool.DICTATE_TOGGLE:
-            return Tool.DICTATE
-        case Tool.AGENT_VOICE_TOGGLE:
-            return Tool.AGENT_VOICE
-        case _:
-            return source
+    return LISTENING_TOOLS.get(source, source)
 
 
 class Assistant:

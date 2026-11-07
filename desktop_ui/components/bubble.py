@@ -12,6 +12,7 @@ lazy from PySide6.QtCore import QPointF, QRectF, Qt
 lazy from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen
 
 from contracts.feed_origin import App
+from contracts.members import every_member
 from desktop_ui.components import typeface
 from desktop_ui.components.appearance import Rim, Shade, brand, rim_stops
 from desktop_ui.components.text import color, face
@@ -64,31 +65,27 @@ class Symbol:
 type Glyph = Letter | Symbol
 
 
+GLYPHS: Final = every_member(
+    App,
+    {
+        App.TEAMS: Letter("T"),
+        App.OUTLOOK: Letter("O"),
+        App.KANBAN: Letter("K"),
+        App.CODEX: Letter("X"),
+        App.CLAUDE: Letter("C"),
+        App.EDGE: Letter("E"),
+        App.WINDOWS: Symbol("grid"),
+        App.DOCUMENT: Symbol("doc"),
+        App.WEB_PAGE: Symbol("globe"),
+        App.WORKSPACE: Symbol("agent"),
+    },
+)
+"""Brands have distinct letters; Workspace and generic content use symbols."""
+
+
 def glyph(app: App) -> Glyph:
     """Brands have distinct letters; Workspace and generic content use symbols."""
-    match app:
-        case App.TEAMS:
-            return Letter("T")
-        case App.OUTLOOK:
-            return Letter("O")
-        case App.KANBAN:
-            return Letter("K")
-        case App.CODEX:
-            return Letter("X")
-        case App.CLAUDE:
-            return Letter("C")
-        case App.EDGE:
-            return Letter("E")
-        case App.WINDOWS:
-            return Symbol("grid")
-        case App.DOCUMENT:
-            return Symbol("doc")
-        case App.WEB_PAGE:
-            return Symbol("globe")
-        case App.WORKSPACE:
-            return Symbol("agent")
-        case _:
-            assert_never(app)
+    return GLYPHS[app]
 
 
 def paint_badge(painter: QPainter, at: QPointF, app: App) -> None:

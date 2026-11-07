@@ -9,7 +9,7 @@ whether something had to be launched.
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import assert_never
+from typing import Final, assert_never
 
 import protocol
 from desktop_ui.shell_items import PinnedApp, next_window
@@ -97,35 +97,27 @@ type Order = Navigation | Placing
 """What the application observer is asked to do."""
 
 
+KEYED: Final[frozendict[protocol.Tool, Order]] = frozendict(
+    {
+        protocol.Tool.FOCUS_LEFT: SpatialFocus(Direction.LEFT, Source.KEY),
+        protocol.Tool.FOCUS_RIGHT: SpatialFocus(Direction.RIGHT, Source.KEY),
+        protocol.Tool.FOCUS_UP: SpatialFocus(Direction.UP, Source.KEY),
+        protocol.Tool.FOCUS_DOWN: SpatialFocus(Direction.DOWN, Source.KEY),
+        protocol.Tool.DESKTOP_1: JumpDesktop(0, Source.KEY),
+        protocol.Tool.DESKTOP_2: JumpDesktop(1, Source.KEY),
+        protocol.Tool.DESKTOP_3: JumpDesktop(2, Source.KEY),
+        protocol.Tool.DESKTOP_4: JumpDesktop(3, Source.KEY),
+        protocol.Tool.DESKTOP_5: JumpDesktop(4, Source.KEY),
+        protocol.Tool.ZOOM: Zoom(Source.KEY),
+        protocol.Tool.PLACEMENT_PAUSE: Placing.TOGGLE_PAUSE,
+        protocol.Tool.PLACE_NOW: Placing.NOW,
+    }
+)
+"""The order each navigation key gives; other tools give none."""
+
+
 def keyed(tool: protocol.Tool) -> Order | None:
-    """The order a navigation key gives; None for every other tool."""
-    match tool:
-        case protocol.Tool.FOCUS_LEFT:
-            return SpatialFocus(Direction.LEFT, Source.KEY)
-        case protocol.Tool.FOCUS_RIGHT:
-            return SpatialFocus(Direction.RIGHT, Source.KEY)
-        case protocol.Tool.FOCUS_UP:
-            return SpatialFocus(Direction.UP, Source.KEY)
-        case protocol.Tool.FOCUS_DOWN:
-            return SpatialFocus(Direction.DOWN, Source.KEY)
-        case protocol.Tool.DESKTOP_1:
-            return JumpDesktop(0, Source.KEY)
-        case protocol.Tool.DESKTOP_2:
-            return JumpDesktop(1, Source.KEY)
-        case protocol.Tool.DESKTOP_3:
-            return JumpDesktop(2, Source.KEY)
-        case protocol.Tool.DESKTOP_4:
-            return JumpDesktop(3, Source.KEY)
-        case protocol.Tool.DESKTOP_5:
-            return JumpDesktop(4, Source.KEY)
-        case protocol.Tool.ZOOM:
-            return Zoom(Source.KEY)
-        case protocol.Tool.PLACEMENT_PAUSE:
-            return Placing.TOGGLE_PAUSE
-        case protocol.Tool.PLACE_NOW:
-            return Placing.NOW
-        case _:
-            return None
+    return KEYED.get(tool)
 
 
 @dataclass(frozen=True, slots=True)
