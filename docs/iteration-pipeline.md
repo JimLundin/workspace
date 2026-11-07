@@ -1,12 +1,12 @@
-# Checking and deploying changes
+# Checking and running changes
 
 Run native commands from the checkout in PowerShell. `Dev.cmd` uses the Windows
 `.venv` and adds native Git to PATH. `Dev.cmd setup` runs `uv sync --locked`:
 it creates that `.venv` from the user-installed Python 3.15 with exactly
-`uv.lock`, as an install does, plus the `dev` group; run it again after the lock
-changes. Dependencies are declared in `pyproject.toml` (exact versions in
-`[tool.uv] constraint-dependencies`); change them there and run `uv lock`. Keep the installed client
-(`%LOCALAPPDATA%\Programs\workspace-sdk\workspace`) separate so edits and tests never replace files in the running application.
+`uv.lock` plus the `dev` group; run it again after the lock changes. Workspace
+itself runs from this checkout and `.venv`. Dependencies are declared in
+`pyproject.toml` (exact versions in `[tool.uv] constraint-dependencies`); change
+them there and run `uv lock`.
 
 ```powershell
 .\Dev.cmd check --tests tests/test_feed_triage.py
@@ -35,7 +35,7 @@ For feedback on save (`Dev.cmd setup` installs the watcher):
 
 `watch` reruns the editing tier's affected tests in fresh processes after each
 debounced save. `--native` adds the affected native modules and slow tests. `preview` restarts the real toolbar with sample data and inert
-actions after each save; it starts no keeper, microphone, keyboard observer or
+actions after each save; it starts no launcher, microphone, keyboard observer or
 live communications. `watch --preview` runs the same preview beside the tests.
 
 ## Code volume
@@ -62,9 +62,12 @@ before/after product and test totals when a change cuts code.
    `ruff check` and `ruff format --check` before tests, and Pyright over the
    changed Python files alongside the tests. `--full` and CI type the whole tree.
 4. It runs the selected tests. Without `--tests` it compares source with the
-   installed copy and selects the test modules that import a changed module,
-   directly or through test helpers. Pin changes, application assets and a
-   missing baseline select the full source suite.
+   last source that tier passed (a receipt in
+   `%LOCALAPPDATA%\workspace\development\checked`) and selects the test modules
+   that import a changed module, directly or through test helpers. Pin changes,
+   application assets and a missing baseline select the full source suite. A
+   passing check records its source; a passing `--native` check records both
+   tiers.
 
 Checks have two tiers. The editing tier, the default, runs only portable tests:
 it leaves out native modules (`tests/test_windows_*.py`) and the slow portable
@@ -75,7 +78,7 @@ test over 3 s fails `--native` and `--full` by name unless `NATIVE_SLOW` lists
 it. Both lists have caps, so a new slow test means fixing another. `--native`
 adds the affected native modules and the slow tests. `--full` runs everything, natively, and types
 the whole tree: run it after broad native changes or before a merge.
-CI and the keeper also run the protected `selfcheck.py` full suite.
+CI runs the full suite with `python -m scripts.selfcheck`.
 
 Any failure stops before a receipt. `--tests` runs exactly the named files and
 `tests/test_x.py::test_name` selectors, with no time budget.
@@ -99,27 +102,17 @@ Every check that reaches execution writes timing evidence to
 `%LOCALAPPDATA%\workspace\development\timings\check-*.json`, or to the path given
 with `--timings`. Each failure is listed with its node id and a short summary.
 Editing checks cache per-file policy observations under
-`%LOCALAPPDATA%\workspace\development\analysis`; the protected selfcheck uses no cache.
+`%LOCALAPPDATA%\workspace\development\analysis`; `scripts.selfcheck` uses no cache.
 
 Generated tests live in `tests/properties/` and need the `test` extra
 (`Dev.cmd setup` installs it, in the `dev` group).
 
-## Deployment
+## Running
 
-Deploy with `Dev.cmd deploy`. It needs no prior check: the keeper checks the
-change itself. A changed dependency lock is installed like any change: the
-keeper builds the lock's environment from PyPI with uv (`environments.py`), checks the
-change with that environment's interpreter, and relaunches into it. A changed
-`.python-version` is refused: install that Python by hand.
-
-Deploy copies the Git-listed source files to a fresh folder in Windows Temp and
-sends the running keeper the same install request the agent uses, naming that
-folder. The keeper checks a frozen copy (the tests the change affects, portable
-and native; what failed in its previous check runs first, and the first failure
-ends the check), records the running copy as a version, installs
-the files and restarts only the programs the change affects. A change to a
-protected file relaunches the keeper. Deploy waits for the keeper's result and
-reports it; a refusal or undo fails the command. When no keeper is running,
-deploy takes the keeper's lock and installs the files through the same version
-store, and the copy stays stopped. `scripts/release.py` builds the release ZIP:
-the source alone, without dependencies.
+`StartWorkspace.cmd` syncs `.venv` from `uv.lock` and starts the gateway, layout,
+assistant and desktop with `launch.py`; the login shortcut runs it. After a
+checked change, `Dev.cmd deploy` restarts them all (`launch.py restart`); name
+programs to restart only those, as the tray's restart items do. Nothing
+supervises the programs: a crashed one stays down until the next start, and a
+bad change is undone by reverting its commit and restarting. Each program's
+output goes to `%LOCALAPPDATA%\workspace\state\<name>.log`.

@@ -80,8 +80,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
   tuples, never by filling a mutable container in a loop (nor by rebinding an
   accumulator there). A loop is for a side effect, which has no place in a
   comprehension; even then, keep side effects out of loops where you can. The
-  architecture review rejects a local container filled in a loop, except in the
-  keeper's protected files, which agents don't change.
+  architecture review rejects a local container filled in a loop.
 - Keep evaluation lazy: a function whose result is just a generator materialized
   (`return tuple(item for ...)`) returns an `Iterator` or is a generator, and the
   caller materializes when it must. Materialize where the value is stored in a
@@ -128,11 +127,15 @@ changing native code; keep `--full` for broad changes. Don't rerun a whole suite
 to clear a flaky native test: rerun only what failed, and report it. A test over
 the editing budget fails by name: speed it up or list it in
 `scripts/check_tiers.py`. Run native checks sequentially on the shared desktop.
-Do not change the protected selfcheck gate or CI's full checks.
+A passing check records the source it passed (`%LOCALAPPDATA%\workspace\development\checked`),
+and the next check selects the tests affected since; the first check runs everything.
+Change scripts under `scripts/` with `--native` before restarting, since the
+editing tier skips the slow check-process tests. CI runs the full suite
+(`python -m scripts.selfcheck`).
 
-# Committing and deploying
+# Committing and running
 
-Work is done only when it is committed, deployed and pushed. Changes with no
+Work is done only when it is committed, running and pushed. Changes with no
 runtime effect (comments, docstrings, docs) need only commit and push.
 
 - Commit in small steps, one change each, ending with the session's attribution
@@ -141,12 +144,12 @@ runtime effect (comments, docstrings, docs) need only commit and push.
 - Merge work from worktrees and subagents into the user's branch, then remove
   finished worktrees and branches. Never leave the only copy in a worktree, a
   stash or an unpushed branch.
-- Deploy with `Dev.cmd deploy`; it needs no prior check run. The running keeper
-  checks the tests the change affects, then installs it into
-  `C:\Users\Jim.Lundin\AppData\Local\Programs\workspace-sdk\workspace` and restarts only
-  what changed; a stopped copy just receives the files. The user has authorized
-  this without asking. A `uv.lock` change (`uv lock` after editing
-  `pyproject.toml`) deploys like any other: the keeper builds the lock's
-  environment from PyPI first. Never use pip; uv manages every environment. Only a `.python-version`
-  change is refused. Report any refusal or undo.
-- Report exactly what remains uncommitted, undeployed or unpushed, and why.
+- Workspace runs straight from this checkout's `.venv`: `StartWorkspace.cmd`
+  (also the login shortcut) syncs the environment from `uv.lock` and runs
+  `launch.py`, which starts the gateway, layout, assistant and desktop. After a
+  checked change, `Dev.cmd deploy` restarts them (`launch.py restart [NAME]`
+  restarts one); the user has authorized this without asking. Nothing
+  supervises the programs or undoes a change: revert the commit and restart.
+  After editing `pyproject.toml`, run `uv lock` and `Dev.cmd setup`. Never use
+  pip; uv manages every environment.
+- Report exactly what remains uncommitted, not restarted or unpushed, and why.

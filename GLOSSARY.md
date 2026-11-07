@@ -43,16 +43,8 @@ at a target (`contracts/card_actions.py`).
 **Moment**: what takes over the bar's island: dictation, a question or a
 **notice** (the agent's news). See [the island bar](docs/toolbar-design.md).
 
-**Component**: a program the keeper runs, the layout or the assistant, listed
-in the catalogue in `components.py`. It writes a **readiness marker** once it
-is up.
-
-**Keeper request**: a typed request in the keeper's inbox: install, undo or
-restart (`keeper_control.py`).
-
-**Installed version**: a commit in `%LOCALAPPDATA%\workspace\versions.git`
-holding one state of the installed source. Undo checks out the version an
-install replaced.
+**Component**: one of the programs `launch.py` starts (the gateway, the layout,
+the assistant and the desktop), listed in the catalogue in `components.py`.
 
 **Self-review**: a task in which the agent reviews its own runs and keeps
 **lessons**, rules that later general runs follow

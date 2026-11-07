@@ -11,33 +11,28 @@ installed Python 3.15 and needs no admin rights. It runs five processes:
 - **The assistant** (`assistant/`) owns dictation, meetings, the inbox feeds,
   the canvas document and the agent; durable agent work runs on its own threads
   (`automation/`). It has no window of its own: the desktop shows its work over
-  a loopback link. Either runs without the other, so a change to one restarts
-  only that one, and an agent task keeps running while the desktop restarts.
+  a loopback link. Either runs without the other, so an agent task keeps
+  running while the desktop restarts.
 - **The AI connection** (`gateway/`) is a local pass-through to your endpoint
-  that dictation, meetings and the agent share. It holds the key and keeps
-  running when a change to the rest of Workspace is installed.
-- **The keeper** (`keeper.py`) starts the others, restarts them if they
-  crash, and installs every change to Workspace. A change restarts only the
-  programs whose code it touches; editing the bar's specs restarts nothing.
+  that dictation, meetings and the agent share. It holds the key.
+- **The launcher** (`launch.py`) starts the four programs from this folder's
+  environment, and stops or restarts them. Nothing restarts a program that
+  crashes; start Workspace again.
 
 ## Install and start
 
 1. Install Windows x64 Python 3.15 with the Python launcher, and
    [uv](https://docs.astral.sh/uv/getting-started/installation/).
-2. Extract `workspace-python315-win64.zip` into a folder you can write to.
+2. Clone the repository into a folder you can write to.
 3. Set the environment variables below for your account, then restart
    Workspace whenever you change one.
 4. Turn on **Let desktop apps access your microphone** in Windows privacy
    settings.
-5. Double-click `StartWorkspace.cmd`. The first start installs the pinned
-   dependencies from PyPI with [uv](https://docs.astral.sh/uv/) (install it
-   first) into their own environment
-   (`%LOCALAPPDATA%\workspace\environments`), which takes a minute or two and
-   needs the network; later starts reuse it. To start Workspace at login, put a
-   shortcut to it in `shell:startup`.
-
-An installed change to the dependency lock builds its own environment the same
-way before it is checked, and undoing it switches back to the previous one.
+5. Double-click `StartWorkspace.cmd`. It syncs the pinned dependencies from
+   PyPI with [uv](https://docs.astral.sh/uv/) into the folder's `.venv` (the
+   first time takes a minute or two and needs the network), then starts the
+   programs. To start Workspace at login, put a shortcut to it in
+   `shell:startup`. `python launch.py restart` restarts them after a change.
 
 `pyw -3.15 miryoku.pyw` runs the layout alone.
 
@@ -177,16 +172,6 @@ Kanban. It runs without confirmation prompts and stops after 80 steps. It asks
 questions in the bar, and you answer by holding **X + K**. It collects work,
 sources and notes on the canvas. Tasks are saved, so a restart resumes them.
 
-Ask the agent to change Workspace, such as "add a snippet for my email
-address". It edits a copy of the source under `%LOCALAPPDATA%\workspace` and
-runs the checks. Then the keeper checks the copy again, installs it, and restarts
-only the programs the change affects. If the new version crashes during its
-ten-minute trial, the keeper undoes it. Each installed version is a commit in
-`%LOCALAPPDATA%\workspace\versions.git`. After installation, the agent pushes
-the change to `main`. Ask it to "publish it for review" to push a
-`workspace/agent-*` branch instead, without installing. Publishing needs Git for
-Windows on `PATH` with credentials.
-
 ## Logs and data
 
 Everything is in `%LOCALAPPDATA%\workspace`.
@@ -195,7 +180,7 @@ Everything is in `%LOCALAPPDATA%\workspace`.
 |---|---|
 | `usage.jsonl` | Feature use and timings, never what you typed or said |
 | `assistant.log`, `layout.log` | Problems and crashes |
-| `keeper.log` | Starts, installs, trials and undos |
+| `state\*.log` | Each program's output and crashes, written by the launcher |
 | `agent-ui.log` | View startup and errors |
 | `work/work.sqlite3` | Saved tasks, questions and action outcomes |
 | `work/canvas.sqlite3` | The canvas |

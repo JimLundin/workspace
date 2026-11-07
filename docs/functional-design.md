@@ -11,8 +11,8 @@ for the agent. Tests pass concrete adapters for these.
 
 | Process | Entry | Owns |
 | --- | --- | --- |
-| Keeper | `workspace.pyw`, `keeper.py` | Starts and restarts the components, checks and installs changes, trials and undo |
-| AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway`, `components` and `link`, so other deploys leave it running |
+| Launcher | `StartWorkspace.cmd`, `launch.py` | Starts, stops and restarts the components from the checkout's `.venv`; it supervises nothing |
+| AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway`, `components` and `link` |
 | Layout | `miryoku.pyw`, `miryoku/` | The keyboard hook and remapping. Standard library and `winapi/` only |
 | Assistant | `assistant/__main__.py`, `assistant/`, `automation/` | Dictation, meetings, feeds, the canvas document and the agent, on a native message loop plus worker threads. No Qt and no UI |
 | Desktop | `desktop/__main__.py`, `desktop_ui/` | The bar, tray, work canvas views, overlay and window placement, on Qt's event loop. Reaches the assistant only through `desktop_ui.assistant_port` |
@@ -25,27 +25,18 @@ carrying `contracts.desktop_link` messages. The assistant publishes states
 commands. The layout posts each request to its owner (`protocol.owner`): app,
 window, inbox and switcher keys to the desktop, the rest to the assistant;
 what the desktop shows (layer, chord, pressed keys) to the desktop; the
-layout's state to both. A clean exit of the desktop (Quit in its tray) quits
-Workspace; the assistant exits only when the keeper closes it.
-
-The keeper and its helpers are protected: the agent can't change them, and a
-deploy that changes one relaunches the keeper. A changed data file restarts the
-programs that import its package; files under an entry's `live_assets` restart
-nothing, because their program reloads them.
+layout's state to both. Quit in the tray runs `launch.py stop`, which asks
+each program to quit in reverse start order.
 
 ## Top-level modules
 
 | Module | Role |
 | --- | --- |
-| `keeper.py` | Supervision, the install pipeline, trials, undo, and `Versions` (a Git repository of installed versions) |
-| `keeper_control.py` | Typed keeper requests (`Install`, `Undo`, `Restart`) and their results |
-| `components.py` | The component catalogue: the gateway, layout, assistant and desktop, their windows, readiness markers and endpoint files |
-| `restart_plan.py` | Which components a change restarts, from both versions' import graphs |
-| `selfcheck.py` | The compile, import and test gate every install passes |
+| `launch.py` | Starts, stops and restarts the components |
+| `components.py` | The component catalogue: the gateway, layout, assistant and desktop, their windows, quit messages and endpoint files |
 | `protocol.py` | Window messages from the layout to the desktop and the assistant, the `Tool` and `App` requests, and each request's owner (`Side`, `owner`) |
 | `config.py` | User settings: apps, snippets, agent step limit, dark-screen delay |
 | `usage.py`, `diagnostics.py` | The usage log and its failure details |
-| `environments.py` | One virtual environment per dependency lock, built from PyPI by uv; the keeper and every program run its interpreter |
 | `winapi/` | Typed Win32 and COM bindings: the only `ctypes` code |
 
 ## `miryoku/`
@@ -65,13 +56,12 @@ removes the hook and reinstalls it. Measure latency with
 | `llm.py` | `Settings` from the environment, the SDK clients, transcription and one-shot questions |
 | `features.py`, `control_policy.py` | What each key and tray menu entry does |
 | `sdk.py`, `agent.py`, `agent_execution.py`, `task_profiles.py` | The Agents SDK boundary, the agent loop, and each task profile's tools and context |
-| `agent_tools.py`, `*_tools.py` | Tool families: desktop, browser, business (Teams, Outlook, Kanban), canvas, meetings, tasks, self-change, self-review |
+| `agent_tools.py`, `*_tools.py` | Tool families: desktop, browser, business (Teams, Outlook, Kanban), canvas, meetings, tasks, self-review |
 | `browser*.py`, `web_apps.py` | The agent's own Edge over CDP, and typed web-app operations |
 | `feed_*.py`, `notification_*.py`, `communications*.py` | Teams and Windows notification sources, screening and triage |
 | `personal_work_*.py` | Work threads collected from Outlook, Teams and Kanban |
 | `work_canvas.py`, `canvas_*.py` | The canvas document's owner (`canvas.sqlite3`) |
 | `meetings.py`, `meeting_*.py`, `automatic_meetings.py` | Meeting recording, its journal and transcript, and Teams auto-record |
-| `workspace.py`, `publishing.py` | The agent's source copy, and landing or publishing its changes with Git |
 
 ## `automation/`
 

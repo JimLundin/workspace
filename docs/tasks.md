@@ -4,28 +4,11 @@ What's left after splitting the desktop from the assistant (November 2026).
 Each task is meant to fit in one short session and ship as its own commits.
 Delete a task when it's done.
 
-## 1. Make checking and deploying fast
+## 1. Make checking fast
 
-Done:
-
-- The keeper's install check runs the modules that failed last time first and
-  stops at the first failure (`--previous`, `--stop-at-first-failure`). A failing
-  deploy used to run all of its roughly 830 tests, about 3 minutes, before
-  saying no.
-- The run-alone tests (`tests/test_windows_run_alone.py`) are selected by
-  changes to either side's composition, and no longer by keeper changes.
-- The two scope-bypass tests pass again.
-- Every recorded failure says where it was raised (`scripts/check_results.raised`).
-
-Measured on 2026-11-06:
-
-- a one-file desktop or layout change installs in 8–23 s;
-- a change to a protected file takes about 60 s to check, then relaunches
-  everything.
-
-Test pass (2026-11-07): `--full` went from 291 s to 187 s (measured before the native lanes and the SDK change). Each slow test now
-carries its reason in `scripts/check_tiers.py`, under caps, and a native test
-over 3 s fails by name.
+The keeper is gone (2026-11-07): Workspace runs from the checkout through
+`launch.py`, and `Dev.cmd deploy` only restarts the programs. A check selects
+tests against the source the same tier last passed.
 
 Left:
 
@@ -35,8 +18,6 @@ Left:
   end to end; about 5 s of that starts the Windows test runner and moves it
   onto a private desktop. Test modules that can't touch Qt or Win32 could run
   in the checker process itself. That is a judgement call on isolation.
-- **The SDK now loads only when a test runs an agent** (done 2026-11-07).
-  33 of 117 portable modules used to pay 3–8 s for it on every check.
 - **An intermittent coordinator crash (`0xC0000409`) in the isolated selfcheck**
   (2026-11-07): three of six full runs died about 96 s in, while
   `test_windows_browser` drove Edge; the rest passed or failed that test with
@@ -46,16 +27,12 @@ Left:
   - UIA (30 s);
   - managed Edge (26 s);
   - attached Edge (19 s).
-- **Dependencies are installed, not bundled** (done 2026-11-07).
-  `environments.py` builds one venv per `uv.lock` with `uv sync --locked`; the keeper and every
-  program run its interpreter. A lock change deploys through the keeper, and undo
-  switches environments.
-  - uv also manages CI and the dev `.venv` from the same universal `uv.lock`;
-    pip is no longer used anywhere.
+- **Move ruff and pyright to the dev group.** They sit in the runtime
+  dependencies only because the agent's own checks needed them.
 
 ## 2. Check that each side survives the other's restart, live
 
-Verified on 2026-11-06 through the keeper's `Restart`: restarting the
+Verified on 2026-11-06 (then through the keeper's `Restart`; now `launch.py restart`): restarting the
 assistant left the desktop's process running and its link reconnected to the
 new assistant, and restarting the desktop left the assistant running and the
 new desktop connected. Still to watch by eye: the bar showing "reconnecting"
@@ -104,8 +81,8 @@ violations left, with no baseline of exceptions. Counted in production code on
    engine benchmark is unchanged.
 3. **Append in a loop**: done 2026-11-07. 76 sites rewritten with
    comprehensions, generators and generator functions; the review's
-   `loop-accumulation` rule rejects new ones. The keeper's protected files keep
-   their 17 and are exempt. 11 remain in tests, which the rule doesn't cover.
+   `loop-accumulation` rule rejects new ones. The keeper's 17 went with the
+   keeper and `scripts/selfcheck`'s 11 were rewritten once it stopped being protected. 11 remain in tests, which the rule doesn't cover.
    `island_layout.arrange` is about 6 µs slower per call (a frozen step per
    part), negligible beside its font measurement.
 4. **Mutable parameter types** (41 production, 26 tests): `list`/`dict`/`set`
