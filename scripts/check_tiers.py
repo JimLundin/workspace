@@ -31,7 +31,6 @@ SLOW: Final = frozenset(
         "tests/test_keeper.py::test_versions_install_and_restore_exact_bytes_beside_an_untouched_runtime",
         "tests/test_meetings.py::test_recording_and_transcription_continue_while_the_markdown_file_is_locked",
         "tests/test_meetings.py::test_slow_transcription_does_not_block_capture_stop_or_shutdown",
-        "tests/test_project_context.py::test_context_capacity_rejects_new_records_but_allows_existing_edits",
         "tests/test_publishing.py::test_an_installed_change_lands_on_main_once_and_never_over_newer_work",
         "tests/test_publishing.py::test_durable_publication_records_before_candidate_code_and_remote_push",
         "tests/test_publishing.py::test_failed_checks_and_diverged_base_refuse_publication",

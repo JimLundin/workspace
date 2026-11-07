@@ -92,8 +92,14 @@ def test_context_text_and_record_budgets_preserve_complete_available_records(tmp
 
 def test_context_capacity_rejects_new_records_but_allows_existing_edits(tmp_path: Path) -> None:
     context = ContextStore(tmp_path / "work.sqlite3")
-    for index in range(200):
-        context.save(Preference(str(index), "Preference " + str(index), "A saved preference.", "Jim", 1))
+    context.save(Preference("0", "Preference 0", "A saved preference.", "Jim", 1))
+    # Clone the validated record in one transaction: 199 more saves cost 199 fsyncs.
+    with closing(sqlite3.connect(tmp_path / "work.sqlite3")) as database, database:
+        database.executemany(
+            "INSERT INTO project_context SELECT ?, kind, ?, content, source, observed, expires FROM project_context WHERE id='0'",
+            ((str(index), f"Preference {index}") for index in range(1, 199)),
+        )
+    context.save(Preference("199", "Preference 199", "A saved preference.", "Jim", 1))  # the 200th, through the capacity check
     with TestCase().assertRaises(ValueError):
         context.save(Preference("extra", "Beyond capacity", "Do not discard existing records.", "Jim", 2))
     context.save(Preference("0", "Preference zero", "Updated in place.", "Jim", 3))
