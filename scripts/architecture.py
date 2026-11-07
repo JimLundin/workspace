@@ -394,17 +394,20 @@ def _numeric(items: Iterable[ast.expr]) -> bool:
 def value_shapes(
     tree: ast.AST, module: str, declaration: str = "", function: ast.FunctionDef | ast.AsyncFunctionDef | None = None
 ) -> Iterator[Finding]:
-    """One pass for two modelling rules.
+    """One pass for the modelling rules.
 
     A `match` that only maps enum members to constants belongs in an `every_member`
     table; a fixed `tuple` of only ints and floats is a point, size or span that
-    needs its own type. A function's assigned names are collected only for a
-    `match` whose patterns all name members, the rare case that needs them.
+    needs its own type; a function doesn't fill a local container in a loop. A
+    function's assigned names are collected only for a `match` whose patterns all
+    name members, the rare case that needs them.
     """
     for child in ast.iter_child_nodes(tree):
         match child:
             case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                yield from value_shapes(child, module, ".".join(part for part in (declaration, name) if part), child)
+                inner = ".".join(part for part in (declaration, name) if part)
+                yield from loop_accumulations(child, module, inner)
+                yield from value_shapes(child, module, inner, child)
                 continue
             case ast.ClassDef(name=name):
                 yield from value_shapes(child, module, ".".join(part for part in (declaration, name) if part), function)
@@ -420,6 +423,87 @@ def value_shapes(
             case _:
                 pass
         yield from value_shapes(child, module, declaration, function)
+
+
+CONTAINERS: Final = frozenset({"list", "dict", "set", "bytearray", "deque", "defaultdict", "Counter", "OrderedDict"})
+"""Constructors of the mutable containers a function might fill in a loop."""
+FILLING: Final = frozenset({"append", "extend", "add", "update", "insert", "setdefault", "appendleft", "extendleft"})
+"""Methods that grow a container in place."""
+
+
+SCOPES: Final = (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+
+
+def _scope_levels(function: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.AST]:
+    """A function's own nodes, one breadth-first level at a time, never entering a nested scope."""
+    frontier = tuple(node for node in ast.iter_child_nodes(function) if not isinstance(node, SCOPES))
+    while frontier:
+        yield from frontier
+        frontier = tuple(child for node in frontier for child in ast.iter_child_nodes(node) if not isinstance(child, SCOPES))
+
+
+def _own_nodes(function: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[ast.AST, ...]:
+    """The nodes of a function's own scope; nested functions and classes are checked as their own scopes."""
+    return tuple(_scope_levels(function))
+
+
+def _creates_container(value: ast.expr) -> bool:
+    match value:
+        case ast.List() | ast.Dict() | ast.Set() | ast.ListComp() | ast.DictComp() | ast.SetComp():
+            return True
+        case ast.Call(func=ast.Name(id=name) | ast.Attribute(attr=name)):
+            return name in CONTAINERS
+        case _:
+            return False
+
+
+def _filled(node: ast.AST) -> str | None:
+    """The local name a statement or call grows in place, if it grows one."""
+    match node:
+        case ast.Call(func=ast.Attribute(value=ast.Name(id=name), attr=method)) if method in FILLING:
+            return name
+        case ast.Assign(targets=[ast.Subscript(value=ast.Name(id=name)), *_]) | ast.AugAssign(target=ast.Subscript(value=ast.Name(id=name))):
+            return name
+        case ast.AugAssign(target=ast.Name(id=name), value=ast.List() | ast.ListComp() | ast.Tuple()):
+            return name
+        case _:
+            return None
+
+
+def _fills(loop: ast.AST, own: frozenset[int]) -> Iterator[str]:
+    """The names a loop grows in place within its own function."""
+    return (name for node in ast.walk(loop) if id(node) in own and (name := _filled(node)) is not None)
+
+
+def loop_accumulations(function: ast.FunctionDef | ast.AsyncFunctionDef, module: str, declaration: str) -> Iterator[Finding]:
+    """A local container created in the function and filled inside one of its loops."""
+    nodes = _own_nodes(function)
+    grown = frozenset(name for node in nodes if (name := _filled(node)) is not None)
+    if not grown:
+        return
+    created = grown & frozenset(
+        target.id
+        for node in nodes
+        if isinstance(node, ast.Assign | ast.AnnAssign) and node.value is not None and _creates_container(node.value)
+        for target in (node.targets if isinstance(node, ast.Assign) else (node.target,))
+        if isinstance(target, ast.Name)
+    )
+    if not created:
+        return
+    own = frozenset(map(id, nodes))
+    filled = frozendict(
+        (name, loop.lineno)
+        for loop in reversed(tuple(node for node in nodes if isinstance(node, ast.For | ast.AsyncFor | ast.While)))
+        for name in _fills(loop, own)
+        if name in created
+    )
+    detail = "Build the collection with a comprehension, generator or generator function; a loop is for a side effect."
+    yield from (Finding("loop-accumulation", module, declaration, name, line, detail) for name, line in sorted(filled.items(), key=_finding_line))
+
+
+def _finding_line(entry: tuple[str, int]) -> int:
+    _, line = entry
+    return line
 
 
 def _static_import(call: ast.Call) -> bool:
@@ -515,6 +599,27 @@ def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Fi
     return result
 
 
+def protected_modules(root: Path) -> frozenset[str]:
+    """The modules of `keeper.PROTECTED`, read from its source: files only a deploy changes, never an agent."""
+    keeper = root / "keeper.py"
+    if not keeper.is_file():
+        return frozenset()
+    for node in ast.parse(keeper.read_text(encoding="utf-8")).body:
+        match node:
+            case (
+                ast.AnnAssign(target=ast.Name(id="PROTECTED"), value=ast.Call(args=[ast.Set(elts=items)]))
+                | ast.Assign(targets=[ast.Name(id="PROTECTED")], value=ast.Call(args=[ast.Set(elts=items)]))
+            ):
+                return frozenset(module_name(item.value) for item in items if isinstance(item, ast.Constant) and isinstance(item.value, str))
+            case _:
+                pass
+    return frozenset()
+
+
+EXEMPT_IN_PROTECTED: Final = frozenset({"loop-accumulation"})
+"""Modelling rules an agent can't satisfy in a file it may not change."""
+
+
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     sources = python_sources(root, names)
     configuration = _configuration(root)
@@ -526,8 +631,14 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
     # Keyboard routes stop at the first application module they reach.
     keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "miryoku")), _keyboard)
+    protected = protected_modules(root)
     findings = (
-        *(finding for observed in observations.values() for finding in observed.declarations),
+        *(
+            finding
+            for observed in observations.values()
+            for finding in observed.declarations
+            if not (finding.rule in EXEMPT_IN_PROTECTED and finding.module in protected)
+        ),
         *(finding for source in all_source for finding in cached_testing_dependencies(source, cache)),
         *(
             finding

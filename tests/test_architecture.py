@@ -324,3 +324,51 @@ pressed: tuple[str, str] = ("", "")
         ("bare-tuple", "", "tuple[int, int]"),
         ("bare-tuple", "", "tuple[float, float]"),
     ]
+
+
+def test_a_function_never_fills_a_local_container_in_a_loop(tmp_path: Path) -> None:
+    # Defect: a collection built by appending, adding or index-assigning in a
+    # loop slips past the review (or is reported twice from a nested function);
+    # or a loop that only performs side effects, an owner updating its own
+    # state, or a comprehension is wrongly flagged; or a keeper-protected file,
+    # which an agent may not change, fails the review.
+    source = """def names(items):
+    found = []
+    for item in items:
+        found.append(item.name)
+    return found
+
+def index(items):
+    by_id = {}
+    for item in items:
+        by_id[item.id] = item
+    return by_id
+
+def outer(items):
+    def inner(values):
+        seen = set()
+        while values:
+            seen.add(values.pop())
+        return seen
+    return inner(items)
+
+def announce(items, sink):
+    for item in items:
+        sink.send(item)
+
+class Owner:
+    def take(self, items):
+        for item in items:
+            self.items.append(item)
+
+def built(items):
+    return tuple(item.name for item in items)
+"""
+    keeper = 'PROTECTED: Final = frozenset({"keeper.py"})\n' + source.replace("def names", "def legacy")
+    write_tree(tmp_path, {"collect.py": source, "keeper.py": keeper})
+    found = [(finding.rule, finding.module, finding.declaration, finding.expression) for finding in review(tmp_path).failures]
+    assert found == [
+        ("loop-accumulation", "collect", "names", "found"),
+        ("loop-accumulation", "collect", "index", "by_id"),
+        ("loop-accumulation", "collect", "outer.inner", "seen"),
+    ]
