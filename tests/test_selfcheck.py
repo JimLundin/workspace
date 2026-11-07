@@ -143,21 +143,23 @@ def test_every_source_asset_names_readers_that_exist() -> None:
 
 def test_parallel_native_lanes_report_each_lanes_passes_failures_and_crashes(tmp_path: Path) -> None:
     # Detect the coordinator losing a lane's failing test, treating a lane that
-    # died before writing its result as passed, or dropping another lane's passes.
+    # died before writing its result as passed, dropping another lane's passes,
+    # or skipping the native modules it runs itself beside the lanes.
     root = tree(
         tmp_path,
         {
             **SOUND,
             "tests/test_windows_browser.py": "def test_browser() -> None:\n    assert True\n",
             "tests/test_windows_runtime.py": "def test_runtime() -> None:\n    assert False, 'runtime lane failed'\n",
-            "tests/test_windows_shell.py": "import os\nos._exit(3)\n",
+            "tests/test_windows_computer.py": "import os\nos._exit(3)\n",
+            "tests/test_windows_shell.py": "def test_shell() -> None:\n    assert True\n",
         },
     )
     code, report = selfcheck(root)
     assert code == 1, report
     assert "FAILED tests.test_windows_runtime.test_runtime" in report and "runtime lane failed" in report
-    assert "FAILED native lane (test_windows_shell.py): exited 3 without a result" in report
-    assert "3 passed, 2 failed" in report, report
+    assert "FAILED native lane (test_windows_computer.py): exited 3 without a result" in report
+    assert "test_windows_shell.py: 1 passed" in report and "4 passed, 2 failed" in report, report
 
 
 def test_a_syntax_error_fails_in_modules_and_the_windowless_launcher(tmp_path: Path) -> None:

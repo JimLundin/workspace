@@ -48,6 +48,8 @@ from typing import Final, Protocol
 
 lazy from pydantic import TypeAdapter
 
+lazy from winapi.processes import ProcessJob
+
 _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 """Signs that an import failed only because this isn't Windows."""
 
@@ -388,12 +390,12 @@ class LaneOutcome:
     timings: tuple[tuple[float, str], ...]
 
 
-def native_groups(root: Path, paths: list[Path]) -> list[list[Path]]:
-    """The selected native modules of each lane, then the remaining ones, omitting empty groups."""
+def native_groups(root: Path, paths: list[Path]) -> tuple[list[list[Path]], list[Path]]:
+    """The selected native modules of each lane (empty lanes omitted), and the remaining ones."""
     relative = {path: path.relative_to(root).as_posix() for path in paths}
     grouped = [[path for path in paths if relative[path] in lane] for lane in NATIVE_LANES]
     remaining = [path for path in paths if not any(relative[path] in lane for lane in NATIVE_LANES)]
-    return [group for group in (*grouped, remaining) if group]
+    return [group for group in grouped if group], remaining
 
 
 def run_lane(paths: list[Path], result: Path) -> bool:
@@ -418,39 +420,57 @@ def _lane_failure(group: list[Path], text: str) -> Outcome:
     return 0, 0, (f"FAILED native lane ({', '.join(path.name for path in group)}): {text}",), ()
 
 
-def run_lanes(root: Path, groups: list[list[Path]]) -> list[Outcome]:
-    """Run each group in a process of its own, concurrently, and collect their outcomes.
+class Lanes:
+    """Native lane processes running beside the coordinator, each on a private desktop of its own.
 
     Each process runs this protected runner, not the candidate's. It drops the
     inherited test desktop, so its first `import tests` gives it a private desktop
-    of its own. The job of the test desktop that started this check owns the lanes
-    too, so stopping the check ends them.
+    of its own. A job owns them: a check that is cancelled or times out ends its
+    lanes with it instead of leaving them running.
     """
-    environment = {key: value for key, value in os.environ.items() if key != "WORKSPACE_TEST_DESKTOP"}
-    outcomes: list[Outcome] = []
-    with tempfile.TemporaryDirectory(prefix="selfcheck-lanes-") as scratch:
-        running: list[tuple[list[Path], Path, Path, subprocess.Popen[bytes]]] = []
+
+    def __init__(self, root: Path, groups: list[list[Path]]) -> None:
+        environment = {key: value for key, value in os.environ.items() if key != "WORKSPACE_TEST_DESKTOP"}
+        self.scratch = tempfile.TemporaryDirectory(prefix="selfcheck-lanes-")
+        self.job = _job()
+        self.running: list[tuple[list[Path], Path, Path, subprocess.Popen[bytes]]] = []
         for index, group in enumerate(groups):
-            result, log = Path(scratch) / f"lane-{index}.json", Path(scratch) / f"lane-{index}.txt"
+            result, log = Path(self.scratch.name) / f"lane-{index}.json", Path(self.scratch.name) / f"lane-{index}.txt"
             names = [path.relative_to(root).as_posix() for path in group]
             command = [sys.executable, os.path.abspath(__file__), str(root), "--modules", ",".join(names), "--result", str(result)]
             with log.open("wb") as output:
                 process = subprocess.Popen(command, cwd=root, env=environment, stdout=output, stderr=subprocess.STDOUT)
-            running.append((group, result, log, process))
-        for group, result, log, process in running:
-            code = process.wait()
-            report = log.read_text(encoding="utf-8", errors="replace")
-            sys.stdout.write(report)
-            sys.stdout.flush()
-            try:
-                lane = TypeAdapter(LaneOutcome).validate_json(result.read_bytes())
-            except OSError, ValueError:
-                outcomes.append(_lane_failure(group, f"exited {code} without a result\n{report[-2000:]}"))
-                continue
-            outcomes.append((lane.passed, lane.skipped, lane.problems, lane.timings))
-            if code and not lane.problems:
-                outcomes.append(_lane_failure(group, f"exited {code}"))
-    return outcomes
+            if self.job is not None:
+                self.job.add(process.pid)
+            self.running.append((group, result, log, process))
+
+    def collect(self) -> list[Outcome]:
+        """Wait for every lane and its outcome; a lane that died without a result fails."""
+        outcomes: list[Outcome] = []
+        try:
+            for group, result, log, process in self.running:
+                code = process.wait()
+                report = log.read_text(encoding="utf-8", errors="replace")
+                sys.stdout.write(report)
+                sys.stdout.flush()
+                try:
+                    lane = TypeAdapter(LaneOutcome).validate_json(result.read_bytes())
+                except OSError, ValueError:
+                    outcomes.append(_lane_failure(group, f"exited {code} without a result\n{report[-2000:]}"))
+                    continue
+                outcomes.append((lane.passed, lane.skipped, lane.problems, lane.timings))
+                if code and not lane.problems:
+                    outcomes.append(_lane_failure(group, f"exited {code}"))
+        finally:
+            if self.job is not None:
+                self.job.close()
+            self.scratch.cleanup()
+        return outcomes
+
+
+def _job() -> ProcessJob | None:
+    """A job that ends the lanes when this check ends; None off Windows."""
+    return ProcessJob() if _ON_WINDOWS else None
 
 
 def _progress(path: Path, outcome: Outcome, seconds: float) -> None:
@@ -564,12 +584,14 @@ def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope =
                 outcomes.append(outcome)
                 ran.add(path)
         sequential(later)
-    groups = native_groups(root, native)
-    if len(groups) > 1 and not failed():
-        outcomes.extend(run_lanes(root, groups))
-        ran.update(native)
-    else:
-        sequential(native)
+    # The slow lanes run in their own processes while the coordinator runs the
+    # remaining native modules itself, as it did before there were lanes.
+    groups, remaining = native_groups(root, native)
+    lanes = Lanes(root, groups) if groups and not failed() else None
+    sequential(remaining if lanes is not None else native)
+    if lanes is not None:
+        outcomes.extend(lanes.collect())
+        ran.update(path for group in groups for path in group)
     for _, _, found, _ in outcomes:
         problems.extend(found)
     if (left := len(paths) - len(ran)) and failed():
