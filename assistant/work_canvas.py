@@ -8,7 +8,7 @@ Each change publishes immutable document and attention observations.
 import hashlib
 import threading
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import assert_never
 from uuid import uuid4
@@ -16,6 +16,7 @@ from uuid import uuid4
 from pydantic import TypeAdapter
 
 from automation import journal
+from cell import Cell
 from contracts.agent_session import Snapshot
 from contracts.attention import observed_attention
 from contracts.canvas_activity import (
@@ -65,6 +66,17 @@ _EVIDENCE = TypeAdapter(tuple[tuple[str, str], ...])
 _FINISHED = ("completed", "failed", "cancelled")
 
 
+@dataclass(frozen=True, slots=True)
+class _Canvas:
+    catalog: Catalog | None = None
+    """The latest personal-work catalog; None until the first arrives."""
+    tasks: tuple[Task, ...] = ()
+    session: tuple[CanvasActivity, ...] | None = None
+    """The agent session's activity, once it has any."""
+    task_activity: tuple[CanvasActivity, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class WorkCanvas:
     """Own persistence, queueing and publication under one autonomy policy.
 
@@ -75,18 +87,16 @@ class WorkCanvas:
     # This effect owner serializes independent work/catalog publishers and UI
     # commands. Reentrancy permits its saved-before-queue callback to read the
     # committed document; published state and all domain inputs are immutable.
-    __slots__ = ("_autonomous", "_catalog", "_lock", "_publish", "_queue", "_session", "_task_activity", "_tasks", "path")
+    path: Path
+    _queue: Callable[[CanvasRun], None]
+    _publish: Callable[[CanvasPublication], None]
+    autonomous: bool = field(kw_only=True)
+    _state: Cell[_Canvas] = field(default_factory=lambda: Cell(_Canvas()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
-    def __init__(self, path: Path, queue: Callable[[CanvasRun], None], publish: Callable[[CanvasPublication], None], *, autonomous: bool) -> None:
-        self._lock = threading.RLock()
-        self.path: Path = path
-        self._queue: Callable[[CanvasRun], None] = queue
-        self._publish: Callable[[CanvasPublication], None] = publish
-        self._autonomous: bool = autonomous
-        self._catalog: Catalog | None = None
-        self._tasks: tuple[Task, ...] = ()
-        self._session: tuple[CanvasActivity, ...] | None = None
-        self._task_activity: tuple[CanvasActivity, ...] = ()
+    def __post_init__(self) -> None:
+        path = self.path
         path.parent.mkdir(parents=True, exist_ok=True)
         with journal.writing(path) as connection:
             connection.execute("CREATE TABLE IF NOT EXISTS canvas (id INTEGER PRIMARY KEY CHECK(id=1), payload BLOB NOT NULL)")
@@ -104,7 +114,7 @@ class WorkCanvas:
             return published(self._observed_catalog(), self.read(), None)
 
     def _observed_catalog(self) -> Catalog:
-        return self._catalog or Catalog()
+        return self._state.get().catalog or Catalog()
 
     def read(self) -> CanvasDocument:
         with self._lock:
@@ -131,9 +141,9 @@ class WorkCanvas:
         """Mirror conversation questions; publish only a changed session observation."""
         with self._lock:
             activity = session_activity(session)
-            if activity == self._session:
+            if activity == self._state.get().session:
                 return False
-            self._session = activity
+            self._state.update(lambda state: replace(state, session=activity))
             previous = self.read()
             document = observe_activity(previous, activity)
             document = self._persist(previous, replace(document, activity=settle_session(document.activity, session)))
@@ -142,11 +152,11 @@ class WorkCanvas:
 
     def observe_work(self, observed: WorkSnapshot) -> None:
         with self._lock:
-            self._tasks = observed.tasks
+            self._state.update(lambda state: replace(state, tasks=observed.tasks))
             previous = self.read()
             updates = task_activity(observed.tasks, previous.runs)
-            known = frozenset(item.id for item in (*self._task_activity, *(self._session or ())))
-            self._task_activity = updates
+            known = frozenset(item.id for item in (*self._state.get().task_activity, *(self._state.get().session or ())))
+            self._state.update(lambda state: replace(state, task_activity=updates))
             document = observe_activity(previous, updates)
             rejected = frozenset(TaskRequest(problem.task_id, problem.request_id) for problem in observed.reply_problems)
             document = self._persist(previous, replace(document, activity=settle_tasks(document.activity, observed.tasks, rejected)))
@@ -158,7 +168,8 @@ class WorkCanvas:
 
     def observe_catalog(self, catalog: Catalog) -> None:
         with self._lock:
-            previous, self._catalog = self._catalog, catalog
+            previous = self._state.get().catalog
+            self._state.update(lambda state: replace(state, catalog=catalog))
             document = self._investigate(self.read())
             # The first catalog is a silent baseline; later state changes are announced.
             changes = important_changes(previous, catalog) if previous is not None else ()
@@ -170,12 +181,14 @@ class WorkCanvas:
 
     def _investigate(self, previous: CanvasDocument) -> CanvasDocument:
         """Queue bounded research for changed evidence, saving each binding before its task."""
-        if not self._autonomous or self._catalog is None:
+        state = self._state.get()
+        catalog = state.catalog
+        if not self.autonomous or catalog is None:
             return previous
-        document = self._persist(previous, retained(previous, self._tasks))
-        known = frozenset(item.id for item in (*self._catalog.sources, *document.notes))
+        document = self._persist(previous, retained(previous, state.tasks))
+        known = frozenset(item.id for item in (*catalog.sources, *document.notes))
         document = self._persist(document, replace(document, reviewed=tuple(item for item in document.reviewed if item.id in known)))
-        for run in pending(self._catalog, document, self._tasks):
+        for run in pending(catalog, document, state.tasks):
             document = replace(document, runs=(*document.runs, run))
             self._save(document)
             try:
@@ -206,7 +219,7 @@ class WorkCanvas:
         """Continue one work without duplicating its unfinished investigation."""
         with self._lock:
             document = self.read()
-            active = frozendict((task.id, task) for task in self._tasks if phase(task.state) not in _FINISHED)
+            active = frozendict((task.id, task) for task in self._state.get().tasks if phase(task.state) not in _FINISHED)
             binding = next((run for run in reversed(document.runs) if run.work_id == work_id and run.task_id in active), None)
             if binding is None:
                 return self.start(CanvasRun("canvas:" + uuid4().hex, work_id))

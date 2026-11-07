@@ -676,7 +676,7 @@ class AssistantApp:
     def layout_changed(self, value: int) -> None:
         with contextlib.suppress(ValueError):
             self.layout = LayoutState(value)
-        self.assistant.layout_on = self.layout is LayoutState.ON
+        self.assistant.use_layout(on=self.layout is LayoutState.ON)
         if not self.assistant.layout_on:
             self.assistant.stop_capture(reason="layout_off")
         if self.assistant.listening is None:

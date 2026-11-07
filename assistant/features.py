@@ -10,7 +10,7 @@ handed to the worker thread (`submit`), which does one job at a time, in order.
 
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Final, Literal, Protocol, assert_never
 
 from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, transcribe, wav
@@ -109,51 +109,54 @@ def listening_tool(source: Tool) -> Tool:
     return LISTENING_TOOLS.get(source, source)
 
 
+@dataclass(frozen=True, slots=True)
+class _Keys:
+    capture: Capture | None = None
+    """The voice capture in progress."""
+    capture_id: int = 0
+    """The last capture's identity."""
+    latest_transcription: str | None = None
+    layout_on: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class Assistant:
     """Turns requests from the layout's tool and app keys into actions."""
 
-    __slots__ = (
-        "capture",
-        "capture_id",
-        "controls",
-        "desktop",
-        "latest_transcription",
-        "layout_on",
-        "missing",
-        "record",
-        "settings",
-        "submit",
-    )
-
     # Desktop, settings, scheduling, usage and controls form the key-feature composition seam.
-    def __init__(  # noqa: PLR0913 - injected collaborators and callbacks
-        self,
-        desktop: Desktop,
-        settings: Settings,
-        *,
-        record: Recorder,
-        submit: Callable[[Callable[[], None]], None],
-        controls: Controls,
-        missing: Missing | None = None,
-    ) -> None:
-        self.desktop = desktop
-        self.settings = settings
-        self.record = record
-        self.submit = submit
-        """Runs a job on the worker thread, after whatever is already queued."""
-        self.controls: Controls = controls
-        self.capture: Capture | None = None
-        self.capture_id = 0
-        self.latest_transcription: str | None = None
-        self.layout_on = True
-        self.missing = missing
-        """Settings the AI tools need but don't have; the other keys work without them."""
+    desktop: Desktop
+    settings: Settings
+    record: Recorder = field(kw_only=True)
+    submit: Callable[[Callable[[], None]], None] = field(kw_only=True)
+    """Runs a job on the worker thread, after whatever is already queued."""
+    controls: Controls = field(kw_only=True)
+    missing: Missing | None = field(default=None, kw_only=True)
+    """Settings the AI tools need but don't have; the other keys work without them."""
+    clock: Callable[[], float] = field(default=time.monotonic, kw_only=True)
+    """When a voice capture starts and stops, for its time limit."""
+    _state: Cell[_Keys] = field(default_factory=lambda: Cell(_Keys()), init=False, repr=False)
+
+    @property
+    def capture(self) -> Capture | None:
+        return self._state.get().capture
+
+    @property
+    def latest_transcription(self) -> str | None:
+        return self._state.get().latest_transcription
+
+    @property
+    def layout_on(self) -> bool:
+        return self._state.get().layout_on
+
+    def use_layout(self, *, on: bool) -> None:
+        """Record whether the keyboard layout is on, which decides the idle state shown."""
+        self._state.set(replace(self._state.get(), layout_on=on))
 
     # ---- requests ----------------------------------------------------------------------
 
     @property
     def listening(self) -> Tool | None:
-        return self.capture.tool if self.capture is not None else None
+        return capture.tool if (capture := self.capture) is not None else None
 
     def handle(self, request: Request, *, down: bool) -> None:
         """Dispatch a key edge or menu press."""
@@ -198,7 +201,7 @@ class Assistant:
 
     def idle(self) -> None:
         self.desktop.busy(None)
-        self.desktop.show_state(State.READY if self.layout_on else State.LAYOUT_OFF)
+        self.desktop.show_state(State.READY if self._state.get().layout_on else State.LAYOUT_OFF)
 
     def working(self, job: Job) -> None:
         self.desktop.busy(job)
@@ -215,7 +218,7 @@ class Assistant:
             evidence = failure_info(error).details()
             phase = progress.details.get("phase", "working") if progress is not None else "working"
             message = f"{feature.replace('_', ' ').title()} failed while {phase}. Please try again; diagnostic details are in Workspace's usage log."
-            if phase == "submitting" and self.latest_transcription is not None:
+            if phase == "submitting" and self._state.get().latest_transcription is not None:
                 message = (
                     "Text submission failed. Your transcript is saved in Workspace and was copied to the clipboard if available. "
                     "Use Copy latest transcript in Workspace controls; check for partial text before pasting."
@@ -237,10 +240,11 @@ class Assistant:
 
     def hold(self, tool: Tool, *, down: bool) -> None:
         if down:
-            if self.capture is not None:
+            if self._state.get().capture is not None:
                 return
-            self.capture_id += 1
-            capture = Capture(self.capture_id, tool, listening_tool(tool), time.monotonic())
+            identity = self._state.get().capture_id + 1
+            self._state.set(replace(self._state.get(), capture_id=identity))
+            capture = Capture(identity, tool, listening_tool(tool), self.clock())
             try:
                 problem = self.desktop.start_listening()
             except Exception as error:
@@ -257,10 +261,10 @@ class Assistant:
                 self.record(capture.tool.name.lower(), {"capture_id": capture.identity, "phase": "starting", "ok": False, "error": problem[:120]})
                 self.idle()
                 return
-            self.capture = capture
+            self._state.set(replace(self._state.get(), capture=capture))
             self.record("voice_capture", {"capture_id": capture.identity, "phase": "recording", "source": capture.source.name.lower()})
             self.desktop.show_state(State.LISTENING)
-        elif self.capture is not None and tool is self.capture.source:
+        elif (held := self.capture) is not None and tool is held.source:
             self.stop_capture()
 
     def capture_problem(self, capture: Capture, phase: str, error: Exception) -> None:
@@ -283,10 +287,11 @@ class Assistant:
         reason: Literal["released", "stop", "toggle", "layout_off", "shutdown", "limit"] = "released",
         now: float | None = None,
     ) -> bool:
-        capture, self.capture = self.capture, None
+        capture = self._state.get().capture
+        self._state.set(replace(self._state.get(), capture=None))
         if capture is None:
             return False
-        held_seconds = (time.monotonic() if now is None else now) - capture.started
+        held_seconds = (self.clock() if now is None else now) - capture.started
         try:
             pcm = self.desktop.stop_listening()
         except Exception as error:
@@ -318,7 +323,7 @@ class Assistant:
 
     def expire_capture(self, now: float) -> None:
         """Recover a lost release/toggle at the microphone's existing buffer limit."""
-        if self.capture is not None and now >= self.capture.started + MAX_SECONDS and self.stop_capture(reason="limit", now=now):
+        if (held := self.capture) is not None and now >= held.started + MAX_SECONDS and self.stop_capture(reason="limit", now=now):
             self.desktop.notify("Recording finished", "The five-minute voice limit was reached; your recording was queued for transcription.")
 
     # ---- the tools ---------------------------------------------------------------------
@@ -347,18 +352,18 @@ class Assistant:
         """Keep recovery independent of both the clipboard and the insertion attempt."""
         if not text.strip():
             return
-        self.latest_transcription = text
+        self._state.set(replace(self._state.get(), latest_transcription=text))
         try:
             self.desktop.set_clipboard(text)
         except OSError:
             self.desktop.problem("The clipboard is busy. Your transcript is saved; use Copy latest transcript in Workspace controls.")
 
     def copy_transcript(self) -> None:
-        if self.latest_transcription is None:
+        if (transcript := self.latest_transcription) is None:
             self.desktop.notify("No transcript yet", "Dictate first, then copy the latest transcript here.")
             return
         try:
-            self.desktop.set_clipboard(self.latest_transcription)
+            self.desktop.set_clipboard(transcript)
         except OSError as error:
             self.desktop.problem(str(error))
 

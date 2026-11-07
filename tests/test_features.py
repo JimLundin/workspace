@@ -1,9 +1,9 @@
 """What each tool and app key does, against a fake desktop and a fake endpoint."""
 
 import json
+import time
 from collections.abc import Callable, Mapping
 from typing import cast
-lazy from dataclasses import replace
 
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
@@ -108,6 +108,7 @@ class Rig:
         *,
         desktop: FakeDesktop | None = None,
         submit: Callable[[Callable[[], None]], None] = run_immediately,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.endpoint = endpoint
         self.desktop = desktop if desktop is not None else FakeDesktop()
@@ -121,6 +122,7 @@ class Rig:
             submit=submit,
             controls=FakeControls(self.agent.append),
             missing=missing,
+            clock=clock,
         )
 
     def press(self, request: Tool | App) -> None:
@@ -471,13 +473,12 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
 def test_voice_limit_uses_the_deadline_across_a_float_precision_boundary() -> None:
     with fake_endpoint() as endpoint:
         endpoint.replies = [said("Full limited recording")]
-        rig = Rig(endpoint)
-        rig.assistant.handle(Tool.DICTATE, down=True)
-        capture = rig.assistant.capture
-        assert capture is not None
         started = 2**20 - 100 + 2**-33
         assert (started + MAX_SECONDS) - started < MAX_SECONDS
-        rig.assistant.capture = replace(capture, started=started)
+        rig = Rig(endpoint, clock=lambda: started)
+        rig.assistant.handle(Tool.DICTATE, down=True)
+        capture = rig.assistant.capture
+        assert capture is not None and capture.started == started
         rig.assistant.expire_capture(started + MAX_SECONDS)
         assert rig.assistant.listening is None
         assert dict(rig.used)["dictate"]["stop_reason"] == "limit"
