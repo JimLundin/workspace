@@ -599,27 +599,37 @@ def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Fi
     return result
 
 
-KEEPER: Final = "keeper.py"
-"""Where `PROTECTED` is declared. The review reads it as text, not as an import."""
-READS: Final = (KEEPER,)
-"""Files the review reads besides the sources it reviews; a fixture tree copies them."""
+PROTECTED_FILES: Final = frozenset(
+    {"keeper.py", "selfcheck.py", "workspace.pyw", "keeper_ui.py", "keeper_control.py", "components.py", "restart_plan.py", "environments.py"}
+)
+"""`keeper.PROTECTED`: files only a deploy changes, never an agent. Fixture trees copy the
+check scripts without the keeper, so the review keeps this copy and checks it against
+the keeper's own list wherever `keeper.py` is present."""
 
 
-def protected_modules(root: Path) -> frozenset[str]:
-    """The modules of `keeper.PROTECTED`, read from its source: files only a deploy changes, never an agent."""
-    keeper = root / KEEPER
+def keeper_protected(root: Path) -> frozenset[str] | None:
+    """`PROTECTED` as `keeper.py` declares it, read from its source; None without a keeper."""
+    keeper = root / "keeper.py"
     if not keeper.is_file():
-        return frozenset()
-    for node in ast.parse(keeper.read_text(encoding="utf-8")).body:
-        match node:
-            case (
-                ast.AnnAssign(target=ast.Name(id="PROTECTED"), value=ast.Call(args=[ast.Set(elts=items)]))
-                | ast.Assign(targets=[ast.Name(id="PROTECTED")], value=ast.Call(args=[ast.Set(elts=items)]))
-            ):
-                return frozenset(module_name(item.value) for item in items if isinstance(item, ast.Constant) and isinstance(item.value, str))
-            case _:
-                pass
-    return frozenset()
+        return None
+    declared = (
+        frozenset(item.value for item in items if isinstance(item, ast.Constant) and isinstance(item.value, str))
+        for node in ast.parse(keeper.read_text(encoding="utf-8")).body
+        if isinstance(node, ast.AnnAssign | ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "PROTECTED" for target in (node.targets if isinstance(node, ast.Assign) else (node.target,))
+        )
+        and isinstance(node.value, ast.Call)
+        for items in (argument.elts for argument in node.value.args if isinstance(argument, ast.Set))
+    )
+    return next(declared, frozenset[str]())
+
+
+def protected_drift(root: Path) -> Iterator[Finding]:
+    declared = keeper_protected(root)
+    if declared is not None and declared != PROTECTED_FILES:
+        detail = "Update PROTECTED_FILES to match keeper.PROTECTED: " + ", ".join(sorted(declared ^ PROTECTED_FILES))
+        yield Finding("protected-drift", "scripts.architecture", "PROTECTED_FILES", "", 0, detail)
 
 
 EXEMPT_IN_PROTECTED: Final = frozenset({"loop-accumulation"})
@@ -637,7 +647,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
     # Keyboard routes stop at the first application module they reach.
     keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "miryoku")), _keyboard)
-    protected = protected_modules(root)
+    protected = frozenset(module_name(name) for name in PROTECTED_FILES)
     findings = (
         *(
             finding
@@ -656,6 +666,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             )
         ),
         *contract_isolation(imported_by),
+        *protected_drift(root),
         *process_isolation(imported_by),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))

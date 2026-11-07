@@ -111,4 +111,6 @@ def attach() -> None:
     # the child's status without returning to the launcher's test collection.
     sys.stdout.flush()
     sys.stderr.flush()
-    os._exit(code)
+    # Windows exit codes are unsigned 32-bit (a crash is 0xC0000409); os._exit takes a C
+    # int, so pass the same bits signed rather than fail and hide the child's status.
+    os._exit(code - (1 << 32) if code > 0x7FFF_FFFF else code)
