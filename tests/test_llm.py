@@ -107,6 +107,7 @@ def test_truncated_replies_are_retriable_failures() -> None:
 
 def test_failures_for_an_unreachable_endpoint() -> None:
     # Defect: an unreachable endpoint raises or hides which host was tried.
-    result = transcribe(settings("http://127.0.0.1:9/v1"), wav(b"", RATE), timeout_s=2)
+    # Windows takes about 2 s to refuse a closed loopback port; a timeout is the same failure to reach it.
+    result = transcribe(settings("http://127.0.0.1:9/v1"), wav(b"", RATE), timeout_s=0.2)
     assert isinstance(result, Failure)
     assert result.message.startswith("can't reach 127.0.0.1:9: ")

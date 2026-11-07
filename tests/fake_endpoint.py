@@ -70,6 +70,9 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
             self.send_response(reply.status)
             self.send_header("Content-Type", reply.content_type)
             self.send_header("Content-Length", str(len(reply.body) if reply.content_length is None else reply.content_length))
+            if reply.status >= 400:
+                # The client still retries what it would retry, without waiting out its real backoff.
+                self.send_header("retry-after-ms", "1")
             self.end_headers()
             self.wfile.write(reply.body)
 
