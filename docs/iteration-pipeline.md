@@ -50,7 +50,8 @@ before/after product and test totals when a change cuts code.
 
 1. It runs the architecture review (`scripts/architecture.py`), which parses
    source without importing it. The review enforces keyboard isolation,
-   headless and UI-private owners, frozen and slotted data records, the reflection rules with their
+   headless and UI-private owners, frozen and slotted data records, enum translations as
+   tables rather than `match`, the reflection rules with their
    exact exceptions in `pyproject.toml`, and the ban on patch and mock
    frameworks in every source file.
 2. It runs the interface review (`scripts/quality.py`): Ruff's FBT001, FBT002 and

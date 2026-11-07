@@ -88,7 +88,8 @@ each check goes live in the architecture review only once its rule has no
 violations left, with no baseline of exceptions. Counted in production code on
 2026-11-07:
 
-1. **Enum-translating `match`** (22): a `match` whose cases are only enum members,
+1. **Enum-translating `match`** (done 2026-11-07, enforced as `enum-translation`;
+   23 converted, module-level constants counted as constants) (22): a `match` whose cases are only enum members,
    each returning or assigning one constant (a literal, a member or a
    constructor of literals). Mechanical; first. Mappings lose Pyright's
    exhaustiveness, so build them through one helper that fails at import

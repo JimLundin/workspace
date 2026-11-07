@@ -55,7 +55,9 @@ their tests. Legacy data and backwards compatibility are not requirements.
   stored union apart in JSON is fine.
 - Translate an enum to values with a `Final[frozendict[Enum, Value]]` or a value
   on its members (see `desktop_ui.icons.COLOURS`), not a `match` that only
-  returns one constant per member.
+  returns one constant per member. Build a total table with
+  `contracts.members.every_member`, which fails at import unless it names every
+  member; the architecture review enforces the rule.
 - Use domain types with their bounds, not bare tuples: `desktop_ui.colour.Rgb`,
   not `tuple[int, int, int]`.
 - Prefer immutable values; mutate only inside the owner that needs it. Build
