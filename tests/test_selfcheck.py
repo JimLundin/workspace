@@ -45,16 +45,9 @@ def test_a_sound_tree_passes(tmp_path: Path) -> None:
     assert "1 module skipped" in report
 
 
-def test_a_failing_test_fails(tmp_path: Path) -> None:
-    files = {**SOUND, "tests/test_maths.py": "from tools.maths import double\ndef test_double() -> None:\n    assert double(2) == 5\n"}
-    code, report = selfcheck(tree(tmp_path, files))
-    assert code == 1
-    assert "FAILED tests.test_maths.test_double" in report
-    assert "AssertionError" in report
-
-
 def test_worker_modules_report_their_passes_and_failures(tmp_path: Path) -> None:
-    # Detect a worker outcome that is dropped from the counts, the report or the exit code.
+    # Detect a failing test (here, one on a worker) dropped from the counts, the
+    # report or the exit code, or reported without its traceback.
     files = {
         **SOUND,
         "tests/test_llm.py": "def test_worker_passes() -> None:\n    assert True\n",
@@ -62,7 +55,7 @@ def test_worker_modules_report_their_passes_and_failures(tmp_path: Path) -> None
     }
     code, report = selfcheck(tree(tmp_path, files))
     assert code == 1, report
-    assert "FAILED tests.test_agent.test_worker_fails" in report
+    assert "FAILED tests.test_agent.test_worker_fails" in report and "AssertionError" in report
     assert "3 passed, 1 failed" in report
 
 
@@ -148,40 +141,30 @@ def test_every_source_asset_names_readers_that_exist() -> None:
     assert [reader for readers in ASSET_READERS.values() for reader in readers if not (root / reader).is_file()] == []
 
 
-def test_a_syntax_error_fails(tmp_path: Path) -> None:
-    code, report = selfcheck(tree(tmp_path, {**SOUND, "tools/broken.py": "def oops(:\n"}))
+def test_a_syntax_error_fails_in_modules_and_the_windowless_launcher(tmp_path: Path) -> None:
+    # Defects: a module or the .pyw launcher that doesn't compile is installed.
+    code, report = selfcheck(tree(tmp_path, {**SOUND, "tools/broken.py": "def oops(:\n", "workspace.pyw": "def broken(:\n"}))
     assert code == 1
-    assert "doesn't compile: tools/broken.py" in report
+    assert "doesn't compile: tools/broken.py" in report and "doesn't compile: workspace.pyw" in report
 
 
-def test_a_module_that_cant_import_fails(tmp_path: Path) -> None:
-    code, report = selfcheck(tree(tmp_path, {**SOUND, "tools/needs.py": "import no_such_thing\n"}))
-    assert code == 1
-    assert "doesn't import: tools.needs" in report
-
-
-def test_missing_native_ui_dependencies_are_only_skipped_off_windows(tmp_path: Path) -> None:
+def test_a_module_that_cant_import_fails_and_missing_native_ui_is_skipped_only_off_windows(tmp_path: Path) -> None:
+    # Defects: a module that can't import is installed, or a missing Qt/Win32
+    # dependency is excused on Windows, where it is a real failure.
     native = {
         f"tools/native_{index}.py": f"raise ModuleNotFoundError(\"No module named '{name}'\")\n"
         for index, name in enumerate(("PySide6", "shiboken6", "win32more"))
     }
-    code, report = selfcheck(tree(tmp_path, {**SOUND, **native}))
-    if sys.platform == "win32":
-        assert code == 1 and all(f"doesn't import: tools.native_{index}" in report for index in range(3)), report
-    else:
-        assert code == 0 and "2 passed" in report, report
+    code, report = selfcheck(tree(tmp_path, {**SOUND, **native, "tools/needs.py": "import no_such_thing\n"}))
+    assert code == 1 and "doesn't import: tools.needs" in report, report
+    excused = not any(f"doesn't import: tools.native_{index}" in report for index in range(3))
+    assert excused is (sys.platform != "win32"), report
 
 
 def test_a_crashing_test_module_fails(tmp_path: Path) -> None:
     code, report = selfcheck(tree(tmp_path, {**SOUND, "tests/test_bad.py": "raise RuntimeError('boom')\n"}))
     assert code == 1
     assert "boom" in report
-
-
-def test_broken_windowless_launcher_fails(tmp_path: Path) -> None:
-    code, report = selfcheck(tree(tmp_path, {**SOUND, "workspace.pyw": "def broken(:\n"}))
-    assert code == 1
-    assert "doesn't compile: workspace.pyw" in report
 
 
 def test_fast_checks_defer_native_tests_but_the_default_install_gate_runs_them(tmp_path: Path) -> None:
