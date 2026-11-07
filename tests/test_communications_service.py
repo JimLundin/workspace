@@ -111,7 +111,7 @@ def service(path: Path) -> tuple[Communications, Web]:
     web = Web()
     store = SavedState(path, COMMUNICATIONS_STATE, cipher=LocalCipher())
     controller = Communications(web, store, lambda feed: None)
-    controller.feed = Feed(status=Status.CONNECTED, conversations=(Conversation("19:one@thread.v2", "Anna"),), followed=("19:one@thread.v2",))
+    controller.show(Feed(status=Status.CONNECTED, conversations=(Conversation("19:one@thread.v2", "Anna"),), followed=("19:one@thread.v2",)))
     return controller, web
 
 
@@ -126,7 +126,7 @@ def test_repeated_collection_retains_one_connection(tmp_path: Path) -> None:
 def test_handled_chat_revisions_survive_reload_without_saving_incoming_bodies(tmp_path: Path) -> None:
     controller, _web = service(tmp_path / "saved.bin")
     message = Message("19:one@thread.v2", "one", "Anna", "Private incoming content", 1, 2)
-    controller.feed = replace(controller.feed, messages=(message,))
+    controller.show(replace(controller.feed, messages=(message,)))
     controller.command(Handle((Acknowledgement(message.key, fingerprint(message.text)),)))
     saved = controller.store.read()
     assert "Private incoming content" not in str(saved)
@@ -139,7 +139,7 @@ def test_handled_chat_revisions_survive_reload_without_saving_incoming_bodies(tm
 def test_failed_teams_read_confirmation_does_not_claim_native_acknowledgement(tmp_path: Path) -> None:
     controller, _web = service(tmp_path / "saved.bin")
     update = Update(TeamsActivity("123"), "Reaction", "Someone reacted", "Teams", 1)
-    controller.feed = replace(controller.feed, updates=(update,))
+    controller.show(replace(controller.feed, updates=(update,)))
     controller.command(Handle((Acknowledgement(update.key, update_fingerprint(update)),)))
     assert Acknowledgement(update.key, update_fingerprint(update)) in controller.feed.handled
     assert "could not be confirmed" in controller.feed.activity_detail
@@ -149,7 +149,7 @@ def test_only_a_verified_reply_handles_its_captured_ticket_and_never_a_new_arriv
     controller, web = service(tmp_path / "saved.bin")
     original = Message("19:one@thread.v2", "request", "Anna", "Please check", 1, 2)
     arrival = replace(original, identity="new", text="And this", created_at=3)
-    controller.feed = replace(controller.feed, messages=(original, arrival))
+    controller.show(replace(controller.feed, messages=(original, arrival)))
     web.result = (replace(original, identity="sent", sender="You", text="Checked", created_at=4),)
     captured = (Acknowledgement(original.key, fingerprint(original.text)),)
     controller.command(Send(original.conversation, "Checked", "verified", captured))
@@ -159,7 +159,7 @@ def test_only_a_verified_reply_handles_its_captured_ticket_and_never_a_new_arriv
 
 def test_one_unavailable_chat_does_not_drop_other_chats_observed_updates(tmp_path: Path) -> None:
     controller, web = service(tmp_path / "saved.bin")
-    controller.feed = replace(controller.feed, followed=("19:one@thread.v2", "19:missing@thread.v2"))
+    controller.show(replace(controller.feed, followed=("19:one@thread.v2", "19:missing@thread.v2")))
     message = Message("19:one@thread.v2", "old", "Anna", "Updated while another chat is unavailable", 1, 2)
     current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (message,), editor_ready=True)
     web.current = current
@@ -172,7 +172,7 @@ def test_one_unavailable_chat_does_not_drop_other_chats_observed_updates(tmp_pat
     assert controller.feed.unavailable[0].conversation == "19:missing@thread.v2"
     assert "1 chat" in controller.feed.detail
     web.unavailable = frozenset()
-    controller.cursor = 1
+    controller.poll_next(1)
     controller.collect()
     assert not tuple(controller.feed.unavailable)
 
@@ -191,7 +191,7 @@ def test_saved_followed_chat_recovers_when_no_conversation_pane_is_open(tmp_path
 
 def test_first_collection_discovers_chat_navigation_before_choosing_chats(tmp_path: Path) -> None:
     controller, web = service(tmp_path / "saved.bin")
-    controller.feed = Feed()
+    controller.show(Feed())
     empty = Observation("", "", (), (), editor_ready=False)
     current = Observation("19:one@thread.v2", "Anna", (Conversation("19:one@thread.v2", "Anna"),), (), editor_ready=True)
     web.current, web.discovered = empty, current
@@ -203,7 +203,7 @@ def test_first_collection_discovers_chat_navigation_before_choosing_chats(tmp_pa
 
 def test_first_collection_opens_a_discovered_chat_when_teams_has_no_current_chat(tmp_path: Path) -> None:
     controller, web = service(tmp_path / "saved.bin")
-    controller.feed = Feed()
+    controller.show(Feed())
     landing = Observation("", "", (Conversation("19:one@thread.v2", "Anna"),), (), editor_ready=False)
     current = Observation("19:one@thread.v2", "Anna", landing.conversations, (), editor_ready=True)
     web.current, web.discovered, web.selected = landing, landing, current
@@ -275,7 +275,7 @@ def test_unknown_send_is_retained_across_restart_and_not_repeated(tmp_path: Path
     assert controller.feed.replies[-1].delivery is Delivery.UNKNOWN
     recovered, next_web = service(path)
     recovered.load()
-    recovered.feed = replace(recovered.feed, status=Status.CONNECTED)
+    recovered.show(replace(recovered.feed, status=Status.CONNECTED))
     recovered.send(Send("19:one@thread.v2", "Check the figures", "retry"))
     assert next_web.sends == []
     assert recovered.feed.replies[-1].delivery is Delivery.FAILED
@@ -284,7 +284,7 @@ def test_unknown_send_is_retained_across_restart_and_not_repeated(tmp_path: Path
 
 def test_interrupted_attempt_recovers_as_unknown_without_browser_effect(tmp_path: Path) -> None:
     controller, _web = service(tmp_path / "saved.bin")
-    controller.feed = replace(controller.feed, replies=(Reply("attempt", "19:one@thread.v2", "Anna", "Saved words", 1, Delivery.SENDING),))
+    controller.show(replace(controller.feed, replies=(Reply("attempt", "19:one@thread.v2", "Anna", "Saved words", 1, Delivery.SENDING),)))
     controller.save()
     recovered, next_web = service(controller.store.path)
     recovered.load()
