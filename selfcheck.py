@@ -374,10 +374,7 @@ def run_module(path: Path) -> Outcome:
 def _prepare_worker(root: str) -> None:
     sys.path.insert(0, root)
     os.chdir(root)
-    os.environ.pop("WORKSPACE_E2E", None)
-    if (Path(root) / "assistant" / "sdk.py").is_file():
-        # Resolve the SDK graph before Qt installs its per-module source inspection.
-        importlib.import_module("assistant.sdk")
+    os.environ.pop("WORKSPACE_E2E", None)  # The SDK loads when a test first runs an agent, not up front.
 
 
 @dataclass(frozen=True, slots=True)

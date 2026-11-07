@@ -224,21 +224,24 @@ def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> 
     assert (1.0, "worker:module:tests.test_work_store") in combined.durations
 
 
-def test_the_sdk_is_imported_before_timing_only_for_tests_that_reach_it(tmp_path: Path) -> None:
-    # Defects: a test reaching the SDK through a Workspace module pays its cold
-    # import inside the time budget, or a pure edit pays that import for nothing.
+def test_the_sdk_is_imported_before_timing_only_for_tests_that_load_it(tmp_path: Path) -> None:
+    # Defects: a test that loads the SDK through a Workspace module pays its cold
+    # import inside the time budget, or a test that only reaches it lazily (and so
+    # never loads it unless it runs an agent) pays seconds for nothing.
     files = {
         "app/__init__.py": "",
         "app/model.py": "from app import client\n",
-        "app/client.py": "lazy import openai\n",
+        "app/client.py": "import openai\n",
+        "app/agent.py": "lazy import openai\n",
         "tests/test_model.py": "from app.model import x\n",
+        "tests/test_agent.py": "from app import agent\n",
         "tests/test_pure.py": "import os\n",
     }
     for name, text in files.items():
         (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / name).write_text(text, encoding="utf-8")
     assert sdk_packages(("tests/test_model.py::test_one", "tests/test_pure.py"), tmp_path) == ("openai",)
-    assert sdk_packages(("tests/test_pure.py",), tmp_path) == ()
+    assert sdk_packages(("tests/test_agent.py", "tests/test_pure.py"), tmp_path) == ()
 
 
 def test_a_failure_summary_says_where_in_the_source_it_was_raised() -> None:

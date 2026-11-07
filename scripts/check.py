@@ -5,6 +5,7 @@ python -m scripts.check [--full | --native] [--standards] [--tests tests/test_x.
 """
 
 import argparse
+import ast
 import contextlib
 import importlib
 import inspect
@@ -267,9 +268,28 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
 SDK_PACKAGES = ("agents", "openai")
 
 
+def eager_imports(text: str) -> frozenset[str]:
+    """Modules a source file imports when it loads, with their packages; lazy imports load only when used."""
+    found = frozenset(
+        module
+        for node in ast.parse(text).body
+        for module in (
+            tuple(alias.name for alias in node.names)
+            if isinstance(node, ast.Import) and not node.is_lazy
+            else (node.module, *(f"{node.module}.{alias.name}" for alias in node.names))
+            if isinstance(node, ast.ImportFrom) and node.module is not None and not node.is_lazy
+            else ()
+        )
+    )
+    return frozenset(".".join(module.split(".")[:end]) for module in found for end in range(1, module.count(".") + 2))
+
+
 def sdk_packages(tests: tuple[str, ...], root: Path) -> tuple[str, ...]:
-    """The SDK packages the selected tests import, directly or through Workspace modules."""
-    cache = Cache(root) if (root / "pyproject.toml").is_file() else None
+    """The SDK packages the selected tests load as they import, directly or through Workspace modules.
+
+    Only eager imports count: a module that reaches the SDK lazily (as `assistant.agent`
+    does) loads it only when a test runs an agent, so most tests never pay its
+    seconds-long import."""
     pending = [module_name(selector.partition("::")[0]) for selector in tests]
     seen: set[str] = set()
     reached: set[str] = set()
@@ -282,18 +302,16 @@ def sdk_packages(tests: tuple[str, ...], root: Path) -> tuple[str, ...]:
         path = next((candidate for candidate in (base.with_suffix(".py"), base / "__init__.py") if candidate.is_file()), None)
         if path is None:
             continue
-        imported = dependencies(path.relative_to(root).as_posix(), path.read_text(encoding="utf-8"), cache=cache)
+        imported = eager_imports(path.read_text(encoding="utf-8"))
         reached |= {name.partition(".")[0] for name in imported} & set(SDK_PACKAGES)
         pending.extend(imported)
     return tuple(package for package in SDK_PACKAGES if package in reached)
 
 
 def prepare_worker(root: Path) -> None:
+    # The SDK is not preloaded: it loads when a test first runs an agent (a few
+    # seconds), and loading it before or after Qt took the same time warm.
     os.environ.pop("WORKSPACE_E2E", None)
-    # No properties run in these workers. Their selected SDK tests already need
-    # this graph; resolving it before Qt avoids Qt's dependency-source inspection.
-    if (root / "assistant" / "sdk.py").is_file():
-        importlib.import_module("assistant.sdk")
 
 
 def execute_overlapped(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
@@ -361,6 +379,7 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
         matched = False
         for label, test in selected_tests(module, loaded, requested_function if separator else ""):
             matched = True
+            sdk_loaded = "agents" in sys.modules
             started = time.perf_counter()
             # Expected diagnostics from passing tests, such as SDK warnings for a
             # deliberately broken stream, would bury real failures in the console.
@@ -378,7 +397,10 @@ def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], obje
             except Exception as error:
                 failures.append(raised(f"{name}::{label}", error, output.getvalue()))
             finally:
-                timings.append((time.perf_counter() - started, module + "." + label))
+                # The first test to run an agent loads the SDK (seconds, cold); that load is
+                # a phase of this run, not the test's cost, so the budget never blames it.
+                first_load = not sdk_loaded and "agents" in sys.modules
+                timings.append((time.perf_counter() - started, f"phase:first SDK load in {module}.{label}" if first_load else module + "." + label))
         if separator and not matched:
             failures.append(Failure(selector, "No test function matched", f"No test function matched {selector}"))
     return Results(passed, skipped, tuple(failures), tuple(timings))
