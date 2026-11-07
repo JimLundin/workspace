@@ -29,9 +29,6 @@ over 3 s fails by name.
 
 Left:
 
-- **Fix `test_keyboard_light::test_an_unlock_without_a_darkening_leaves_the_keyboard_alone`.**
-  It has failed since it was added in f4ad991: an unlock with no lock before it
-  still writes an effect.
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
   three meeting tests from the slow lists.
 - **Investigate the four largest native tests:**
@@ -40,18 +37,13 @@ Left:
   - copied bundle (24 s), which changes anyway with the install-time
     dependencies task below;
   - attached Edge (19 s).
-- **Run native modules in parallel in the keeper's check.** The branch
-  `keeper-native-lanes` holds it, rebased locally. Two Edge tests failed beside
-  another lane; reproduce by running only those two modules side by side.
 - **Dependencies are installed, not bundled** (done 2026-11-07).
-  `environments.py` builds one venv per lock from PyPI; the keeper and every
+  `environments.py` builds one venv per lock from PyPI with uv; the keeper and every
   program run its interpreter. A lock change deploys through the keeper, and undo
   switches environments.
   - **Left:** the CI test jobs still use `pip install -e ".[test]"`, which is
     unpinned. Their matrix may include runners the Windows lock can't install
     on, so move them to the lock where it can.
-  - **Left:** the installed copy's old `.runtime` and `runtime-before-slim`
-    folders are unused now. Delete them when convenient.
 
 ## 2. Check that each side survives the other's restart, live
 
