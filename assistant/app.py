@@ -400,7 +400,7 @@ class AssistantApp:
 
     def create_feed(self, work: FeedWork) -> Triage:
         """Construct the feed owner over the durable task/context observations."""
-        return Triage(
+        return Triage.start(
             windows_store(DIRECTORY / "work-feed.bin", STORED_BOARD),
             self.review_feed,
             submit=self.agent.submit_identified,

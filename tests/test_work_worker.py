@@ -78,7 +78,7 @@ class LinkedOwners:
     """The fixture's feed owner, recording each command it receives."""
 
     def __init__(self) -> None:
-        self.triage = Triage(MemoryStore(), lambda _batch, _rules: "")
+        self.triage = Triage.start(MemoryStore(), lambda _batch, _rules: "")
         self.operations: tuple[FeedCommand, ...] = ()
         self.desktop = WorkOwners(self.feed, no_personal_work, no_canvas)
 

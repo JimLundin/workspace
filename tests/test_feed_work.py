@@ -136,36 +136,36 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
         submitted.append((task, prompt, profile))
         tasks.submit(task, item.title, prompt, RequestSource("feed", profile), at=clock())
 
-    triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
-    request = feed_bridge(triage)
+    triage = TriageFixture.start(feed_store, lambda _batch, _rules: "{}", submit=queue)
+    request = feed_bridge(triage.triage)
     rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
     arguments = {"item": reply.item, "revision": reply.revision, "reply_id": reply.reply_id, "text": reply.text}
     try:
         wrong = rig.call("work_feed_reply", **{**arguments, "revision": "stale"})
-        assert not wrong.ok and not submitted and not triage.board.history
+        assert not wrong.ok and not submitted and not triage.triage.board.history
         result = rig.call("work_feed_reply", **arguments)
         assert result.ok and len(submitted) == 1
         task_id, prompt, profile = submitted[0]
         assert words in prompt and "Carry out the user's instruction" in prompt
         assert profile == FeedHandoff(item.identity, item.title)
-        assert triage.board.actions == (item,), "Queueing is not completion."
+        assert triage.triage.board.actions == (item,), "Queueing is not completion."
         assert _OBJECT.validate_json(result.text)["queued"] == task_id
     finally:
-        triage.close()
-    restarted = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
+        triage.triage.close()
+    restarted = TriageFixture.start(feed_store, lambda _batch, _rules: "{}", submit=queue)
     try:
-        restarted.command(reply)
+        restarted.triage.command(reply)
         assert len(submitted) == 2 and submitted[0] == submitted[1]
-        assert len(restarted.board.history) == 1 and tasks.get(task_id) is not None
+        assert len(restarted.triage.board.history) == 1 and tasks.get(task_id) is not None
         # Acknowledgment retries remain bound to the saved instruction even after re-triage.
-        restarted.board = replace(restarted.board, items=(replace(item, summary="New reading"),))
-        restarted.command(reply)
+        restarted.triage.set_board(replace(restarted.triage.board, items=(replace(item, summary="New reading"),)))
+        restarted.triage.command(reply)
         assert len(submitted) == 2
-        assert isinstance(restarted.command(replace(reply, text="A different instruction.")), FeedRejected)
-        assert len(restarted.board.history) == 1
+        assert isinstance(restarted.triage.command(replace(reply, text="A different instruction.")), FeedRejected)
+        assert len(restarted.triage.board.history) == 1
     finally:
-        restarted.close()
+        restarted.triage.close()
 
 
 def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryable_instruction(tmp_path: Path) -> None:
@@ -182,31 +182,31 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     broken.data = saved(Board(enabled=True, items=(item,)))
     submitted: list[str] = []
     command = FeedReply(item.identity, proposal_revision(item), "reply", "Check the totals.")
-    failed = TriageFixture(
+    failed = TriageFixture.start(
         broken,
         lambda _batch, _rules: "{}",
         submit=lambda task, _prompt, _profile: submitted.append(task),
     )
     try:
         with TestCase().assertRaises(OSError):
-            failed.command(command)
-        assert not submitted and not failed.board.history
+            failed.triage.command(command)
+        assert not submitted and not failed.triage.board.history
     finally:
-        failed.close()
+        failed.triage.close()
 
     def unavailable(_task: str, _prompt: str, _profile: Profile) -> None:
         raise ValueError("Work queue unavailable")
 
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    queued = TriageFixture(store, lambda _batch, _rules: "{}", submit=unavailable)
+    queued = TriageFixture.start(store, lambda _batch, _rules: "{}", submit=unavailable)
     try:
         with TestCase().assertRaises(OSError):
-            queued.command(command)
+            queued.triage.command(command)
         assert len(restored(store.read()).history) == 1
-        assert not queued.submitted and queued.board.actions == (item,)
+        assert not queued.triage.submitted and queued.triage.board.actions == (item,)
     finally:
-        queued.close()
+        queued.triage.close()
 
 
 def test_context_changes_reconsider_open_work_without_reopening_handled_items(tmp_path: Path) -> None:
@@ -217,18 +217,18 @@ def test_context_changes_reconsider_open_work_without_reopening_handled_items(tm
     item = replace(decode(output(([source.identity], "action")), (source,))[0], reviewed_on=day)
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(replace(item, disposition=Disposition.QUIET),)))
-    triage = TriageFixture(store, lambda _batch, _rules: "{}")
+    triage = TriageFixture.start(store, lambda _batch, _rules: "{}")
     try:
-        assert not unassessed(triage.board, (source,), today=day)
-        triage.context_changed((), ())
-        epoch = triage.epoch
-        triage.context_changed((), ())
-        assert triage.epoch == epoch
-        triage.context_changed((), (Preference("style", "Style", "Use the baseline.", "Jim", 10),))
-        assert triage.epoch == epoch + 1 and unassessed(triage.board, (source,), today=day) == (source,)
-        triage.edit(DismissItem(item.identity))
-        triage.context_changed((), ())
-        assert not triage.board.actions
-        assert triage.board.history[-1].kind == "dismiss"
+        assert not unassessed(triage.triage.board, (source,), today=day)
+        triage.triage.context_changed((), ())
+        epoch = triage.triage.epoch
+        triage.triage.context_changed((), ())
+        assert triage.triage.epoch == epoch
+        triage.triage.context_changed((), (Preference("style", "Style", "Use the baseline.", "Jim", 10),))
+        assert triage.triage.epoch == epoch + 1 and unassessed(triage.triage.board, (source,), today=day) == (source,)
+        triage.triage.edit(DismissItem(item.identity))
+        triage.triage.context_changed((), ())
+        assert not triage.triage.board.actions
+        assert triage.triage.board.history[-1].kind == "dismiss"
     finally:
-        triage.close()
+        triage.triage.close()

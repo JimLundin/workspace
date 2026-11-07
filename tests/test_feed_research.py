@@ -108,14 +108,14 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
     feed = acknowledge(acknowledge(feed, feed.messages[0].key), feed.messages[3].key)
     batch = triage_evidence(PendingFeed(feed))
     assert len(batch) == 1
-    triage = TriageFixture(
+    triage = TriageFixture.start(
         MemoryStore(),
         lambda _batch, _rules: "{}",
         work=FeedWork(tasks, memory, lambda: ContextSnapshot(50, "active", ())),
         clock=lambda: 50,
     )
     try:
-        triage.observe(PendingFeed(feed))
+        triage.triage.observe(PendingFeed(feed))
         with fake_endpoint() as endpoint:
             endpoint.replies = [
                 screening_reply((item.identity, "action") for item in batch),
@@ -126,7 +126,7 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
                 says(output(([batch[0].identity], "action"))),
             ]
             settings = Settings(endpoint.url, "fixture", "transcribe", "", agent_reasoning_effort="high")
-            research = Research(settings, triage.research_context, triage.research_conversation, stop=triage.closed)
+            research = Research(settings, triage.triage.research_context, triage.triage.research_conversation, stop=triage.triage.closed)
             review = classify(settings, batch, (), research=research, clock=lambda: 50)
             requests = tuple(_OBJECT.validate_json(item.body) for item in endpoint.received[1:])
         assert len(decode(review, batch)) == 1 and len(requests) == 3
@@ -146,7 +146,7 @@ def test_background_research_reads_topic_memory_full_thread_and_file_before_publ
         assert "not found" in _OBJECT.dump_json(requests[2]).decode().lower()
         assert path.read_text(encoding="utf-8") == "The approved Atlas budget is 100; the current forecast is 112."
     finally:
-        triage.close()
+        triage.triage.close()
 
 
 def test_own_reply_reconsiders_cached_work_and_cannot_be_overwritten_by_old_research(tmp_path: Path) -> None:
@@ -157,23 +157,25 @@ def test_own_reply_reconsiders_cached_work_and_cannot_be_overwritten_by_old_rese
     item = decode(output(([batch[0].identity], "action")), batch)[0]
     store = MemoryStore()
     store.data = saved(Board(enabled=True, items=(item,)))
-    triage = TriageFixture(store, lambda _batch, _rules: "{}")
+    triage = TriageFixture.start(store, lambda _batch, _rules: "{}")
     try:
-        triage.observe(PendingFeed(feed))
+        triage.triage.observe(PendingFeed(feed))
         # Simulate a current committed review through the actual immutable board contract.
         day = date(2026, 10, 29)
-        triage.board = replace(triage.board, items=(replace(item, reviewed_on=day),))
-        epoch = triage.epoch
+        triage.triage.set_board(replace(triage.triage.board, items=(replace(item, reviewed_on=day),)))
+        epoch = triage.triage.epoch
         answered = replace(feed, messages=(*feed.messages, Message("atlas", "reply", "Jim", "Use the approved forecast.", 11, 11, own=True)))
-        triage.observe(PendingFeed(answered))
+        triage.triage.observe(PendingFeed(answered))
         assert triage_evidence(PendingFeed(answered)) == batch
-        assert triage.epoch == epoch + 1 and unassessed(triage.board, batch, today=day) == batch
-        assert "Use the approved forecast" in triage.research_conversation(batch[0].identity)
-        triage.edit(DismissItem(item.identity))
-        triage.observe(PendingFeed(replace(answered, messages=(*answered.messages, Message("atlas", "thanks", "Jim", "Thanks.", 12, 12, own=True)))))
-        assert not triage.board.actions and not unassessed(triage.board, batch, today=day)
+        assert triage.triage.epoch == epoch + 1 and unassessed(triage.triage.board, batch, today=day) == batch
+        assert "Use the approved forecast" in triage.triage.research_conversation(batch[0].identity)
+        triage.triage.edit(DismissItem(item.identity))
+        triage.triage.observe(
+            PendingFeed(replace(answered, messages=(*answered.messages, Message("atlas", "thanks", "Jim", "Thanks.", 12, 12, own=True))))
+        )
+        assert not triage.triage.board.actions and not unassessed(triage.triage.board, batch, today=day)
     finally:
-        triage.close()
+        triage.triage.close()
 
 
 def test_public_research_supplies_findings_or_an_explicit_access_gap_without_losing_local_work() -> None:

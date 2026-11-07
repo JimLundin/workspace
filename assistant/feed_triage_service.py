@@ -3,7 +3,7 @@
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from itertools import chain, islice
 from typing import Protocol, assert_never
@@ -61,6 +61,7 @@ from assistant.llm import Settings
 from assistant.notification_agent import NotificationAgent
 from assistant.personal_work_service import PersonalWork
 from assistant.work_bridge_contracts import FeedResponse
+from cell import Cell
 from contracts.context import ContextRecord
 from contracts.task import FeedHandoff, Phase, Profile, Task, phase
 lazy from assistant.feed_research import Research
@@ -144,31 +145,47 @@ def wait_for_stop(stopped: threading.Event, seconds: float) -> bool:
     return stopped.wait(seconds)
 
 
-class Triage:
-    __slots__ = (
-        "board",
-        "candidates",
-        "clock",
-        "closed",
-        "context_revision",
-        "epoch",
-        "feed",
-        "lock",
-        "model",
-        "notifications",
-        "personal",
-        "store",
-        "submit",
-        "submitted",
-        "thread",
-        "tick_s",
-        "wait",
-        "wake",
-        "work",
-    )
+type ContextRevision = tuple[tuple[tuple[str, Phase, int], ...], tuple[ContextRecord, ...]]
+"""The task phases and saved context the board last reconsidered against."""
 
-    def __init__(  # noqa: PLR0913 - injected collaborators and test seams
-        self,
+
+@dataclass(frozen=True, slots=True)
+class _Triaging:
+    board: Board
+    feed: PendingFeed = field(default_factory=PendingFeed)
+    candidates: tuple[Candidate, ...] = ()
+    epoch: int = 0
+    """Advances whenever the board's decisions must be reconsidered."""
+    context_revision: ContextRevision | None = None
+    submitted: frozenset[str] = frozenset()
+    """Feed handoffs already queued as tasks."""
+
+
+@dataclass(frozen=True, slots=True)
+class Triage:
+    # Compose the real storage, model, work-queue and context effects here.
+    # Cancellable delays and the clock vary independently in native and
+    # deterministic adapters, so each is an explicit dependency.
+    store: Store
+    model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str]
+    submit: Callable[[str, str, Profile], None] | None
+    wait: Callable[[threading.Event, float], bool]
+    clock: Callable[[], float]
+    work: FeedWork | None
+    personal: PersonalWork | None
+    tick_s: float
+    """How often the loop rechecks for a new day or a retry without being woken."""
+    notifications: NotificationAgent
+    closed: threading.Event
+    _state: Cell[_Triaging]
+    """Replaced whole under the lock."""
+    lock: threading.RLock = field(default_factory=threading.RLock, init=False)
+    wake: threading.Event = field(default_factory=threading.Event, init=False)
+    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
+
+    @classmethod
+    def start(  # noqa: PLR0913 - injected collaborators and test seams
+        cls,
         store: Store,
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
         *,
@@ -178,58 +195,82 @@ class Triage:
         work: FeedWork | None = None,
         personal: PersonalWork | None = None,
         tick_s: float = 1.0,
-    ) -> None:
-        # Compose the real storage, model, work-queue and context effects here.
-        # Cancellable delays and the clock vary independently in native and
-        # deterministic adapters, so each is an explicit dependency.
-        self.store, self.model = store, model
-        self.wait: Callable[[threading.Event, float], bool] = wait
-        self.clock: Callable[[], float] = clock
-        self.submit = submit
-        self.work = work
-        self.personal = personal
-        self.context_revision: tuple[tuple[tuple[str, Phase, int], ...], tuple[ContextRecord, ...]] | None = None
-        self.submitted: set[str] = set()
-        self.lock = threading.RLock()
-        self.closed, self.wake = threading.Event(), threading.Event()
-        self.tick_s = tick_s
-        """How often the loop rechecks for a new day or a retry without being woken."""
-        self.notifications = NotificationAgent(submit, self.closed, tick_s=tick_s)
-        self.feed: PendingFeed = PendingFeed()
-        self.candidates: tuple[Candidate, ...] = ()
-        self.epoch = 0
+    ) -> Triage:
+        """Triage from the saved board, its notification admission and worker running."""
         try:
-            self.board: Board = restored(store.read())
+            board = restored(store.read())
         except ValueError, OSError:
-            self.board = Board(enabled=True, status="Saved feed preferences could not be loaded.")
-        self.thread = threading.Thread(target=self.run, name="Work feed triage", daemon=True)
-        self.notifications.start()
-        self.thread.start()
+            board = Board(enabled=True, status="Saved feed preferences could not be loaded.")
+        closed = threading.Event()
+        notifications = NotificationAgent(submit, closed, tick_s=tick_s)
+        triage = cls(store, model, submit, wait, clock, work, personal, tick_s, notifications, closed, Cell(_Triaging(board)))
+        thread = threading.Thread(target=triage.run, name="Work feed triage", daemon=True)
+        triage._thread.set(thread)
+        notifications.start()
+        thread.start()
+        return triage
+
+    @property
+    def thread(self) -> threading.Thread:
+        thread = self._thread.get()
+        assert thread is not None, "Triage.start sets the worker thread before returning."
+        return thread
+
+    @property
+    def board(self) -> Board:
+        return self._state.get().board
+
+    @property
+    def candidates(self) -> tuple[Candidate, ...]:
+        return self._state.get().candidates
+
+    @property
+    def epoch(self) -> int:
+        return self._state.get().epoch
+
+    @property
+    def submitted(self) -> frozenset[str]:
+        return self._state.get().submitted
+
+    def set_board(self, board: Board) -> None:
+        """Replace the board outright, as a test scenario's starting point."""
+        with self.lock:
+            self._state.set(replace(self._state.get(), board=board))
+
+    def set_candidates(self, candidates: tuple[Candidate, ...]) -> None:
+        """Replace the observed candidates outright, as a test scenario's starting point."""
+        with self.lock:
+            self._state.set(replace(self._state.get(), candidates=candidates))
 
     def observe(self, feed: PendingFeed) -> None:
         with self.lock:
-            history_changed = self.feed.teams.messages != feed.teams.messages
-            self.feed = feed
+            history_changed = self._state.get().feed.teams.messages != feed.teams.messages
+            self._state.set(replace(self._state.get(), feed=feed))
             candidates = triage_evidence(feed)
-            if candidates == self.candidates and not history_changed:
+            if candidates == self._state.get().candidates and not history_changed:
                 return
             if history_changed:
-                self.board = reconsidered(self.board)
-                self.epoch += 1
-            changed = timing_changes(self.candidates, candidates)
+                new_board = reconsidered(self._state.get().board)
+                self._state.set(replace(self._state.get(), board=new_board))
+                self._state.set(replace(self._state.get(), epoch=self._state.get().epoch + 1))
+            changed = timing_changes(self._state.get().candidates, candidates)
             if changed:
-                self.board = retimed(self.board, changed)
-                self.epoch += 1
-            self.candidates = candidates
-            self.board = reconcile(self.board, candidates)
+                new_board = retimed(self._state.get().board, changed)
+                self._state.set(replace(self._state.get(), board=new_board))
+                self._state.set(replace(self._state.get(), epoch=self._state.get().epoch + 1))
+            self._state.set(replace(self._state.get(), candidates=candidates))
+            new_board = reconcile(self._state.get().board, candidates)
+            self._state.set(replace(self._state.get(), board=new_board))
             self._offer_actionable()
             self.wake.set()
 
     def _offer_actionable(self) -> None:
         """Only current reviewed action sources may activate automatic work."""
         today = datetime.fromtimestamp(self.clock(), UTC).astimezone().date()
-        references = frozenset(ref for item in self.board.actions if item.reviewed_on == today for ref in item.references)
-        self.notifications.offer(tuple(item for item in self.candidates if (item.identity, item.revision) in references and not item.reaction))
+        references = frozenset(ref for item in self._state.get().board.actions if item.reviewed_on == today for ref in item.references)
+        self.notifications.offer(
+            tuple(item for item in self._state.get().candidates if (item.identity, item.revision) in references and not item.reaction)
+        )
 
     def context_changed(self, tasks: tuple[Task, ...], records: tuple[ContextRecord, ...]) -> None:
         """New goals, outcomes or saved memory reconsider open work without a new notification."""
@@ -238,43 +279,44 @@ class Triage:
             records,
         )
         with self.lock:
-            previous = self.context_revision
-            self.context_revision = revision
+            previous = self._state.get().context_revision
+            self._state.set(replace(self._state.get(), context_revision=revision))
             if previous == revision:
                 return
-            self.board = reconsidered(self.board)
-            self.epoch += 1
+            new_board = reconsidered(self._state.get().board)
+            self._state.set(replace(self._state.get(), board=new_board))
+            self._state.set(replace(self._state.get(), epoch=self._state.get().epoch + 1))
             self._offer_actionable()
             self.wake.set()
 
     def snapshot(self) -> FeedSnapshot:
         with self.lock:
-            actions = self.board.actions
-            state = saved(replace(self.board, items=actions[:40]))
-            current = frozenset((item.identity, item.revision) for item in self.candidates)
+            actions = self._state.get().board.actions
+            state = saved(replace(self._state.get().board, items=actions[:40]))
+            current = frozenset((item.identity, item.revision) for item in self._state.get().candidates)
             wanted = frozenset(ref[0] for item in actions[:40] for ref in item.references)
             ordered = chain(
-                (item for item in self.candidates if item.identity in wanted),
-                (item for item in self.candidates if item.identity not in wanted),
+                (item for item in self._state.get().candidates if item.identity in wanted),
+                (item for item in self._state.get().candidates if item.identity not in wanted),
             )
             return FeedSnapshot(
                 rules=state.rules,
                 items=state.items,
                 review_version=state.review_version,
-                working_context=self.working_context(self.candidates),
+                working_context=self.working_context(self._state.get().candidates),
                 reviewed_at=datetime.fromtimestamp(self.clock(), UTC).astimezone().isoformat(),
                 decisions=tuple(
                     RejectedDecision(item.identity, item.title, item.decision)
-                    for item in self.board.items
+                    for item in self._state.get().board.items
                     if item.disposition is Disposition.REJECTED
                 )[-40:],
                 total_actions=len(actions),
-                quiet_updates=sum(item.disposition in (Disposition.QUIET, Disposition.USER_QUIET) for item in self.board.items),
+                quiet_updates=sum(item.disposition in (Disposition.QUIET, Disposition.USER_QUIET) for item in self._state.get().board.items),
                 focus=actions[0].identity if actions else None,
-                status=self.notifications.status or self.board.status,
-                pending=self.board.pending,
+                status=self.notifications.status or self._state.get().board.status,
+                pending=self._state.get().board.pending,
                 unavailable_items=tuple(proposal.identity for proposal in actions if not all(ref in current for ref in proposal.references)),
-                quiet_reactions=self.board.reactions,
+                quiet_reactions=self._state.get().board.reactions,
                 sources=tuple(source_evidence(item) for item in islice((item for item in ordered if not item.reaction), 80)),
             )
 
@@ -285,14 +327,14 @@ class Triage:
     def research_context(self, query: str) -> str:
         """Read topic-specific evidence without holding the feed lock during store IO."""
         with self.lock:
-            board = self.board
+            board = self._state.get().board
         context = self.work.read(board, query[:20000], self.clock()) if self.work is not None else WorkingContext()
         personal = self.personal.context(query) if self.personal is not None else ""
         return context.describe(board) + "\n\n" + personal
 
     def research_conversation(self, source_id: str) -> str:
         with self.lock:
-            feed = self.feed
+            feed = self._state.get().feed
         return conversation_context(feed.teams, source_id)
 
     def command(self, command: FeedCommand) -> FeedResponse:
@@ -316,13 +358,13 @@ class Triage:
     def edit(self, command: BoardEdit) -> FeedSnapshot:
         with self.lock:
             try:
-                updated = edited(self.board, command, EditObservation(self.candidates, self.clock()))
+                updated = edited(self._state.get().board, command, EditObservation(self._state.get().candidates, self.clock()))
             except ValueError as error:
                 raise RejectedError(str(error)) from error
             # Save first, so a failed write never claims a preference is durable.
             self.store.write(saved(updated))
-            self.board = updated
-            self.epoch += 1
+            self._state.set(replace(self._state.get(), board=updated))
+            self._state.set(replace(self._state.get(), epoch=self._state.get().epoch + 1))
             self._offer_actionable()
             self.wake.set()
         return self.snapshot()
@@ -330,11 +372,11 @@ class Triage:
     def choose(self, command: ChooseSolution) -> ChosenHandoff:
         with self.lock:
             try:
-                item, option = selected(self.board, command.item, command.revision, command.choice)
+                item, option = selected(self._state.get().board, command.item, command.revision, command.choice)
             except ValueError as error:
                 raise RejectedError(str(error)) from error
             task, prompt = solution_task(item, option)
-            recorded = next((entry for entry in self.board.history if entry.id == task), None)
+            recorded = next((entry for entry in self._state.get().board.history if entry.id == task), None)
             if recorded is None:
                 decision = Decision(
                     task,
@@ -361,28 +403,28 @@ class Triage:
         task, prompt = request.task_id, request.prompt
         if self.submit is None:
             raise RejectedError("The work agent is unavailable. This request has not been started.")
-        if not any(entry.id == decision.id for entry in self.board.history):
-            updated = replace(self.board, history=(*self.board.history, decision)[-200:])
+        if not any(entry.id == decision.id for entry in self._state.get().board.history):
+            updated = replace(self._state.get().board, history=(*self._state.get().board.history, decision)[-200:])
             self.store.write(saved(updated))
-            self.board = updated
-            self.epoch += 1
-        if task not in self.submitted:
+            self._state.set(replace(self._state.get(), board=updated))
+            self._state.set(replace(self._state.get(), epoch=self._state.get().epoch + 1))
+        if task not in self._state.get().submitted:
             try:
                 self.submit(task, prompt, FeedHandoff(decision.item, decision.title))
             except ValueError as error:
                 raise OSError("The request could not be queued. Your decision is saved; try again.") from error
-            self.submitted.add(task)
+            self._state.set(replace(self._state.get(), submitted=self._state.get().submitted | {task}))
         return QueuedHandoff(task, decision.item, decision.id)
 
     def reply(self, answer: FeedReply) -> QueuedHandoff:
         with self.lock:
             task = identity("feed-reply", answer.reply_id)
-            previous = next((entry for entry in self.board.history if entry.id == task), None)
+            previous = next((entry for entry in self._state.get().board.history if entry.id == task), None)
             if previous is not None:
                 if (previous.item, previous.revision, previous.text) != (answer.item, answer.revision, answer.text):
                     raise RejectedError("That reply identity belongs to a different instruction.")
                 return self._handoff(previous)
-            item = next((item for item in self.board.actions if item.identity == answer.item), None)
+            item = next((item for item in self._state.get().board.actions if item.identity == answer.item), None)
             if item is None or proposal_revision(item) != answer.revision:
                 raise RejectedError("That proposal has changed. Read the feed again before replying.")
             prompt = (
@@ -411,40 +453,42 @@ class Triage:
             self.wake.wait(self.tick_s)
             with self.lock:
                 today = datetime.fromtimestamp(self.clock(), UTC).astimezone().date()
-                if not unassessed(self.board, self.candidates, today=today):
+                if not unassessed(self._state.get().board, self._state.get().candidates, today=today):
                     self.wake.clear()
                     continue
             self.wake.clear()
             if self.wait(self.closed, 1.5):
                 return
             with self.lock:
-                available = tuple(item for item in self.candidates if item.identity not in retry_without)
+                available = tuple(item for item in self._state.get().candidates if item.identity not in retry_without)
                 today = datetime.fromtimestamp(self.clock(), UTC).astimezone().date()
-                batch = batch_for(self.board, available, today=today)
+                batch = batch_for(self._state.get().board, available, today=today)
                 if not batch and retry_without:
                     retry_without = frozenset[str]()
-                    batch = batch_for(self.board, self.candidates, today=today)
-                rules, epoch = self.board.rules, self.epoch
+                    batch = batch_for(self._state.get().board, self._state.get().candidates, today=today)
+                rules, epoch = self._state.get().board.rules, self._state.get().epoch
                 if not batch:
                     continue
-                self.board = replace(self.board, status="Researching your work…")
+                new_board = replace(self._state.get().board, status="Researching your work…")
+                self._state.set(replace(self._state.get(), board=new_board))
             try:
                 assessments = tuple(replace(item, reviewed_on=today) for item in decode(self.model(batch, rules), batch))
                 with self.lock:
                     if self.closed.is_set():
                         return
-                    current = {(item.identity, item.revision) for item in self.candidates}
+                    current = {(item.identity, item.revision) for item in self._state.get().candidates}
                     retry_without = frozenset(item.identity for item in batch if (item.identity, item.revision) not in current)
-                    if epoch == self.epoch:
-                        updated = applied(self.board, assessments, self.candidates)
+                    if epoch == self._state.get().epoch:
+                        updated = applied(self._state.get().board, assessments, self._state.get().candidates)
                         self.store.write(saved(updated))
-                        self.board = updated
+                        self._state.set(replace(self._state.get(), board=updated))
                         self._offer_actionable()
-                    if unassessed(self.board, self.candidates, today=today):
+                    if unassessed(self._state.get().board, self._state.get().candidates, today=today):
                         self.wake.set()
             except OSError, ValueError:
                 with self.lock:
-                    self.board = replace(self.board, status="Triage unavailable · new work awaits review")
+                    new_board = replace(self._state.get().board, status="Triage unavailable · new work awaits review")
+                    self._state.set(replace(self._state.get(), board=new_board))
                 # Existing proposals remain accessible.
                 if self.wait(self.closed, 30):
                     return

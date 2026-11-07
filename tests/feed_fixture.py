@@ -8,6 +8,7 @@ delay after the test has supplied the observations for that step.
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from queue import Queue
 
 from assistant.feed_contracts import FeedCommand, FeedRejected
@@ -47,32 +48,44 @@ def feed_bridge(triage: Triage) -> Callable[[BridgeCommand], str]:
     return owner_request(WorkOwners(triage.command, no_personal_work, no_canvas))
 
 
-class TriageFixture(Triage):
-    __slots__ = ("delays",)
+@dataclass(frozen=True, slots=True)
+class Delays:
+    """The triage loop's cancellable waits, released one at a time by the test."""
 
-    def __init__(
-        self,
+    waiting: Queue[tuple[float, threading.Event]] = field(default_factory=Queue[tuple[float, threading.Event]])
+
+    def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
+        released = threading.Event()
+        self.waiting.put((timeout, released))
+        while not released.is_set():
+            if stopped.wait(0.01):
+                return True
+        return stopped.is_set()
+
+
+@dataclass(frozen=True, slots=True)
+class TriageFixture:
+    """A real triage owner whose debounce waits the test releases."""
+
+    triage: Triage
+    delays: Delays
+
+    @classmethod
+    def start(
+        cls,
         store: Store,
         model: Callable[[tuple[Candidate, ...], tuple[str, ...]], str],
         *,
         submit: Callable[[str, str, Profile], None] | None = None,
         clock: Callable[[], float] = time.time,
         work: FeedWork | None = None,
-    ) -> None:
-        # Preserve the real owner's dependency interface rather than hide it in options.
-        self.delays: Queue[tuple[float, threading.Event]] = Queue()
+    ) -> TriageFixture:
+        delays = Delays()
         # A short tick: day changes and refused retries surface without a real second's wait.
-        super().__init__(store, model, submit=submit, wait=self.wait_for_stop, clock=clock, work=work, tick_s=0.02)
-
-    def wait_for_stop(self, stopped: threading.Event, timeout: float) -> bool:
-        released = threading.Event()
-        self.delays.put((timeout, released))
-        while not released.is_set():
-            if stopped.wait(0.01):
-                return True
-        return stopped.is_set()
+        triage = Triage.start(store, model, submit=submit, wait=delays.wait_for_stop, clock=clock, work=work, tick_s=0.02)
+        return cls(triage, delays)
 
     def advance(self) -> None:
-        timeout, released = self.delays.get(timeout=5)
+        timeout, released = self.delays.waiting.get(timeout=5)
         assert timeout == 1.5, "The worker did not reach the expected debounce boundary."
         released.set()

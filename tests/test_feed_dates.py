@@ -42,27 +42,27 @@ def test_saved_review_dates_refresh_only_open_work_and_only_on_a_new_day() -> No
 
 def test_corrected_provider_dates_invalidate_open_work_without_reopening_handled_items(tmp_path: Path) -> None:
     """Ignoring date-only provider corrections leaves stale recommendations cached."""
-    triage = TriageFixture(MemoryStore(), lambda _batch, _rules: "{}")
+    triage = TriageFixture.start(MemoryStore(), lambda _batch, _rules: "{}")
     try:
-        triage.closed.set()
+        triage.triage.closed.set()
         updates = tuple(Update(TeamsActivity(str(index)), "Review", "Please review.", "Teams", THIS_WEEK) for index, _kind in enumerate(Disposition))
-        triage.observe(PendingFeed(Feed(updates=updates)))
-        before = triage.candidates
+        triage.triage.observe(PendingFeed(Feed(updates=updates)))
+        before = triage.triage.candidates
         proposals = tuple(
             replace(decode(output(([source.identity], "action")), (source,))[0], disposition=kind)
             for source, kind in zip(before, Disposition, strict=True)
         )
-        triage.board = Board(enabled=True, items=proposals)
+        triage.triage.set_board(Board(enabled=True, items=proposals))
         corrected = tuple(replace(item, source_time=SourceDate(LAST_WEEK)) for item in updates)
-        triage.observe(PendingFeed(Feed(updates=corrected)))
-        assert triage.board.items == proposals[2:]
-        assert triage.board.pending == 2
-        assert tuple((item.identity, item.revision) for item in triage.candidates) == tuple((item.identity, item.revision) for item in before)
-        assert triage.epoch == 1, "An in-flight result with the old date must be fenced out."
-        triage.observe(PendingFeed(Feed(updates=corrected)))
-        assert triage.epoch == 1, "Unchanged dates must not keep invalidating reviews."
+        triage.triage.observe(PendingFeed(Feed(updates=corrected)))
+        assert triage.triage.board.items == proposals[2:]
+        assert triage.triage.board.pending == 2
+        assert tuple((item.identity, item.revision) for item in triage.triage.candidates) == tuple((item.identity, item.revision) for item in before)
+        assert triage.triage.epoch == 1, "An in-flight result with the old date must be fenced out."
+        triage.triage.observe(PendingFeed(Feed(updates=corrected)))
+        assert triage.triage.epoch == 1, "Unchanged dates must not keep invalidating reviews."
     finally:
-        triage.close()
+        triage.triage.close()
 
 
 def test_an_undated_chat_is_not_presented_as_created_today() -> None:
@@ -96,15 +96,15 @@ def test_triage_model_receives_readable_current_and_source_dates() -> None:
 
 
 def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path) -> None:
-    triage = TriageFixture(MemoryStore(), lambda _batch, _rules: "{}", clock=lambda: THIS_WEEK)
+    triage = TriageFixture.start(MemoryStore(), lambda _batch, _rules: "{}", clock=lambda: THIS_WEEK)
     try:
         source = captured("old-invite", Excerpt("Meeting reminder", "The meeting is tomorrow.", LAST_WEEK))
-        triage.candidates = (source,)
-        snapshot = triage.snapshot()
+        triage.triage.set_candidates((source,))
+        snapshot = triage.triage.snapshot()
         assert snapshot.reviewed_at.startswith("2026-10-27T")
         assert snapshot.sources[0].created_at == "2026-10-20T09:00:00+00:00"
     finally:
-        triage.close()
+        triage.triage.close()
 
 
 def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() -> None:
@@ -138,16 +138,16 @@ def test_a_new_day_reconsiders_cached_work_without_a_new_notification(tmp_path: 
             reconsidered.set()
         return output(([item.identity for item in batch], "action" if len(calls) == 1 else "quiet"))
 
-    triage = TriageFixture(MemoryStore(), model, clock=lambda: now)
+    triage = TriageFixture.start(MemoryStore(), model, clock=lambda: now)
     try:
         feed = Feed(updates=(Update(TeamsActivity("old-invite"), "Meeting reminder", "The meeting is tomorrow.", "Teams", LAST_WEEK),))
-        triage.observe(PendingFeed(feed))
+        triage.triage.observe(PendingFeed(feed))
         triage.advance()
-        wait_until(lambda: bool(triage.board.actions))
+        wait_until(lambda: bool(triage.triage.board.actions))
         now = THIS_WEEK
         triage.advance()
         assert reconsidered.wait(5), "Last week's recommendation stayed cached despite the current date changing."
-        wait_until(lambda: not triage.board.actions)
+        wait_until(lambda: not triage.triage.board.actions)
         assert len(calls) == 2 and calls[0] == calls[1], "Refresh must reconsider the same evidence once, without a new arrival."
     finally:
-        triage.close()
+        triage.triage.close()
