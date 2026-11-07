@@ -57,6 +57,12 @@ session is locked or after `DARK_WHEN_IDLE_MINUTES` without input. A display
 request from another program holds off the idle reason. Toggle it in the
 controls menu.
 
+At the same moments the Charybdis's backlight goes off over VIA, and the
+laptop's own panel dims to brightness 0 over WMI (`desktop_ui/laptop_panel.py`).
+Each puts back the setting the person had. The panel is an LCD, so 0 is its
+darkest, not fully off: switching it off would mean turning off every display
+through Windows, which on this laptop enters Modern Standby.
+
 ## Key hints
 
 While either keyboard holds its Apps key (the laptop's X thumb, or the

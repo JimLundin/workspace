@@ -1,6 +1,7 @@
 """Dark external screens while nobody is looking at them, so a still image can't burn into an OLED.
 
-The keyboard's backlight (`desktop_ui.keyboard_light`) goes dark and comes back
+The keyboard's backlight (`desktop_ui.keyboard_light`) and the laptop's own
+panel (`desktop_ui.laptop_panel`, dimmed to brightness 0) go dark and come back
 at the same moments, by the same rules and the same toggle.
 
 A screen goes dark when the session locks or when no keyboard or mouse input has
@@ -22,6 +23,7 @@ from typing import Final
 
 from config import DARK_WHEN_IDLE_MINUTES
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
+from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
 from desktop_ui.window_layout import dark_when_away
 from usage import Detail
 from winapi import presence, screen, session
@@ -128,12 +130,19 @@ class AwayScreens:
     65 ms on the home 4K screen, so only a darken or restore edge costs one
     request per protected screen on that thread."""
 
-    __slots__ = ("dark", "held", "kept", "light", "locked", "record", "recording", "setting")
+    __slots__ = ("dark", "held", "kept", "light", "locked", "panel", "record", "recording", "setting")
 
-    def __init__(self, record: Callable[[str, Mapping[str, Detail]], None], light: KeyboardLight | None = None) -> None:
+    def __init__(
+        self,
+        record: Callable[[str, Mapping[str, Detail]], None],
+        light: KeyboardLight | None = None,
+        panel: LaptopPanel | None = None,
+    ) -> None:
         self.record = record
         self.light = light if light is not None else KeyboardLight(ViaBacklight(), record)
         """The keyboard's backlight, dark exactly while the screens are."""
+        self.panel = panel if panel is not None else LaptopPanel(WmiBrightness(), record)
+        """The laptop's own panel, at brightness 0 exactly while the screens are dark."""
         self.setting = Setting(DELAY_MS, enabled=True)
         self.held: Reason | None = None
         self.recording = False
@@ -148,6 +157,8 @@ class AwayScreens:
         if message == session.WM_DISPLAYCHANGE:
             self.kept.close()
             self.kept = PhysicalMonitors.open()
+            if self.held is None:
+                self.panel = self.panel.restore()  # A panel that refused while the lid was closed is back.
         match session.change(message, wparam):
             case session.Change.LOCKED:
                 self.locked = True
@@ -176,9 +187,11 @@ class AwayScreens:
                 protected = dark_when_away(screen.monitors())
                 self.apply(protected - self.dark, Power.OFF, {"reason": begun.name.lower(), "idle_seconds": idle_seconds})
                 self.light = self.light.darken()
+                self.panel = self.panel.darken()
             case Restore(reason=ended):
                 self.apply(self.dark, Power.ON, {"reason": ended.name.lower(), "idle_seconds": idle_seconds})
                 self.light = self.light.restore()
+                self.panel = self.panel.restore()
             case None:
                 pass
 
@@ -199,4 +212,5 @@ class AwayScreens:
         """Workspace leaving while away turns the screens back on rather than leaving them dark."""
         self.apply(self.dark, Power.ON, {"reason": "close"})
         self.light = self.light.restore()
+        self.panel = self.panel.restore()
         self.kept.close()
