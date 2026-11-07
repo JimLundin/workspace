@@ -110,6 +110,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
   `link.server.Server._retained`). Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
 - Use direct typed attributes, not `getattr`/`hasattr`.
+- Write browser scripts as real `.js` files beside the module that runs them, not
+  JavaScript in Python strings; pass values as arguments, not by interpolation.
 - Use absolute imports from the owning module, at module level. Use `lazy import`
   to defer loading. No re-exports or cosmetic aliases.
 - Boolean parameters are keyword-only. Functions take at most five inputs; Ruff

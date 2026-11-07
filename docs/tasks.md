@@ -205,3 +205,14 @@ problem is a single type whose enum `kind` decides which values are valid:
   `diagnostics.FailureInfo` (`kind: str`).
 
 Take one type per session, `WorkSource` first.
+
+## 4. Move inline JavaScript into real `.js` files
+
+User, 2026-11-07: write actual JavaScript, not JavaScript in Python strings.
+About 145 lines of it sit in production Python on 2026-11-07, mostly
+`assistant.web_apps` (103) and `assistant.communications_browser` (24), with
+a few in `browser_dom`, `meeting_browser` and `browser`. Each script becomes a
+`.js` file beside its module, loaded once and parameterized through its
+arguments (CDP `callFunctionOn` or a JSON-encoded argument) instead of
+f-string interpolation; then the review can reject JavaScript in string literals.
+
