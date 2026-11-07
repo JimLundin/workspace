@@ -109,13 +109,23 @@ violations left, with no baseline of exceptions. Counted in production code on
    1. **Classes that only held their inputs**: done. 29 became frozen records;
       the review's `plain-record` rule rejects new ones. `MemorySession` is an
       exact exception: the SDK's `Session` protocol needs writable attributes.
-   2. **Classes that build state in `__init__` but never rebind** (49): a
-      thread, queue, lock, socket, ctypes handle or a defaulted input
-      (`Server`, `StatusObserver`, `Tray`, `WinMachine`, `TaskStore`, ...).
-      Move the construction into a classmethod or `default_factory`, and start
-      threads from the constructor, not `__init__`.
+   2. **Classes that build state in `__init__` but never rebind**: done
+      2026-11-07, 43 classes. Patterns, for the owners still to come:
+      - stateless adapters just take the decorator;
+      - a defaulted input is a `default_factory` field;
+      - a part built from inputs (a socket, a window, an icon, a thread) comes
+        from a named classmethod (`Server.bind`, `AppWindow.create`,
+        `Icon.draw`, `ViewThread.start`, `WinDesktop.following`);
+      - a store creates its schema in `__post_init__`, which rebinds nothing;
+      - a thread that runs the owner's own method isn't kept: it sets the
+        owner's `finished` event on exit, and `close` waits on that.
+      `Conversations` holds its recent histories as a `frozendict` in a `Cell`.
    3. **Owners that rebind their own attributes** (85 classes, about 700
-      sites): each gets a frozen state record in a `Cell`. Largest:
+      sites), plus five from step 2 that mutate a held container or are written
+      from outside: `meetings._Writer` (`bytearray`), `sdk.Timeline` (with its
+      `TextBuffer` exception), `scripts.selfcheck.Lanes`, `worker.OwnerCalls`
+      (`BoundRunner` sets `current`) and `benchmark_island.Clock`. Each gets a
+      frozen state record in a `Cell`. Largest:
       `CanvasPanel` (70), `DesktopBar` (56), `Communications` (53),
       `WorkAgent` (33), `Worker` (23), `Ui` (18), `Triage` (17). One package per
       session: `link`, `winapi`, `automation`, `contracts`, `scripts`,
