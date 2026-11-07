@@ -304,7 +304,7 @@ def test_rejected_stale_edit_does_not_block_the_voice_agent_from_saving_feedback
     triage = TriageFixture(MemoryStore(), lambda batch, rules: output(([item.identity for item in batch], "action")))
     request = feed_bridge(triage)
     store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
+    work = WorkExecution.begin(claim, store, Resources(), clock=clock)
     rig = ToolRig(work=work, feed_request=request)
     try:
         rejected = rig.call("work_feed_update", operation="quiet", item="replaced-while-evaluating")
@@ -321,7 +321,7 @@ def test_lost_acknowledgement_stays_uncertain_after_the_owner_commits_feedback(t
     triage = TriageFixture(MemoryStore(), lambda batch, rules: output(([item.identity for item in batch], "quiet")))
     request = feed_bridge(triage)
     store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
+    work = WorkExecution.begin(claim, store, Resources(), clock=clock)
 
     def lost(data: BridgeCommand) -> str:
         request(data)
@@ -384,7 +384,7 @@ def test_voice_choice_tool_requires_exact_revision_before_effect(tmp_path: Path)
 
     triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     request = feed_bridge(triage)
-    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock), feed_request=request)
+    rig = ToolRig(work=WorkExecution.begin(claim, store, Resources(), clock=clock), feed_request=request)
     try:
         wrong = rig.call("work_feed_choose", item=item.identity, choice="1")
         assert not wrong.ok and not store.actions(claim.task.id)

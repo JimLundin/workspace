@@ -151,7 +151,7 @@ def test_invalid_desktop_arguments_never_reach_the_journal(tmp_path: Path) -> No
     # Defect: a malformed call is recorded as an attempted change, or reaches
     # the machine before its arguments are validated at the tool seam.
     store, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock))
+    rig = ToolRig(work=WorkExecution.begin(claim, store, Resources(), clock=clock))
     invalid: tuple[tuple[str, dict[str, Json]], ...] = (
         ("write_file", {"path": "note.txt"}),
         ("manage_window", {"handle": 7, "action": "explode"}),

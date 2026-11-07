@@ -138,7 +138,7 @@ def test_registered_reply_tool_saves_instruction_before_handoff_and_reuses_it_af
 
     triage = TriageFixture(feed_store, lambda _batch, _rules: "{}", submit=queue)
     request = feed_bridge(triage)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=request)
+    rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
     reply = FeedReply(item.identity, proposal_revision(item), "user-turn-one", words)
     arguments = {"item": reply.item, "revision": reply.revision, "reply_id": reply.reply_id, "text": reply.text}
     try:

@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Annotated, Protocol, assert_never
 
@@ -12,6 +12,7 @@ from pydantic import Field, TypeAdapter
 
 from automation.actions import Actions, Evidence, Observation, Resources
 from automation.store import TaskStore
+from cell import Cell
 from contracts.json_value import Json
 from contracts.presentation import LiveMessage
 from contracts.task import (
@@ -162,36 +163,48 @@ def _ledger_entry(action: Action) -> _LedgerEntry:
     return _LedgerEntry(action.id, action.specification.tool, outcome_kind(action.outcome), action.started_at, action.updated_at, file, digest)
 
 
+@dataclass(frozen=True, slots=True)
+class _Run:
+    disposition: Waiting | None = None
+    """Set when the run must suspend: a block or a pending question."""
+    observations: tuple[Observed, ...] = ()
+    """The latest 64 successful inspections a reconciliation can cite."""
+
+
+@dataclass(frozen=True, slots=True)
 class WorkExecution:
     """One claimed run; effects are fenced by the store, UI data stays volatile."""
 
-    __slots__ = (
-        "actions",
-        "claim",
-        "clock",
-        "context_text",
-        "disposition",
-        "observations",
-        "store",
-    )
+    claim: Claim
+    store: TaskStore
+    actions: Actions
+    context_text: str
+    clock: Callable[[], float]
+    _run: Cell[_Run] = field(default_factory=lambda: Cell(_Run()), init=False, repr=False)
 
-    def __init__(
-        self,
+    @classmethod
+    def begin(
+        cls,
         claim: Claim,
         store: TaskStore,
         resources: Resources,
         *,
         context_text: str = "",
         clock: Callable[[], float] = time.time,
-    ) -> None:
-        self.claim, self.store, self.clock = claim, store, clock
-        self.actions = Actions(store, claim.run, resources, clock=clock)
-        self.context_text = context_text[:16_000]
-        self.disposition: Waiting | None = None
-        self.observations: list[Observed] = []
+    ) -> WorkExecution:
+        return cls(claim, store, Actions(store, claim.run, resources, clock=clock), context_text[:16_000], clock)
+
+    @property
+    def disposition(self) -> Waiting | None:
+        return self._run.get().disposition
+
+    @property
+    def observations(self) -> tuple[Observed, ...]:
+        return self._run.get().observations
 
     def block(self, reason: str) -> None:
-        self.disposition = Waiting(Blocked(reason[:8_000] or "The task needs attention."))
+        waiting = Waiting(Blocked(reason[:8_000] or "The task needs attention."))
+        self._run.update(lambda run: replace(run, disposition=waiting))
 
     def checkpoint(self, items: Sequence[Json]) -> None:
         """Checkpoint structural progress, never raw SDK or integration payloads."""
@@ -214,8 +227,8 @@ class WorkExecution:
         for response in reversed(self._responses()):
             if response.request.text == question:
                 return response.reply.text
-        request = Question(uuid.uuid4().hex, question, "")
-        self.disposition = Waiting(request)
+        waiting = Waiting(Question(uuid.uuid4().hex, question, ""))
+        self._run.update(lambda run: replace(run, disposition=waiting))
         return None
 
     def observed(self, tool: str, observation: Observation, readback: Readback) -> str:
@@ -229,8 +242,7 @@ class WorkExecution:
             self.clock(),
             observation.evidence,
         )
-        self.observations.append(observed)
-        self.observations[:] = self.observations[-64:]
+        self._run.update(lambda run: replace(run, observations=(*run.observations, observed)[-64:]))
         return observed.id
 
     def describe_actions(self) -> str:

@@ -131,7 +131,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
         assert "Endpoint request failed" in outcome.reason.reason and len(endpoint.received) == 3
         assert store.finish(first.run, outcome, at=time.time()) is not None
         second = request(store, "limited", "Inspect the computer.")
-        work = WorkExecution(second, store, Resources())
+        work = WorkExecution.begin(second, store, Resources())
         endpoint.replies = [calls(("get_clipboard", {}))]
         stop = threading.Event()
         agent = Agent(
@@ -145,7 +145,7 @@ def test_endpoint_failure_and_step_limit_never_report_completion(tmp_path: Path)
 
 def test_nonfinite_tool_arguments_never_enter_effect_storage(tmp_path: Path) -> None:
     store, claim, _ = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources())
+    work = WorkExecution.begin(claim, store, Resources())
     destination = tmp_path / "forbidden.txt"
     payload: dict[str, object] = {"path": str(destination), "content": "not written", "unexpected": float("nan")}
     args = json.dumps(payload)

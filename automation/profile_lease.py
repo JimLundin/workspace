@@ -2,6 +2,7 @@
 
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
 from typing import BinaryIO
@@ -11,22 +12,22 @@ if sys.platform == "win32":
 else:
     import fcntl
 
+from cell import Cell
 
+
+@dataclass(frozen=True, slots=True)
 class ProfileLease:
     """One OS-released owner, acquired before opening/recovering the task store.
 
-    This effect owner must retain and clear its live file handle as the native
-    lock is acquired and released. No mutable lease state leaves this owner.
+    The live file handle is held while the native lock is, and cleared on
+    release. No mutable lease state leaves this owner.
     """
 
-    __slots__ = ("_file", "folder")
-
-    def __init__(self, folder: Path) -> None:
-        self.folder = folder
-        self._file: BinaryIO | None = None
+    folder: Path
+    _file: Cell[BinaryIO | None] = field(default_factory=lambda: Cell[BinaryIO | None](None), init=False, repr=False)
 
     def __enter__(self) -> ProfileLease:
-        if self._file is not None:
+        if self._file.get() is not None:
             raise RuntimeError("The worker ownership lease is already held.")
         self.folder.mkdir(parents=True, exist_ok=True)
         descriptor = os.open(self.folder / "worker.lock", os.O_RDWR | os.O_CREAT, 0o600)
@@ -43,11 +44,12 @@ class ProfileLease:
         except BaseException:
             file.close()
             raise
-        self._file = file
+        self._file.set(file)
         return self
 
     def close(self) -> None:
-        file, self._file = self._file, None
+        file = self._file.get()
+        self._file.set(None)
         if file is not None:
             try:
                 file.seek(0)

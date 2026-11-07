@@ -41,7 +41,7 @@ class AgentExecution:
         """Execute one durable claim; the controller commits the returned disposition."""
         started = time.monotonic()
         profile = self.profiles.run(claim)
-        work = WorkExecution(claim, store, self.resources, context_text=profile.context.saved)
+        work = WorkExecution.begin(claim, store, self.resources, context_text=profile.context.saved)
         agent = Agent(
             self.settings,
             self.machine,

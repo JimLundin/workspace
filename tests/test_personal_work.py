@@ -450,7 +450,7 @@ def test_agent_tools_use_the_desktop_owner_and_record_confirmed_edits(tmp_path: 
     store.observe((evidence,))
     service = PersonalWork(store, CapturedSources(), lambda _: None)
     request = owner_request(WorkOwners(feed_unavailable, service.handle, no_canvas))
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=request)
+    rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
     try:
         sources = rig.call("work_items_sources")
         assert sources.ok and evidence.id in sources.text

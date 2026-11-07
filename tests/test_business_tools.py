@@ -192,7 +192,7 @@ def test_invalid_business_commands_do_not_start_durable_effects(tmp_path: Path) 
     # Defect: input validation happens inside an attempted effect, leaving a
     # harmless invalid request recorded as an uncertain external change.
     store, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock))
+    rig = ToolRig(work=WorkExecution.begin(claim, store, Resources(), clock=clock))
     assert not rig.call("kanban_update_task", target_id="page-1", task_id="task-1", field="title").ok
     assert not rig.call("outlook_web_draft_reply", target_id="page-1", text="Y").ok
     assert not store.actions(claim.task.id) and not rig.machine.log
@@ -205,7 +205,7 @@ def test_confirmed_app_outcomes_complete_their_durable_actions(tmp_path: Path) -
         folder = tmp_path / name
         folder.mkdir()
         store, claim, clock = claimed(folder)
-        rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock), machine=AppMachine())
+        rig = ToolRig(work=WorkExecution.begin(claim, store, Resources(), clock=clock), machine=AppMachine())
         assert rig.call(name, **arguments(name)).ok
         outcome = store.actions(claim.task.id)[0].outcome
         assert isinstance(outcome, ActionVerified), name
@@ -224,7 +224,7 @@ def test_a_receipt_for_another_task_or_a_sent_reply_keeps_the_attempt_uncertain(
         folder = tmp_path / name
         folder.mkdir()
         store, claim, clock = claimed(folder)
-        rig = ToolRig(work=WorkExecution(claim, store, Resources(), clock=clock), machine=AppMachine({**RECEIPTS, operation: receipt}))
+        rig = ToolRig(work=WorkExecution.begin(claim, store, Resources(), clock=clock), machine=AppMachine({**RECEIPTS, operation: receipt}))
         rig.call(name, **arguments(name))
         assert isinstance(store.actions(claim.task.id)[0].outcome, ActionUncertain)
         assert store.unverified_actions(claim.task.id)

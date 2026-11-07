@@ -232,7 +232,7 @@ def test_stale_run_and_stop_after_commit_cannot_enter_the_effect(tmp_path: Path)
 
 def test_reconciliation_requires_post_attempt_same_target_and_is_durable(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
+    work = WorkExecution.begin(claim, store, Resources(), clock=clock)
     agent = families(work)
     pages = {"target-tab": "before", "other-tab": "unrelated"}
     before = observe(agent, Operation.of("browser_snapshot", {"target_id": "target-tab"}), pages["target-tab"])
@@ -258,7 +258,7 @@ def test_reconciliation_requires_post_attempt_same_target_and_is_durable(tmp_pat
 
 def test_script_result_requires_explicit_inspection_and_reconciliation(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
+    work = WorkExecution.begin(claim, store, Resources(), clock=clock)
     agent = families(work)
     destination = tmp_path / "script-output.txt"
     attempt(agent, "run_powershell", {"command": "script writes requested output"})
@@ -280,7 +280,7 @@ def test_script_result_requires_explicit_inspection_and_reconciliation(tmp_path:
 
 def test_old_unverified_action_cannot_fall_off_the_completion_page(tmp_path: Path) -> None:
     store, claim, clock = claimed(tmp_path)
-    work = WorkExecution(claim, store, Resources(), clock=clock)
+    work = WorkExecution.begin(claim, store, Resources(), clock=clock)
     attempt(families(work), "set_clipboard", {"text": "needs verification"})
     spec = written({"path": "note.txt", "content": "verified"})
     assert store.begin_action(claim.run, "later-0", spec, at=clock()) is not None

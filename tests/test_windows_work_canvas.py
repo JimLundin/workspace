@@ -925,7 +925,7 @@ def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_re
     ui.pump()
     request = owner_request(WorkOwners(feed_unavailable, no_personal_work, store.command))
     tasks, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution(claim, tasks, Resources(), clock=clock), feed_request=request)
+    rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
     try:
         with ThreadPoolExecutor(max_workers=1) as worker:
             reading = worker.submit(rig.call, "work_canvas_read")

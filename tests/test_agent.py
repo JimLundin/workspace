@@ -98,7 +98,7 @@ def durable(folder: Path) -> WorkExecution:
     store.submit(identity, "Agent fixture", "do it", RequestSource("chat"), at=1)
     claim = store.claim("worker", identity, at=2)
     assert claim is not None
-    return WorkExecution(claim, store, Resources())
+    return WorkExecution.begin(claim, store, Resources())
 
 
 def observed(output: object) -> str:

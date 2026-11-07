@@ -10,12 +10,13 @@ import threading
 import traceback
 from collections.abc import Callable
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Protocol
 
 from automation.execution import Log
 from automation.store import MAX_PAGE, TaskStore
+from cell import Cell
 from contracts.task import Blocked, Claim, Outcome, RunRef, Task, Waiting, identifier, integer, owns
 
 
@@ -68,6 +69,16 @@ def failure_text(error: BaseException) -> str:
     return f"{type(error).__name__}: {detail}" if detail else type(error).__name__
 
 
+@dataclass(frozen=True, slots=True)
+class _Controlled:
+    snapshot: ControllerSnapshot = ControllerSnapshot(Idle.NEW, ())
+    """The latest published value."""
+    started: bool = False
+    flight: _Flight | None = None
+    """The run executing now."""
+
+
+@dataclass(frozen=True, slots=True)
 class WorkController:
     """Own execution threads while the task store owns durable decisions.
 
@@ -83,59 +94,41 @@ class WorkController:
     wait() succeeds.
     """
 
-    __slots__ = (
-        "_finished",
-        "_flight",
-        "_lock",
-        "_shutdown",
-        "_snapshot",
-        "_started",
-        "_wake",
-        "execution",
-        "limit",
-        "log",
-        "new_run_id",
-        "now",
-        "on_change",
-        "on_error",
-        "owner",
-        "poll_seconds",
-        "store",
-    )
+    store: TaskStore
+    execution: Runner
+    owner: str = field(kw_only=True)
+    log: Callable[[Claim], Log] = field(kw_only=True)
+    now: Callable[[], float] = field(kw_only=True)
+    new_run_id: Callable[[], str] = field(kw_only=True)
+    on_change: Callable[[ControllerSnapshot], None] = field(kw_only=True)
+    on_error: Callable[[str], None] = field(kw_only=True)
+    poll_seconds: float = field(default=0.1, kw_only=True)
+    limit: int = field(default=100, kw_only=True)
+    _controlled: Cell[_Controlled] = field(default_factory=lambda: Cell(_Controlled()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _shutdown: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _wake: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    """Set once a started controller has finished its cleanup and final publication."""
 
-    def __init__(  # noqa: PLR0913 - injected collaborators and callbacks
-        self,
-        store: TaskStore,
-        execution: Runner,
-        *,
-        owner: str,
-        log: Callable[[Claim], Log],
-        now: Callable[[], float],
-        new_run_id: Callable[[], str],
-        on_change: Callable[[ControllerSnapshot], None],
-        on_error: Callable[[str], None],
-        poll_seconds: float = 0.1,
-        limit: int = 100,
-    ) -> None:
-        identifier(owner, "worker owner")
-        integer(limit, "task snapshot limit", minimum=1, maximum=MAX_PAGE)
-        if isinstance(poll_seconds, bool) or not math.isfinite(poll_seconds) or not 0 < poll_seconds <= 1:
+    def __post_init__(self) -> None:
+        identifier(self.owner, "worker owner")
+        integer(self.limit, "task snapshot limit", minimum=1, maximum=MAX_PAGE)
+        if isinstance(self.poll_seconds, bool) or not math.isfinite(self.poll_seconds) or not 0 < self.poll_seconds <= 1:
             raise ValueError("Work polling must be between zero and one second.")
-        self.store, self.execution, self.owner = store, execution, owner
-        self.log, self.now, self.new_run_id = log, now, new_run_id
-        self.on_change, self.on_error = on_change, on_error
-        self.poll_seconds, self.limit = poll_seconds, limit
-        self._lock = threading.Lock()
-        self._shutdown, self._wake, self._finished = threading.Event(), threading.Event(), threading.Event()
-        self._finished.set()
-        self._snapshot = ControllerSnapshot(Idle.NEW, ())
-        self._started = False
-        self._flight: _Flight | None = None
+
+    def _flight(self) -> _Flight | None:
+        return self._controlled.get().flight
+
+    def _fly(self, flight: _Flight | None) -> None:
+        """Record the run in flight; callers hold the lock."""
+        self._controlled.update(lambda controlled: replace(controlled, flight=flight))
 
     def snapshot(self) -> ControllerSnapshot:
         """Read the latest published value without doing storage work."""
         with self._lock:
-            return self._snapshot
+            return self._controlled.get().snapshot
 
     def start(self) -> None:
         """Recover under the caller's exclusive ownership, then serve in a thread."""
@@ -159,22 +152,21 @@ class WorkController:
         """Park unfinished work; never turn application shutdown into cancellation."""
         self._shutdown.set()
         with self._lock:
-            if self._flight is not None:
-                self._flight.stop.set()
+            if (flight := self._flight()) is not None:
+                flight.stop.set()
         self._wake.set()
 
     def wait(self, timeout: float | None = None) -> bool:
         """Wait for this controller's execution cleanup and final callbacks."""
         with self._lock:
-            finished = self._finished
-        return finished.wait(timeout)
+            started = self._controlled.get().started
+        return self._finished.wait(timeout) if started else True
 
     def _prepare(self) -> None:
         with self._lock:
-            if self._started:
+            if self._controlled.get().started:
                 raise RuntimeError("A work controller can only be started once.")
-            self._started = True
-            self._finished = threading.Event()
+            self._controlled.update(lambda controlled: replace(controlled, started=True))
         try:
             self.store.recover(self.owner, at=self.now())
             self._publish(Idle.READY)
@@ -185,9 +177,9 @@ class WorkController:
     def _publish(self, status: Status) -> None:
         snapshot = ControllerSnapshot(status, self.store.list_tasks(limit=self.limit))
         with self._lock:
-            if snapshot == self._snapshot:
+            if snapshot == self._controlled.get().snapshot:
                 return
-            self._snapshot = snapshot
+            self._controlled.update(lambda controlled: replace(controlled, snapshot=snapshot))
         self.on_change(snapshot)
 
     def _serve(self) -> None:
@@ -195,7 +187,7 @@ class WorkController:
         try:
             while True:
                 self._wake.clear()
-                flight = self._flight
+                flight = self._flight()
                 if flight is not None and flight.result.done():
                     self._settle(flight)
                     flight = None
@@ -228,12 +220,12 @@ class WorkController:
         with self._lock:
             if self._shutdown.is_set():
                 stop.set()
-            self._flight = flight
+            self._fly(flight)
         try:
             thread.start()
         except BaseException:
             with self._lock:
-                self._flight = None
+                self._fly(None)
             self.store.interrupt(claim.run, "Execution could not start.", at=self.now())
             raise
         self._publish(Stopping(claim.run) if stop.is_set() else Working(claim.run))
@@ -271,7 +263,7 @@ class WorkController:
                 if latest is not None and owns(latest, flight.claim.run):
                     raise RuntimeError("The task outcome was refused; execution has been stopped without claiming more work.")
         with self._lock:
-            self._flight = None
+            self._fly(None)
         self._publish(Idle.READY)
 
     def _report(self, reason: str) -> None:
@@ -285,7 +277,7 @@ class WorkController:
     def _close(self, error: BaseException | None) -> None:
         self._shutdown.set()
         reasons = [failure_text(error)] if error is not None else []
-        flight = self._flight
+        flight = self._flight()
         try:
             if flight is not None:
                 flight.stop.set()
@@ -301,14 +293,15 @@ class WorkController:
                 finally:
                     flight.thread.join()
                     with self._lock:
-                        self._flight = None
+                        self._fly(None)
             status: Status = Fault("\n".join(reasons)) if reasons else Idle.STOPPED
             try:
                 self._publish(status)
             except BaseException as publication_error:
                 reasons.append(failure_text(publication_error))
+                fault = Fault("\n".join(reasons))
                 with self._lock:
-                    self._snapshot = ControllerSnapshot(Fault("\n".join(reasons)), self._snapshot.tasks)
+                    self._controlled.update(lambda controlled: replace(controlled, snapshot=ControllerSnapshot(fault, controlled.snapshot.tasks)))
             if reasons:
                 self._report("\n".join(reasons))
         finally:

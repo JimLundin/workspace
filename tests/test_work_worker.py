@@ -53,7 +53,7 @@ def test_worker_recovers_saved_work_before_start_returns_and_parks_it_on_close(t
     for _ in range(2):
         released = threading.Event()
         runner = ParkedRunner()
-        worker = Worker(tasks, tmp_path)
+        worker = Worker.leasing(tasks, tmp_path)
         worker.start(runner, lambda run, event: events.put((run, event)), released.set)
         try:
             started = tasks.get("notes")
@@ -103,11 +103,11 @@ class LinkedRunner:
         self.claimed.set()
         assert self.release.wait(5), "The test did not release live progress."
         log.say("Linked progress.")
-        self.calls.current = CallOwner(claim.run, stop)
+        self.calls.bind(CallOwner(claim.run, stop))
         try:
             assert "Keep linked fixture updates quiet." in self.calls.desktop(SaveRule("Keep linked fixture updates quiet."))
         finally:
-            self.calls.current = None
+            self.calls.bind(None)
         return Completed("Linked result.", ())
 
 
@@ -130,7 +130,7 @@ def test_a_submission_runs_on_the_worker_and_its_output_reaches_the_conversation
         if any(isinstance(task.state, Completed) for task in snapshot.tasks):
             completed.set()
 
-    worker = Worker(tasks, tmp_path)
+    worker = Worker.leasing(tasks, tmp_path)
     agent = WorkAgent(
         tasks,
         ContextStore(tasks.path),
@@ -187,7 +187,7 @@ def test_owner_calls_refuse_a_run_that_no_longer_owns_its_task(tmp_path: Path) -
         return "Recording."
 
     calls = OwnerCalls(tasks, desktop, meeting)
-    calls.current = CallOwner(claim.run, threading.Event())
+    calls.bind(CallOwner(claim.run, threading.Event()))
     assert calls.request(MeetingCommand.STATUS) == "Recording."
     assert tasks.control("task", Control.CANCEL, at=3) is not None
     with unittest.TestCase().assertRaisesRegex(OSError, "no longer owns"):

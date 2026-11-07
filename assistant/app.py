@@ -260,7 +260,7 @@ class AssistantApp:
 
         tasks = TaskStore(WORK.journal)
         saved_context = ContextStore(tasks.path)
-        self.automation = Worker(tasks, WORK.root)
+        self.automation = Worker.leasing(tasks, WORK.root)
         self.agent = WorkAgent(
             tasks,
             saved_context,

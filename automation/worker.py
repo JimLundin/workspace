@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Final, assert_never
@@ -25,6 +25,7 @@ from automation.execution import Log
 from automation.profile_lease import ProfileLease
 from automation.store import TaskStore
 from automation.work_folder import BROWSER_PROFILE
+from cell import Cell
 from contracts.presentation import LiveMessage, PresentationEvent, Problem, Progress, Said
 from contracts.task import Claim, Outcome, RunRef, Task, owns
 lazy from assistant.agent_execution import AgentExecution
@@ -59,25 +60,24 @@ class CallOwner:
     stop: threading.Event
 
 
+@dataclass(frozen=True, slots=True)
 class OwnerCalls:
     """Execution binds its run; each call rechecks that the run still owns its task.
 
     The single execution thread sets and clears the binding around a run.
     """
 
-    __slots__ = ("current", "desktop_owner", "meeting_owner", "tasks")
+    tasks: TaskStore
+    desktop_owner: Callable[[BridgeCommand], BridgeResponse]
+    meeting_owner: Callable[[MeetingOperation], str]
+    _current: Cell[CallOwner | None] = field(default_factory=lambda: Cell[CallOwner | None](None), init=False, repr=False)
 
-    def __init__(
-        self,
-        tasks: TaskStore,
-        desktop: Callable[[BridgeCommand], BridgeResponse],
-        meeting: Callable[[MeetingOperation], str],
-    ) -> None:
-        self.tasks, self.desktop_owner, self.meeting_owner = tasks, desktop, meeting
-        self.current: CallOwner | None = None
+    def bind(self, owner: CallOwner | None) -> None:
+        """Bind the run whose calls are allowed, or clear the binding."""
+        self._current.set(owner)
 
     def _owned(self) -> None:
-        current = self.current
+        current = self._current.get()
         if current is None:
             raise OSError("No work run owns this owner request.")
         task = self.tasks.get(current.run.task_id)
@@ -129,13 +129,34 @@ class BoundRunner:
     calls: OwnerCalls
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
-        self.calls.current = CallOwner(claim.run, stop)
+        self.calls.bind(CallOwner(claim.run, stop))
         try:
             return self.runner.run_work(claim, store, log, stop)
         finally:
-            self.calls.current = None
+            self.calls.bind(None)
 
 
+def _no_publication(_run: RunRef, _event: PresentationEvent) -> None:
+    pass
+
+
+def _nothing_to_close() -> None:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _Working:
+    runner: Runner | None = None
+    publish: Callable[[RunRef, PresentationEvent], None] = _no_publication
+    close_background: Callable[[], None] = _nothing_to_close
+    controller: WorkController | None = None
+    registrations: frozendict[str, ContextSnapshot | None] = frozendict()
+    """The context each request was made in, until its run reads it; the oldest leave first."""
+    faults: tuple[float, ...] = ()
+    closing: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Worker:
     """Own the work lease, the invocation contexts and one controller at a time.
 
@@ -143,34 +164,21 @@ class Worker:
     tasks exactly as a new assistant would, up to `RESTARTS` times per window.
     """
 
-    __slots__ = (
-        "_close_background",
-        "_closing",
-        "_controller",
-        "_faults",
-        "_lease",
-        "_lifecycle",
-        "_lock",
-        "_registrations",
-        "folder",
-        "publish",
-        "runner",
-        "tasks",
-    )
+    tasks: TaskStore
+    _lease: ProfileLease
+    _working: Cell[_Working] = field(default_factory=lambda: Cell(_Working()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lifecycle: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    """Held while a controller starts or stops, so a fault restart never races shutdown."""
 
-    def __init__(self, tasks: TaskStore, folder: Path) -> None:
-        self.tasks, self.folder = tasks, folder
-        self.publish: Callable[[RunRef, PresentationEvent], None] = lambda _run, _event: None
-        self.runner: Runner | None = None
-        self._close_background: Callable[[], None] = lambda: None
-        self._lease = ProfileLease(folder)
-        self._lock = threading.Lock()
-        self._lifecycle = threading.Lock()
-        """Held while a controller starts or stops, so a fault restart never races shutdown."""
-        self._controller: WorkController | None = None
-        self._registrations: dict[str, ContextSnapshot | None] = {}
-        self._faults: tuple[float, ...] = ()
-        self._closing = False
+    @classmethod
+    def leasing(cls, tasks: TaskStore, folder: Path) -> Worker:
+        return cls(tasks, ProfileLease(folder))
+
+    @property
+    def folder(self) -> Path:
+        return self._lease.folder
 
     def start(self, runner: Runner, publish: Callable[[RunRef, PresentationEvent], None], close_background: Callable[[], None]) -> None:
         """Take the lease and recover before returning, so readiness follows recovery.
@@ -178,36 +186,38 @@ class Worker:
         `publish` receives each run's live updates; `close_background` releases the
         runner's native resources after work is parked.
         """
-        self.runner, self.publish, self._close_background = runner, publish, close_background
+        with self._lock:
+            self._working.update(lambda working: replace(working, runner=runner, publish=publish, close_background=close_background))
         with self._lifecycle:
             try:
                 self._lease.__enter__()
                 self._start_controller(runner)
             except BaseException:
                 with self._lock:
-                    self._closing = True
+                    self._working.update(lambda working: replace(working, closing=True))
                 self._release()
                 raise
 
     def _launch(self) -> None:
         with self._lifecycle:
-            if self.runner is None or self._closing:
+            working = self._working.get()
+            if working.runner is None or working.closing:
                 return
-            self._start_controller(self.runner)
+            self._start_controller(working.runner)
 
     def _start_controller(self, runner: Runner) -> None:
         controller = WorkController(
             self.tasks,
             runner,
             owner=uuid.uuid4().hex,
-            log=lambda claim: LiveLog(self.publish, claim.run),
+            log=lambda claim: LiveLog(self._working.get().publish, claim.run),
             now=time.time,
             new_run_id=lambda: uuid.uuid4().hex,
             on_change=self._changed,
             on_error=self._problem,
         )
         with self._lock:
-            self._controller = controller
+            self._working.update(lambda working: replace(working, controller=controller))
         controller.start()
 
     def _problem(self, reason: str) -> None:
@@ -227,12 +237,14 @@ class Worker:
 
     def _restart(self) -> None:
         with self._lock:
-            controller = self._controller
             now = time.monotonic()
-            self._faults = (*(at for at in self._faults if now - at < RESTART_WINDOW_S), now)
-            if self._closing or controller is None:
+            working = self._working.update(
+                lambda working: replace(working, faults=(*(at for at in working.faults if now - at < RESTART_WINDOW_S), now))
+            )
+            controller = working.controller
+            if working.closing or controller is None:
                 return
-            if len(self._faults) > RESTARTS:
+            if len(working.faults) > RESTARTS:
                 report("The work controller keeps failing; work stays saved until Workspace restarts.", folder=self.folder)
                 return
         controller.wait()
@@ -242,17 +254,15 @@ class Worker:
     def register(self, task_id: str, context: ContextSnapshot | None) -> None:
         """Keep the context a request was made in until its run reads it."""
         with self._lock:
-            self._registrations[task_id] = context
-            while len(self._registrations) > MAX_REGISTRATIONS:
-                del self._registrations[next(iter(self._registrations))]
+            self._working.update(lambda working: replace(working, registrations=_registered(working.registrations, task_id, context)))
 
     def invocation(self, task_id: str) -> ContextSnapshot | None:
         with self._lock:
-            return self._registrations.get(task_id)
+            return self._working.get().registrations.get(task_id)
 
     def wake(self) -> None:
         with self._lock:
-            controller = self._controller
+            controller = self._working.get().controller
         if controller is not None:
             controller.wake()
 
@@ -260,8 +270,7 @@ class Worker:
         """Park running work and release its resources before the lease."""
         with self._lifecycle:
             with self._lock:
-                self._closing = True
-                controller = self._controller
+                controller = self._working.update(lambda working: replace(working, closing=True)).controller
             try:
                 if controller is not None:
                     controller.shutdown()
@@ -271,9 +280,17 @@ class Worker:
 
     def _release(self) -> None:
         try:
-            self._close_background()
+            self._working.get().close_background()
         finally:
             self._lease.close()
+
+
+def _registered(
+    registrations: frozendict[str, ContextSnapshot | None], task_id: str, context: ContextSnapshot | None
+) -> frozendict[str, ContextSnapshot | None]:
+    """`registrations` with `task_id`'s context, keeping the newest `MAX_REGISTRATIONS`."""
+    entries = (*((key, value) for key, value in registrations.items() if key != task_id), (task_id, context))
+    return frozendict(entries[-MAX_REGISTRATIONS:])
 
 
 def native_runner(  # noqa: PLR0913 - the execution's independent owners
