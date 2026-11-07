@@ -305,7 +305,7 @@ class AssistantApp:
         )
         self.automatic_meetings = AutomaticMeetings(
             self.meetings,
-            TeamsCalls(Browser(BROWSER_PROFILE, source=Product.EDGE)),
+            TeamsCalls(Browser.at(BROWSER_PROFILE, source=Product.EDGE)),
             windows_store(DIRECTORY / "automatic-meetings.bin", PREFERENCE),
             publish=self.automatic_recording_changed,
         )
@@ -381,7 +381,7 @@ class AssistantApp:
         self.agent.watch(tuple(run.task_id for run in self.canvas.read().runs), owner="canvas")
         return PersonalWork(
             PersonalStore(tasks.path),
-            BrowserSources(Browser(BROWSER_PROFILE, source=Product.EDGE)),
+            BrowserSources(Browser.at(BROWSER_PROFILE, source=Product.EDGE)),
             self.personal_changed,
             model=Correlator(self.settings) if self.settings.api_key and self.settings.base_url else None,
             dismissed=self.stop_dismissed_work,

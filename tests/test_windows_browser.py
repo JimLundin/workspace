@@ -176,7 +176,7 @@ def verify_meeting_detection(browser: Browser) -> None:
 def test_managed_browser_dom_teams_persistence_and_cancellation(tmp_path: Path) -> None:
     profile = tmp_path / "managed-profile"
     trace = NativeTrace(profile)
-    with disposable(Browser(profile, opener=trace)) as browser:
+    with disposable(Browser.at(profile, opener=trace)) as browser:
         with fixture() as url:
             verify_dom_and_saved_profile(browser, url)
         verify_communications(browser, trace)
@@ -309,7 +309,7 @@ def verify_hidden_dom(personal: Browser, attached: Browser, url: str) -> None:
 
 
 def test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser(tmp_path: Path) -> None:
-    with disposable(Browser(tmp_path / "fixture-personal")) as personal, fixture() as url:
+    with disposable(Browser.at(tmp_path / "fixture-personal")) as personal, fixture() as url:
         with hosted(personal) as attached:
             verify_attached_dom(personal, attached, url)
             verify_hidden_dom(personal, attached, url)

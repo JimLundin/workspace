@@ -105,7 +105,7 @@ def connected_browser(
 ) -> Browser:
     owner = owner if owner is not None else Attached(Product.EDGE)
     source = owner.product if isinstance(owner, Attached) else Separate.PROFILE
-    browser = Browser(path, source=source, opener=ScriptedSessions(BrowserSession(Cdp(channel, clock=clock), owner)))
+    browser = Browser.at(path, source=source, opener=ScriptedSessions(BrowserSession(Cdp(channel, clock=clock), owner)))
     browser.connect(threading.Event(), visible=isinstance(owner, Managed) and owner.visible)
     return browser
 
@@ -299,7 +299,7 @@ def test_cdp_refuses_non_loopback_debugging_and_proxy_use() -> None:
 
 
 def test_browser_initialization_and_status_do_not_launch_or_create_a_profile(tmp_path: Path) -> None:
-    browser = Browser(tmp_path / "profile")
+    browser = Browser.at(tmp_path / "profile")
     assert decoded(browser.request(command("tabs"), threading.Event()).text) == {"mode": "stopped", "tabs": [], "view": "pages"}
     assert not browser.profile.exists()
     stop = threading.Event()

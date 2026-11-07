@@ -159,7 +159,7 @@ class TeamsWeb:
 
     @classmethod
     def at(cls, folder: Path, *, browser: BrowserPort | None = None) -> TeamsWeb:
-        return cls(browser if browser is not None else Browser(folder, source=Product.EDGE))
+        return cls(browser if browser is not None else Browser.at(folder, source=Product.EDGE))
 
     @property
     def target(self) -> str:

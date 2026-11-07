@@ -8,7 +8,7 @@ import time
 import uuid
 from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, assert_never
 
@@ -77,6 +77,7 @@ from assistant.browser_values import (
     evaluated,
     pages_of,
 )
+from cell import Cell
 from contracts.json_value import Json
 lazy from assistant.web_apps import Located, WebAppOperation, WebApps
 
@@ -147,35 +148,67 @@ def task_pages(pages: Iterable[Page]) -> Iterator[Page]:
                 yield page
 
 
+@dataclass(frozen=True, slots=True)
+class _Driving:
+    source: Source
+    live: BrowserSession | None = None
+    sessions: frozendict[str, str] = frozendict()
+    """The CDP session attached to each page."""
+    created: frozenset[str] = frozenset()
+    """Pages this browser opened, as opposed to the user's own."""
+    hidden: frozenset[str] = frozenset()
+    """Background pages kept out of the user's tab strip."""
+
+
+@dataclass(frozen=True, slots=True)
 class Browser:
     """Own launched processes; borrow a personal browser through its opt-in CDP."""
 
-    __slots__ = ("_live", "_opener", "created", "hidden", "lock", "profile", "sessions", "source")
+    profile: Path
+    _opener: SessionOpener
+    _state: Cell[_Driving]
+    """Replaced whole under the lock."""
+    lock: threading.RLock = field(default_factory=threading.RLock, init=False)
 
-    def __init__(
-        self,
+    @classmethod
+    def at(
+        cls,
         profile: Path,
         *,
         source: Source = Separate.PROFILE,
         executable: Path | None = None,
         opener: SessionOpener | None = None,
-    ) -> None:
-        self.profile = profile
-        self._opener = opener if opener is not None else NativeSessions(profile, executable=executable, persistent=sys.platform == "win32")
-        self.source = source
-        self._live: BrowserSession | None = None
-        self.sessions: dict[str, str] = {}
-        self.created: set[str] = set()
-        self.hidden: frozenset[str] = frozenset()
-        self.lock = threading.RLock()
+    ) -> Browser:
+        sessions = opener if opener is not None else NativeSessions(profile, executable=executable, persistent=sys.platform == "win32")
+        return cls(profile, sessions, Cell(_Driving(source)))
+
+    @property
+    def source(self) -> Source:
+        return self._state.get().source
+
+    @property
+    def hidden(self) -> frozenset[str]:
+        return self._state.get().hidden
+
+    @property
+    def created(self) -> frozenset[str]:
+        return self._state.get().created
+
+    @property
+    def sessions(self) -> frozendict[str, str]:
+        return self._state.get().sessions
+
+    def mark_created(self, target: str) -> None:
+        """Record that this browser opened `target`, so cleanup may close it."""
+        self._state.update(lambda state: replace(state, created=state.created | {target}))
 
     @property
     def connection(self) -> BrowserConnection | None:
-        return self._live.connection if self._live is not None else None
+        return live.connection if (live := self._state.get().live) is not None else None
 
     @property
     def owner(self) -> Owner:
-        return self._live.owner if self._live is not None else Stopped.BROWSER
+        return live.owner if (live := self._state.get().live) is not None else Stopped.BROWSER
 
     @property
     def process(self) -> Process | None:
@@ -203,15 +236,16 @@ class Browser:
                 return False
 
     def select(self, source: Source) -> None:
-        if source != self.source:
+        if source != self._state.get().source:
             self.close()
-            self.source = source
+            self._state.set(replace(self._state.get(), source=source))
 
     def _attach(self, product: Product, cancel: threading.Event) -> None:
         if self.owner == Attached(product) and self.connection is not None:
             return
         self.close()
-        self._live = self._opener.open(product, cancel)
+        new_live = self._opener.open(product, cancel)
+        self._state.set(replace(self._state.get(), live=new_live))
 
     def _call(
         self,
@@ -231,7 +265,7 @@ class Browser:
         with self.lock:
             if cancel.is_set():
                 raise InterruptedError("Stopped before browser automation.")
-            match self.source:
+            match self._state.get().source:
                 case Product() as product:
                     self._attach(product, cancel)
                     return
@@ -240,7 +274,8 @@ class Browser:
             if self.process is not None and self.process.poll() is None and self.visible == visible and self.connection is not None:
                 return
             self.close()
-            self._live = self._opener.open(self.source, cancel, visible=visible)
+            new_live = self._opener.open(self._state.get().source, cancel, visible=visible)
+            self._state.set(replace(self._state.get(), live=new_live))
 
     def close(self, *, keep_browser: bool = False) -> None:
         """Detach personal browsers. Only terminate a process Workspace launched."""
@@ -251,17 +286,16 @@ class Browser:
                 if not self.visible:
                     self._clear_pages()
                 return
-            live, self._live = self._live, None
+            live = self._state.get().live
+            self._state.set(replace(self._state.get(), live=None))
             try:
                 if live is not None:
-                    for target in self.hidden:
+                    for target in self._state.get().hidden:
                         with suppress(OSError):
                             live.connection.call("Target.closeTarget", {"targetId": target}, threading.Event(), timeout=1)
                     live.close()
             finally:
-                self.sessions.clear()
-                self.created.clear()
-                self.hidden = frozenset()
+                self._state.set(replace(self._state.get(), sessions=frozendict(), created=frozenset(), hidden=frozenset()))
 
     def _clear_pages(self) -> None:
         """Release exclusive research pages, including script-opened tabs."""
@@ -269,7 +303,7 @@ class Browser:
         pages = tuple(task_pages(self._tabs(cancel)))
         reply = self._call("Target.createTarget", {"url": "about:blank", "background": True}, cancel)
         blank = decoded(CREATED_TARGET, reply, "The browser did not create its idle page.").target_id
-        targets = frozenset(page.id for page in pages).union(self.hidden).difference((blank,))
+        targets = frozenset(page.id for page in pages).union(self._state.get().hidden).difference((blank,))
         for target in targets:
             result = decoded(_CLOSED_TARGET, self._call("Target.closeTarget", {"targetId": target}, cancel), "The browser did not answer cleanup.")
             if not result.success:
@@ -279,22 +313,21 @@ class Browser:
             if time.monotonic() >= deadline:
                 raise BrowserError("Agent pages remain open after cleanup; inspect browser_tabs for a pending browser dialog.")
             cancel.wait(0.05)
-        self.sessions.clear()
-        self.created.clear()
-        self.hidden = frozenset()
+        self._state.set(replace(self._state.get(), sessions=frozendict(), created=frozenset(), hidden=frozenset()))
 
     def _tabs(self, cancel: threading.Event) -> tuple[Page, ...]:
         if self.connection is None:
             return ()
-        return pages_of(self._call("Target.getTargets", {}, cancel), hidden=self.hidden)
+        return pages_of(self._call("Target.getTargets", {}, cancel), hidden=self._state.get().hidden)
 
     def _session(self, target: str, cancel: threading.Event) -> str:
         if not target or not any(tab.id == target for tab in self._tabs(cancel)):
             raise BrowserError("That page is closed or is not in the connected browser. Call browser_tabs for current ids.")
-        if target not in self.sessions:
+        if target not in self._state.get().sessions:
             reply = self._call("Target.attachToTarget", {"targetId": target, "flatten": True}, cancel)
-            self.sessions[target] = decoded(TARGET_SESSION, reply, "The browser did not attach that page.").session_id
-        return self.sessions[target]
+            attached = decoded(TARGET_SESSION, reply, "The browser did not attach that page.").session_id
+            self._state.set(replace(self._state.get(), sessions=frozendict({**self._state.get().sessions, target: attached})))
+        return self._state.get().sessions[target]
 
     def _reset_capture(self, session: str, cancel: threading.Event) -> None:
         try:
@@ -410,23 +443,23 @@ class Browser:
 
     def _open(self, request: Open, cancel: threading.Event, *, visible: bool) -> BrowserResult:
         url = web_url(request.url)
-        previous_source = self.source
+        previous_source = self._state.get().source
         if visible:
             self.select(Separate.PROFILE)
         elif request.source is not None:
             self.select(request.source)
-        switching_mode = self.source != previous_source or (self.connection is not None and self.visible != visible)
+        switching_mode = self._state.get().source != previous_source or (self.connection is not None and self.visible != visible)
         self.connect(cancel, visible=visible)
         target = "" if switching_mode else request.target_id
         tabs = self._tabs(cancel)
-        self.created.intersection_update(tab.id for tab in tabs)
+        self._state.set(replace(self._state.get(), created=self._state.get().created.intersection(tab.id for tab in tabs)))
         if not target:
             if self.process is not None:
                 target = next((tab.id for tab in tabs if tab.url == "about:blank"), "")
             if not target:
                 created = self._call("Target.createTarget", {"url": "about:blank", "background": not visible}, cancel)
                 target = decoded(CREATED_TARGET, created, "The browser did not create a tab.").target_id
-                self.created.add(target)
+                self.mark_created(target)
         session = self._session(target, cancel)
         navigation = decoded(_NAVIGATED, self._call("Page.navigate", {"url": url}, cancel, session=session), "The browser did not navigate.")
         if navigation.error_text:
@@ -446,8 +479,9 @@ class Browser:
             return self._open(Open(url), cancel, visible=False)
         created = self._call("Target.createTarget", {"url": "about:blank", "background": True, "hidden": True}, cancel)
         target = decoded(CREATED_TARGET, created, "The browser did not create a hidden page.").target_id
-        self.hidden = self.hidden.union((target,))
-        self.created.add(target)
+        new_hidden = self._state.get().hidden.union((target,))
+        self._state.set(replace(self._state.get(), hidden=new_hidden))
+        self.mark_created(target)
         # Hidden WebContents have no native window to supply layout bounds.
         # Give them the same viewport as Workspace's separate headless browser.
         session = self._session(target, cancel)
@@ -462,7 +496,7 @@ class Browser:
 
     def _settle(self, target: str, navigation: Navigated, cancel: threading.Event) -> BrowserResult:
         """Snapshot the navigated page once its main document is ready, within one budget."""
-        session = self.sessions[target]
+        session = self._state.get().sessions[target]
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             if cancel.wait(0.1):
@@ -529,15 +563,15 @@ class Browser:
                 tab.id,
                 tab.title,
                 tab.url,
-                created_in_session=tab.id in self.created if attached else None,
-                hidden=True if tab.id in self.hidden else None,
+                created_in_session=tab.id in self._state.get().created if attached else None,
+                hidden=True if tab.id in self._state.get().hidden else None,
             )
             for tab in tabs[offset : offset + limit]
         )
         mode: Literal["stopped", "attached", "sign_in", "background"] = (
             "stopped" if self.connection is None else "attached" if attached else "sign_in" if self.visible else "background"
         )
-        match self.source:
+        match self._state.get().source:
             case Product() as product:
                 # Reading status never connects or triggers browser permission.
                 setup = setup_message(product) if self.connection is None else None
@@ -576,13 +610,19 @@ class Browser:
                 return BrowserResult(_dumped(_CLOSED_PAGE, PageClosure(target, CloseState.REQUESTED)))
             if cancel.wait(0.05):
                 raise InterruptedError("Stopped while waiting for the tab to close. Inspect browser_tabs before retrying.")
-        self.sessions.pop(target, None)
-        self.created.discard(target)
-        self.hidden = self.hidden.difference((target,))
+        self._state.set(
+            replace(
+                self._state.get(),
+                sessions=frozendict((key, value) for key, value in self._state.get().sessions.items() if key != target),
+                created=self._state.get().created - {target},
+            )
+        )
+        new_hidden = self._state.get().hidden.difference((target,))
+        self._state.set(replace(self._state.get(), hidden=new_hidden))
         return BrowserResult(_dumped(_CLOSED_PAGE, PageClosure(target, CloseState.CLOSED)))
 
     def _attach_request(self, request: Attach, cancel: threading.Event) -> BrowserResult:
-        match request.browser, self.source:
+        match request.browser, self._state.get().source:
             case Product() as product, _:
                 pass
             case None, Product() as product:
@@ -594,7 +634,7 @@ class Browser:
         return self._status(PageList(), cancel)
 
     def _screenshot(self, request: Screenshot, cancel: threading.Event) -> BrowserResult:
-        if request.target_id in self.hidden:
+        if request.target_id in self._state.get().hidden:
             # Windows Edge's hidden WebContents never present a capture surface,
             # even with explicit viewport/focus emulation. Refuse before CDP
             # starts a copy that cannot finish; DOM operations remain available.
@@ -617,7 +657,7 @@ class Browser:
         # Minimized personal browsers ignore trusted input without wake
         # emulation. Keep validation and dispatch in the same restored lifetime.
         with self.awake(request.target_id, cancel):
-            session = self.sessions[request.target_id]
+            session = self._state.get().sessions[request.target_id]
             context, _tree = self._world(session, request.frame_id, cancel)
             # A frame's control coordinates are relative to that frame, not the
             # viewport, so the page dispatches the click itself there.
@@ -650,7 +690,7 @@ class Browser:
                 raise BrowserError("The page did not return its evaluated value as text.")
 
     def _activate(self, request: Activate, cancel: threading.Event) -> BrowserResult:
-        if request.target_id in self.hidden:
+        if request.target_id in self._state.get().hidden:
             raise BrowserError("This is a hidden agent page. Open its URL with visibility=tab for review.")
         if not any(page.id == request.target_id for page in self._tabs(cancel)):
             raise BrowserError("That browser page is closed. Refresh before opening its source.")

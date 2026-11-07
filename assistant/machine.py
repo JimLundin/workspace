@@ -140,7 +140,7 @@ def open_file(target: str) -> None:
 
 
 def _background_browser() -> BrowserControl:
-    return Browser(BROWSER_PROFILE, source=Separate.PROFILE)
+    return Browser.at(BROWSER_PROFILE, source=Separate.PROFILE)
 
 
 @dataclass(frozen=True, slots=True)

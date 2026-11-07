@@ -303,7 +303,7 @@ def native_runner(  # noqa: PLR0913 - the execution's independent owners
     context: Callable[[], ContextSnapshot],
 ) -> tuple[Runner, Callable[[], None]]:
     """The agent execution over the assistant's owners; the second value closes its browser."""
-    browser = Browser(BROWSER_PROFILE, source=Product.EDGE)
+    browser = Browser.at(BROWSER_PROFILE, source=Product.EDGE)
     machine = WinMachine(NativeDesktop(hwnd), meetings=calls, browser=browser)
 
     def request(task: Task) -> RequestContext:

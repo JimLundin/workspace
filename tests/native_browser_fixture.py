@@ -73,7 +73,7 @@ def disposable(browser: Browser) -> Generator[Browser]:
 def borrowed(personal: Browser) -> Generator[Browser]:
     """Fresh client state per scenario; detaching leaves the owner's tabs alive."""
     unused = personal.profile.parent / "unused-attached-profile"
-    browser = Browser(unused, source=Product.EDGE, opener=NativeSessions(unused, profiles=lambda _: personal.profile))
+    browser = Browser.at(unused, source=Product.EDGE, opener=NativeSessions(unused, profiles=lambda _: personal.profile))
     try:
         yield browser
     finally:
@@ -102,7 +102,7 @@ def hosted(personal: Browser) -> Generator[Browser]:
     opener = NativeSessions(unused, profiles=lambda _: personal.profile)
     server = Server.bind(personal.profile.parent / "browser-host", Host(Product.EDGE, opener))
     server.start()
-    browser = Browser(unused, source=Product.EDGE, opener=HostedSessions(server))
+    browser = Browser.at(unused, source=Product.EDGE, opener=HostedSessions(server))
     try:
         yield browser
     finally:

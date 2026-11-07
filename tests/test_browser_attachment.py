@@ -53,7 +53,7 @@ def consent_browser(
     def connect(uri: str, cancel: threading.Event, *, timeout: float = 2) -> Cdp:
         return Cdp.connect(uri, cancel, timeout=timeout, sockets=sockets)
 
-    browser = Browser(
+    browser = Browser.at(
         tmp_path / "unused",
         source=Product.EDGE,
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=connect),
@@ -116,7 +116,7 @@ def test_endpoint_discovery_is_bounded_and_accepts_only_a_local_browser_path() -
 
 def test_status_does_not_read_profiles_or_request_a_connection(tmp_path: Path) -> None:
     opener = ScriptedSessions()
-    browser = Browser(tmp_path / "separate", source=Product.EDGE, opener=opener)
+    browser = Browser.at(tmp_path / "separate", source=Product.EDGE, opener=opener)
     status = decoded(browser.request(command("tabs"), threading.Event()).text)
     assert not opener.opened
     assert status["mode"] == "stopped" and status["browser"] == "edge" and status["tabs"] == []
@@ -137,7 +137,7 @@ def test_attach_reuses_one_connection_and_never_closes_the_personal_browser(tmp_
         opened.append((uri, cancel, timeout))
         return connection
 
-    browser = Browser(
+    browser = Browser.at(
         tmp_path / "unused",
         source=Product.EDGE,
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=connect),
@@ -166,7 +166,7 @@ def test_attached_tab_pages_identify_created_tabs_and_keep_late_targets_accessib
     messages: list[dict[str, Json]] = [{"id": index, "result": value} for index, value in enumerate(replies, 1)]
     channel = Channel(*(json.dumps(message) for message in messages))
     browser = connected_browser(tmp_path / "unused", channel)
-    browser.created.add("page-64")
+    browser.mark_created("page-64")
     cancel = threading.Event()
 
     output = browser.request(command("tabs", **{"limit": 40}), cancel).text
@@ -196,7 +196,7 @@ def test_missing_or_denied_attachment_does_not_launch_a_separate_browser(tmp_pat
         attempts.append(uri)
         raise BrowserError("Denied")
 
-    browser = Browser(
+    browser = Browser.at(
         tmp_path / "unused",
         source=Product.CHROME,
         opener=NativeSessions(tmp_path / "unused", profiles=lambda _: tmp_path, connect=denied),
