@@ -1,8 +1,9 @@
 """The usage report: every feature, how often it was used, and which never were."""
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from itertools import chain, groupby
 from pathlib import Path
 
 from pydantic import TypeAdapter, ValidationError
@@ -35,25 +36,45 @@ class _Entry:
 _ENTRY = TypeAdapter(_Entry)
 
 
-def summarize(lines: Iterable[str], since: datetime | None = None) -> dict[str, Use]:
-    """Uses per feature (`source/feature`). Lines that aren't log entries are skipped."""
-    summary: dict[str, Use] = {}
-    cutoff = since.isoformat() if since else ""
+@dataclass(frozen=True, slots=True)
+class _Hit:
+    """Uses of one feature recorded by one log line."""
+
+    key: str
+    uses: int
+    failed: bool
+    t: str
+
+
+def _entries(lines: Iterable[str], cutoff: str) -> Iterator[_Entry]:
     for line in lines:
         try:
             entry = _ENTRY.validate_json(line)
         except ValidationError:
             continue
-        if entry.t < cutoff:
-            continue
-        found: list[tuple[str, int]] = [(entry.feature, 1)] if entry.feature is not None else []
-        if entry.counts is not None:
-            found.extend(entry.counts.items())
-        for name, count in found:
-            key = f"{entry.source}/{name}"
-            use = summary.get(key, Use())
-            summary[key] = Use(use.uses + count, use.failures + (1 if entry.ok is False else 0), max(use.last, entry.t))
-    return summary
+        if entry.t >= cutoff:
+            yield entry
+
+
+def _hits(entry: _Entry) -> Iterator[_Hit]:
+    single = ((entry.feature, 1),) if entry.feature is not None else ()
+    counted = entry.counts.items() if entry.counts is not None else ()
+    return (_Hit(f"{entry.source}/{name}", count, entry.ok is False, entry.t) for name, count in chain(single, counted))
+
+
+def _key(hit: _Hit) -> str:
+    return hit.key
+
+
+def _use(hits: Sequence[_Hit]) -> Use:
+    return Use(sum(hit.uses for hit in hits), sum(1 for hit in hits if hit.failed), max(("", *(hit.t for hit in hits))))
+
+
+def summarize(lines: Iterable[str], since: datetime | None = None) -> frozendict[str, Use]:
+    """Uses per feature (`source/feature`), in order of first use. Lines that aren't log entries are skipped."""
+    hits = tuple(hit for entry in _entries(lines, since.isoformat() if since else "") for hit in _hits(entry))
+    grouped = {key: tuple(group) for key, group in groupby(sorted(hits, key=_key), key=_key)}
+    return frozendict((key, _use(grouped[key])) for key in dict.fromkeys(hit.key for hit in hits))
 
 
 def _most_used_first(item: tuple[str, Use]) -> tuple[int, str]:

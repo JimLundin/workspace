@@ -7,6 +7,7 @@ report `Unanswered`.
 """
 
 import ctypes
+from collections.abc import Iterator
 from ctypes import wintypes
 from dataclasses import dataclass
 from enum import Enum
@@ -79,6 +80,25 @@ type Reading = Power | Unanswered | Unrecognized | Detached
 type Applied = Power | Unanswered | Detached
 
 
+@dataclass(frozen=True, slots=True)
+class _Opened:
+    """The open physical monitors behind one attached monitor, in the array Windows filled."""
+
+    monitor: Monitor
+    array: ctypes.Array[PhysicalMonitor]
+
+
+def _opened() -> Iterator[_Opened]:
+    """Open the physical monitors of each attached monitor that has any; the caller owns the arrays."""
+    for hmonitor, monitor in attached():
+        count = wintypes.DWORD()
+        if not _GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, ctypes.byref(count)) or count.value == 0:
+            continue
+        array = (PhysicalMonitor * count.value)()
+        if _GetPhysicalMonitorsFromHMONITOR(hmonitor, count.value, array):
+            yield _Opened(monitor, array)
+
+
 class PhysicalMonitors:
     """Physical-monitor handles for every attached monitor, opened together and destroyed by `close`.
 
@@ -87,19 +107,11 @@ class PhysicalMonitors:
     __slots__ = ("_arrays", "_handles")
 
     def __init__(self) -> None:
-        arrays: list[ctypes.Array[PhysicalMonitor]] = []
-        handles: dict[Monitor, tuple[int, ...]] = {}
-        for hmonitor, monitor in attached():
-            count = wintypes.DWORD()
-            if not _GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, ctypes.byref(count)) or count.value == 0:
-                continue
-            array = (PhysicalMonitor * count.value)()
-            if not _GetPhysicalMonitorsFromHMONITOR(hmonitor, count.value, array):
-                continue
-            arrays.append(array)
-            handles[monitor] = tuple(int(physical.handle or 0) for physical in array)
-        self._arrays: tuple[ctypes.Array[PhysicalMonitor], ...] = tuple(arrays)
-        self._handles: frozendict[Monitor, tuple[int, ...]] = frozendict(handles)
+        opened = tuple(_opened())
+        self._arrays: tuple[ctypes.Array[PhysicalMonitor], ...] = tuple(physical.array for physical in opened)
+        self._handles: frozendict[Monitor, tuple[int, ...]] = frozendict(
+            (physical.monitor, tuple(int(entry.handle or 0) for entry in physical.array)) for physical in opened
+        )
 
     @property
     def monitors(self) -> frozenset[Monitor]:

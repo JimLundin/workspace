@@ -9,8 +9,11 @@ from the top of the screen down to its glass, so a pointer thrown against the ed
 still lands on it.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
+from functools import reduce
+from itertools import chain
+from operator import add
 from typing import assert_never
 
 from desktop_ui import ui_spec
@@ -104,6 +107,37 @@ def textual(part: Part) -> bool:
             return False
 
 
+@dataclass(frozen=True, slots=True)
+class _Step:
+    """A part's advance along the row: the gap before it, then its width."""
+
+    part: Part
+    gap: float
+    width: float
+
+
+def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], capsule: ui_spec.Capsule) -> Iterator[_Step]:
+    for index, slot in enumerate(slots):
+        for position, part in enumerate(slot):
+            width = extent(part, measure, capsule)
+            if not position:
+                yield _Step(part, capsule.slot_gap if index else 0.0, width)
+            elif width:
+                # Two readings side by side keep the space of separate facts.
+                yield _Step(part, capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap, width)
+            else:
+                yield _Step(part, 0.0, width)
+
+
+def _placed(steps: Iterable[_Step], start: float) -> Iterator[Spot]:
+    """Each part where it lands: after its gap, then the row moves on by its width."""
+    x = start
+    for step in steps:
+        x += step.gap
+        yield Spot(step.part, x, step.width)
+        x += step.width
+
+
 def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: ui_spec.Sizes, detail: Detail | None = None) -> Content:
     """Parts left to right with their gaps. A control at either end sits concentric with the capsule;
     content without text pads like an icon and is never narrower than a circle.
@@ -123,18 +157,11 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: ui_s
             case _:
                 return pad
 
-    x = edge(parts[0]) if parts else pad
-    spots: list[Spot] = []
-    for index, slot in enumerate(slots):
-        if index and slot:
-            x += capsule.slot_gap
-        for position, part in enumerate(slot):
-            width = extent(part, measure, capsule)
-            if position and width:
-                # Two readings side by side keep the space of separate facts.
-                x += capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap
-            spots.append(Spot(part, x, width))
-            x += width
+    steps = tuple(_steps(slots, measure, capsule))
+    start = edge(parts[0]) if parts else pad
+    spots = tuple(_placed(steps, start))
+    # Added left to right like the placement, so the end matches the last part exactly.
+    x = reduce(add, chain.from_iterable((step.gap, step.width) for step in steps), start)
     end = x + (edge(parts[-1]) if parts else pad)
     if detail is None:
         width = max(float(capsule.height), end)

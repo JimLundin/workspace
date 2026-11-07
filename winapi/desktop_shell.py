@@ -1,7 +1,7 @@
 """Taskbar visibility and the independent recovery companion's process wait."""
 
 import ctypes
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from ctypes import wintypes
 
 from winapi._core import fn, kernel32, user32
@@ -15,15 +15,18 @@ _CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _GetProp = fn(user32, "GetPropW", wintypes.HANDLE, wintypes.HWND, wintypes.LPCWSTR)
 
 
+def _windows(name: str) -> Iterator[int]:
+    """Each top-level window of class `name`, in Z order."""
+    previous = 0
+    while found := _FindWindowEx(0, previous, name, None):
+        previous = int(found)
+        yield previous
+
+
 def taskbars() -> tuple[int, ...]:
-    handles: list[int] = []
-    for name in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd"):
-        previous = 0
-        while found := _FindWindowEx(0, previous, name, None):
-            previous = int(found)
-            if not _GetProp(previous, "workspace tray proxy"):
-                handles.append(previous)
-    return tuple(handles)
+    return tuple(
+        handle for name in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd") for handle in _windows(name) if not _GetProp(handle, "workspace tray proxy")
+    )
 
 
 def visible(hwnd: int) -> bool:

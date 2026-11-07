@@ -184,15 +184,11 @@ def background_frost(bounds: Rect) -> Frost:
         return Frost.SMOKED
     # Sample the sides: above/below can contain a neighboring conversation bubble.
     points = tuple((x, bounds.top + bounds.height * third // 3) for x in (bounds.left - 12, bounds.right + 12) for third in (1, 2))
-    colors: list[int] = []
     try:
-        for px, py in points:
-            color = int(_GetPixel(dc, px, py))
-            if color != 0xFFFF_FFFF:
-                colors.append(color)
+        colors = tuple(color for px, py in points if (color := int(_GetPixel(dc, px, py))) != 0xFFFF_FFFF)
     finally:
         _ReleaseDC(None, dc)
-    return frost_for(tuple(colors))
+    return frost_for(colors)
 
 
 def frost_for(colors: tuple[int, ...]) -> Frost:

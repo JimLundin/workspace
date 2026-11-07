@@ -184,28 +184,25 @@ def _holding(layer: Layer | None) -> int | None:
     return next((cell for cell, a in enumerate(BASE.cells()) if isinstance(a, TapHold) and a.hold is layer), None)
 
 
-def keymap(layer: Layer | None) -> list[list[Cap]]:
+def _cap(layer: Layer | None, held: int | None, scancode: Scancode, name: str) -> Cap:
+    """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
+    if scancode == ESCAPE:
+        return Cap(name, "On/off", "hold: quit", Kind.SPECIAL)
+    match slot(scancode):
+        case Unmapped():
+            return Cap(name, "", "", Kind.BLANK)
+        case int(cell) if cell == held and layer is not None:
+            return Cap(name, layer.name.title(), "held", Kind.HELD)
+        case int(cell):
+            a = action(layer, cell)
+            label, kind = describe(a)
+            return Cap(name, label, _hold(a), kind)
+
+
+def keymap(layer: Layer | None) -> tuple[tuple[Cap, ...], ...]:
     """The keyboard, row by row, as `layer` (None: the base layer) has it."""
     held = _holding(layer) if layer is not None else None
-    rows: list[list[Cap]] = []
-    for row in ROWS:
-        caps: list[Cap] = []
-        for scancode, name in row:
-            if scancode == ESCAPE:
-                caps.append(Cap(name, "On/off", "hold: quit", Kind.SPECIAL))
-            else:
-                match slot(scancode):
-                    case Unmapped():
-                        caps.append(Cap(name, "", "", Kind.BLANK))
-                    case int(cell) if cell == held and layer is not None:
-                        caps.append(Cap(name, layer.name.title(), "held", Kind.HELD))
-                    case int(cell):
-                        a = action(layer, cell)
-                        label, kind = describe(a)
-                        hold = _hold(a)
-                        caps.append(Cap(name, label, hold, kind))
-        rows.append(caps)
-    return rows
+    return tuple(tuple(_cap(layer, held, scancode, name) for scancode, name in row) for row in ROWS)
 
 
 def indicator_text(layer: Layer | None, *, locked: bool, caps_word: bool) -> str | None:

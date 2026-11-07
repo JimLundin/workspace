@@ -85,15 +85,7 @@ class NativeNotifications:
                 raise TimeoutError("Notification Center read did not finish")
         if info.Status != AsyncStatus.Completed:
             raise OSError("Notification Center read failed")
-        found: list[Notice] = []
-        for row in islice(operation.GetResults(), 256):
-            try:
-                key = NoticeKey(int(row.Id), creation_time(row.CreationTime))
-                notice = known.get(key) or read_notice(row, key)
-            except OSError:
-                continue  # The source can disappear between enumeration and reading.
-            if notice is not None:
-                found.append(notice)
+        found = (notice for row in islice(operation.GetResults(), 256) if (notice := _known_or_read(row, known)) is not None)
         return Observed(tuple(sorted(found, key=notice_created, reverse=True)))
 
     def close(self) -> None:
@@ -168,6 +160,14 @@ class NotificationObserver:
     def close(self) -> None:
         self.stopped.set()
         self.thread.join(timeout=4)
+
+
+def _known_or_read(row: UserNotification, known: Mapping[NoticeKey, Notice]) -> Notice | None:
+    try:
+        key = NoticeKey(int(row.Id), creation_time(row.CreationTime))
+        return known.get(key) or read_notice(row, key)
+    except OSError:
+        return None  # The source can disappear between enumeration and reading.
 
 
 def read_notice(row: UserNotification, key: NoticeKey) -> Notice | None:

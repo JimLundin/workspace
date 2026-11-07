@@ -4,6 +4,7 @@ import ctypes
 from collections.abc import Callable, Sequence
 from ctypes import wintypes
 from dataclasses import dataclass
+from itertools import chain
 from typing import Final
 
 from winapi._core import LRESULT, ULONG_PTR, fn, kernel32, user32
@@ -164,11 +165,14 @@ def send_scancodes(strokes: Sequence[tuple[int, bool]], extra: int) -> None:
 def type_text(text: str, extra: int) -> None:
     """Types text as characters, whatever the keyboard layout. A newline presses Enter."""
     enter = scancode_for(_VK_RETURN)
-    events: list[INPUT] = []
-    for i, line in enumerate(text.split("\n")):
-        if i:
-            events += [_key(_VK_RETURN, enter, 0, extra), _key(_VK_RETURN, enter, KEYEVENTF_KEYUP, extra)]
-        events += [_key(0, unit, KEYEVENTF_UNICODE | up, extra) for unit in utf16_units(line) for up in (0, KEYEVENTF_KEYUP)]
+    events = tuple(
+        event
+        for i, line in enumerate(text.split("\n"))
+        for event in chain(
+            (_key(_VK_RETURN, enter, flags, extra) for flags in ((0, KEYEVENTF_KEYUP) if i else ())),
+            (_key(0, unit, KEYEVENTF_UNICODE | up, extra) for unit in utf16_units(line) for up in (0, KEYEVENTF_KEYUP)),
+        )
+    )
     if events:
         _send(events)
 
