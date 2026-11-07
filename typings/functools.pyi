@@ -1,7 +1,7 @@
-"""Consumed caching and callback API; preserve result and parameter types."""
+"""Consumed caching, callback and folding API; preserve result and parameter types."""
 
-from collections.abc import Callable
-from typing import Concatenate, NamedTuple, Protocol
+from collections.abc import Callable, Iterable
+from typing import Concatenate, NamedTuple, Protocol, overload
 
 class _CacheInfo(NamedTuple):
     hits: int
@@ -16,3 +16,7 @@ class _lru_cache_wrapper[**P, R](Protocol):
 
 def lru_cache[**P, R](maxsize: int | None = 128, typed: bool = False) -> Callable[[Callable[P, R]], _lru_cache_wrapper[P, R]]: ...
 def partial[T, **P, R](function: Callable[Concatenate[T, P], R], value: T, /) -> Callable[P, R]: ...
+@overload
+def reduce[T](function: Callable[[T, T], T], iterable: Iterable[T], /) -> T: ...
+@overload
+def reduce[T, S](function: Callable[[S, T], S], iterable: Iterable[T], initial: S, /) -> S: ...
