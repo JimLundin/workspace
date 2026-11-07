@@ -684,7 +684,7 @@ class WorkAgent:
                     case _:
                         assert_never(job)
             except Exception as error:
-                self._service.problem = str(error) or "The work request could not be saved."
+                self._service.failed(str(error) or "The work request could not be saved.")
                 match job:
                     case Issued() | IdentifiedSubmission():
                         self._record_failure(job)
@@ -732,7 +732,7 @@ class WorkAgent:
                         for run, event in later:
                             self._log(run, event)
                 except Exception as error:
-                    self._service.problem = str(error) or "Work could not be refreshed."
+                    self._service.failed(str(error) or "Work could not be refreshed.")
                     self._publish_unavailable()
                     self.report_error(traceback.format_exc())
                 finally:

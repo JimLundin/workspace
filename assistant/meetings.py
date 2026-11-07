@@ -12,7 +12,6 @@ import sqlite3
 import threading
 import time
 import traceback
-from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -57,6 +56,17 @@ class Handover:
     closed: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class _Spooled:
+    blocks: tuple[bytes, ...] = ()
+    problems: tuple[Problem, ...] = ()
+    size: int = 0
+    """Bytes held in `blocks`."""
+    flagged: bool = False
+    closed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class Spool:
     """A bounded handover from the real-time capture thread to the journal thread.
 
@@ -64,54 +74,51 @@ class Spool:
     would exceed the bound is refused, which ends the recording.
     """
 
-    __slots__ = ("_blocks", "_closed", "_condition", "_flagged", "_problems", "_size", "limit")
-
-    def __init__(self, limit: int = RATE * 2 * SPOOL_SECONDS) -> None:
-        self.limit = limit
-        self._condition = threading.Condition()
-        self._blocks: deque[bytes] = deque()
-        self._problems: list[Problem] = []
-        self._size = 0
-        self._flagged = self._closed = False
+    limit: int = RATE * 2 * SPOOL_SECONDS
+    _spooled: Cell[_Spooled] = field(default_factory=lambda: Cell(_Spooled()), init=False, repr=False)
+    """Replaced whole under the condition."""
+    _condition: threading.Condition = field(default_factory=threading.Condition, init=False, repr=False)
 
     def put(self, pcm: bytes) -> None:
         if len(pcm) % 2:
             raise ValueError("The capture device returned an invalid audio block.")
         with self._condition:
-            if self._size + len(pcm) > self.limit:
+            spooled = self._spooled.get()
+            if spooled.size + len(pcm) > self.limit:
                 raise SpoolFullError(
                     f"Recording stopped: saving fell more than {self.limit // (RATE * 2)} s behind the audio devices. "
                     "The captured part has been saved."
                 )
-            self._blocks.append(pcm)
-            self._size += len(pcm)
+            self._spooled.set(replace(spooled, blocks=(*spooled.blocks, pcm), size=spooled.size + len(pcm)))
             self._condition.notify()
 
     def report(self, problem: Problem) -> None:
         with self._condition:
-            self._problems.append(problem)
+            self._spooled.update(lambda spooled: replace(spooled, problems=(*spooled.problems, problem)))
             self._condition.notify()
 
     def flag(self) -> None:
         """Ask the journal thread to publish the current state soon."""
         with self._condition:
-            self._flagged = True
+            self._spooled.update(lambda spooled: replace(spooled, flagged=True))
             self._condition.notify()
 
     def close(self) -> None:
         with self._condition:
-            self._closed = True
+            self._spooled.update(lambda spooled: replace(spooled, closed=True))
             self._condition.notify()
 
     def take(self, timeout: float) -> Handover:
         with self._condition:
-            self._condition.wait_for(lambda: self._blocks or self._problems or self._flagged or self._closed, timeout)
-            taken = Handover(b"".join(self._blocks), tuple(self._problems), flagged=self._flagged, closed=self._closed)
-            self._blocks.clear()
-            self._problems.clear()
-            self._size = 0
-            self._flagged = False
-            return taken
+
+            def ready() -> bool:
+                spooled = self._spooled.get()
+                return bool(spooled.blocks or spooled.problems or spooled.flagged or spooled.closed)
+
+            self._condition.wait_for(ready, timeout)
+            spooled = self._spooled.get()
+            self._spooled.set(_Spooled(closed=spooled.closed))
+            return Handover(b"".join(spooled.blocks), spooled.problems, flagged=spooled.flagged, closed=spooled.closed)
 
 
 @dataclass(frozen=True, slots=True)

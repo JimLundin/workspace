@@ -12,8 +12,8 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Generator, Iterator, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Generator, Iterator, Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, Literal, assert_never
 lazy import fcntl
@@ -284,20 +284,39 @@ def lease(folder: Path) -> Generator[None]:
         yield
 
 
-class Host:
-    __slots__ = ("clients", "generation", "lock", "opener", "product", "session")
+type Clients = frozendict[str, frozenset[str]]
+"""Each connected client's attached page sessions."""
 
-    def __init__(self, product: Product, opener: SessionOpener) -> None:
-        self.product, self.opener = product, opener
-        self.session: BrowserSession | None = None
-        self.lock = threading.Lock()
-        self.clients: dict[str, set[str]] = {}
-        self.generation = 0
+
+@dataclass(frozen=True, slots=True)
+class _Hosting:
+    session: BrowserSession | None = None
+    clients: Clients = frozendict()
+    generation: int = 0
+    """How many browser sessions this host has opened."""
+
+
+def _attached(clients: Clients, client: str, change: Callable[[frozenset[str]], frozenset[str]]) -> Clients:
+    return frozendict({**clients, client: change(clients.get(client, frozenset()))})
+
+
+@dataclass(frozen=True, slots=True)
+class Host:
+    product: Product
+    opener: SessionOpener
+    _state: Cell[_Hosting] = field(default_factory=lambda: Cell(_Hosting()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+
+    @property
+    def session(self) -> BrowserSession | None:
+        return self._state.get().session
 
     def handle(self, request: HostRequest, cancel: threading.Event) -> frozendict[str, Json]:
         match request:
             case StatusRequest():
-                status = HostStatus(self.generation, len(self.clients), os.getpid(), connected=self.session is not None)
+                hosting = self._state.get()
+                status = HostStatus(hosting.generation, len(hosting.clients), os.getpid(), connected=hosting.session is not None)
                 return _RESULT.validate_json(_STATUS.dump_json(status))
             case ConnectRequest() | ReleaseRequest() | CallRequest():
                 pass
@@ -312,53 +331,60 @@ class Host:
             self.lock.release()
 
     def _handle(self, request: ConnectRequest | ReleaseRequest | CallRequest, cancel: threading.Event) -> frozendict[str, Json]:
+        hosting = self._state.get()
         match request:
             case ConnectRequest(client=client):
-                if self.session is None:
-                    self.session = self.opener.open(self.product, cancel)
-                    self.generation += 1
-                self.clients.setdefault(client, set())
+                if hosting.session is None:
+                    hosting = replace(hosting, session=self.opener.open(self.product, cancel), generation=hosting.generation + 1)
+                self._state.set(replace(hosting, clients=_attached(hosting.clients, client, lambda sessions: sessions)))
                 return _NO_RESULT
             case ReleaseRequest(client=client):
-                sessions = self.clients.pop(client, set())
-                if self.session is not None:
+                sessions = hosting.clients.get(client, frozenset())
+                self._state.set(replace(hosting, clients=frozendict((key, value) for key, value in hosting.clients.items() if key != client)))
+                if hosting.session is not None:
                     for session in sessions:
                         with contextlib.suppress(OSError):
-                            self.session.connection.call("Target.detachFromTarget", {"sessionId": session}, cancel, timeout=1)
+                            hosting.session.connection.call("Target.detachFromTarget", {"sessionId": session}, cancel, timeout=1)
                 return _NO_RESULT
-            case CallRequest(client=client) if client not in self.clients or self.session is None:
+            case CallRequest(client=client) if client not in hosting.clients or hosting.session is None:
                 raise DisconnectedError("The approved browser connection is unavailable. Use Connect Teams to reconnect explicitly.")
             case CallRequest(method="Browser.close"):
                 raise BrowserError("Workspace does not own the personal browser's lifetime.")
-            case CallRequest(client=client, session=session) if session and session not in self.clients[client]:
+            case CallRequest(client=client, session=session) if session and session not in hosting.clients[client]:
                 raise BrowserError("That browser page session belongs to another client.")
             case CallRequest(client=client):
                 return self._call(client, request, cancel)
 
     def _call(self, client: str, request: CallRequest, cancel: threading.Event) -> frozendict[str, Json]:
-        if self.session is None:
+        session = self._state.get().session
+        if session is None:
             raise DisconnectedError("The approved browser connection is unavailable. Use Connect Teams to reconnect explicitly.")
         try:
-            result = self.session.connection.call(request.method, dict(request.params), cancel, session=request.session, timeout=request.timeout)
+            result = session.connection.call(request.method, dict(request.params), cancel, session=request.session, timeout=request.timeout)
         except DisconnectedError:
-            self.session.close()
-            self.session = None
-            self.clients.clear()
+            session.close()
+            self._state.update(lambda hosting: replace(hosting, session=None, clients=frozendict()))
             raise
         match request.method:
             case "Target.attachToTarget":
-                self.clients[client].add(decoded(_SESSION, result, "The browser did not attach that page.").session_id)
+                attached = decoded(_SESSION, result, "The browser did not attach that page.").session_id
+                self._state.update(
+                    lambda hosting: replace(hosting, clients=_attached(hosting.clients, client, lambda sessions: sessions | {attached}))
+                )
             case "Target.detachFromTarget":
-                self.clients[client].discard(decoded(_SESSION, dict(request.params), "The detached page session is invalid.").session_id)
+                detached = decoded(_SESSION, dict(request.params), "The detached page session is invalid.").session_id
+                self._state.update(
+                    lambda hosting: replace(hosting, clients=_attached(hosting.clients, client, lambda sessions: sessions - {detached}))
+                )
             case _:
                 pass
         return frozendict(result)
 
     def close(self) -> None:
         with self.lock:
-            if self.session is not None:
-                self.session.close()
-                self.session = None
+            if (session := self._state.get().session) is not None:
+                session.close()
+                self._state.update(lambda hosting: replace(hosting, session=None))
 
 
 @dataclass(frozen=True, slots=True)
@@ -527,8 +553,8 @@ def main() -> None:
                     # Browser exit ends the host; an ordinary command timeout does not reconnect it.
                     if server.host.lock.acquire(blocking=False):
                         try:
-                            if server.host.session is not None:
-                                server.host.session.connection.call("Browser.getVersion", {}, threading.Event(), timeout=5)
+                            if (session := server.host.session) is not None:
+                                session.connection.call("Browser.getVersion", {}, threading.Event(), timeout=5)
                         except DisconnectedError:
                             break
                         except OSError:

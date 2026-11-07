@@ -273,7 +273,7 @@ class AssistantApp:
             context=context,
         )
         self.timings.mark("work frontend")
-        self.activity = ActivityTracker(
+        self.activity = ActivityTracker.of(
             foreground_context,
             self.agent.running,
             policy=Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off"),

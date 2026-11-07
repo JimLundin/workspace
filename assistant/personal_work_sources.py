@@ -7,7 +7,7 @@ saved evidence. CDP targets belong to this observation and are never persisted.
 
 import threading
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Final, Protocol, assert_never
 from urllib.parse import urlsplit
 
@@ -29,6 +29,7 @@ from assistant.web_apps import (
     TeamsQuery,
     WebAppOperation,
 )
+from cell import Cell
 from contracts.personal_work import SourceKind, WorkSource, source_id, source_revision
 
 
@@ -152,26 +153,29 @@ def message_sources(conversation: WorkSource, messages: Iterable[Piece]) -> tupl
     )
 
 
-class BrowserSources:
-    __slots__ = ("browser", "connected", "failed", "retry_at")
+@dataclass(frozen=True, slots=True)
+class _Access:
+    """Connection state and a bounded retry deadline. Regular samples keep
+    checking app access; attachment failures wait one minute."""
 
-    def __init__(self, browser: BrowserPort) -> None:
-        self.browser = browser
-        # This reader owns connection state and a bounded retry deadline. Regular
-        # samples keep checking app access; attachment failures wait one minute.
-        self.connected = False
-        self.failed: str | None = None
-        self.retry_at = 0.0
+    connected: bool = False
+    failed: str | None = None
+    retry_at: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserSources:
+    browser: BrowserPort
+    _state: Cell[_Access] = field(default_factory=lambda: Cell(_Access()), init=False, repr=False)
 
     def refresh(self) -> None:
-        self.failed = None
-        self.retry_at = 0.0
+        self._state.update(lambda state: replace(state, failed=None, retry_at=0.0))
 
     def tabs(self, cancel: threading.Event) -> Iterator[Tab]:
         """Check every page of open tabs, rejecting stopped or stalled reads."""
-        if not self.connected:
+        if not self._state.get().connected:
             self.browser.connect(cancel)
-            self.connected = True
+            self._state.update(lambda state: replace(state, connected=True))
         offset = 0
         while not cancel.is_set():
             status = _STATUS.validate_json(self.browser.request(PageList(offset, limit=40), cancel).text)
@@ -188,16 +192,16 @@ class BrowserSources:
     def read(self, at: float, cancel: threading.Event) -> Observations:
         if cancel.is_set():
             return Observations((), ())
-        if self.failed is not None and at < self.retry_at:
-            return Observations((), (), (self.failed,))
+        access = self._state.get()
+        if access.failed is not None and at < access.retry_at:
+            return Observations((), (), (access.failed,))
         try:
             tabs = tuple(self.tabs(cancel))
         except BrowserError, OSError, ValueError:
-            self.connected = False
-            self.retry_at = at + ACCESS_RETRY_SECONDS
-            self.failed = "Browser evidence is unavailable. Open signed-in Teams, Outlook and Kanban tabs; access retries automatically each minute."
-            return Observations((), (), (self.failed,))
-        self.failed = None
+            failed = "Browser evidence is unavailable. Open signed-in Teams, Outlook and Kanban tabs; access retries automatically each minute."
+            self._state.set(_Access(connected=False, failed=failed, retry_at=at + ACCESS_RETRY_SECONDS))
+            return Observations((), (), (failed,))
+        self._state.update(lambda state: replace(state, failed=None))
         sources: tuple[WorkSource, ...] = ()
         coverage: tuple[str, ...] = ()
         problems: tuple[str, ...] = ()
