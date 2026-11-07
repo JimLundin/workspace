@@ -349,47 +349,49 @@ def _translates(cases: Iterable[ast.match_case], bound: frozenset[str]) -> bool:
     return len(named) >= 2 and all(_members(case.pattern) and case.guard is None and constant(case) for case in named)
 
 
-def _bound(function: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]:
+def _bound(function: ast.FunctionDef | ast.AsyncFunctionDef | None) -> frozenset[str]:
     """The function's parameters and every name it assigns: values that vary between calls."""
+    if function is None:
+        return frozenset()
     arguments = function.args
     parameters = (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs, *(item for item in (arguments.vararg, arguments.kwarg) if item))
     stored = (node.id for node in ast.walk(function) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store))
     return frozenset((*(item.arg for item in parameters), *stored))
 
 
-def enum_translations(tree: ast.AST, module: str, declaration: str = "", bound: frozenset[str] = frozenset()) -> Iterator[Finding]:
-    """A `match` that only maps enum members to constants belongs in an `every_member` table."""
+def _numeric(items: Iterable[ast.expr]) -> bool:
+    return all(isinstance(item, ast.Name) and item.id in ("int", "float") for item in items)
+
+
+def value_shapes(
+    tree: ast.AST, module: str, declaration: str = "", function: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+) -> Iterator[Finding]:
+    """One pass for two modelling rules.
+
+    A `match` that only maps enum members to constants belongs in an `every_member`
+    table; a fixed `tuple` of only ints and floats is a point, size or span that
+    needs its own type. A function's assigned names are collected only for a
+    `match` whose patterns all name members, the rare case that needs them.
+    """
     for child in ast.iter_child_nodes(tree):
         match child:
             case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                yield from enum_translations(child, module, ".".join(part for part in (declaration, name) if part), _bound(child))
+                yield from value_shapes(child, module, ".".join(part for part in (declaration, name) if part), child)
                 continue
             case ast.ClassDef(name=name):
-                yield from enum_translations(child, module, ".".join(part for part in (declaration, name) if part), bound)
+                yield from value_shapes(child, module, ".".join(part for part in (declaration, name) if part), function)
                 continue
-            case ast.Match(subject=subject, cases=cases) if _translates(cases, bound):
+            case ast.Match(subject=subject, cases=cases) if all(
+                _members(case.pattern) or (isinstance(case.pattern, ast.MatchAs) and case.pattern.pattern is None) for case in cases
+            ) and _translates(cases, _bound(function)):
                 detail = "Translate enum members with a contracts.members.every_member table, or a frozendict for a partial one."
                 yield Finding("enum-translation", module, declaration, ast.unparse(subject), child.lineno, detail)
-            case _:
-                pass
-        yield from enum_translations(child, module, declaration, bound)
-
-
-def bare_tuples(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Finding]:
-    """A fixed `tuple` of only ints and floats is a point, size or span that needs its own type."""
-    for child in ast.iter_child_nodes(tree):
-        match child:
-            case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                yield from bare_tuples(child, module, ".".join(part for part in (declaration, name) if part))
-                continue
-            case ast.Subscript(value=ast.Name(id="tuple"), slice=ast.Tuple(elts=[_, _, *_] as items)) if all(
-                isinstance(item, ast.Name) and item.id in ("int", "float") for item in items
-            ):
+            case ast.Subscript(value=ast.Name(id="tuple"), slice=ast.Tuple(elts=[_, _, *_] as items)) if _numeric(items):
                 detail = "Name the values with a frozen domain type and its bounds, such as winapi.shapes.Point or Size."
                 yield Finding("bare-tuple", module, declaration, ast.unparse(child), child.lineno, detail)
             case _:
                 pass
-        yield from bare_tuples(child, module, declaration)
+        yield from value_shapes(child, module, declaration, function)
 
 
 def observation(source: Source, cache: Cache | None) -> Observation:
@@ -425,7 +427,7 @@ def observation(source: Source, cache: Cache | None) -> Observation:
                         )
             case _:
                 pass
-    result = Observation((*_declarations(tree, module), *enum_translations(tree, module), *bare_tuples(tree, module)), tuple(dynamic))
+    result = Observation((*_declarations(tree, module), *value_shapes(tree, module)), tuple(dynamic))
     if cache is not None:
         cache.write(key, result, OBSERVATION)
     return result
