@@ -1,14 +1,11 @@
-"""When Workspace turns the Charybdis's backlight off and on around the lock, and what it puts back."""
+"""What Workspace puts back when the Charybdis's backlight comes back with the screens."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from desktop_ui.keyboard_light import KeyboardLight, started
+from desktop_ui.keyboard_light import KeyboardLight
 from usage import Detail
-from winapi import session, via
-
-LOCK = (session.WM_WTSSESSION_CHANGE, 7)
-UNLOCK = (session.WM_WTSSESSION_CHANGE, 8)
+from winapi import via
 
 
 @dataclass(slots=True)
@@ -34,47 +31,40 @@ def light(keyboard: Keyboard) -> KeyboardLight:
     def record(feature: str, details: Mapping[str, Detail]) -> None:
         pass
 
-    return started(keyboard, record)
+    return KeyboardLight(keyboard, record)
 
 
-def test_lock_turns_the_lights_off_and_unlock_puts_back_the_effect_the_person_set() -> None:
-    # Defects: unlock restores a fixed effect instead of the person's, or the lights stay off.
+def test_darkening_turns_the_lights_off_and_restoring_puts_back_the_effect_the_person_set() -> None:
+    # Defects: restoring writes a fixed effect instead of the person's, or the lights stay off.
     keyboard = Keyboard(current=7)
-    owner = light(keyboard)
-    owner = owner.message(*LOCK)
+    owner = light(keyboard).darken()
     assert keyboard.current == 0
-    owner = owner.message(*UNLOCK)
+    owner.restore()
     assert keyboard.current == 7
 
 
-def test_a_repeated_lock_keeps_the_original_effect_to_restore() -> None:
-    # Defect: a second lock notification reads "off" and remembers it, so the lights never come back.
+def test_darkening_twice_keeps_the_original_effect_to_restore() -> None:
+    # Defect: a second darkening reads "off" and remembers it, so the lights never come back.
     keyboard = Keyboard(current=1)
-    owner = light(keyboard)
-    owner = owner.message(*LOCK)
-    owner = owner.message(*LOCK)
-    owner = owner.message(*UNLOCK)
+    light(keyboard).darken().darken().restore()
     assert keyboard.current == 1
 
 
-def test_an_unlock_without_a_darkening_leaves_the_keyboard_alone() -> None:
-    # Defect: unlocking after the keyboard was plugged in during the lock writes an effect it never read.
+def test_restoring_what_was_never_darkened_leaves_the_keyboard_alone() -> None:
+    # Defect: a keyboard plugged in while away gets an effect Workspace never read written to it.
     keyboard = Keyboard(current=1)
-    owner = light(keyboard)
-    owner = owner.message(*UNLOCK)
+    light(keyboard).restore()
     assert keyboard.sets == []
 
 
-def test_an_unplug_while_locked_does_not_carry_a_stale_effect_to_the_next_lock() -> None:
-    # Defect: a failed restore keeps the old effect and the next lock skips reading the new setting.
+def test_an_unplug_while_dark_does_not_carry_a_stale_effect_to_the_next_darkening() -> None:
+    # Defect: a failed restore keeps the old effect and the next darkening skips reading the new setting.
     keyboard = Keyboard(current=1)
-    owner = light(keyboard)
-    owner = owner.message(*LOCK)
+    owner = light(keyboard).darken()
     keyboard.attached = False
-    owner = owner.message(*UNLOCK)
+    owner = owner.restore()
     keyboard.attached, keyboard.current = True, 5  # Replugged: lit from its saved setting, then changed.
-    owner = owner.message(*LOCK)
-    owner = owner.message(*UNLOCK)
+    owner.darken().restore()
     assert keyboard.current == 5
 
 

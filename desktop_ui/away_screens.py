@@ -1,5 +1,8 @@
 """Dark external screens while nobody is looking at them, so a still image can't burn into an OLED.
 
+The keyboard's backlight (`desktop_ui.keyboard_light`) goes dark and comes back
+at the same moments, by the same rules and the same toggle.
+
 A screen goes dark when the session locks or when no keyboard or mouse input has
 arrived for the configured delay, and comes back once neither holds. A program
 asking Windows to keep the display on, such as a video or a call, or a Workspace
@@ -18,6 +21,7 @@ from enum import Enum, auto
 from typing import Final
 
 from config import DARK_WHEN_IDLE_MINUTES
+from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.window_layout import dark_when_away
 from usage import Detail
 from winapi import presence, screen, session
@@ -124,10 +128,12 @@ class AwayScreens:
     65 ms on the home 4K screen, so only a darken or restore edge costs one
     request per protected screen on that thread."""
 
-    __slots__ = ("dark", "held", "kept", "locked", "record", "recording", "setting")
+    __slots__ = ("dark", "held", "kept", "light", "locked", "record", "recording", "setting")
 
-    def __init__(self, record: Callable[[str, Mapping[str, Detail]], None]) -> None:
+    def __init__(self, record: Callable[[str, Mapping[str, Detail]], None], light: KeyboardLight | None = None) -> None:
         self.record = record
+        self.light = light if light is not None else KeyboardLight(ViaBacklight(), record)
+        """The keyboard's backlight, dark exactly while the screens are."""
         self.setting = Setting(DELAY_MS, enabled=True)
         self.held: Reason | None = None
         self.recording = False
@@ -169,8 +175,10 @@ class AwayScreens:
             case Darken(reason=begun):
                 protected = dark_when_away(screen.monitors())
                 self.apply(protected - self.dark, Power.OFF, {"reason": begun.name.lower(), "idle_seconds": idle_seconds})
+                self.light = self.light.darken()
             case Restore(reason=ended):
                 self.apply(self.dark, Power.ON, {"reason": ended.name.lower(), "idle_seconds": idle_seconds})
+                self.light = self.light.restore()
             case None:
                 pass
 
@@ -190,4 +198,5 @@ class AwayScreens:
     def close(self) -> None:
         """Workspace leaving while away turns the screens back on rather than leaving them dark."""
         self.apply(self.dark, Power.ON, {"reason": "close"})
+        self.light = self.light.restore()
         self.kept.close()

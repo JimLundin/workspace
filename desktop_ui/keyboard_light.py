@@ -1,10 +1,12 @@
-"""The Charybdis's backlight goes off while the session is locked and comes back at unlock.
+"""The Charybdis's backlight goes dark with the screens while nobody is looking, and comes back with them.
 
-The keyboard can't see a lock, and locking doesn't suspend USB, so its own
-sleep handling never fires. Workspace tells it over VIA instead: it reads the
-effect the person set, turns the matrix off without saving, and puts that
-effect back at unlock. Nothing is written to the keyboard's EEPROM, so a
-keyboard unplugged while locked comes back lit as it was set.
+`desktop_ui.away_screens` decides when (the lock, or idleness) and darkens and
+restores this light at the same edges as the screens. The keyboard can't see a
+lock or idleness, and locking doesn't suspend USB, so its own sleep handling
+never fires. Workspace tells it over VIA instead: it reads the effect the person
+set, turns the matrix off without saving, and puts that effect back. Nothing is
+written to the keyboard's EEPROM, so a keyboard unplugged meanwhile comes back
+lit as it was set.
 """
 
 from collections.abc import Callable, Mapping
@@ -13,7 +15,7 @@ from typing import Final, Protocol
 
 from miryoku.firmware import FIRMWARE_KEYBOARD
 from usage import Detail
-from winapi import session, via
+from winapi import via
 
 _VENDOR: Final = int(FIRMWARE_KEYBOARD[0].removeprefix("VID_"), 16)
 _PRODUCT: Final = int(FIRMWARE_KEYBOARD[1].removeprefix("PID_"), 16)
@@ -42,21 +44,12 @@ class ViaBacklight:
 
 @dataclass(frozen=True, slots=True)
 class KeyboardLight:
-    """The lights-off state across lock and unlock; each change returns the owner's next state."""
+    """The lights-off state while away; each change returns the owner's next state."""
 
     backlight: Backlight
     record: Callable[[str, Mapping[str, Detail]], None]
     restore_to: int | None = None
     """The effect the person set, while Workspace keeps the lights off."""
-
-    def message(self, message: int, wparam: int) -> KeyboardLight:
-        match session.change(message, wparam):
-            case session.Change.LOCKED:
-                return self.darken()
-            case session.Change.UNLOCKED:
-                return self.restore()
-            case None:
-                return self
 
     def darken(self) -> KeyboardLight:
         if self.restore_to is not None:
@@ -80,9 +73,3 @@ class KeyboardLight:
         ok = self.backlight.set_effect(self.restore_to) != via.Absent()
         self.record("keyboard_light", {"lit": True, "ok": ok})
         return replace(self, restore_to=None)
-
-
-def started(backlight: Backlight, record: Callable[[str, Mapping[str, Detail]], None]) -> KeyboardLight:
-    """The owner as Workspace starts, already dark when it starts, or restarts, behind the lock screen."""
-    light = KeyboardLight(backlight, record)
-    return light.darken() if session.locked() is True else light
