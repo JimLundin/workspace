@@ -8,7 +8,6 @@ from pathlib import Path
 from assistant.agent_execution import AgentExecution
 from assistant.llm import Settings
 from assistant.task_profiles import GeneralEffects, Profiles, unseen
-from assistant.workspace import Workspace
 from automation.context import ContextStore
 from automation.execution import Log
 from automation.self_review import ReviewingRunner, TaskRecord, describe_history, describe_history_page
@@ -33,7 +32,6 @@ from contracts.task import (
 )
 from tests.fake_endpoint import fake_endpoint
 from tests.test_agent import FakeMachine, FakeWindow, calls, no_feed, says
-from tests.test_workspace import live_tree
 
 NOW = datetime(2026, 11, 3, 9, 30).astimezone()
 
@@ -151,7 +149,7 @@ def test_history_tool_pages_day_and_recent_then_drills_into_diagnostics(tmp_path
         execution = AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", ""),
             machine,
-            Profiles(Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed, ContextStore(store.path))),
+            Profiles(GeneralEffects(unseen, no_feed, ContextStore(store.path))),
             record=lambda _record: None,
             report_error=errors.append,
             close_background=machine.close_background,
@@ -187,7 +185,7 @@ def test_saved_lessons_are_verified_and_user_preferences_stay_the_users(tmp_path
         execution = AgentExecution(
             Settings(endpoint.url, "fixture", "transcribe", ""),
             machine,
-            Profiles(Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace"), GeneralEffects(unseen, no_feed, lessons)),
+            Profiles(GeneralEffects(unseen, no_feed, lessons)),
             record=lambda _record: None,
             report_error=errors.append,
             close_background=machine.close_background,

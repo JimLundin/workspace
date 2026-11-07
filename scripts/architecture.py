@@ -21,8 +21,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import StrictStr, StringConstraints, TypeAdapter
 
-from restart_plan import call_name, import_aliases, imports, module_name
-from scripts.source_analysis import Cache, Source, parse
+from scripts.source_analysis import Cache, Source, call_name, import_aliases, imports, module_name, parse
 
 type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -218,15 +217,8 @@ PROCESSES: Final = frozendict(
 and the assistant run without each other and share only `contracts`."""
 
 
-KEEPER_PROGRAM_EDGES: Final = frozenset({("keeper", "keeper_ui")})
-"""Imports made only when that module runs as its own program: `keeper.main` opens the
-keeper's dialog. The assistant uses the keeper's install helpers, never its program."""
-
-
 def process_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:
-    graph = frozendict(
-        (module, frozenset(target for target in targets if (module, target) not in KEEPER_PROGRAM_EDGES)) for module, targets in imported_by.items()
-    )
+    graph = imported_by
     for packages, forbidden in PROCESSES.items():
         for entry in sorted(module for module in graph if any(_within(module, package) for package in packages)):
             for route in _routes(graph, (entry,)):
@@ -599,43 +591,6 @@ def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Fi
     return result
 
 
-PROTECTED_FILES: Final = frozenset(
-    {"keeper.py", "selfcheck.py", "workspace.pyw", "keeper_ui.py", "keeper_control.py", "components.py", "restart_plan.py", "environments.py"}
-)
-"""`keeper.PROTECTED`: files only a deploy changes, never an agent. Fixture trees copy the
-check scripts without the keeper, so the review keeps this copy and checks it against
-the keeper's own list wherever `keeper.py` is present."""
-
-
-def keeper_protected(root: Path) -> frozenset[str] | None:
-    """`PROTECTED` as `keeper.py` declares it, read from its source; None without a keeper."""
-    keeper = root / "keeper.py"
-    if not keeper.is_file():
-        return None
-    declared = (
-        frozenset(item.value for item in items if isinstance(item, ast.Constant) and isinstance(item.value, str))
-        for node in ast.parse(keeper.read_text(encoding="utf-8")).body
-        if isinstance(node, ast.AnnAssign | ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "PROTECTED" for target in (node.targets if isinstance(node, ast.Assign) else (node.target,))
-        )
-        and isinstance(node.value, ast.Call)
-        for items in (argument.elts for argument in node.value.args if isinstance(argument, ast.Set))
-    )
-    return next(declared, frozenset[str]())
-
-
-def protected_drift(root: Path) -> Iterator[Finding]:
-    declared = keeper_protected(root)
-    if declared is not None and declared != PROTECTED_FILES:
-        detail = "Update PROTECTED_FILES to match keeper.PROTECTED: " + ", ".join(sorted(declared ^ PROTECTED_FILES))
-        yield Finding("protected-drift", "scripts.architecture", "PROTECTED_FILES", "", 0, detail)
-
-
-EXEMPT_IN_PROTECTED: Final = frozenset({"loop-accumulation"})
-"""Modelling rules an agent can't satisfy in a file it may not change."""
-
-
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     sources = python_sources(root, names)
     configuration = _configuration(root)
@@ -647,14 +602,8 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
     # Keyboard routes stop at the first application module they reach.
     keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "miryoku")), _keyboard)
-    protected = frozenset(module_name(name) for name in PROTECTED_FILES)
     findings = (
-        *(
-            finding
-            for observed in observations.values()
-            for finding in observed.declarations
-            if not (finding.rule in EXEMPT_IN_PROTECTED and finding.module in protected)
-        ),
+        *(finding for observed in observations.values() for finding in observed.declarations),
         *(finding for source in all_source for finding in cached_testing_dependencies(source, cache)),
         *(
             finding
@@ -666,7 +615,6 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             )
         ),
         *contract_isolation(imported_by),
-        *protected_drift(root),
         *process_isolation(imported_by),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))

@@ -1,6 +1,6 @@
 """Run the assistant: `pythonw -m assistant`. It has no window of its own: the
 desktop (`python -m desktop`) shows its work over a loopback link, and either runs
-without the other. The keeper (`workspace.pyw`) starts both, with the gateway and
+without the other. `launch.py` starts both, with the gateway and
 the layout. See the README for the keys and the settings.
 """
 

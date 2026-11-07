@@ -26,31 +26,18 @@ REAL_GIT: Final = "drives real git repositories; the defect is in how publicatio
 
 SLOW: Final[frozendict[str, str]] = frozendict(
     {
-        "tests/test_agent.py::test_apply_needs_a_passing_check_of_exactly_these_changes": CHECK_PROCESS,
-        "tests/test_agent.py::test_runtime_failure_returns_to_the_agent_to_fix_before_installing": CHECK_PROCESS,
         "tests/test_architecture.py::test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt": CHECK_PROCESS,
         "tests/test_computer_tools.py::test_automatic_and_explicit_screenshots_share_the_same_history_limit": (
             "three full agent runs fill the screenshot history past its limit"
         ),
-        "tests/test_keeper.py::test_a_deploy_without_a_keeper_installs_a_version_undo_can_restore": REAL_GIT,
-        "tests/test_keeper.py::test_versions_install_and_restore_exact_bytes_beside_an_untouched_runtime": REAL_GIT,
         "tests/test_meetings.py::test_recording_and_transcription_continue_while_the_markdown_file_is_locked": (
             "waits through the meeting service's real publish pacing while the transcript is locked"
         ),
         "tests/test_meetings.py::test_slow_transcription_does_not_block_capture_stop_or_shutdown": (
             "waits through the meeting service's real publish pacing beside a slow transcription"
         ),
-        "tests/test_publishing.py::test_an_installed_change_lands_on_main_once_and_never_over_newer_work": REAL_GIT,
-        "tests/test_publishing.py::test_durable_publication_records_before_candidate_code_and_remote_push": REAL_GIT,
-        "tests/test_publishing.py::test_failed_checks_and_diverged_base_refuse_publication": REAL_GIT,
-        "tests/test_publishing.py::test_git_commits_land_in_the_named_folder_whatever_repository_the_parent_locates": (
-            "starts a fresh interpreter so git sees only the environment it is given"
-        ),
         "tests/test_quality.py::test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt": CHECK_PROCESS,
         "tests/test_quality.py::test_standards_fail_on_a_lint_error_outside_the_selected_tests_before_tests_or_a_receipt": CHECK_PROCESS,
-        "tests/test_restart_plan.py::test_restart_plan_tracks_shared_removed_lazy_and_package_dependencies": (
-            "parses 14 source trees' import graphs, one per restart case"
-        ),
         "tests/test_self_review.py::test_history_tool_pages_day_and_recent_then_drills_into_diagnostics": (
             "several SDK turns against the fake endpoint, one per history page"
         ),
@@ -61,14 +48,9 @@ SLOW: Final[frozendict[str, str]] = frozendict(
         "tests/test_source_analysis.py::test_cached_quality_cannot_accept_changed_boolean_signature_or_import_ownership": (
             "real Ruff scans, before and after an edit"
         ),
-        "tests/test_work_execution.py::test_cancelling_a_check_terminates_its_candidate_process": CHECK_PROCESS,
-        "tests/test_work_execution.py::test_runtime_checks_are_recorded_before_candidate_import_and_failures_remain_fixable": CHECK_PROCESS,
         "tests/test_work_submissions.py::test_unrelated_failures_cannot_evict_a_watched_identity_collision": (
             "300 submissions, enough to pass the 256-problem limit"
         ),
-        "tests/test_workspace.py::test_check_runs_selfcheck_on_the_workspace": CHECK_PROCESS,
-        "tests/test_workspace.py::test_editing_checks_fail_on_the_standards_report_after_tests_pass": CHECK_PROCESS,
-        "tests/test_workspace.py::test_runtime_checks_cannot_change_the_source_that_was_checked": CHECK_PROCESS,
         "tests/test_selfcheck.py::test_parallel_native_lanes_report_each_lanes_passes_failures_and_crashes": CHECK_PROCESS,
     }
 )
@@ -115,7 +97,6 @@ NATIVE_SLOW: Final[frozendict[str, str]] = frozendict(
         "tests/test_windows_run_alone.py::test_the_desktop_runs_reports_ready_and_quits_with_no_assistant": (
             "the whole desktop starts and quits in a fresh interpreter"
         ),
-        "tests/test_windows_runtime.py::test_keeper_allows_owned_cleanup_longer_than_five_seconds": ("waits past the keeper's real 5 s close grace"),
         "tests/test_windows_test_desktop.py::test_desktop_bootstrap_preserves_arguments_streams_and_failure_status": (
             "relaunches Python onto a private desktop"
         ),

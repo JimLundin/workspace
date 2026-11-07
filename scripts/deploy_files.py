@@ -63,6 +63,7 @@ def read(path: Path) -> dict[str, object]:
 
 def write(path: Path, value: Mapping[str, object]) -> None:
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".pending")
     with temporary.open("w", encoding="utf-8", newline="\n") as stream:
         json.dump(value, stream, sort_keys=True, indent=2, allow_nan=False)

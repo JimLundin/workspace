@@ -21,8 +21,6 @@ from pydantic import ConfigDict, TypeAdapter
 from assistant.agent_history import History
 from assistant.agent_tools import Args, ArgumentError, Display, Machine, Output, Tool, Verify
 from assistant.llm import Settings, ToolCall
-from assistant.publishing import PublishError
-from assistant.workspace import SourceError
 from automation.actions import ActionError, Change, Observation, Operation, UncertainEffectError
 from automation.activity import ContextSnapshot
 from automation.execution import Log, Proof, Report, ReportStatus, Targets, WorkExecution
@@ -70,7 +68,6 @@ class Agent:
         "context_reader",
         "context_text",
         "history",
-        "installing",
         "log",
         "machine",
         "max_steps",
@@ -119,13 +116,8 @@ class Agent:
         self.context_image: bytes | None = None
         self.work = work
         self.report: Report = ReportStatus.STARTING
-        self.installing: str | None = None
-        """Set once the keeper has been asked to install: the task is over."""
         self.toolset = toolset(self)
         self.tools = registry(self.toolset.tools)
-
-    def installation_requested(self, summary: str, /) -> None:
-        self.installing = summary
 
     def current_context(self) -> ContextSnapshot | None:
         return self.context_reader() if self.context_reader is not None else self.context
@@ -194,7 +186,7 @@ class Agent:
         """Run a validated tool; its family describes each operation to the durable boundary."""
         try:
             return tool.run(args)
-        except (ArgumentError, SourceError, PublishError, ValueError) as error:
+        except (ArgumentError, ValueError) as error:
             return Output(f"Error: {error}", ok=False)
         except UncertainEffectError as error:
             # The journal still refuses every change until the uncertain action is

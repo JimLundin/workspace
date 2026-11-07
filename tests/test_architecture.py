@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.architecture import PROTECTED_FILES, dependencies, python_sources, review
+from scripts.architecture import dependencies, python_sources, review
 from tests.check_fixture import copy_check_scripts
 from tests.git_fixture import initialized
 
@@ -330,8 +330,7 @@ def test_a_function_never_fills_a_local_container_in_a_loop(tmp_path: Path) -> N
     # Defect: a collection built by appending, adding or index-assigning in a
     # loop slips past the review (or is reported twice from a nested function);
     # or a loop that only performs side effects, an owner updating its own
-    # state, or a comprehension is wrongly flagged; or a keeper-protected file,
-    # which an agent may not change, fails the review.
+    # state, or a comprehension is wrongly flagged.
     source = """def names(items):
     found = []
     for item in items:
@@ -364,20 +363,10 @@ class Owner:
 def built(items):
     return tuple(item.name for item in items)
 """
-    declared = ", ".join(f'"{name}"' for name in sorted(PROTECTED_FILES))
-    keeper = f"PROTECTED: Final = frozenset({{{declared}}})\n" + source.replace("def names", "def legacy")
-    write_tree(tmp_path, {"collect.py": source, "keeper.py": keeper})
+    write_tree(tmp_path, {"collect.py": source})
     found = [(finding.rule, finding.module, finding.declaration, finding.expression) for finding in review(tmp_path).failures]
     assert found == [
         ("loop-accumulation", "collect", "names", "found"),
         ("loop-accumulation", "collect", "index", "by_id"),
         ("loop-accumulation", "collect", "outer.inner", "seen"),
     ]
-
-
-def test_the_review_notices_when_the_keeper_protects_different_files(tmp_path: Path) -> None:
-    # Defect: the keeper protects a new file (or stops protecting one) and the
-    # review's copy of the list silently keeps exempting the old set.
-    write_tree(tmp_path, {"keeper.py": 'PROTECTED: Final = frozenset({"keeper.py", "selfcheck.py"})\n'})
-    [drift] = (finding for finding in review(tmp_path).failures if finding.rule == "protected-drift")
-    assert "components.py" in drift.detail and "restart_plan.py" in drift.detail

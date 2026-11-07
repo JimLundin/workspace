@@ -8,7 +8,6 @@ desktop and meeting owners through direct calls on its own thread.
 
 import contextlib
 import importlib
-import os
 import threading
 import time
 import uuid
@@ -34,10 +33,8 @@ lazy from assistant.browser_session import Product
 lazy from assistant.llm import Missing, Settings
 lazy from assistant.machine import NativeDesktop, WinMachine
 lazy from assistant.meeting_tools import MeetingOperation
-lazy from assistant.publishing import DEFAULT_REMOTE, Landing
 lazy from assistant.task_profiles import GeneralEffects, Profiles, RequestContext
 lazy from assistant.work_bridge_contracts import BRIDGE_RESPONSE, BridgeCommand, BridgeResponse
-lazy from assistant.workspace import Workspace
 lazy from automation.self_review import ReviewingRunner
 
 MAX_REGISTRATIONS: Final = 256
@@ -299,15 +296,11 @@ def native_runner(  # noqa: PLR0913 - the execution's independent owners
         return RequestContext(worker.invocation(task.id), saved, context)
 
     usable = settings if isinstance(settings, Settings) else Settings("", "", "", "")
-    landing = Landing(os.environ.get("WORKSPACE_GIT_REMOTE", DEFAULT_REMOTE), os.environ.get("WORKSPACE_GIT_BASE", "main"))
     try:
         execution = AgentExecution(
             usable,
             machine,
-            Profiles(
-                Workspace(standards=True),
-                GeneralEffects(request, calls.desktop, contexts, landing),
-            ),
+            Profiles(GeneralEffects(request, calls.desktop, contexts)),
             record=lambda details: usage.record("automation", "agent", details),
             report_error=lambda detail: report(detail, folder=worker.folder),
             close_background=machine.close_background,

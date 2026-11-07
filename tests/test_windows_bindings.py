@@ -1,17 +1,16 @@
 """Windows bindings at their boundaries, without touching the real keyboard."""
 
 import ctypes
-import queue
 import sys
-import threading
 import unittest
 import uuid
 from collections.abc import Callable, Generator, Mapping
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from ctypes import wintypes
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bindings")
+
 
 from components import Window
 from config import APPS
@@ -20,7 +19,6 @@ from desktop_ui.desktop_controls import (
     WindowInput,
     control_event,
 )
-from keeper import WindowsUser32
 from miryoku import hook_watch
 from miryoku.engine import Indicator
 from miryoku.layout import ESCAPE, Key, Layer, Mod, Scancode
@@ -835,58 +833,6 @@ def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> N
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     layers = [decode_indicator(wparam) for message, wparam, _ in driver.messages if message == WM_INDICATOR]
     assert layers == [(Layer.SYM.value, True, True)]
-
-
-def test_keeper_native_messages_preserve_pointer_sized_payloads() -> None:
-    # Detect narrowing HWND/WPARAM/LPARAM to ctypes' unprototyped 32-bit defaults.
-    title = "Workspace keeper ABI " + uuid.uuid4().hex
-    ready: queue.Queue[tuple[int, int]] = queue.Queue()
-    started: queue.Queue[int] = queue.Queue()
-    received: queue.Queue[tuple[int, int, int]] = queue.Queue()
-    closing = threading.Event()
-    message = 0x8123
-    words = (2**40 + 42, -(2**40) + 7)
-
-    def serve() -> None:
-        if closing.is_set():
-            return
-        thread_id = system.thread_id()
-        started.put(thread_id)
-
-        # The callback retains Win32's window/message/two-payload ABI.
-        def observe(hwnd: int, event: int, wparam: int, lparam: int) -> int | None:
-            if event == message:
-                received.put((hwnd, wparam, lparam))
-                system.post_quit()
-                return 0
-            return None
-
-        window = shell.AppWindow(title, observe)
-        try:
-            ready.put((window.handle, thread_id))
-            if not closing.is_set():
-                system.run_message_loop()
-        finally:
-            window.destroy()
-
-    worker = threading.Thread(target=serve, name="keeper native messages", daemon=True)
-    worker.start()
-    thread_id: int | None = None
-    try:
-        handle, thread_id = ready.get(timeout=5)
-        boundary = WindowsUser32()
-        assert boundary.FindWindowW(None, title) == handle
-        assert boundary.PostMessageW(handle, message, *words)
-        assert received.get(timeout=5) == (handle, *words)
-    finally:
-        closing.set()
-        if thread_id is None:
-            with suppress(queue.Empty):
-                thread_id = started.get_nowait()
-        if thread_id is not None:
-            system.post_thread_message(thread_id, 0x0012, 0, 0)
-        worker.join(timeout=5)
-        assert not worker.is_alive()
 
 
 def test_a_bare_windows_key_tap_asks_the_assistant_for_the_taskbar_once() -> None:

@@ -13,8 +13,6 @@ from typing import Literal, Protocol
 
 from pydantic import TypeAdapter
 
-import keeper
-import keeper_control
 from automation.work_folder import BROWSER_PROFILE
 from winapi.shapes import Rect
 lazy from assistant import commands, uia
@@ -268,6 +266,3 @@ class WinMachine:
 
     def open(self, target: str) -> None:
         self.open_target(target)
-
-    def install(self, summary: str, digest: str, checked: str | None) -> None:
-        keeper_control.ask(keeper.REQUESTS, keeper_control.Install(summary, digest, checked))

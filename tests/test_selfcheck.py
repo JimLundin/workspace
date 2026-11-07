@@ -5,9 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from selfcheck import ASSET_READERS, affected_tests, asset_readers, compile_all
+from scripts.selfcheck import ASSET_READERS, affected_tests, asset_readers, compile_all
 
-SELFCHECK = Path(__file__).resolve().parent.parent / "selfcheck.py"
+ROOT = Path(__file__).resolve().parent.parent
+SELFCHECK = ROOT / "scripts" / "selfcheck.py"
 
 
 def tree(root: Path, files: dict[str, str]) -> Path:
@@ -123,7 +124,7 @@ def test_a_changed_asset_selects_the_tests_of_its_readers_only(tmp_path: Path) -
 def test_every_source_asset_names_readers_that_exist() -> None:
     # Detect a new asset that silently selects the whole suite on every change,
     # or a renamed reader that leaves an asset's tests unselected.
-    root = SELFCHECK.parent
+    root = ROOT
     if (root / ".git").exists():
         listed = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True).stdout.decode().split("\0")
     else:

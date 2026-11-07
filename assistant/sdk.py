@@ -39,7 +39,7 @@ from pydantic import AfterValidator, BeforeValidator, TypeAdapter
 from assistant.agent import KEPT_SCREENSHOTS
 from assistant.agent_history import History
 from assistant.llm import ToolCall, ToolSpec, async_client
-from automation.execution import Incomplete, InstallationRequested, InvalidConfiguration, Reported, ReportStatus
+from automation.execution import Incomplete, InvalidConfiguration, Reported, ReportStatus
 from contracts.json_value import Json
 from contracts.presentation import Answer, LiveMessage, ReasoningSummary, StreamState
 lazy from assistant.agent import Agent
@@ -247,7 +247,7 @@ class Timeline:
 
 async def watch_stop(local: Agent, result: RunResultStreaming, hooks: Hooks) -> None:
     while not result.is_complete:
-        if local.stop.is_set() or local.work.disposition is not None or local.installing is not None:
+        if local.stop.is_set() or local.work.disposition is not None:
             if hooks.awaiting_model:
                 result.cancel()
             # During tools, after_tools finishes normally and saves their results.
@@ -280,8 +280,8 @@ def tool(spec: ToolSpec) -> FunctionTool:
         local: Agent = context.context
         if local.work.disposition is not None:
             return "This task is waiting; its execution will suspend."
-        if local.stop.is_set() or local.installing is not None:
-            return "Stopped by the user." if local.stop.is_set() else "Installation already requested."
+        if local.stop.is_set():
+            return "Stopped by the user."
         local.mark("first_tool_seconds")
         pending = asyncio.create_task(asyncio.to_thread(local.call, ToolCall(context.tool_call_id, spec.name, arguments)))
         try:
@@ -314,8 +314,6 @@ def after_tools(context: RunContextWrapper[Agent], results: list[FunctionToolRes
         return ToolsToFinalOutputResult(is_final_output=True, final_output="Stopped.")
     if local.work.disposition is not None:
         return ToolsToFinalOutputResult(is_final_output=True, final_output="Waiting for this task to continue.")
-    if local.installing is not None:
-        return ToolsToFinalOutputResult(is_final_output=True, final_output=f"Installing: {local.installing}. Workspace restarts in a moment.")
     return ToolsToFinalOutputResult(is_final_output=False)
 
 
@@ -441,12 +439,6 @@ async def run(local: Agent, task: str, prompt: str, specs: tuple[ToolSpec, ...])
             timeline.finish()
         output: object = result.final_output
         final = str(output or "Done.")
-        local.report = (
-            ReportStatus.STOPPED
-            if local.stop.is_set()
-            else InstallationRequested(local.installing)
-            if local.installing is not None
-            else Reported(final)
-        )
+        local.report = ReportStatus.STOPPED if local.stop.is_set() else Reported(final)
         local.log.done("Stopped." if local.stop.is_set() else final)
         return not local.stop.is_set()

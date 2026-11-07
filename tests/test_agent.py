@@ -7,7 +7,7 @@ import uuid
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Final, cast
+from typing import cast
 
 from assistant.agent import Agent
 from assistant.agent_history import History
@@ -20,7 +20,6 @@ from assistant.task_profiles import General
 from assistant.uia import UiRequest
 from assistant.web_apps import Located, WebAppOperation
 from assistant.work_bridge_contracts import BridgeCommand
-from assistant.workspace import Workspace
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.store import TaskStore
@@ -30,7 +29,6 @@ from contracts.json_value import Json
 from contracts.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from contracts.task import RequestSource
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
-from tests.test_workspace import live_tree
 from winapi.shapes import Rect
 
 
@@ -216,10 +214,10 @@ class FakeWindow:
 
 
 class Rig:
-    __slots__ = ("endpoint", "history", "machine", "stop", "window", "work", "workspace")
+    __slots__ = ("endpoint", "history", "machine", "stop", "window", "work")
 
-    def __init__(self, endpoint: FakeEndpoint, *replies: Reply, work: WorkExecution, workspace: Workspace | None = None) -> None:
-        self.work, self.workspace = work, workspace
+    def __init__(self, endpoint: FakeEndpoint, *replies: Reply, work: WorkExecution) -> None:
+        self.work = work
         endpoint.replies = list(replies)
         self.endpoint = endpoint
         self.machine = FakeMachine()
@@ -248,7 +246,7 @@ class Rig:
             self.window,
             self.stop,
             work=self.work,
-            toolset=lambda agent: General(agent, workspace=self.workspace, feed_request=no_feed),
+            toolset=lambda agent: General(agent, feed_request=no_feed),
             max_steps=max_steps,
             after_step=after_step,
             history=self.history,
@@ -276,7 +274,6 @@ class ToolRig:
         self,
         *,
         work: WorkExecution,
-        workspace: Workspace | None = None,
         machine: FakeMachine | None = None,
         clock: Callable[[], datetime] = datetime.now,
         feed_request: Callable[[BridgeCommand], str] = no_feed,
@@ -289,7 +286,7 @@ class ToolRig:
             self.window,
             threading.Event(),
             work=work,
-            toolset=lambda agent: General(agent, workspace=workspace, clock=clock, feed_request=feed_request),
+            toolset=lambda agent: General(agent, clock=clock, feed_request=feed_request),
         )
 
     def call(self, name: str, **arguments: Json) -> Output:
@@ -459,15 +456,6 @@ def test_stopped_turn_keeps_completed_actions_and_accepts_a_follow_up(tmp_path: 
         endpoint.replies = [says("It said clipped.")]
         rig.run("What did it say?")
         assert any(m.get("type") == "function_call_output" and observed(m["output"]) == "clipped" for m in rig.sent())
-
-
-def test_desktop_requests_do_not_prepare_a_source_workspace(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, calls(("desktop_state", {})), says("Outlook is open."), workspace=workspace, work=durable(tmp_path))
-        rig.run("What is open?")
-        assert rig.window.log[-1] == "done Outlook is open."
-    assert not workspace.root.exists()
 
 
 def test_every_call_gets_a_result_even_bad_ones(tmp_path: Path) -> None:
@@ -678,157 +666,3 @@ def test_stop_prevents_actions(tmp_path: Path) -> None:
         assert not result.ok and result.text == "Stopped by the user."
     assert not target.exists()
     assert not machine.log
-
-
-# ---- changing Workspace itself -------------------------------------------------------
-
-
-def source(tmp_path: Path) -> Workspace:
-    return Workspace(live_tree(tmp_path / "live"), tmp_path / "workspace")
-
-
-EDIT: Final = ("edit_source", {"path": "config.py", "old": "'hej'", "new": "'hello'"})
-
-
-def test_apply_needs_a_passing_check_of_exactly_these_changes(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    second = ("edit_source", {"path": "config.py", "old": "'hello'", "new": "'hi'"})
-    apply = ("apply_changes", {"summary": "x"})
-    with fake_endpoint() as endpoint:
-        rig = Rig(
-            endpoint,
-            calls(EDIT),
-            calls(apply),
-            calls(("check_changes", {})),
-            calls(second),
-            calls(apply),
-            says("ok"),
-            workspace=workspace,
-            work=durable(tmp_path),
-        )
-        rig.run()
-        assert rig.results(2) == ["Error: run check_changes first; only checked changes can be installed."]
-        assert rig.results(5) == ["Error: the changes have changed since they were checked; run check_changes again."]
-        assert rig.machine.log == []
-
-
-def test_failing_checks_are_reported_and_block_apply(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    breaking = ("write_source", {"path": "config.py", "content": "GREETING = (\n"})
-    with fake_endpoint() as endpoint:
-        rig = Rig(
-            endpoint,
-            calls(breaking),
-            calls(("check_changes", {})),
-            calls(("apply_changes", {"summary": "x"})),
-            says("ok"),
-            workspace=workspace,
-            work=durable(tmp_path),
-        )
-        rig.run()
-        assert "doesn't compile" in rig.results(2)[0]
-        assert rig.results(3) == ["Error: the last check failed; fix the changes and check again."]
-        assert not any(entry.startswith("install") for entry in rig.machine.log)
-
-
-def test_protected_files_cant_be_edited(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    result = ToolRig(workspace=workspace, work=durable(tmp_path)).call("write_source", path="keeper.py", content="x")
-    assert not result.ok and result.text.startswith("Error: keeper.py is protected")
-
-
-def test_first_source_use_starts_from_the_running_version(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    workspace.root.mkdir()
-    (workspace.root / "leftover.py").write_text("x = 1\n", encoding="utf-8")
-    result = ToolRig(workspace=workspace, work=durable(tmp_path)).call("show_changes")
-    assert result.ok and observed(result.text) == "No changes yet."
-    assert not (workspace.root / "leftover.py").exists()
-
-
-def test_source_edits_survive_follow_up_requests(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    with fake_endpoint() as endpoint:
-        rig = Rig(
-            endpoint,
-            calls(("write_source", {"path": "draft.py", "content": "x = 1\n"})),
-            says("Drafted."),
-            workspace=workspace,
-            work=durable(tmp_path),
-        )
-        rig.run("Make a draft.")
-        endpoint.replies = [calls(("read_source", {"path": "draft.py"})), says("The draft is still here.")]
-        rig.run("Read the draft back.")
-        assert [observed(result) for result in rig.results()] == ["x = 1\n"]
-        assert not (workspace.live / "draft.py").exists()
-
-
-def test_invalid_task_and_source_arguments_never_reach_the_journal_or_source(tmp_path: Path) -> None:
-    # Defect: a malformed self-change or task call reaches an action record or
-    # the workspace before its arguments are validated at the seam.
-    work = durable(tmp_path)
-    workspace = source(tmp_path)
-    rig = ToolRig(workspace=workspace, work=work)
-    invalid: tuple[tuple[str, dict[str, Json]], ...] = (
-        ("write_source", {"path": "draft.py"}),
-        ("edit_source", {"path": "config.py", "old": "'hej'"}),
-        ("apply_changes", {"summary": 5}),
-        ("reconcile_action", {"action_id": "a", "observation_id": "o", "applied": "yes"}),
-        ("ask_user", {"question": 5}),
-    )
-    for name, arguments in invalid:
-        result = rig.call(name, **arguments)
-        assert not result.ok and result.text.startswith(f"Error: {name} arguments are invalid"), (name, result.text)
-    assert work.disposition is None and not work.store.actions(work.claim.task.id)
-    assert not workspace.root.exists() or "draft.py" not in workspace.files()
-
-
-def test_reading_and_listing_the_source(tmp_path: Path) -> None:
-    rig = ToolRig(workspace=source(tmp_path), work=durable(tmp_path))
-    listing = rig.call("list_source")
-    text = rig.call("read_source", path="config.py")
-    assert listing.ok and "config.py" in observed(listing.text).splitlines()
-    assert text.ok and observed(text.text) == "GREETING = 'hej'\n"
-
-
-def test_without_a_workspace_there_are_no_source_tools(tmp_path: Path) -> None:
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint, says("ok"), work=durable(tmp_path))
-        rig.run()
-        assert b"read_source" not in endpoint.last.body
-
-
-def test_editing_checks_report_affected_native_failures_before_install(tmp_path: Path) -> None:
-    # Defect: check_changes defers native modules, so their failures surface only as keeper refusals.
-    workspace = source(tmp_path)
-    native = "import config\n\n\ndef test_native():\n    assert config.GREETING == 'hej', 'native failure'\n"
-    (workspace.live / "tests/test_windows_native.py").write_text(native)
-    rig = ToolRig(workspace=workspace, work=durable(tmp_path))
-    assert rig.call("edit_source", path="config.py", old="'hej'", new="'hello'").ok
-    checked = rig.call("check_changes")
-    assert not checked.ok and "FAILED tests.test_windows_native.test_native" in checked.text
-
-
-def test_runtime_failure_returns_to_the_agent_to_fix_before_installing(tmp_path: Path) -> None:
-    workspace = source(tmp_path)
-    check: tuple[str, Mapping[str, Json]] = ("check_changes", {})
-    apply = ("apply_changes", {"summary": "Fix greeting"})
-    with fake_endpoint() as endpoint:
-        rig = Rig(
-            endpoint,
-            calls(("write_source", {"path": "config.py", "content": "GREETING = ''\n"})),
-            calls(check),
-            calls(apply),
-            calls(("write_source", {"path": "config.py", "content": "GREETING = 'hello'\n"})),
-            calls(check),
-            calls(apply),
-            workspace=workspace,
-            work=durable(tmp_path),
-        )
-        rig.run("Fix the greeting")
-        assert "FAILED tests.test_config.test_greeting" in rig.results(2)[0]
-        assert "the last check failed" in rig.results(3)[0]
-        assert "1 passed, 0 failed" in rig.results(5)[0]
-        assert rig.machine.log == ["install Fix greeting after its fast check"]
-        assert rig.window.log[-1] == "done Installing: Fix greeting. Workspace restarts in a moment."
-        assert len(endpoint.received) == 6  # the task ends with the install

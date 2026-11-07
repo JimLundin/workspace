@@ -30,7 +30,6 @@ from contracts.task import (
     OutcomeKind,
     Question,
     Response,
-    Until,
     Waiting,
     outcome_kind,
 )
@@ -56,12 +55,7 @@ class InvalidConfiguration:
     reason: str
 
 
-@dataclass(frozen=True, slots=True)
-class InstallationRequested:
-    summary: str
-
-
-type Report = ReportStatus | Reported | Incomplete | InvalidConfiguration | InstallationRequested
+type Report = ReportStatus | Reported | Incomplete | InvalidConfiguration
 
 
 class Log(Protocol):
@@ -346,18 +340,6 @@ class WorkExecution:
                 return Waiting(Blocked(reason[:8_000]))
             case InvalidConfiguration(reason):
                 return Failed(reason[:8_000])
-            case InstallationRequested(summary):
-                self.store.progress(
-                    self.claim.run,
-                    "Installation requested; verify the running source after the keeper finishes. " + summary[:4_000],
-                    at=self.clock(),
-                )
-                return Waiting(
-                    Until(
-                        self.clock() + 120,
-                        "Waiting for the keeper's checked installation; verify the running source before completion.",
-                    )
-                )
             case ReportStatus.STARTING:
                 return Waiting(Blocked("Execution ended before a result was reported."))
             case _:

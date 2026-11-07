@@ -26,14 +26,12 @@ lazy from concurrent.futures import Future, ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
 
-from restart_plan import module_name
 from scripts.architecture import Report, dependencies, python_sources, review
 from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, json_record, read, sha, source_map, write, write_receipt
-from scripts.development_paths import LIVE, PROFILE
-from scripts.source_analysis import Cache
-lazy import selfcheck
-lazy from scripts import check_standards, check_tiers, quality
+from scripts.development_paths import PROFILE
+from scripts.source_analysis import Cache, module_name
+lazy from scripts import check_standards, check_tiers, quality, selfcheck
 lazy from scripts.check_native import execute_lanes
 lazy from scripts.native_desktop import current_name
 
@@ -460,6 +458,14 @@ def check_lint(root: Path) -> None:
         raise SystemExit(1)
 
 
+CHECKED = PROFILE / "development" / "checked"
+"""The last source each tier passed: a check selects what changed since, and a passing check records it."""
+
+
+def checked(*, native: bool) -> Path:
+    return CHECKED / ("native.json" if native else "portable.json")
+
+
 def arguments(parser: argparse.ArgumentParser) -> Options:
     raw = dict(inspect.getmembers(parser.parse_args()))
     match raw:
@@ -469,9 +475,10 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
             "standards": bool() as standards,
             "tests": requested,
             "receipt": (Path() | None) as receipt,
-            "baseline": Path() as baseline,
+            "baseline": (Path() | None) as chosen,
             "timings": (Path() | None) as timings,
         }:
+            baseline = chosen if chosen is not None else checked(native=native or full)
             if requested is None:
                 return Options(full=full, native=native or full, standards=standards, tests=(), receipt=receipt, baseline=baseline, timings=timings)
             try:
@@ -590,9 +597,12 @@ def publish_check(options: Options, run: CheckRun) -> bool:
     print(f"Complete cost evidence: {evidence}", flush=True)
     for seconds, name in sorted((item for item in observations if not item[1].startswith(("phase:", "module:", "worker:module:"))), reverse=True)[:5]:
         print(f"{seconds:.3f}s {name}")
-    if not failures and options.receipt:
+    # A passing selected check records what it passed; a native one passed the portable tier too.
+    recorded = (checked(native=False), checked(native=True)) if options.native else (checked(native=False),)
+    receipts = (*((options.receipt,) if options.receipt else ()), *(() if options.tests else recorded))
+    for receipt in receipts if not failures else ():
         write_receipt(
-            options.receipt,
+            receipt,
             CheckReceipt(
                 files=frozendict(run.files),
                 tests=run.selection.tests,
@@ -627,7 +637,7 @@ def main() -> None:
     parser.add_argument("--tests", nargs="+", help="explicit test modules for an in-progress iteration")
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--timings", type=Path, help="diagnostic cost report, retained on test/import failure")
-    parser.add_argument("--baseline", type=Path, default=LIVE)
+    parser.add_argument("--baseline", type=Path, help="a receipt or source folder to select changes from; the tier's last passing check by default")
     args = arguments(parser)
     if args.timings is not None and args.receipt is not None and args.timings.absolute() == args.receipt.absolute():
         parser.error("Timing evidence and the success receipt need separate paths")

@@ -17,7 +17,7 @@ dependencies = [
     "win32more-core==0.8.7; sys_platform == 'win32'",
     "win32more-Microsoft.Windows.SDK.Contracts==0.8.10.0.28000.2705; sys_platform == 'win32'",
     "win32more-Microsoft.Windows.SDK.Win32Metadata==0.8.71.0.26; sys_platform == 'win32'",
-    # The agent's own checks (scripts.check_candidate) run these in the installed environment.
+    # Development checks; kept in the runtime group until the dev group carries them.
     "ruff==0.17.3",
     "pyright==1.1.414",
     "truststore==0.10.5",
@@ -286,9 +286,8 @@ max-positional-args = 5
 ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
-# Protected owners resolve candidate/runtime imports after activation.
-"keeper.py" = ["PLC0415"]
-"selfcheck.py" = ["PLC0415"]
+# The test runner imports each test module only when it runs it.
+"scripts/selfcheck.py" = ["PLC0415"]
 # The layout tables are kept as a wide grid that reads across the keyboard.
 "miryoku/layout.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
@@ -297,7 +296,7 @@ ban-relative-imports = "all"
 "typings/win32more/**/*.pyi" = ["N801", "N802", "N815"]
 
 [tool.setuptools]
-py-modules = ["components", "config", "diagnostics", "environments", "keeper", "keeper_control", "keeper_ui", "protocol", "selfcheck", "usage"]
+py-modules = ["components", "config", "diagnostics", "launch", "protocol", "usage"]
 
 [tool.setuptools.packages.find]
 include = ["assistant*", "contracts*", "desktop_ui*", "automation*", "gateway*", "link*", "miryoku*", "winapi*"]

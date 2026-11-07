@@ -13,6 +13,7 @@ import importlib.metadata
 import os
 import sys
 import tempfile
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -75,3 +76,63 @@ class Cache:
             if temporary is not None:
                 with contextlib.suppress(OSError):
                     temporary.unlink(missing_ok=True)
+
+
+DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})
+
+
+def module_name(name: str) -> str:
+    """The dotted module a source file name defines; a package's `__init__` names the package."""
+    parts = Path(name).with_suffix("").parts
+    return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+
+
+def call_name(node: ast.AST, aliases: Mapping[str, str]) -> str:
+    """The dotted name a call's function resolves to through import aliases."""
+    match node:
+        case ast.Name(id=name):
+            return aliases.get(name, name)
+        case ast.Attribute(value=value, attr=attribute):
+            return call_name(value, aliases) + "." + attribute
+        case _:
+            return ""
+
+
+def _bound_names(node: ast.AST) -> Iterator[tuple[str, str]]:
+    match node:
+        case ast.Import(names=names):
+            yield from ((alias.asname or alias.name.split(".")[0], alias.name if alias.asname else alias.name.split(".")[0]) for alias in names)
+        case ast.ImportFrom(module=str() as module, level=0, names=names):
+            yield from ((alias.asname or alias.name, module + "." + alias.name) for alias in names)
+        case _:
+            pass
+
+
+def import_aliases(tree: ast.AST) -> frozendict[str, str]:
+    """Local names bound by imports, mapped to the module or attribute they name."""
+    return frozendict(pair for node in ast.walk(tree) for pair in _bound_names(node))
+
+
+def _imported(node: ast.AST, package: list[str], aliases: Mapping[str, str]) -> Iterator[str]:
+    match node:
+        case ast.Import(names=names):
+            yield from (alias.name for alias in names)
+        case ast.ImportFrom(module=base, level=level, names=names):
+            prefix = ".".join(package[: len(package) - level + 1]) if level else ""
+            target = ".".join(value for value in (prefix, base) if value)
+            yield target
+            yield from (".".join(value for value in (target, alias.name) if value) for alias in names if alias.name != "*")
+        case ast.Call(func=function, args=[ast.Constant(value=str(value)), *_]) if call_name(function, aliases) in DYNAMIC_IMPORTS:
+            yield value
+        case _:
+            pass
+
+
+def imports(name: str, tree: ast.AST) -> frozenset[str]:
+    """Every module `name` can load, including lazy imports and ancestor packages."""
+    aliases = import_aliases(tree)
+    module = module_name(name).split(".")
+    package = module if name.endswith("/__init__.py") else module[:-1]
+    found = (target for node in ast.walk(tree) for target in _imported(node, package, aliases))
+    # Importing a submodule executes its ancestor package initializers too.
+    return frozenset(".".join(parts[:index]) for target in found for parts in (target.split("."),) for index in range(1, len(parts) + 1))

@@ -1,6 +1,6 @@
-"""selfcheck: is this copy of the workspace sound? Uses installed or bundled SDK dependencies.
+"""selfcheck: is this copy of the workspace sound? CI's full test runner.
 
-    python selfcheck.py [FOLDER] [--fast | --native] [--changed-from BASE] [--durations N]
+    python -m scripts.selfcheck [FOLDER] [--fast | --native] [--changed-from BASE] [--durations N]
                         [--previous REPORT] [--stop-at-first-failure]
 
 1. Every .py file compiles.
@@ -8,19 +8,16 @@
 3. Every test passes: functions named test_* in tests/test_*.py. A test may take
    `tmp_path` (a fresh folder); a test module may raise unittest.SkipTest.
 
-Prints a report; exits 0 if sound, 1 if not. The keeper runs this on every change
-before installing it, so the agent can't change it (see keeper.py).
+Prints a report; exits 0 if sound, 1 if not.
 The fast editing profile defers tests/test_windows_*.py. The native profile runs
-only those modules: the keeper uses it when the agent's fast check already passed
-for exactly the same source digest, so compiling, importing and the portable
-tests are not repeated back to back. Any other install gets the full profile.
+only those modules.
 With --changed-from, a check runs only the test modules that import a file changed
 from BASE, directly or through test helpers, and compiles and imports only changed
 source. A changed asset in ASSET_READERS counts as a change to its readers; any other
 non-Python change runs the whole profile. The full suite runs in CI.
 With --previous, the modules that failed in that earlier report run first, alone,
 so a retried fix that still fails says so in seconds. With --stop-at-first-failure
-no module starts after one fails: an install check needs only a yes or no.
+no module starts after one fails.
 
 Discovered member values remain objects; the runner validates origin and the
 supported keyword arguments before invoking a test.
@@ -37,8 +34,8 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections.abc import Iterable, Iterator, Mapping
-from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass
 from enum import Enum
@@ -49,6 +46,10 @@ from typing import Final, Protocol
 lazy from pydantic import TypeAdapter
 
 lazy from winapi.processes import ProcessJob
+
+# Run by path (as its lanes are), this file's folder leads sys.path; the repository's own
+# packages (`winapi`) still resolve, after the tree under test that `_enter` puts first.
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
 """Signs that an import failed only because this isn't Windows."""
@@ -80,7 +81,7 @@ class Scope:
 
 
 FULL_SCOPE = Scope(Profile.FULL)
-"""The keeper's default gate: every test module."""
+"""The default profile: every test module."""
 
 _DOCUMENTS = ("docs/", ".github/", ".vscode/", "typings/", ".git")
 """Changes no test reads: documentation, repository and editor configuration, type stubs."""
@@ -89,9 +90,9 @@ _TEXT = frozenset({"AGENTS.md", "README.md", "GLOSSARY.md"})
 ASSET_READERS: Final = frozendict(
     {
         "pyproject.toml": ("scripts/architecture.py", "scripts/quality.py", "scripts/source_analysis.py", "scripts/check.py"),
-        "Dev.cmd": ("scripts/check.py", "scripts/deploy.py"),
-        "scripts/dev.ps1": ("scripts/check.py", "scripts/deploy.py"),
-        "StartWorkspace.cmd": ("environments.py",),
+        "Dev.cmd": ("scripts/check.py", "launch.py"),
+        "scripts/dev.ps1": ("scripts/check.py", "launch.py"),
+        "StartWorkspace.cmd": ("launch.py",),
         "assistant/uia.ps1": ("assistant/uia.py",),
         "desktop_ui/fonts/": ("desktop_ui/components/typeface.py", "desktop_ui/components/text.py"),
         "tests/uia_fixture.ps1": ("tests/test_windows_computer.py",),
@@ -116,15 +117,16 @@ def asset_readers(name: str) -> tuple[str, ...] | None:
     return None
 
 
-def _files(root: Path) -> dict[str, bytes]:
-    found: dict[str, bytes] = {}
+def _files(root: Path) -> frozendict[str, bytes]:
+    return frozendict(_contents(root))
+
+
+def _contents(root: Path) -> Iterator[tuple[str, bytes]]:
+    """Each source file under `root` (hidden files and compiled bytecode excepted) and its bytes."""
     for folder, directories, files in os.walk(root):
         directories[:] = [name for name in directories if not name.startswith(".") and name != "__pycache__"]
-        for name in files:
-            path = Path(folder) / name
-            if not name.startswith(".") and path.suffix != ".pyc":
-                found[path.relative_to(root).as_posix()] = path.read_bytes()
-    return found
+        paths = (Path(folder) / name for name in files if not name.startswith("."))
+        yield from ((path.relative_to(root).as_posix(), path.read_bytes()) for path in paths if path.suffix != ".pyc")
 
 
 def changed_files(root: Path, base: Path) -> frozenset[str]:
@@ -143,19 +145,22 @@ def imports(name: str, text: str) -> frozenset[str]:
     package = _module(name).split(".")
     if not name.endswith("__init__.py"):
         package = package[:-1]
-    found: set[str] = set()
-    for node in ast.walk(ast.parse(text, filename=name)):
-        match node:
-            case ast.Import(names=aliases):
-                found.update(alias.name for alias in aliases)
-            case ast.ImportFrom(module=module, names=aliases, level=level):
-                prefix = ".".join(package[: len(package) - level + 1]) if level else ""
-                origin = ".".join(part for part in (prefix, module or "") if part)
-                found.add(origin)
-                found.update(f"{origin}.{alias.name}" for alias in aliases)
-            case _:
-                pass
-    return frozenset(module for name in found for module in _ancestors(name))
+    nodes = ast.walk(ast.parse(text, filename=name))
+    return frozenset(module for node in nodes for imported in _imported(node, package) for module in _ancestors(imported))
+
+
+def _imported(node: ast.AST, package: Sequence[str]) -> Iterator[str]:
+    """The modules (and imported names) one import statement in `package` names."""
+    match node:
+        case ast.Import(names=aliases):
+            yield from (alias.name for alias in aliases)
+        case ast.ImportFrom(module=module, names=aliases, level=level):
+            prefix = ".".join(package[: len(package) - level + 1]) if level else ""
+            origin = ".".join(part for part in (prefix, module or "") if part)
+            yield origin
+            yield from (f"{origin}.{alias.name}" for alias in aliases)
+        case _:
+            pass
 
 
 def _ancestors(module: str) -> Iterator[str]:
@@ -183,14 +188,22 @@ def module_inputs(found: Imports) -> dict[str, frozenset[str]]:
     """
     by_module = {_module(name): (name, modules) for name, modules in found.items()}
     helpers = frozenset(module for module, (name, _) in by_module.items() if not Path(name).name.startswith("test_"))
-    result: dict[str, frozenset[str]] = {}
-    for module in sorted(by_module.keys() - helpers):
-        # Each module's input set grows locally; only the frozen set leaves.
-        inputs = {module, *by_module[module][1]}
-        while extra := {name for helper in inputs & helpers for name in by_module[helper][1]} - inputs:
-            inputs |= extra
-        result[by_module[module][0]] = frozenset(inputs)
-    return result
+    return {
+        name: _reached(frozenset({module, *modules}), by_module, helpers)
+        for module, (name, modules) in sorted(by_module.items())
+        if module not in helpers
+    }
+
+
+def _reached(inputs: frozenset[str], by_module: Mapping[str, tuple[str, frozenset[str]]], helpers: frozenset[str]) -> frozenset[str]:
+    """`inputs` with everything the test helpers among them import, transitively."""
+    extra = frozenset(name for helper in inputs & helpers for name in _helper_imports(by_module[helper])) - inputs
+    return _reached(inputs | extra, by_module, helpers) if extra else inputs
+
+
+def _helper_imports(entry: tuple[str, frozenset[str]]) -> frozenset[str]:
+    _, modules = entry
+    return modules
 
 
 def affected_tests(root: Path, changed: Iterable[str], found: Imports | None = None) -> frozenset[str] | None:
@@ -200,17 +213,18 @@ def affected_tests(root: Path, changed: Iterable[str], found: Imports | None = N
     (which passes its cached `found`) both use it. None means every test: a
     changed non-Python file has unknown readers.
     """
-    reached: set[str] = set()
-    for name in changed:
-        if name.endswith((".py", ".pyw")):
-            reached.add(_module(name))
-        elif (readers := asset_readers(name)) is None:
-            return None
-        else:
-            reached.update(_module(reader) for reader in readers)
+    groups = tuple(_readers(name) for name in changed)
+    if any(group is None for group in groups):
+        return None
+    reached = frozenset(_module(reader) for group in groups if group is not None for reader in group)
     if not reached:
         return frozenset()
     return frozenset(name for name, inputs in module_inputs(tests_imports(root) if found is None else found).items() if inputs & reached)
+
+
+def _readers(name: str) -> tuple[str, ...] | None:
+    """The source files a change to `name` counts as: itself if it is Python, else its readers."""
+    return (name,) if name.endswith((".py", ".pyw")) else asset_readers(name)
 
 
 def _selected(path: Path, profile: Profile) -> bool:
@@ -229,13 +243,10 @@ WORKERS = 4
 # and per-function temporary stores. These modules never use the shared desktop
 # or installed source, so they run in worker processes alongside the remaining
 # portable modules. An explicit inventory, rather than filename inference, keeps
-# new/native tests sequential until their effects have been reviewed; it lives
-# in this protected file so a change cannot widen it for its own install check.
-# Heavier modules lead the queue. The full sequential suite outgrew the keeper's
-# check limit, so installs failed before any test could fail.
+# new/native tests sequential until their effects have been reviewed.
+# Heavier modules lead the queue.
 PORTABLE = (
     "tests/test_agent.py",
-    "tests/test_publishing.py",
     "tests/test_architecture.py",
     "tests/test_quality.py",
     "tests/test_work_store.py",
@@ -249,9 +260,7 @@ PORTABLE = (
     "tests/test_project_context.py",
     "tests/test_llm.py",
     "tests/test_background_agent.py",
-    "tests/test_keeper.py",
     "tests/test_source_analysis.py",
-    "tests/test_workspace.py",
     "tests/test_work_agent.py",
     "tests/test_features.py",
     "tests/test_work_submissions.py",
@@ -263,7 +272,7 @@ AFTER_WORKERS = frozenset({"tests/test_agent_streaming.py"})
 NATIVE_LANES: Final = (
     # Each launches real Edge processes on disposable profiles.
     ("tests/test_windows_browser.py",),
-    ("tests/test_windows_runtime.py", "tests/test_windows_test_desktop.py"),
+    ("tests/test_windows_test_desktop.py",),
     ("tests/test_windows_computer.py", "tests/test_windows_development.py"),
 )
 """Slow native modules that wait on child processes and share no machine-wide state.
@@ -323,26 +332,32 @@ class Test(Protocol):
 
 
 def _call(test: Test) -> None:
-    arguments: dict[str, Path] = {}
-    for name in inspect.signature(test).parameters:
-        if name != "tmp_path":
+    # Only the first parameter is supplied; any later one must have a default.
+    match next(iter(inspect.signature(test).parameters), None):
+        case None:
+            test()
+        case "tmp_path":
+            with tempfile.TemporaryDirectory(prefix="selfcheck-") as scratch:
+                test(tmp_path=Path(scratch))
+        case name:
             raise TypeError(f"selfcheck can only give a test tmp_path, not {name}")
-        with tempfile.TemporaryDirectory(prefix="selfcheck-") as scratch:
-            arguments[name] = Path(scratch)
-            test(**arguments)
-            return
-    test(**arguments)
 
 
 type Outcome = tuple[int, int, tuple[str, ...], tuple[tuple[float, str], ...]]
 """Passed tests, skipped modules, problems and per-test timings of one module run."""
 
 
+@dataclass(frozen=True, slots=True)
+class FunctionResult:
+    """One test function's run: whether it passed, its failure, and how long it took."""
+
+    passed: bool
+    problem: str | None
+    timing: tuple[float, str]
+
+
 def run_module(path: Path) -> Outcome:
     """Load one test module from the current tree and run its tests."""
-    passed = skipped = 0
-    problems: list[str] = []
-    timings: list[tuple[float, str]] = []
     name = f"tests.{path.stem}"
     try:
         module = importlib.import_module(name)
@@ -353,22 +368,33 @@ def run_module(path: Path) -> Outcome:
             return 0, 1, (), ()
         return 0, 0, (f"FAILED {name} (while loading)\n{''.join(traceback.format_exception(error))}",), ()
     members: dict[str, object] = vars(module)
+    results = tuple(_run_functions(name, members))
+    return (
+        sum(result.passed for result in results),
+        0,
+        tuple(result.problem for result in results if result.problem is not None),
+        tuple(result.timing for result in results),
+    )
+
+
+def _run_functions(name: str, members: Mapping[str, object]) -> Iterator[FunctionResult]:
+    """Run each test function module `name` defines (not imports), in name order."""
     for attribute, test in sorted(members.items()):
-        if attribute.startswith("test_") and callable(test):
-            if not isinstance(test, FunctionType) or test.__module__ != name:  # Defined here, not imported.
-                continue
-            invoke: Test = test
-            started = time.perf_counter()
-            try:
-                _call(invoke)
-                passed += 1
-            except unittest.SkipTest:
-                pass
-            except Exception as error:
-                problems.append(f"FAILED {name}.{attribute}\n{''.join(traceback.format_exception(error))}")
-            finally:
-                timings.append((time.perf_counter() - started, f"{name}.{attribute}"))
-    return passed, skipped, tuple(problems), tuple(timings)
+        if attribute.startswith("test_") and isinstance(test, FunctionType) and test.__module__ == name:
+            yield _run_function(f"{name}.{attribute}", test)
+
+
+def _run_function(qualified: str, test: Test) -> FunctionResult:
+    started = time.perf_counter()
+    passed, problem = False, None
+    try:
+        _call(test)
+        passed = True
+    except unittest.SkipTest:
+        pass
+    except Exception as error:
+        problem = f"FAILED {qualified}\n{''.join(traceback.format_exception(error))}"
+    return FunctionResult(passed, problem, (time.perf_counter() - started, qualified))
 
 
 def _prepare_worker(root: str) -> None:
@@ -397,17 +423,12 @@ def native_groups(root: Path, paths: list[Path]) -> tuple[list[list[Path]], list
 
 def run_lane(paths: list[Path], result: Path) -> bool:
     """Run one lane's modules here, in order, and write their combined outcome to `result`."""
-    outcomes: list[Outcome] = []
-    for path in paths:
-        started = time.perf_counter()
-        outcome = run_module(path)
-        _progress(path, outcome, time.perf_counter() - started)
-        outcomes.append(outcome)
+    outcomes = tuple(outcome for _, outcome in _sequential(paths, stop=False))
     combined = LaneOutcome(
-        sum(outcome[0] for outcome in outcomes),
-        sum(outcome[1] for outcome in outcomes),
-        tuple(problem for outcome in outcomes for problem in outcome[2]),
-        tuple(timing for outcome in outcomes for timing in outcome[3]),
+        sum(passed for passed, _, _, _ in outcomes),
+        sum(skipped for _, skipped, _, _ in outcomes),
+        tuple(problem for _, _, problems, _ in outcomes for problem in problems),
+        tuple(timing for _, _, _, timings in outcomes for timing in timings),
     )
     result.write_bytes(TypeAdapter(LaneOutcome).dump_json(combined))
     return not combined.problems
@@ -441,28 +462,29 @@ class Lanes:
                 self.job.add(process.pid)
             self.running.append((group, result, log, process))
 
-    def collect(self) -> list[Outcome]:
+    def collect(self) -> tuple[Outcome, ...]:
         """Wait for every lane and its outcome; a lane that died without a result fails."""
-        outcomes: list[Outcome] = []
         try:
-            for group, result, log, process in self.running:
-                code = process.wait()
-                report = log.read_text(encoding="utf-8", errors="replace")
-                sys.stdout.write(report)
-                sys.stdout.flush()
-                try:
-                    lane = TypeAdapter(LaneOutcome).validate_json(result.read_bytes())
-                except OSError, ValueError:
-                    outcomes.append(_lane_failure(group, f"exited {code} without a result\n{report[-2000:]}"))
-                    continue
-                outcomes.append((lane.passed, lane.skipped, lane.problems, lane.timings))
-                if code and not lane.problems:
-                    outcomes.append(_lane_failure(group, f"exited {code}"))
+            return tuple(self._outcomes())
         finally:
             if self.job is not None:
                 self.job.close()
             self.scratch.cleanup()
-        return outcomes
+
+    def _outcomes(self) -> Iterator[Outcome]:
+        for group, result, log, process in self.running:
+            code = process.wait()
+            report = log.read_text(encoding="utf-8", errors="replace")
+            sys.stdout.write(report)
+            sys.stdout.flush()
+            try:
+                lane = TypeAdapter(LaneOutcome).validate_json(result.read_bytes())
+            except OSError, ValueError:
+                yield _lane_failure(group, f"exited {code} without a result\n{report[-2000:]}")
+                continue
+            yield lane.passed, lane.skipped, lane.problems, lane.timings
+            if code and not lane.problems:
+                yield _lane_failure(group, f"exited {code}")
 
 
 def _job() -> ProcessJob | None:
@@ -494,7 +516,7 @@ def import_changed(root: Path, changed: frozenset[str], problems: list[str]) -> 
             problems.append(f"doesn't compile: {name}\n{error}")
             continue
         module = _module(name)
-        if name.endswith(".py") and not name.startswith("tests/") and name != "selfcheck.py":
+        if name.endswith(".py") and not name.startswith("tests/") and name != "scripts/selfcheck.py":
             try:
                 importlib.import_module(module)
             except Exception as error:
@@ -528,6 +550,60 @@ def partition(root: Path, paths: list[Path], first: frozenset[str]) -> Runs:
     return leading, portable, alongside, later, native
 
 
+type Ran = tuple[Path, Outcome]
+"""A module that ran here or on a worker, and its outcome."""
+
+
+def _failed(outcomes: Iterable[Outcome]) -> bool:
+    return any(problems for _, _, problems, _ in outcomes)
+
+
+def _ran_failed(runs: Iterable[Ran]) -> bool:
+    return _failed(outcome for _, outcome in runs)
+
+
+def _sequential(paths: Iterable[Path], *, stop: bool) -> Iterator[Ran]:
+    """Run each module here, in order, reporting its progress; with `stop`, none after one fails."""
+    for path in paths:
+        started = time.perf_counter()
+        outcome = run_module(path)
+        _progress(path, outcome, time.perf_counter() - started)
+        yield path, outcome
+        if stop and _failed((outcome,)):
+            return
+
+
+def _gathered(pool: ProcessPoolExecutor, pending: Iterable[tuple[Path, Future[Outcome]]], started: float, *, stop: bool) -> Iterator[Ran]:
+    """Each worker's outcome, in submission order; with `stop`, the rest are cancelled after one fails."""
+    for path, future in pending:
+        try:
+            outcome = future.result()
+        except BrokenProcessPool:
+            # Some hosts refuse worker processes (CI's Windows runner denies the
+            # handle duplication spawning needs); those modules run here instead.
+            outcome = run_module(path)
+        except Exception as error:
+            outcome = 0, 0, (f"FAILED tests.{path.stem} (in a worker)\n{''.join(traceback.format_exception(error))}",), ()
+        _progress(path, outcome, time.perf_counter() - started)
+        yield path, outcome
+        if stop and _failed((outcome,)):
+            pool.shutdown(wait=True, cancel_futures=True)
+            return
+
+
+def _with_workers(root: Path, portable: Sequence[Path], alongside: Sequence[Path], later: Sequence[Path], *, stop: bool) -> tuple[Ran, ...]:
+    """Portable modules on workers while the alongside ones run here, then the later ones here."""
+    started = time.perf_counter()
+    with ProcessPoolExecutor(max_workers=WORKERS, initializer=_prepare_worker, initargs=(str(root),)) as pool:
+        pending = tuple((path, pool.submit(run_module, path)) for path in portable)
+        beside = tuple(_sequential(alongside, stop=stop))
+        if stop and _ran_failed(beside):
+            pool.shutdown(wait=True, cancel_futures=True)
+            return beside
+        done = (*beside, *_gathered(pool, pending, started, stop=stop))
+    return done if stop and _ran_failed(done) else (*done, *_sequential(later, stop=stop))
+
+
 def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope = FULL_SCOPE) -> tuple[int, int, tuple[tuple[float, str], ...]]:
     """Passed tests, skipped test modules and per-test timings.
 
@@ -538,63 +614,30 @@ def run_tests(root: Path, problems: list[str], paths: list[Path], scope: Scope =
     the modules left out are reported.
     """
     leading, portable, alongside, later, native = partition(root, paths, scope.first)
-    # This coordinator owns the run's counters and ledgers; workers return
-    # immutable outcomes only.
-    outcomes: list[Outcome] = []
-    ran: set[Path] = set()
-    """The modules that ran, whichever runner ran them; a lane reports once for all of its modules."""
-
-    def failed() -> bool:
-        return scope.stop and any(outcome[2] for outcome in outcomes)
-
-    def sequential(group: list[Path]) -> None:
-        for path in group:
-            if failed():
-                return
-            started = time.perf_counter()
-            outcome = run_module(path)
-            _progress(path, outcome, time.perf_counter() - started)
-            outcomes.append(outcome)
-            ran.add(path)
-
-    sequential(leading)
-    if len(portable) < 2:
-        sequential([*portable, *alongside, *later])
-    elif not failed():
-        started = time.perf_counter()
-        with ProcessPoolExecutor(max_workers=WORKERS, initializer=_prepare_worker, initargs=(str(root),)) as pool:
-            pending = [(path, pool.submit(run_module, path)) for path in portable]
-            sequential(alongside)
-            for path, future in pending:
-                if failed():
-                    pool.shutdown(wait=True, cancel_futures=True)
-                    break
-                try:
-                    outcome = future.result()
-                except BrokenProcessPool:
-                    # Some hosts refuse worker processes (CI's Windows runner denies the
-                    # handle duplication spawning needs); those modules run here instead.
-                    outcome = run_module(path)
-                except Exception as error:
-                    outcome = 0, 0, (f"FAILED tests.{path.stem} (in a worker)\n{''.join(traceback.format_exception(error))}",), ()
-                _progress(path, outcome, time.perf_counter() - started)
-                outcomes.append(outcome)
-                ran.add(path)
-        sequential(later)
+    stop = scope.stop
+    first = tuple(_sequential(leading, stop=stop))
+    if stop and _ran_failed(first):
+        rest: tuple[Ran, ...] = ()
+    elif len(portable) < 2:
+        rest = tuple(_sequential([*portable, *alongside, *later], stop=stop))
+    else:
+        rest = _with_workers(root, portable, alongside, later, stop=stop)
+    done = (*first, *rest)
+    halted = stop and _ran_failed(done)
     # The slow lanes run in their own processes while the coordinator runs the
     # remaining native modules itself, as it did before there were lanes.
     groups, remaining = native_groups(root, native)
-    lanes = Lanes(root, groups) if groups and not failed() else None
-    sequential(remaining if lanes is not None else native)
-    if lanes is not None:
-        outcomes.extend(lanes.collect())
-        ran.update(path for group in groups for path in group)
-    for _, _, found, _ in outcomes:
-        problems.extend(found)
-    if (left := len(paths) - len(ran)) and failed():
+    lanes = Lanes(root, groups) if groups and not halted else None
+    here = () if halted else tuple(_sequential(remaining if lanes is not None else native, stop=stop))
+    laned = lanes.collect() if lanes is not None else ()
+    # Every outcome in run order; a lane reports once for all of its modules.
+    outcomes = (*(outcome for _, outcome in (*done, *here)), *laned)
+    ran = frozenset(path for path, _ in (*done, *here)) | frozenset(path for group in groups for path in group if lanes is not None)
+    problems.extend(problem for _, _, found, _ in outcomes for problem in found)
+    if (left := len(paths) - len(ran)) and stop and _failed(outcomes):
         problems.append(f"Stopped at the first failure: {left} affected test module{'' if left == 1 else 's'} not run.")
-    measured = tuple(timing for outcome in outcomes for timing in outcome[3])
-    return sum(outcome[0] for outcome in outcomes), sum(outcome[1] for outcome in outcomes), measured
+    measured = tuple(timing for _, _, _, timings in outcomes for timing in timings)
+    return sum(passed for passed, _, _, _ in outcomes), sum(skipped for _, skipped, _, _ in outcomes), measured
 
 
 def _enter(root: Path) -> None:
@@ -640,7 +683,7 @@ def check(root: Path, scope: Scope = FULL_SCOPE, durations: int = 0) -> tuple[bo
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("folder", nargs="?", type=Path, default=Path(__file__).parent)
+    parser.add_argument("folder", nargs="?", type=Path, default=Path(__file__).resolve().parent.parent)
     profiles = parser.add_mutually_exclusive_group()
     profiles.add_argument("--fast", action="store_true", help="editing checks; defer Windows integration modules")
     profiles.add_argument("--native", action="store_true", help="only the Windows integration modules a passing fast check deferred")

@@ -1,7 +1,6 @@
 """The AI connection: a loopback pass-through to the provider, against a local fake
 provider; runs anywhere."""
 
-import ast
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -11,9 +10,7 @@ import httpx
 from assistant.llm import Failure, Settings, transcribe, wav
 from gateway.proxy import Gateway
 from gateway.upstream import Unconfigured, Upstream
-from keeper import LIVE, source_tree
 from link.endpoint import Endpoint, publish
-from restart_plan import closure, imports, module_name
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
 from winapi.pcm import RATE
 
@@ -105,20 +102,6 @@ def test_a_restarted_gateway_takes_back_its_port() -> None:
         assert second.port == port
     finally:
         second.close()
-
-
-def test_the_gateway_restarts_only_for_its_own_code() -> None:
-    # Defect: an import added to the gateway (say, of `protocol`, `winapi` or
-    # `assistant`) makes every deploy of that code restart the AI connection.
-    tree = source_tree(LIVE)
-    modules = {module_name(name): name for name in tree.files if name.endswith((".py", ".pyw"))}
-
-    def graph(module: str) -> frozenset[str]:
-        name = modules.get(module)
-        return frozenset() if name is None else imports(name, ast.parse((LIVE / name).read_bytes(), name))
-
-    ours = {module for module in closure("gateway.__main__", graph) if module in modules}
-    assert {module for module in ours if module.split(".")[0] != "gateway"} == {"components", "link", "link.endpoint"}
 
 
 def test_settings_without_a_published_gateway_call_the_provider(tmp_path: Path) -> None:
