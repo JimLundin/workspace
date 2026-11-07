@@ -37,6 +37,11 @@ Left:
   in the checker process itself. That is a judgement call on isolation.
 - **The SDK now loads only when a test runs an agent** (done 2026-11-07).
   33 of 117 portable modules used to pay 3–8 s for it on every check.
+- **An intermittent coordinator crash (`0xC0000409`) in the isolated selfcheck**
+  (2026-11-07): three of six full runs died about 96 s in, while
+  `test_windows_browser` drove Edge; the rest passed or failed that test with
+  "Navigation is still loading". It isn't tied to one commit. The isolated
+  launcher now reports the status instead of overflowing `os._exit`.
 - **Investigate the three largest native tests:**
   - UIA (30 s);
   - managed Edge (26 s);
