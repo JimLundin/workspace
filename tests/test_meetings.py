@@ -111,16 +111,23 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Pa
         store.finish_capture()
         finished = True
 
+    def write() -> None:
+        try:
+            finish()
+        except sqlite3.OperationalError as error:
+            # A reader snapshot may defer the writer; retry after it closes.
+            if "locked" not in str(error):
+                errors.append(str(error))
+
+    # The writer starts mid-snapshot on its own thread: on the reader's thread it
+    # could only wait out the journal's whole busy timeout behind its own read.
+    writer = threading.Thread(target=write)
+
     def interleave(statement: str) -> None:
         nonlocal attempted
         if statement == "SELECT finished FROM meeting WHERE id=1" and not attempted:
             attempted = True
-            try:
-                finish()
-            except sqlite3.OperationalError as error:
-                # A reader snapshot may defer the writer; retry after it closes.
-                if "locked" not in str(error):
-                    errors.append(str(error))
+            writer.start()
 
     def connection(database: Path) -> sqlite3.Connection:
         native = sqlite3.connect(database, timeout=0, isolation_level=None)
@@ -129,6 +136,7 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Pa
 
     reader = MeetingStore(store.folder, connect=connection)
     batch = reader.batch()
+    writer.join(timeout=30)
     assert attempted and not errors
     assert batch is None or batch.pcm == SPEECH + tail, "A finished capture was paired with audio read before its final block."
     if not finished:

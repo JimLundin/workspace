@@ -37,7 +37,6 @@ SLOW: Final = frozenset(
         "tests/test_keeper.py::test_a_deploy_without_a_keeper_installs_a_version_undo_can_restore",
         "tests/test_keeper.py::test_versions_install_and_restore_exact_bytes_beside_an_untouched_runtime",
         "tests/test_llm.py::test_failures_for_an_unreachable_endpoint",
-        "tests/test_meetings.py::test_batch_reads_capture_completion_and_audio_from_one_snapshot",
         "tests/test_meetings.py::test_recording_and_transcription_continue_while_the_markdown_file_is_locked",
         "tests/test_meetings.py::test_slow_transcription_does_not_block_capture_stop_or_shutdown",
         "tests/test_project_context.py::test_context_capacity_rejects_new_records_but_allows_existing_edits",
