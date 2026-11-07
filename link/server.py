@@ -12,6 +12,7 @@ import hmac
 import socket
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
@@ -22,18 +23,16 @@ HANDSHAKE_S: Final = 5.0
 """How long a connecting client has to prove its token."""
 
 
+@dataclass(frozen=True, slots=True)
 class _Connection:
-    __slots__ = ("outbox", "socket")
-
-    def __init__(self, connected: socket.socket) -> None:
-        self.socket = connected
-        self.outbox = frames.Outbox()
+    stream: socket.socket
+    outbox: frames.Outbox = field(default_factory=frames.Outbox)
 
     def close(self) -> None:
         self.outbox.close()
         with contextlib.suppress(OSError):
-            self.socket.shutdown(socket.SHUT_RDWR)
-        self.socket.close()
+            self.stream.shutdown(socket.SHUT_RDWR)
+        self.stream.close()
 
 
 class Server:
@@ -112,7 +111,7 @@ class Server:
     def _write(connection: _Connection) -> None:
         with contextlib.suppress(OSError):
             while (payload := connection.outbox.take()) is not None:
-                frames.send(connection.socket, payload)
+                frames.send(connection.stream, payload)
 
     def close(self) -> None:
         self._closed = True

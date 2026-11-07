@@ -46,7 +46,7 @@ prepare()
 
 def test_legacy_black_app_icons_keep_their_mask_while_copying_pixels() -> None:
     # Defect: the adapter treats opaque black legacy ink as transparent.
-    image = shell.Icon(32, bytes(32 * 32 * 4))
+    image = shell.Icon.draw(32, bytes(32 * 32 * 4))
     try:
         copied = pixels(image.handle)
         assert copied is not None and all(alpha == 255 for alpha in copied.bgra[3::4])
@@ -134,10 +134,10 @@ def test_tray_host_captures_real_icon_updates_routes_clicks_and_restores_explore
             return 0
         return None
 
-    owner = shell.AppWindow("workspace test tray owner", message)
-    image = shell.Icon(16, bytes((80, 160, 240, 255)) * 256)
+    owner = shell.AppWindow.create("workspace test tray owner", message)
+    image = shell.Icon.draw(16, bytes((80, 160, 240, 255)) * 256)
     host = TrayHost()
-    tray = shell.TrayIcon(owner.handle, 0x8123, image, "Workspace fixture")
+    tray = shell.TrayIcon.add(owner.handle, 0x8123, image, "Workspace fixture")
     try:
         deadline = time.monotonic() + 2
         while not host.entries and time.monotonic() < deadline:

@@ -687,7 +687,7 @@ class CanvasPanel:
                     detail = SourceDetail(self.work, content, self.style, on_context=self.open_context)
                     detail.refresh(content, self.view.catalog, self.document)
                 case CanvasNote() as content:
-                    detail = NoteDetail(content, self.save_note, self.style)
+                    detail = NoteDetail.build(content, self.save_note, self.style)
                 case CanvasUpdate() | CanvasAction() as content:
                     detail = UpdateDetail(content, self.open_at, self.style)
                 case CanvasQuestion() as content:

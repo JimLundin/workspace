@@ -70,12 +70,12 @@ def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release
 
     lease = Lease()
     source = Source(read_fixture)
-    observer = NotificationObserver(source=source, banner_policy=lease)
+    observer = NotificationObserver.start(source=source, banner_policy=lease)
     try:
         results = tuple(observer.results.get(timeout=2) for _ in range(5))
     finally:
         observer.close()
-    assert not observer.thread.is_alive()
+    assert observer.finished.is_set()
     assert results[:2] == (Observed((notice,), Banners.PARTIAL), Observed((notice,), Banners.SUPPRESSED))
     assert all(isinstance(result, Unavailable) for result in results[2:])
     assert lease.closes == 2  # Repeated failure recovery, followed by owner shutdown.
@@ -93,7 +93,7 @@ def test_notification_reads_follow_database_changes_instead_of_every_poll() -> N
         return Observed(())
 
     source = Source(observe, writing=False)
-    observer = NotificationObserver(source=source, banner_policy=Lease())
+    observer = NotificationObserver.start(source=source, banner_policy=Lease())
     try:
         observer.results.get(timeout=2)
         assert not observer.stopped.wait(0.8) and reads == 1

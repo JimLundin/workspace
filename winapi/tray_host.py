@@ -181,7 +181,7 @@ class TrayHost:
         self.closed = False
         self.explorer = next(iter(desktop_shell.taskbars()), 0)
         self.created = TASKBAR_CREATED
-        self.window = AppWindow("workspace tray proxy", self.message, class_name="Shell_TrayWnd")
+        self.window = AppWindow.create("workspace tray proxy", self.message, class_name="Shell_TrayWnd")
         _SetProp(self.window.handle, "workspace tray proxy", 1)
         _SetProp(self.window.handle, "TaskbandHWND", self.window.handle)
         self.poll()

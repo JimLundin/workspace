@@ -1,7 +1,7 @@
 """In-place native card details and revision-bound drafts, owned by Qt."""
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -316,20 +316,28 @@ class SourceDetail:
             self.read_conversation(self.conversation.next_offset)
 
 
+@dataclass(frozen=True, slots=True)
 class NoteDetail:
-    def __init__(self, content: CanvasNote, save: Callable[[CanvasNote], None], style: str) -> None:
-        self.current: CanvasNote = content
-        self.save: Callable[[CanvasNote], None] = save
-        self.frame: QtWidgets.QWidget = detail_frame(475, style)
-        layout = column(self.frame)
-        self.title: QtWidgets.QLineEdit = QtWidgets.QLineEdit(content.title)
-        self.title.setAccessibleName("Note title")
-        self.text: Editor = Editor()
-        self.text.setAccessibleName("Canvas note")
-        self.text.setPlainText(content.text)
-        layout.addWidget(self.title)
-        layout.addWidget(self.text)
-        layout.addWidget(button("Save note", self.commit, name="primary"))
+    current: CanvasNote
+    save: Callable[[CanvasNote], None]
+    frame: QtWidgets.QWidget
+    title: QtWidgets.QLineEdit
+    text: Editor
+
+    @classmethod
+    def build(cls, content: CanvasNote, save: Callable[[CanvasNote], None], style: str) -> NoteDetail:
+        frame = detail_frame(475, style)
+        layout = column(frame)
+        title = QtWidgets.QLineEdit(content.title)
+        title.setAccessibleName("Note title")
+        text = Editor()
+        text.setAccessibleName("Canvas note")
+        text.setPlainText(content.text)
+        detail = cls(content, save, frame, title, text)
+        layout.addWidget(title)
+        layout.addWidget(text)
+        layout.addWidget(button("Save note", detail.commit, name="primary"))
+        return detail
 
     def commit(self) -> None:
         self.save(replace(self.current, title=self.title.text(), text=self.text.toPlainText()))

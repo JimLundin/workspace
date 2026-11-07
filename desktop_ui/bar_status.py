@@ -11,7 +11,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Final
 
 from desktop_ui.ambient import SystemStatus
@@ -47,18 +47,26 @@ def apply_volume(level: float) -> bool:
     return system_status.set_volume(level)
 
 
-class StatusObserver:
-    __slots__ = ("apply", "cancelled", "observe", "requests", "results", "wake", "worker")
+def _observe_status() -> Callable[[], SystemStatus]:
+    return Observation().observe
 
-    def __init__(self, observe: Callable[[], SystemStatus] | None = None, apply: Callable[[float], bool] = apply_volume) -> None:
-        self.observe = observe if observe is not None else Observation().observe
-        self.apply = apply
-        self.cancelled = threading.Event()
-        self.wake = threading.Event()
-        self.requests: queue.Queue[float] = queue.Queue(maxsize=1)
-        self.results: queue.Queue[SystemStatus] = queue.Queue(maxsize=1)
-        self.worker = threading.Thread(target=self.run, name="toolbar system status", daemon=True)
-        self.worker.start()
+
+@dataclass(frozen=True, slots=True)
+class StatusObserver:
+    observe: Callable[[], SystemStatus] = field(default_factory=_observe_status)
+    apply: Callable[[float], bool] = apply_volume
+    cancelled: threading.Event = field(default_factory=threading.Event)
+    wake: threading.Event = field(default_factory=threading.Event)
+    requests: queue.Queue[float] = field(default_factory=lambda: queue.Queue[float](maxsize=1))
+    results: queue.Queue[SystemStatus] = field(default_factory=lambda: queue.Queue[SystemStatus](maxsize=1))
+    finished: threading.Event = field(default_factory=threading.Event)
+    """Set when the worker thread exits."""
+
+    @classmethod
+    def start(cls, observe: Callable[[], SystemStatus] | None = None, apply: Callable[[float], bool] = apply_volume) -> StatusObserver:
+        observer = cls(apply=apply) if observe is None else cls(observe, apply)
+        threading.Thread(target=observer.run, name="toolbar system status", daemon=True).start()
+        return observer
 
     def set_volume(self, level: float) -> None:
         """Called from the UI thread only: it is the one producer, so replacing the pending level cannot race."""
@@ -68,6 +76,12 @@ class StatusObserver:
         self.wake.set()
 
     def run(self) -> None:
+        try:
+            self._poll()
+        finally:
+            self.finished.set()
+
+    def _poll(self) -> None:
         while not self.cancelled.is_set():
             with suppress(queue.Empty):
                 self.apply(self.requests.get_nowait())
@@ -81,4 +95,4 @@ class StatusObserver:
     def close(self) -> None:
         self.cancelled.set()
         self.wake.set()
-        self.worker.join(timeout=0.1)
+        self.finished.wait(timeout=0.1)

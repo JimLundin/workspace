@@ -84,28 +84,33 @@ class Desktops:
     current: uuid.UUID
 
 
+@dataclass(frozen=True, slots=True)
 class VirtualDesktops:
     """The shell's desktop interfaces, owned by the thread that connected them."""
 
-    __slots__ = ("internal", "manager", "views")
+    manager: ctypes.c_void_p
+    internal: ctypes.c_void_p
+    views: ctypes.c_void_p
 
-    def __init__(self) -> None:
-        self.manager = ctypes.c_void_p()
-        self.internal = ctypes.c_void_p()
-        self.views = ctypes.c_void_p()
+    @classmethod
+    def connect(cls) -> VirtualDesktops:
+        desktops = cls(ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p())
         shell = ctypes.c_void_p()
         try:
             context = _CLSCTX_INPROC_SERVER | _CLSCTX_LOCAL_SERVER
-            _check(_CoCreateInstance(_DESKTOP_MANAGER, None, context, _IID_DESKTOP_MANAGER, ctypes.byref(self.manager)), "open the desktop manager")
+            _check(
+                _CoCreateInstance(_DESKTOP_MANAGER, None, context, _IID_DESKTOP_MANAGER, ctypes.byref(desktops.manager)), "open the desktop manager"
+            )
             _check(_CoCreateInstance(_IMMERSIVE_SHELL, None, _CLSCTX_LOCAL_SERVER, _IID_SERVICE_PROVIDER, ctypes.byref(shell)), "reach the shell")
             query = _method(shell, _QUERY_SERVICE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
-            _check(query(shell, _SERVICE_DESKTOP_MANAGER_INTERNAL, _IID_DESKTOP_MANAGER_INTERNAL, ctypes.byref(self.internal)), "manage desktops")
-            _check(query(shell, _IID_VIEW_COLLECTION, _IID_VIEW_COLLECTION, ctypes.byref(self.views)), "read application views")
+            _check(query(shell, _SERVICE_DESKTOP_MANAGER_INTERNAL, _IID_DESKTOP_MANAGER_INTERNAL, ctypes.byref(desktops.internal)), "manage desktops")
+            _check(query(shell, _IID_VIEW_COLLECTION, _IID_VIEW_COLLECTION, ctypes.byref(desktops.views)), "read application views")
         except OSError:
-            self.close()
+            desktops.close()
             raise
         finally:
             _release(shell)
+        return desktops
 
     def close(self) -> None:
         for pointer in (self.views, self.internal, self.manager):

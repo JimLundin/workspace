@@ -261,16 +261,16 @@ class DesktopBar:
 
     def start_shell(self) -> None:
         """The production desktop: notifications, system status, shell controls and taskbar recovery."""
-        self.notification_service = NotificationObserver()
-        self.status_service = StatusObserver()
-        self.controls = shell.AppWindow("workspace shell controls", self.message)
+        self.notification_service = NotificationObserver.start()
+        self.status_service = StatusObserver.start()
+        self.controls = shell.AppWindow.create("workspace shell controls", self.message)
         self.away_screens = AwayScreens(self.record_usage)
         try:
             session.subscribe(self.controls.handle)
         except OSError as error:
             self.errors.put(f"Screens can't go dark when locked: {error}")
         self.tray_host = TrayHost()
-        self.application_service = ApplicationObserver(self.errors.put)
+        self.application_service = ApplicationObserver.start(self.errors.put)
         self.hints = KeyHintOverlay(NativeOverlayDesktop())
         self.worker = threading.Thread(target=self.start_taskbar, name="taskbar recovery", daemon=True)
         self.worker.start()

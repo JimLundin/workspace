@@ -56,7 +56,7 @@ def serve(request: TargetRequest) -> None:
                 return 0
             return None
 
-        window = shell.AppWindow(request.title, message)
+        window = shell.AppWindow.create(request.title, message)
 
         def requests() -> None:
             try:

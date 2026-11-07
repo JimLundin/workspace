@@ -352,23 +352,31 @@ class Host:
                 self.session = None
 
 
+@dataclass(frozen=True, slots=True)
 class Server:
-    __slots__ = ("folder", "host", "limit", "location", "stop", "stream", "thread")
+    folder: Path
+    host: Host
+    stream: socket.socket
+    location: Endpoint
+    stop: threading.Event = field(default_factory=threading.Event)
+    limit: threading.BoundedSemaphore = field(default_factory=lambda: threading.BoundedSemaphore(MAX_CLIENTS))
+    started: threading.Event = field(default_factory=threading.Event)
+    finished: threading.Event = field(default_factory=threading.Event)
+    """Set when the listener thread exits, so closing can wait for it without holding the thread."""
 
-    def __init__(self, folder: Path, host: Host) -> None:
-        self.folder, self.host = folder, host
-        self.stream = socket.socket()
-        self.stream.bind(("127.0.0.1", 0))
-        self.stream.listen(MAX_CLIENTS)
-        self.stream.settimeout(0.25)
-        match self.stream.getsockname():
+    @classmethod
+    def bind(cls, folder: Path, host: Host) -> Server:
+        """A server listening on a fresh local port, not yet published or accepting."""
+        stream = socket.socket()
+        stream.bind(("127.0.0.1", 0))
+        stream.listen(MAX_CLIENTS)
+        stream.settimeout(0.25)
+        match stream.getsockname():
             case (str(), int() as port):
-                self.location = Endpoint(port, secrets.token_hex(32), os.getpid())
+                return cls(folder, host, stream, Endpoint(port, secrets.token_hex(32), os.getpid()))
             case _:
+                stream.close()
                 raise BrowserError("The browser host could not bind its local port.")
-        self.stop = threading.Event()
-        self.limit = threading.BoundedSemaphore(MAX_CLIENTS)
-        self.thread = threading.Thread(target=self.run, name="browser host listener", daemon=True)
 
     def start(self) -> None:
         self.folder.mkdir(parents=True, exist_ok=True)
@@ -377,9 +385,16 @@ class Server:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(sealed(_ENDPOINT.dump_json(self.location)))
         candidate.replace(self.folder / "endpoint.bin")
-        self.thread.start()
+        self.started.set()
+        threading.Thread(target=self.run, name="browser host listener", daemon=True).start()
 
     def run(self) -> None:
+        try:
+            self._accept()
+        finally:
+            self.finished.set()
+
+    def _accept(self) -> None:
         while not self.stop.is_set():
             try:
                 stream, _address = self.stream.accept()
@@ -442,7 +457,8 @@ class Server:
     def close(self) -> None:
         self.stop.set()
         self.stream.close()
-        self.thread.join(timeout=1)
+        if self.started.is_set():
+            self.finished.wait(timeout=1)
         self.host.close()
         with contextlib.suppress(OSError, ValueError):
             if endpoint(self.folder) == self.location:
@@ -495,7 +511,7 @@ def main() -> None:
     product, folder = Product(sys.argv[1]), Path(sys.argv[2])
     try:
         with lease(folder):
-            server = Server(folder, Host(product, NativeSessions(folder / "unused")))
+            server = Server.bind(folder, Host(product, NativeSessions(folder / "unused")))
             server.start()
             try:
                 while not server.stop.wait(30):

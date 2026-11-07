@@ -109,7 +109,7 @@ class Desktop:
     def connected(self) -> VirtualDesktops | None:
         if self.connection is None:
             with suppress(OSError):  # Another Windows build, or Explorer restarting: try again next poll.
-                self.connection = VirtualDesktops()
+                self.connection = VirtualDesktops.connect()
         return self.connection
 
     def disconnect(self) -> None:
@@ -207,33 +207,40 @@ class Arrangement:
 EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
 
 
+@dataclass(frozen=True, slots=True)
 class ApplicationObserver:
     """One worker owns native polling, placement, desktops, navigation and slot-window regions; callers receive immutable snapshots."""
 
-    __slots__ = ("log", "problem", "requests", "results", "stop", "thread")
+    problem: Callable[[str], None]
+    log: Path = NAVIGATION_LOG
+    """The navigation log, appended only by the worker."""
+    results: queue.Queue[Arrangement] = field(default_factory=lambda: queue.Queue[Arrangement](maxsize=1))
+    requests: queue.Queue[Order | WinEvent | None] = field(default_factory=queue.Queue[Order | WinEvent | None])
+    """Navigation and placement orders and foreground events; None only wakes the worker to stop."""
+    stop: threading.Event = field(default_factory=threading.Event)
+    finished: threading.Event = field(default_factory=threading.Event)
+    """Set when the worker thread exits."""
 
-    def __init__(self, problem: Callable[[str], None], log: Path = NAVIGATION_LOG) -> None:
-        self.problem = problem
-        self.log = log
-        """The navigation log, appended only by the worker."""
-        self.results: queue.Queue[Arrangement] = queue.Queue(maxsize=1)
-        self.requests: queue.Queue[Order | WinEvent | None] = queue.Queue()
-        """Navigation and placement orders and foreground events; None only wakes the worker to stop."""
-        self.stop = threading.Event()
-        self.thread = threading.Thread(target=self.run, name="application icons", daemon=True)
-        self.thread.start()
+    @classmethod
+    def start(cls, problem: Callable[[str], None], log: Path = NAVIGATION_LOG) -> ApplicationObserver:
+        observer = cls(problem, log)
+        threading.Thread(target=observer.run, name="application icons", daemon=True).start()
+        return observer
 
     def order(self, order: Order) -> None:
         self.requests.put(order)
 
     def run(self) -> None:
-        with app_user_model.apartment():
-            Worker(self).run()
+        try:
+            with app_user_model.apartment():
+                Worker(self).run()
+        finally:
+            self.finished.set()
 
     def close(self) -> None:
         self.stop.set()
         self.requests.put(None)
-        self.thread.join(timeout=5)
+        self.finished.wait(timeout=5)
 
 
 class Worker:

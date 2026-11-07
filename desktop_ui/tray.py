@@ -1,12 +1,14 @@
 """Workspace notification-area presentation and native icon lifetimes."""
 
 import threading
+from dataclasses import dataclass, field
 
 from contracts.status import State
 from desktop_ui.icons import COLOURS, dot
 lazy from winapi import shell
 
 
+@dataclass(frozen=True, slots=True)
 class Tray:
     """Own native icon handles and serialize updates/removal across caller threads.
 
@@ -15,12 +17,14 @@ class Tray:
     resource lifetimes exclusive while callers publish presentation updates.
     """
 
-    __slots__ = ("_icon", "_icons", "_lock")
+    _icons: frozendict[State, shell.Icon]
+    _icon: shell.TrayIcon
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def __init__(self, window: int, message: int) -> None:
-        self._icons = frozendict((state, shell.Icon(32, dot(32, COLOURS[state]))) for state in State)
-        self._lock = threading.Lock()
-        self._icon = shell.TrayIcon(window, message, self._icons[State.READY], "Workspace")
+    @classmethod
+    def add(cls, window: int, message: int) -> Tray:
+        icons = frozendict((state, shell.Icon.draw(32, dot(32, COLOURS[state]))) for state in State)
+        return cls(icons, shell.TrayIcon.add(window, message, icons[State.READY], "Workspace"))
 
     def show(self, state: State) -> None:
         with self._lock:

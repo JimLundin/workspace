@@ -6,7 +6,7 @@ import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import dataclass, field, replace
+from dataclasses import KW_ONLY, dataclass, field, replace
 from itertools import islice
 from pathlib import Path
 from typing import Protocol
@@ -94,18 +94,26 @@ class NativeNotifications:
         RoUninitialize()
 
 
+@dataclass(frozen=True, slots=True)
 class NotificationObserver:
     """WinRT lives on one MTA worker; no notification content is logged or saved."""
 
-    __slots__ = ("banner_policy", "results", "source", "stopped", "thread")
+    _: KW_ONLY
+    source: NotificationSource
+    banner_policy: BannerLease
+    results: queue.Queue[Observation] = field(default_factory=lambda: queue.Queue[Observation](maxsize=1))
+    stopped: threading.Event = field(default_factory=threading.Event)
+    finished: threading.Event = field(default_factory=threading.Event)
+    """Set when the worker thread exits."""
 
-    def __init__(self, *, source: NotificationSource | None = None, banner_policy: BannerLease | None = None) -> None:
-        self.results: queue.Queue[Observation] = queue.Queue(maxsize=1)
-        self.source: NotificationSource = NativeNotifications() if source is None else source
-        self.banner_policy: BannerLease = BannerPolicy() if banner_policy is None else banner_policy
-        self.stopped = threading.Event()
-        self.thread = threading.Thread(target=self.run, name="Windows notifications", daemon=True)
-        self.thread.start()
+    @classmethod
+    def start(cls, *, source: NotificationSource | None = None, banner_policy: BannerLease | None = None) -> NotificationObserver:
+        observer = cls(
+            source=NativeNotifications() if source is None else source,
+            banner_policy=BannerPolicy() if banner_policy is None else banner_policy,
+        )
+        threading.Thread(target=observer.run, name="Windows notifications", daemon=True).start()
+        return observer
 
     def publish(self, value: Observation) -> None:
         with suppress(queue.Empty):
@@ -113,6 +121,12 @@ class NotificationObserver:
         self.results.put_nowait(value)
 
     def run(self) -> None:
+        try:
+            self._watch()
+        finally:
+            self.finished.set()
+
+    def _watch(self) -> None:
         if not self.source.open():
             self.publish(Unavailable(Access.UNAVAILABLE))
             return
@@ -161,7 +175,7 @@ class NotificationObserver:
 
     def close(self) -> None:
         self.stopped.set()
-        self.thread.join(timeout=4)
+        self.finished.wait(timeout=4)
 
 
 def _known_or_read(row: UserNotification, known: Mapping[NoticeKey, Notice]) -> Notice | None:

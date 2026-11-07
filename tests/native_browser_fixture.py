@@ -100,7 +100,7 @@ def hosted(personal: Browser) -> Generator[Browser]:
     """Own a disposable host while borrowing one already running browser."""
     unused = personal.profile.parent / "unused-hosted-profile"
     opener = NativeSessions(unused, profiles=lambda _: personal.profile)
-    server = Server(personal.profile.parent / "browser-host", Host(Product.EDGE, opener))
+    server = Server.bind(personal.profile.parent / "browser-host", Host(Product.EDGE, opener))
     server.start()
     browser = Browser(unused, source=Product.EDGE, opener=HostedSessions(server))
     try:

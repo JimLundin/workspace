@@ -75,7 +75,7 @@ def client(server: Server) -> HostedConnection:
 
 def test_reloaded_clients_share_one_connection_and_release_only_their_sessions(tmp_path: Path) -> None:
     opener = Opener()
-    server = Server(tmp_path, Host(Product.EDGE, opener))
+    server = Server.bind(tmp_path, Host(Product.EDGE, opener))
     server.start()
     try:
         first, second = client(server), client(server)
@@ -101,7 +101,7 @@ def test_host_preserves_boolean_browser_parameters_and_observations(tmp_path: Pa
     # Defect: union serialization turns CDP's flatten/awaitPromise/returnByValue
     # booleans into integers, which the live browser rejects as invalid parameters.
     opener = Opener()
-    server = Server(tmp_path, Host(Product.EDGE, opener))
+    server = Server.bind(tmp_path, Host(Product.EDGE, opener))
     server.start()
     try:
         connection = client(server)
@@ -123,7 +123,7 @@ def test_host_preserves_boolean_browser_parameters_and_observations(tmp_path: Pa
 
 def test_timeout_and_cancel_do_not_disconnect_the_shared_browser(tmp_path: Path) -> None:
     opener = Opener()
-    server = Server(tmp_path, Host(Product.EDGE, opener))
+    server = Server.bind(tmp_path, Host(Product.EDGE, opener))
     server.start()
     failures: list[Exception] = []
     cancelled = threading.Event()
@@ -155,7 +155,7 @@ def test_timeout_and_cancel_do_not_disconnect_the_shared_browser(tmp_path: Path)
 
 def test_lost_browser_requires_explicit_reconnection_and_status_never_connects(tmp_path: Path) -> None:
     opener = Opener()
-    server = Server(tmp_path, Host(Product.EDGE, opener))
+    server = Server.bind(tmp_path, Host(Product.EDGE, opener))
     server.start()
     try:
         assert server.location.exchange(StatusRequest(server.location.token), threading.Event(), timeout=1)["connected"] is False
@@ -177,7 +177,7 @@ def test_lost_browser_requires_explicit_reconnection_and_status_never_connects(t
 
 def test_old_host_retired_context_remains_recoverable_without_a_new_browser_connection(tmp_path: Path) -> None:
     opener = Opener()
-    server = Server(tmp_path, Host(Product.EDGE, opener))
+    server = Server.bind(tmp_path, Host(Product.EDGE, opener))
     server.start()
     try:
         connection = client(server)
@@ -192,7 +192,7 @@ def test_old_host_retired_context_remains_recoverable_without_a_new_browser_conn
 
 def test_cancelling_a_queued_request_never_runs_it(tmp_path: Path) -> None:
     opener = Opener()
-    server = Server(tmp_path, Host(Product.EDGE, opener))
+    server = Server.bind(tmp_path, Host(Product.EDGE, opener))
     server.start()
     cancelled = threading.Event()
     errors: list[Exception] = []

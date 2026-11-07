@@ -4,6 +4,7 @@ import contextlib
 import threading
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import KW_ONLY, dataclass, field
 from typing import Protocol
 
 from assistant.agent import Agent
@@ -24,32 +25,18 @@ class BackgroundCleanup(Protocol):
     def __call__(self, *, keep_browser: bool) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
 class AgentExecution:
-    __slots__ = (
-        "close_background",
-        "machine",
-        "profiles",
-        "record",
-        "report_error",
-        "resources",
-        "settings",
-    )
-
-    def __init__(  # noqa: PLR0913 - injected collaborators and callbacks
-        self,
-        settings: Settings,
-        machine: Machine,
-        profiles: Profiles,
-        *,
-        record: Callable[[Mapping[str, Detail]], None],
-        report_error: Callable[[str], None],
-        close_background: BackgroundCleanup,
-    ) -> None:
-        # Settings, machine and profiles supply the run; recording, error reporting,
-        # cancellation cleanup and resource ownership are independent run effects.
-        self.settings, self.machine, self.profiles = settings, machine, profiles
-        self.record, self.report_error, self.close_background = record, report_error, close_background
-        self.resources = Resources()
+    # Settings, machine and profiles supply the run; recording, error reporting,
+    # cancellation cleanup and resource ownership are independent run effects.
+    settings: Settings
+    machine: Machine
+    profiles: Profiles
+    _: KW_ONLY
+    record: Callable[[Mapping[str, Detail]], None]
+    report_error: Callable[[str], None]
+    close_background: BackgroundCleanup
+    resources: Resources = field(default_factory=Resources)
 
     def run_work(self, claim: Claim, store: TaskStore, log: Log, stop: threading.Event) -> Outcome:
         """Execute one durable claim; the controller commits the returned disposition."""

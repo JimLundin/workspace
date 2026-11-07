@@ -34,7 +34,7 @@ class WinDesktop:
         on_problem: Callable[[str], None],
     ) -> WinDesktop:
         """The desktop over `mic`, with a follower that keeps it on the default capture device."""
-        follower = audio.DefaultFollower(mic)
+        follower = audio.DefaultFollower.start(mic)
         return cls(owner, mic, follower, on_state=on_state, on_job=on_job, on_notify=on_notify, on_problem=on_problem)
 
     # ---- the microphone ----------------------------------------------------------------

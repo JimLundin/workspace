@@ -353,19 +353,25 @@ class Microphone:
                 self._handle = _HWAVEIN()
 
 
+def _follow_default(microphone: Microphone, interval: float, closing: threading.Event) -> None:
+    while not closing.wait(interval):
+        microphone.follow_default()
+
+
+@dataclass(frozen=True, slots=True)
 class DefaultFollower:
     """Owns the thread that keeps one microphone on the current default capture device."""
 
-    __slots__ = ("_closing", "_thread")
+    _closing: threading.Event
+    _thread: threading.Thread
 
-    def __init__(self, microphone: Microphone, interval: float = 2.0) -> None:
-        self._closing = threading.Event()
-        self._thread = threading.Thread(target=self._run, args=(microphone, interval), name="microphone default follower", daemon=True)
-        self._thread.start()
-
-    def _run(self, microphone: Microphone, interval: float) -> None:
-        while not self._closing.wait(interval):
-            microphone.follow_default()
+    @classmethod
+    def start(cls, microphone: Microphone, interval: float = 2.0) -> DefaultFollower:
+        closing = threading.Event()
+        arguments = (microphone, interval, closing)
+        thread = threading.Thread(target=_follow_default, args=arguments, name="microphone default follower", daemon=True)
+        thread.start()
+        return cls(closing, thread)
 
     def close(self) -> None:
         """Returns once no reopen is in progress, so the microphone can close next."""

@@ -112,8 +112,8 @@ class DesktopApp:
 
     def __init__(self, ui: Ui, assistant: AssistantPort, *, window: components.Window = components.DESKTOP.window) -> None:
         self.ui, self.assistant = ui, assistant
-        self.window = shell.AppWindow(window.title, self.on_message, class_name=window.window_class)
-        self.tray = Tray(self.window.handle, WM_TRAY)
+        self.window = shell.AppWindow.create(window.title, self.on_message, class_name=window.window_class)
+        self.tray = Tray.add(self.window.handle, WM_TRAY)
         self.tray_spec: desktop_controls.TraySpec = desktop_controls.tray(reload=False)
         self.overlay = OverlayState(enabled=load_enabled())
         self.layout: LayoutState | None = None

@@ -39,22 +39,27 @@ class LinkedDesktop:
         return self.server.connected
 
 
+def _run_jobs(jobs: queue.Queue[Callable[[], None] | None]) -> None:
+    while (job := jobs.get()) is not None:
+        job()
+
+
+@dataclass(frozen=True, slots=True)
 class ViewThread:
     """One thread for the agent session's view, as Qt's was: jobs run in order, one at a time."""
 
-    __slots__ = ("_jobs", "_thread")
+    _jobs: queue.Queue[Callable[[], None] | None]
+    _thread: threading.Thread
 
-    def __init__(self) -> None:
-        self._jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
-        self._thread = threading.Thread(target=self._run, name="session view", daemon=True)
-        self._thread.start()
+    @classmethod
+    def start(cls) -> ViewThread:
+        jobs = queue.Queue[Callable[[], None] | None]()
+        thread = threading.Thread(target=_run_jobs, args=(jobs,), name="session view", daemon=True)
+        thread.start()
+        return cls(jobs, thread)
 
     def post(self, job: Callable[[], None]) -> None:
         self._jobs.put(job)
-
-    def _run(self) -> None:
-        while (job := self._jobs.get()) is not None:
-            job()
 
     def close(self) -> None:
         self._jobs.put(None)
@@ -79,16 +84,38 @@ class SessionView:
         pass
 
 
+@dataclass(frozen=True, slots=True)
+class _Levels:
+    read: Callable[[], float | None]
+    port: DesktopPort
+    listening: threading.Event
+    stopped: threading.Event
+
+
+def _feed_levels(levels: _Levels) -> None:
+    while not levels.stopped.is_set():
+        if not levels.listening.wait(0.2):
+            continue
+        level = levels.read()
+        levels.port.send(MicLevel(None if level is None else min(1.0, max(0.0, level))))
+        levels.stopped.wait(0.05)
+
+
+@dataclass(frozen=True, slots=True)
 class LevelFeed:
     """While dictation listens, the microphone's level goes to the desktop's trace every 50 ms."""
 
-    __slots__ = ("_listening", "_port", "_read", "_stopped", "_thread")
+    _port: DesktopPort
+    _listening: threading.Event
+    _stopped: threading.Event
+    _thread: threading.Thread
 
-    def __init__(self, read: Callable[[], float | None], port: DesktopPort) -> None:
-        self._read, self._port = read, port
-        self._listening, self._stopped = threading.Event(), threading.Event()
-        self._thread = threading.Thread(target=self._run, name="microphone level feed", daemon=True)
-        self._thread.start()
+    @classmethod
+    def start(cls, read: Callable[[], float | None], port: DesktopPort) -> LevelFeed:
+        levels = _Levels(read, port, threading.Event(), threading.Event())
+        thread = threading.Thread(target=_feed_levels, args=(levels,), name="microphone level feed", daemon=True)
+        thread.start()
+        return cls(port, levels.listening, levels.stopped, thread)
 
     def listen(self, *, enabled: bool) -> None:
         if enabled:
@@ -96,14 +123,6 @@ class LevelFeed:
         else:
             self._listening.clear()
             self._port.send(MicLevel(None))
-
-    def _run(self) -> None:
-        while not self._stopped.is_set():
-            if not self._listening.wait(0.2):
-                continue
-            level = self._read()
-            self._port.send(MicLevel(None if level is None else min(1.0, max(0.0, level))))
-            self._stopped.wait(0.05)
 
     def close(self) -> None:
         self._stopped.set()

@@ -196,39 +196,46 @@ WindowProc = Callable[[int, int, int, int], "int | None"]
 """(hwnd, message, wparam, lparam) -> result, or None for Windows' default handling."""
 
 
+@dataclass(frozen=True, slots=True)
 class AppWindow:
     """A hidden top-level window with our own window procedure. Other processes can
     find it by its title. Its messages are handled while this thread runs a message
     loop (`system.run_message_loop`)."""
 
-    __slots__ = ("_callback", "_class", "handle")
+    handle: int
+    _callback: object
+    """The ctypes callback, kept alive as long as the window."""
+    _class: WNDCLASSW
 
-    def __init__(self, title: str, proc: WindowProc, *, class_name: str | None = None) -> None:
+    @classmethod
+    def create(cls, title: str, proc: WindowProc, *, class_name: str | None = None) -> AppWindow:
         def call(hwnd: int, message: int, wparam: int, lparam: int) -> int:
             result = proc(int(hwnd or 0), int(message), int(wparam or 0), int(lparam or 0))
             return int(_DefWindowProcW(hwnd, message, wparam, lparam)) if result is None else result
 
-        self._callback = WNDPROC(call)  # kept alive as long as the window
+        callback = WNDPROC(call)
         instance = _GetModuleHandleW(None)
-        self._class = WNDCLASSW(0, self._callback, 0, 0, instance, None, None, None, None, class_name or f"{title} class")
-        if not _RegisterClassW(ctypes.byref(self._class)):
+        window_class = WNDCLASSW(0, callback, 0, 0, instance, None, None, None, None, class_name or f"{title} class")
+        if not _RegisterClassW(ctypes.byref(window_class)):
             raise last_error()
-        hwnd: int | None = _CreateWindowExW(0, self._class.lpszClassName, title, 0, 0, 0, 0, 0, None, None, instance, None)
+        hwnd: int | None = _CreateWindowExW(0, window_class.lpszClassName, title, 0, 0, 0, 0, 0, None, None, instance, None)
         if not hwnd:
             raise last_error()
-        self.handle = int(hwnd)
+        return cls(int(hwnd), callback, window_class)
 
     def destroy(self) -> None:
         _DestroyWindow(self.handle)
         _UnregisterClassW(self._class.lpszClassName, self._class.hInstance)
 
 
+@dataclass(frozen=True, slots=True)
 class Icon:
     """An icon drawn from 32-bit BGRA pixels (with alpha), top row first."""
 
-    __slots__ = ("handle",)
+    handle: int
 
-    def __init__(self, size: int, bgra: bytes) -> None:
+    @classmethod
+    def draw(cls, size: int, bgra: bytes) -> Icon:
         header = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), size, -size, 1, 32, 0, 0, 0, 0, 0, 0)
         bits = ctypes.c_void_p()
         color = _CreateDIBSection(None, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
@@ -240,28 +247,32 @@ class Icon:
         _DeleteObject(color)
         if not handle:
             raise last_error()
-        self.handle = int(handle)
+        return cls(int(handle))
 
     def destroy(self) -> None:
         _DestroyIcon(self.handle)
 
 
+@dataclass(frozen=True, slots=True)
 class TrayIcon:
     """An icon in the notification area. Mouse events on it arrive at `window` as
     `message`, with the mouse message (WM_RBUTTONUP...) in lparam."""
 
-    __slots__ = ("_data",)
+    _data: NOTIFYICONDATAW
+    """The shell's registration, which each update rewrites in place for `Shell_NotifyIconW`."""
 
-    def __init__(self, window: int, message: int, icon: Icon, tip: str) -> None:
-        self._data = NOTIFYICONDATAW()
-        self._data.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
-        self._data.hWnd = window
-        self._data.uID = 1
-        self._data.uFlags = _NIF_MESSAGE | _NIF_ICON | _NIF_TIP
-        self._data.uCallbackMessage = message
-        self._data.hIcon = icon.handle
-        self._data.szTip = tip[:127]
-        _Shell_NotifyIconW(_NIM_ADD, ctypes.byref(self._data))
+    @classmethod
+    def add(cls, window: int, message: int, icon: Icon, tip: str) -> TrayIcon:
+        data = NOTIFYICONDATAW()
+        data.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
+        data.hWnd = window
+        data.uID = 1
+        data.uFlags = _NIF_MESSAGE | _NIF_ICON | _NIF_TIP
+        data.uCallbackMessage = message
+        data.hIcon = icon.handle
+        data.szTip = tip[:127]
+        _Shell_NotifyIconW(_NIM_ADD, ctypes.byref(data))
+        return cls(data)
 
     def update(self, icon: Icon, tip: str) -> None:
         self._data.uFlags = _NIF_ICON | _NIF_TIP

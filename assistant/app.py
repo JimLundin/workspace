@@ -241,15 +241,15 @@ class AssistantApp:
         self.publication: CanvasPublication | None = None
         self.session: AgentWindow | None = None
         """The agent session, once the work frontend has asked for it."""
-        self.window = shell.AppWindow(window.title, self.on_message)
-        self.view_thread = ViewThread()
+        self.window = shell.AppWindow.create(window.title, self.on_message)
+        self.view_thread = ViewThread.start()
         self.automatic_attention = AutomaticAttention(lambda status: self.desktop.send(AutomaticChanged(status)), self.warn_automatic_recording)
         self.mic_event = system.create_event()
         mic = audio.Microphone(RATE, MAX_SECONDS, self.mic_event)
         self.machine = WinDesktop.following(
             self.window.handle, mic, on_state=self.show, on_job=self.job_changed, on_notify=self.notify, on_problem=self.problem
         )
-        self.levels = LevelFeed(mic.level, desktop)
+        self.levels = LevelFeed.start(mic.level, desktop)
         self.timings.mark("control window and microphone")
         self.settings, missing = configured(settings)
         self.activity: ActivityTracker

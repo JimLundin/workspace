@@ -722,7 +722,7 @@ def test_overlay_refuses_mouse_activation_but_still_delivers_other_messages() ->
             return 7
         return None
 
-    window = shell.AppWindow("Workspace overlay delivery " + uuid.uuid4().hex, default_message)
+    window = shell.AppWindow.create("Workspace overlay delivery " + uuid.uuid4().hex, default_message)
     try:
         windows.make_overlay(window.handle, click_through=False)
         assert int(_SendMessage(window.handle, 0x0021, 0, 0)) == 3
