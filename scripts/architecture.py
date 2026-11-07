@@ -599,9 +599,15 @@ def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Fi
     return result
 
 
+KEEPER: Final = "keeper.py"
+"""Where `PROTECTED` is declared. The review reads it as text, not as an import."""
+READS: Final = (KEEPER,)
+"""Files the review reads besides the sources it reviews; a fixture tree copies them."""
+
+
 def protected_modules(root: Path) -> frozenset[str]:
     """The modules of `keeper.PROTECTED`, read from its source: files only a deploy changes, never an agent."""
-    keeper = root / "keeper.py"
+    keeper = root / KEEPER
     if not keeper.is_file():
         return frozenset()
     for node in ast.parse(keeper.read_text(encoding="utf-8")).body:

@@ -9,7 +9,7 @@ import shutil
 from collections.abc import Iterable
 from pathlib import Path
 
-from scripts.architecture import dependencies
+from scripts.architecture import READS, dependencies
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -56,6 +56,8 @@ def copy_check_scripts(root: Path, entries: Iterable[str]) -> None:
     scripts = root / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
     (scripts / "__init__.py").write_text("")
-    for name in check_scripts(entries):
+    copied = check_scripts(entries)
+    # The architecture review also reads files it doesn't import, such as the keeper's protected list.
+    for name in copied | (frozenset(READS) if "scripts/architecture.py" in copied else frozenset[str]()):
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, root / name)
