@@ -87,6 +87,9 @@ above what a cheap native test takes there."""
 
 NATIVE_SLOW: Final[frozendict[str, str]] = frozendict(
     {
+        "tests/test_windows_recording.py::test_meeting_service_saves_speech_after_a_microphone_dropout": (
+            "waits through the meeting service's real 2 s publish pacing; a pacing seam would remove it"
+        ),
         "tests/test_windows_browser.py::test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser": (
             "a real personal Edge reached over CDP"
         ),

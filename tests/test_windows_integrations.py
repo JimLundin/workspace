@@ -55,7 +55,7 @@ def test_job_closure_stops_an_owned_process_and_its_child(tmp_path: Path) -> Non
 def test_job_handle_also_closes_when_its_owner_exits(tmp_path: Path) -> None:
     marker = tmp_path / "child-started"
     late = tmp_path / "child-survived"
-    child = "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); time.sleep(2); pathlib.Path(sys.argv[2]).touch(); time.sleep(60)"
+    child = "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); time.sleep(0.5); pathlib.Path(sys.argv[2]).touch(); time.sleep(60)"
     source = str(Path(__file__).resolve().parent.parent)
     parent = (
         f"import sys; sys.path.insert(0,{json.dumps(source)}); "
@@ -65,5 +65,5 @@ def test_job_handle_also_closes_when_its_owner_exits(tmp_path: Path) -> None:
         "exec('while not marker.exists() and time.monotonic()<deadline: time.sleep(.02)'); assert marker.exists()"
     )
     subprocess.run([sys.executable, "-c", parent, child, str(marker), str(late)], check=True, timeout=8, creationflags=0x08000000)
-    time.sleep(2.1)
+    time.sleep(0.7)  # past the child's 0.5 s: a child the job missed has written its marker by now
     assert marker.exists() and not late.exists()

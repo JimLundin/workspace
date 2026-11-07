@@ -279,7 +279,7 @@ def test_stop_interrupts_provider_backoff_without_another_request(tmp_path: Path
 
         def respond(_: Received) -> Reply:
             stop.set()
-            return Reply(b'{"error": {"message": "rate limited"}}', status=429)
+            return Reply(b'{"error": {"message": "rate limited"}}', status=429, retry_after_ms=None)  # the backoff stop interrupts
 
         endpoint.respond = respond
         agent = make_agent(endpoint, panel, stop, work=durable(tmp_path))

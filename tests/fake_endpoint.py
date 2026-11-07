@@ -22,6 +22,8 @@ class Reply:
     status: int = 200
     content_type: str = "application/json"
     content_length: int | None = None
+    retry_after_ms: int | None = 1
+    """On an error, how soon the client may retry; None leaves the client's own backoff."""
 
 
 def sse(*events: str) -> Reply:
@@ -70,9 +72,9 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
             self.send_response(reply.status)
             self.send_header("Content-Type", reply.content_type)
             self.send_header("Content-Length", str(len(reply.body) if reply.content_length is None else reply.content_length))
-            if reply.status >= 400:
+            if reply.status >= 400 and reply.retry_after_ms is not None:
                 # The client still retries what it would retry, without waiting out its real backoff.
-                self.send_header("retry-after-ms", "1")
+                self.send_header("retry-after-ms", str(reply.retry_after_ms))
             self.end_headers()
             self.wfile.write(reply.body)
 
