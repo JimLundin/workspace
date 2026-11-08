@@ -19,11 +19,11 @@ from contracts.meeting_detection import AutomaticStatus
 from contracts.recording_state import RecordingState
 from contracts.status import Job
 from desktop_ui import shell_surface
-from desktop_ui.bar_events import Opening
+from desktop_ui.bar_events import Opening, Pressed, SampleDue
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
 from desktop_ui.island_menu import Menu
-from desktop_ui.island_model import Agent, Key
+from desktop_ui.island_model import Action, Agent, Key
 from desktop_ui.island_surface import ControlButton, MenuCell
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
@@ -54,7 +54,7 @@ def test_idle_toolbar_preserves_application_focus_and_menu_can_take_the_keyboard
     try:
         handle = int(bar.window.winId())
         assert _GetWindowLong(handle, -20) & 0x08000000
-        bar.open_menu()
+        bar.handle(Pressed(Action.OPEN_MENU))
         assert not _GetWindowLong(handle, -20) & 0x08000000
         bar.close_menu(restore=False)
         assert _GetWindowLong(handle, -20) & 0x08000000
@@ -102,7 +102,7 @@ def sampled(app: QtWidgets.QApplication, bar: DesktopBar, reached: Callable[[], 
     """Sample the microphone until the trace reaches a state; the meter reads off Qt's thread."""
     deadline = time.monotonic() + 1
     while not reached() and time.monotonic() < deadline:
-        bar.sample_audio()
+        bar.handle(SampleDue())
         app.processEvents()
         time.sleep(0.005)
     assert reached(), "The microphone level did not reach the trace."
@@ -272,7 +272,7 @@ def test_tray_icons_sit_in_the_menu_and_hand_their_clicks_to_the_application() -
         bar.show_tray(entries)
         bar.render()
         assert bar.window.tray_locations() == ()
-        bar.open_menu()
+        bar.handle(Pressed(Action.OPEN_MENU))
         app.processEvents()
         cells = tuple(cell for cell in bar.window.capsules[Key.STATUS].cells if cell.accessibleName().startswith("Fixture"))
         assert tuple(cell.accessibleName() for cell in cells) == tuple(entry.tip for entry in entries)
@@ -287,7 +287,7 @@ def test_tray_icons_sit_in_the_menu_and_hand_their_clicks_to_the_application() -
             assert (each.bounds.left, each.bounds.top) == (outer.left + round(point.x() * scale), outer.top + round(point.y() * scale))
         QTest.mouseClick(cells[3], QtCore.Qt.MouseButton.RightButton)
         assert bar.opened is None and focused == []
-        bar.open_menu()
+        bar.handle(Pressed(Action.OPEN_MENU))
         app.processEvents()
         QTest.mouseClick(menu_row(bar, "Fixture 0"), QtCore.Qt.MouseButton.LeftButton)
         assert bar.opened is None and focused == []
@@ -333,7 +333,7 @@ def test_dictation_traces_the_microphone_only_while_listening() -> None:
         bar.dictation(active=False)
         bar.job_changed(Job.TRANSCRIBING)
         assert not bar.audio_timer.isActive()
-        bar.sample_audio()
+        bar.handle(SampleDue())
         assert tuple(bar.window.samples) == trace
     finally:
         closed(app, bar)
@@ -355,7 +355,7 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
     try:
         bar.dictation(active=True)
         started = time.monotonic()
-        bar.sample_audio()
+        bar.handle(SampleDue())
         assert time.monotonic() - started < 0.025, "A slow driver blocked a waveform frame."
         assert entered.wait(0.5), "Listening must start observing the microphone."
         assert readers and all(reader is not caller for reader in readers), "Native audio observation belongs off Qt's thread."
@@ -442,7 +442,7 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
     waiting = QtCore.QEventLoop()
     target = QtWidgets.QWidget()
     try:
-        QtCore.QTimer.singleShot(75, bar.open_menu)
+        QtCore.QTimer.singleShot(75, lambda: bar.handle(Pressed(Action.OPEN_MENU)))
         QtCore.QTimer.singleShot(300, waiting.quit)
         waiting.exec()
         assert bar.opened is not None, "Native activation closed the menu immediately after opening it."
@@ -490,7 +490,7 @@ def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
     bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
     try:
         assert bar.window.capsules[Key.STATUS].toolTip()
-        bar.open_menu()
+        bar.handle(Pressed(Action.OPEN_MENU))
         island = bar.window.capsules[Key.STATUS]
         assert island.toolTip() == "" and all(cell.toolTip() == "" for cell in island.cells)
         assert "Workspace controls" in island.accessibleName()

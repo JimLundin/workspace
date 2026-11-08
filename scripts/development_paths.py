@@ -16,4 +16,3 @@ else:
 
 TEMP = LOCAL / "Temp"
 PROFILE = LOCAL / "workspace"
-PYTHON = LOCAL / "Programs" / "Python" / "Python315" / "python.exe"

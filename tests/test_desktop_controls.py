@@ -1,8 +1,5 @@
 """The desktop's control decisions: tray menu items, the overlay preference, and window messages decoded into actions."""
 
-from dataclasses import replace
-from pathlib import Path
-
 from components import LAYOUT
 from config import APPS
 from desktop_ui.desktop_controls import (
@@ -11,15 +8,12 @@ from desktop_ui.desktop_controls import (
     FeatureRequest,
     Menu,
     MenuState,
-    OverlayChange,
     PhysicalKey,
     WindowInput,
-    change_overlay,
     control_event,
     menu_items,
     toggle_layout,
 )
-from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.spec.tray import TRAY
 from miryoku.layout import Scancode
 from protocol import WM_KEY_STATE, WM_REQUEST, WM_TOGGLE_LAYOUT, LayoutState, Tool
@@ -65,24 +59,6 @@ class LayoutFixture:
         assert self.timeline == ("timer",)
         self.timeline += ("workers",)
 
-    def ready(self) -> None:
-        self.timeline += ("ready",)
-
-
-class OverlayFixture:
-    """A fully constructed preference adapter with real local persistence."""
-
-    def __init__(self, overlay: OverlayState, path: Path) -> None:
-        self.overlay, self.path = overlay, path
-        self.shown: tuple[bool, ...] = ()
-
-    def display_overlay(self, change: OverlayChange) -> None:
-        self.overlay = replace(self.overlay, enabled=change.enabled)
-        self.shown += (self.overlay.visible,)
-
-    def persist_overlay(self, change: OverlayChange) -> None:
-        save_enabled(enabled=change.enabled, path=self.path)
-
 
 def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:
     for layout in (LayoutState.ON, LayoutState.OFF):
@@ -123,25 +99,12 @@ def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle(
         assert (item.text, item.enabled) == ("Open meeting transcripts", True)
 
 
-def test_tray_overlay_toggle_updates_and_remembers_the_preference(tmp_path: Path) -> None:
-    effects = OverlayFixture(OverlayState(layout_on=True), tmp_path / "overlay.json")
+def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> None:
+    # Defect: the tray shows the overlay as on after the user turned it off, or the reverse.
     for enabled in (False, True):
-        assert change_overlay(OverlayChange(enabled=enabled), effects) is None
-        assert load_enabled(effects.path) is enabled
         state = MenuState(layout=LayoutState.ON, overlay_enabled=enabled, agent_running=False, capturing=False)
         item = next(item for item in menu_items(state, TRAY) if item.id == Menu.OVERLAY.value)
         assert item.checked is enabled
-    assert effects.shown == (False, True)
-
-
-def test_overlay_feedback_survives_a_preference_write_failure(tmp_path: Path) -> None:
-    """Detect persistence failure preventing feedback or silently reporting success."""
-    destination = tmp_path / "directory"
-    destination.mkdir()
-    effects = OverlayFixture(OverlayState(layout_on=True), destination)
-    problem = change_overlay(OverlayChange(enabled=False), effects)
-    assert effects.shown == (False,)
-    assert problem == "The overlay changed, but its setting couldn't be saved."
 
 
 def test_control_event_preserves_voice_release_and_rejects_unknown_requests() -> None:

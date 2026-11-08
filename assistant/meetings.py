@@ -278,11 +278,6 @@ class Meetings:
     def _show(self, state: RecordingState) -> None:
         self._state.set(replace(self._state.get(), state=state))
 
-    def _paused_without(self, folder: Path) -> None:
-        self._state.set(
-            replace(self._state.get(), paused=frozendict((key, value) for key, value in self._state.get().paused.items() if key != folder))
-        )
-
     @property
     def root(self) -> Path:
         return self.archive.root

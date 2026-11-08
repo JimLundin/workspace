@@ -39,7 +39,6 @@ lazy from desktop_ui.bar_events import (
     Act,
     AgentShown,
     AllControls,
-    AmbientObserved,
     AutomaticShown,
     BarAction,
     BarModel,
@@ -88,7 +87,6 @@ lazy from desktop_ui.bar_events import (
     ShowHints,
     Showing,
     Stop,
-    SystemObserved,
     TickDue,
     Ticked,
     ToggleAway,
@@ -763,20 +761,9 @@ class DesktopBar:
     def paint_frames(self) -> None:
         self.handle(PaintDue())
 
-    def sample_audio(self) -> None:
-        self.handle(SampleDue())
-
     def show(self, *, visible: bool) -> None:
         """Show or hide the bar; hidden, it lays out without animating."""
         self.handle(Visibility(visible))
-
-    def observe_system(self, system: SystemStatus) -> None:
-        """Show this system status until the next tick observes another."""
-        self.handle(SystemObserved(system))
-
-    def observe_ambient(self, ambient: Ambient) -> None:
-        """Show this clock and power until the next tick observes another."""
-        self.handle(AmbientObserved(ambient))
 
     def show_tray(self, entries: tuple[Entry, ...]) -> None:
         """The tray icons the menu lists."""
@@ -792,9 +779,6 @@ class DesktopBar:
 
     def deactivated(self) -> None:
         self.handle(Deactivated())
-
-    def open_menu(self) -> None:
-        self.handle(Pressed(Action.OPEN_MENU))
 
     def close_menu(self, *, restore: bool) -> None:
         self.handle(Pressed(Action.CLOSE_MENU) if restore else Deactivated())

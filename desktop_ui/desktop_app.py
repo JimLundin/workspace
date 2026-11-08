@@ -250,7 +250,6 @@ class DesktopApp:
         if (layout := windows.find(components.LAYOUT.window.title)) is not None:
             system.post_message(layout, WM_QUERY_LAYOUT_STATE, 0, 0)
         self.perform(TrayShow(tray_state(state.get().shown)))
-        components.ready()
 
     # ---- the fold ----------------------------------------------------------------------
 

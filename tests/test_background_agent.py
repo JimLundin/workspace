@@ -10,11 +10,11 @@ from assistant.agent import Agent
 from assistant.llm import Settings, ToolCall
 from assistant.meeting_tools import MeetingCommand, StartMeeting
 from assistant.task_profiles import General
-from contracts.agent_session import activity_text
 from contracts.json_value import Json
 from contracts.presentation import ToolActivity
 from tests.agent_requests import body
 from tests.fake_endpoint import fake_endpoint
+from tests.session_text import activity_text
 from tests.test_agent import FakeMachine, FakeWindow, Rig, calls, durable, no_feed, says
 
 

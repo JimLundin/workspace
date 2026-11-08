@@ -72,7 +72,6 @@ class _Callbacks:
     submit: Callable[[str], None] | None
     waiting: Callable[[bool], None] | None
     recording: Callable[[RecordingAction], None] | None
-    work: Callable[[], None] | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +110,6 @@ class AgentWindow:
         on_submit: Callable[[str], None] | None = None,
         on_waiting: Callable[[bool], None] | None = None,
         on_recording: Callable[[RecordingAction], None] | None = None,
-        on_work: Callable[[], None] | None = None,
         log: Callable[[str], None],
     ) -> AgentWindow:
         # The publication creates and renders the view only once posted, after the window below exists.
@@ -121,7 +119,7 @@ class AgentWindow:
         def render(view: View | None) -> None:
             window._render(view)
 
-        callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording, on_work)
+        callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording)
         window = cls(callbacks, ViewPublication(post, create, render, log=log), log)
         window.publication.post(window._prepare)
         return window
@@ -288,10 +286,6 @@ class AgentWindow:
         self._waiting_changed(before=was_waiting, after=waiting)
         return True
 
-    def show_work(self) -> None:
-        if self._callbacks.work is not None:
-            self._callbacks.work()
-
     def notify_canvas(self, title: str, target: str) -> None:
         self._event(CanvasNotice(title, target, time.time()))
 
@@ -368,10 +362,6 @@ class AgentWindow:
     def stopping(self) -> None:
         self.withdraw_input()
         self._event(StopRequested())
-
-    def all_text(self) -> str:
-        with self.lock:
-            return self.state.all_text()
 
     def close(self) -> None:
         self.publication.close()

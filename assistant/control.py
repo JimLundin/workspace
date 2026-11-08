@@ -19,7 +19,7 @@ from assistant.agent_window import AgentWindow
 from assistant.meeting_store import MeetingStore
 from contracts.attention import AttentionSnapshot
 from contracts.canvas_activity import CanvasRun
-from contracts.desktop_link import AutomaticChanged, CanvasChanged, JobChanged, Notify, RecordingChanged, ShowWork, ToDesktop, WorkChanged
+from contracts.desktop_link import AutomaticChanged, CanvasChanged, JobChanged, Notify, RecordingChanged, ToDesktop, WorkChanged
 from contracts.meeting_detection import AutomaticStatus
 from contracts.personal_work import Catalog, PersonalView, WorkThread
 from contracts.recording_state import Phase, RecordingAction, RecordingState
@@ -99,11 +99,6 @@ class SessionOpened:
 
 
 @dataclass(frozen=True, slots=True)
-class WorkShown:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class LayoutReported:
     value: int
     """The layout's raw `LayoutState`; an unknown value keeps the last known one."""
@@ -132,7 +127,6 @@ type Fact = (
     | AutomaticShown
     | AutomaticUnavailable
     | SessionOpened
-    | WorkShown
     | LayoutReported
 )
 
@@ -428,9 +422,6 @@ def _reacted(state: ControlState, fact: Fact) -> Iterator[Effect]:
         case SessionOpened(window):
             if state.publication is not None:
                 yield ShowAttention(window, state.publication.attention)
-        case WorkShown():
-            yield Send(ShowWork(focus=True))
-            yield RefreshWork()
         case LayoutReported():
             yield UseLayout(on=_layout(fact, state) is LayoutState.ON)
         case _:

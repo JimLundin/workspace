@@ -6,9 +6,7 @@ from scripts.check_results import Selection
 from scripts.check_tiers import (
     NATIVE_BUDGET_S,
     NATIVE_SLOW,
-    NATIVE_SLOW_CAP,
     SLOW,
-    SLOW_CAP,
     editing,
     over_budget,
     over_native_budget,
@@ -45,6 +43,10 @@ def test_a_test_over_budget_fails_by_name_and_phases_never_do() -> None:
         ("tests/test_agent.py::test_slow", "took 2.5 s, over the 1.5 s editing budget"),
         ("tests/properties/test_pcm.py::test_generated", "took 1.6 s, over the 1.5 s editing budget"),
     ]
+
+
+# At most this many slow portable and native tests: adding one beyond a cap means removing or fixing another.
+SLOW_CAP, NATIVE_SLOW_CAP = 30, 12
 
 
 def test_every_slow_entry_names_an_existing_test_with_a_reason_within_its_cap() -> None:

@@ -11,6 +11,7 @@ from contracts.presentation import Answer, StreamState
 from contracts.recording_state import RecordingAction
 from contracts.task import TextAnswer
 from tests.agent_requests import asked, body
+from tests.session_text import all_text
 
 
 class RecordingView:
@@ -86,8 +87,8 @@ def test_background_activity_and_queued_turns_do_not_show_or_focus_the_panel() -
     assert not rig.view.states, "Painting must wait for the UI thread."
     rig.paint()
     assert rig.view.states and not rig.view.shown
-    assert "Find the workbook" in panel.all_text()
-    assert "Try again later." in panel.all_text()
+    assert "Find the workbook" in all_text(panel.state)
+    assert "Try again later." in all_text(panel.state)
     panel.show()
     panel.show(focus=True)
     rig.paint()

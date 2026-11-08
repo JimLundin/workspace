@@ -18,6 +18,7 @@ from contracts.json_value import Json
 from contracts.presentation import Answer, LiveMessage, ReasoningSummary, StreamState, Succeeded, ToolActivity, ToolStatus
 from tests.agent_requests import body
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint
+from tests.session_text import all_text
 from tests.test_agent import FakeMachine, FakeWindow, calls, durable, message, no_feed, response, says
 from tests.test_agent_window import Recording, RecordingView
 
@@ -174,7 +175,7 @@ def test_summaries_and_answers_are_visible_before_the_response_finishes(tmp_path
             assert len(panel.state.messages) == 3  # user, one summary, one answer
             assert isinstance(panel.state.messages[-1], Answer)
             assert panel.state.messages[-1].state is StreamState.COMPLETE
-            assert panel.state.all_text().count("Found **budget.xlsx**.") == 1
+            assert all_text(panel.state).count("Found **budget.xlsx**.") == 1
             assert body(partial.messages[-1]) == "Found **budget"  # immutable snapshots
 
 

@@ -16,7 +16,7 @@ from typing import Final, Protocol, assert_never
 
 import usage
 from cell import Cell
-from components import ASSISTANT, DESKTOP, LAYOUT, Window, ready
+from components import ASSISTANT, DESKTOP, LAYOUT, Window
 from config import APPS
 from diagnostics import FailureInfo, failure_info
 from miryoku import hook_watch
@@ -770,7 +770,6 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
     outcome = Exit.QUIT
     language_timer = system.set_timer(200)
     flush_timer = system.set_timer(USAGE_FLUSH_MS)
-    ready()  # tells the keeper this version came up
     layout_state: LayoutState = LayoutState.ON if keyboard.engine_state.enabled else LayoutState.OFF
     keyboard.host.layout_state(layout_state)
     # Nothing here creates reference cycles, so the cycle collector has nothing to

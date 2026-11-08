@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Final, Protocol, assert_never
+from typing import Final, assert_never
 
 import components
 import usage
@@ -71,7 +71,6 @@ from assistant.control import (
     UseLayout,
     Voice,
     WorkObserved,
-    WorkShown,
     idle_state,
     transition,
     tray_state,
@@ -219,9 +218,6 @@ class NativeStartup:
     def start_timer(self, handle: int) -> int:
         return system.set_window_timer(handle, 1000)
 
-    def ready(self) -> None:
-        components.ready()
-
 
 @dataclass(frozen=True, slots=True)
 class WorkerStartup:
@@ -353,7 +349,6 @@ def _session_window(
         on_submit=runner.start,
         on_waiting=lambda waiting: report(Show(State.NEEDS_INPUT if waiting else State.AGENT)),
         on_recording=lambda action: report(Record(action)),
-        on_work=lambda: report(WorkShown()),
         log=log,
     )
     report(SessionOpened(window))
@@ -837,10 +832,6 @@ class AssistantApp:
         system.close_event(self.mic_event)
         timings.mark("microphone cleanup")
         system.post_quit()
-
-
-class Controller(Protocol):
-    def run(self) -> None: ...
 
 
 def run(

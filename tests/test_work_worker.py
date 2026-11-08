@@ -23,6 +23,7 @@ from contracts.presentation import PresentationEvent, Progress
 from contracts.task import Claim, Completed, Control, Interrupted, Outcome, RequestSource, Running, RunRef
 from contracts.work_snapshot import WorkSnapshot
 from tests.feed_fixture import no_canvas, no_personal_work
+from tests.session_text import all_text
 from tests.test_agent_window import Recording
 from tests.test_feed_triage_service import MemoryStore
 from tests.test_work_agent import invocation
@@ -159,7 +160,7 @@ def test_a_submission_runs_on_the_worker_and_its_output_reaches_the_conversation
         assert runner.contexts == [invocation("Linked workbook")]
         assert owners.triage.board.rules == ("Keep linked fixture updates quiet.",)
         assert agent.refresh().wait(5)
-        text = panels[0].window.all_text()
+        text = all_text(panels[0].window.state)
         assert "Linked progress." in text and "Linked result." in text
         assert not errors
     finally:

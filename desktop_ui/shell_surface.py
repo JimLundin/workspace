@@ -308,10 +308,6 @@ class Section(QtWidgets.QWidget):
                 assert_never(self.appearance)
 
 
-def windows_label(count: int) -> str:
-    return f"{count} window" if count == 1 else f"{count} windows"
-
-
 def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
     """A pager target acts on a left click or each click of a double-click; it has no menu."""
 

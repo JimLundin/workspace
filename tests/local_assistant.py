@@ -18,7 +18,7 @@ from assistant.desktop_commands import DesktopCommands
 from assistant.desktop_port import SessionView
 from assistant.work_canvas import WorkCanvas
 from contracts.canvas_activity import CanvasRun
-from contracts.desktop_link import CanvasChanged, ShowWork, ToAssistant, ToDesktop, from_assistant, from_desktop, to_assistant, to_desktop
+from contracts.desktop_link import CanvasChanged, ToAssistant, ToDesktop, from_assistant, from_desktop, to_assistant, to_desktop
 from contracts.recording_state import RecordingAction
 from contracts.work_canvas_contracts import CanvasPublication
 from contracts.work_commands import WorkViewCommand
@@ -93,7 +93,6 @@ class LocalAssistant:
                 post=self.jobs.append,
                 create_view=lambda _: SessionView(self.desktop, self.canvas.observe_session),
                 on_problem=self.problem,
-                on_work=lambda: self.desktop.send(ShowWork(focus=True)),
                 log=lambda _text: None,
             )
             self.session.canvas_attention(self.canvas.publication().attention)

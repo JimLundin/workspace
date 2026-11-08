@@ -16,7 +16,7 @@ spec each time it shows, so an edit shows on the next selection or expansion.
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Final, assert_never
+from typing import assert_never
 
 from desktop_ui.fluent_icons import REGULAR
 
@@ -62,9 +62,6 @@ class RelationAction(StrEnum):
 
     EDIT = auto()
     REMOVE = auto()
-
-
-WORK_ONLY: Final = frozenset({BubbleAction.CONTINUE, BubbleAction.EDIT_WORK, BubbleAction.DISMISS, BubbleAction.NOT_MINE})
 
 
 @dataclass(frozen=True, slots=True)

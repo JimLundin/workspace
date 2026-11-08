@@ -249,10 +249,6 @@ def resizable(hwnd: int) -> bool:
     return bool(int(_GetWindowLongW(hwnd, _GWL_STYLE)) & _WS_THICKFRAME)
 
 
-def is_visible(hwnd: int) -> bool:
-    return bool(_IsWindowVisible(hwnd))
-
-
 def scale(hwnd: int) -> float:
     return float(_GetDpiForWindow(hwnd) or 96) / 96
 

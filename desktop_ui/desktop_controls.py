@@ -152,26 +152,6 @@ def toggle_layout(effects: LayoutTransport) -> bool:
     return window is not None and effects.post(window, protocol.WM_TOGGLE_LAYOUT, 0, 0)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class OverlayChange:
-    enabled: bool
-
-
-class OverlayPreference(Protocol):
-    def display_overlay(self, change: OverlayChange) -> None: ...
-    def persist_overlay(self, change: OverlayChange) -> None: ...
-
-
-def change_overlay(change: OverlayChange, effects: OverlayPreference) -> str | None:
-    """Apply immediate feedback before persistence; preserve feedback on failure."""
-    effects.display_overlay(change)
-    try:
-        effects.persist_overlay(change)
-    except OSError:
-        return "The overlay changed, but its setting couldn't be saved."
-    return None
-
-
 WM_TOOL_CHOSEN: Final = 0x8057
 """Bar menu -> desktop control window: Tool value in wparam, target HWND in lparam (0 for foreground)."""
 

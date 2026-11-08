@@ -9,7 +9,7 @@ dictation, meetings and the agent share, running.
 import os
 import secrets
 
-from components import endpoint, ready
+from components import endpoint
 lazy from gateway.proxy import Gateway
 lazy from gateway.upstream import upstream_from
 lazy from link.endpoint import Endpoint, publish, read
@@ -22,7 +22,6 @@ def main() -> None:
     gateway = Gateway.listen(upstream_from(os.environ), token, port=0 if previous is None else previous.port)
     if path is not None:
         publish(path, Endpoint(gateway.port, token))
-    ready()
     gateway.serve()
 
 

@@ -19,7 +19,7 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindowThreadProces
 from desktop_ui.desktop_bar import BarActions, DesktopBar
 from desktop_ui.qt_ui import application
 from tests.test_windows_computer import desktop_name, object_name
-from winapi import windows
+from winapi import desktop_shell
 
 
 def test_qt_children_stay_off_the_input_desktop() -> None:
@@ -52,7 +52,7 @@ def test_qt_children_stay_off_the_input_desktop() -> None:
             bar.render()
             application().processEvents()
             handle = int(bar.window.winId())
-            assert windows.is_visible(handle), "Isolation hid the fixture instead of exercising native presentation"
+            assert desktop_shell.visible(handle), "Isolation hid the fixture instead of exercising native presentation"
             assert desktop_name(GetWindowThreadProcessId(handle, None)) == expected
         finally:
             bar.close()

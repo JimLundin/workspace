@@ -19,6 +19,7 @@ from contracts.presentation import Answer, Done, Failed, Finished, Progress, Rea
 from contracts.recording_state import RecordingState
 from contracts.task import TextAnswer
 from tests.agent_requests import asked, body
+from tests.session_text import all_text
 
 
 def state_of(message: Message) -> object:
@@ -45,7 +46,7 @@ def test_live_messages_replace_their_row_and_final_completion_is_not_duplicated(
     session = transition(session, Done("Found budget.xlsx.", 6))
     session = transition(session, Finished())
     assert len(session.messages) == 3 and session.status == "Ready"
-    assert "Reasoning summary\nChecking the files." in session.all_text()
+    assert "Reasoning summary\nChecking the files." in all_text(session)
 
 
 def test_stop_seals_partial_text_but_accepts_the_result_of_an_already_running_tool() -> None:
@@ -75,7 +76,7 @@ def test_finishing_marks_unfinished_summaries_and_tools_and_preserves_completed_
     assert state_of(session.messages[1]) is StreamState.INTERRUPTED
     assert state_of(session.messages[2]) is ToolStatus.CANCELLED
     assert state_of(session.messages[3]) == Failed("File not found")
-    assert "b.txt\nFile not found" in session.all_text()
+    assert "b.txt\nFile not found" in all_text(session)
 
 
 def test_meeting_preview_updates_without_adding_messages_or_changing_the_agent_task() -> None:
@@ -129,13 +130,13 @@ def test_queued_messages_appear_once_when_their_turn_starts_and_activity_is_sepa
     session = transition(session, Begin("Find my workbook", 0, queued=False))
     session = transition(session, Enqueued("Open that one"))
     assert session.queued == ("Open that one",)
-    assert "Open that one" not in session.all_text()
+    assert "Open that one" not in all_text(session)
     session = transition(session, Done("Found it.", 0))
     session = transition(session, Begin("Open that one", 0, queued=True))
     session = transition(session, Progress('open {"target":"budget.xlsx"}'))
     assert not session.queued
-    assert session.all_text().count("Open that one") == 1
-    assert '"target"' not in session.all_text()
+    assert all_text(session).count("Open that one") == 1
+    assert '"target"' not in all_text(session)
     assert session.activity == ('open {"target":"budget.xlsx"}',)
 
 
@@ -173,7 +174,7 @@ def test_waiting_state_and_answer_remain_in_the_transcript() -> None:
     session = transition(session, Resolution("open-1", TextAnswer("budget.xlsx")))
     assert not session.waiting
     assert isinstance(session.messages[-1], AgentRequest) and session.messages[-1].reply == TextAnswer("budget.xlsx")
-    assert "budget.xlsx" in session.all_text()
+    assert "budget.xlsx" in all_text(session)
 
 
 def test_stopping_removes_the_queue_and_preserves_the_cancelled_request() -> None:

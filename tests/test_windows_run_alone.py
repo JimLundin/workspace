@@ -54,7 +54,7 @@ def run_alone(tmp_path: Path, *parts: str) -> str:
         with subprocess.Popen(
             [sys.executable, "-c", "".join(textwrap.dedent(part) for part in parts)],
             cwd=ROOT,
-            env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path), WORKSPACE_STATE=str(state), WORKSPACE_READY=str(state / "ready")),
+            env=dict(os.environ, PYTHONUTF8="1", LOCALAPPDATA=str(tmp_path), WORKSPACE_STATE=str(state)),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         ) as process:
@@ -66,7 +66,6 @@ def run_alone(tmp_path: Path, *parts: str) -> str:
         released(tmp_path / "workspace" / "browser-connections")
     output = stdout.decode("utf-8", errors="replace")
     assert code == 0, f"Native exit {code & 0xFFFFFFFF:#x}: {output}"
-    assert (state / "ready").exists(), output
     return output
 
 
@@ -92,10 +91,9 @@ CLOSE_WHEN_FOUND = """\
 """
 
 
-def test_the_assistant_runs_reports_ready_and_quits_with_no_desktop(tmp_path: Path) -> None:
+def test_the_assistant_runs_and_quits_with_no_desktop(tmp_path: Path) -> None:
     # Defect: the assistant needs the desktop to start (it waits for, imports or
-    # builds UI), never reports ready to the keeper, or hangs on the keeper's close
-    # while no desktop ever connected.
+    # builds UI), or hangs on its close while no desktop ever connected.
     heavy("starts the real assistant process")
     output = run_alone(
         tmp_path,
@@ -121,10 +119,9 @@ def test_the_assistant_runs_reports_ready_and_quits_with_no_desktop(tmp_path: Pa
     assert "Assistant ran alone" in output
 
 
-def test_the_desktop_runs_reports_ready_and_quits_with_no_assistant(tmp_path: Path) -> None:
+def test_the_desktop_runs_and_quits_with_no_assistant(tmp_path: Path) -> None:
     # Defect: the desktop needs the assistant to start (it blocks on the link or
-    # builds assistant owners), never reports ready to the keeper, or leaves Qt
-    # running after the keeper's close.
+    # builds assistant owners), or leaves Qt running after its close.
     heavy("starts the real desktop process")
     output = run_alone(
         tmp_path,

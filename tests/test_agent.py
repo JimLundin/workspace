@@ -23,12 +23,12 @@ from assistant.work_bridge_contracts import BridgeCommand
 from automation.actions import Resources
 from automation.execution import WorkExecution
 from automation.store import TaskStore
-from contracts.agent_session import activity_text
 from contracts.geometry import Shot
 from contracts.json_value import Json
 from contracts.presentation import LiveMessage, Succeeded, ToolActivity, ToolStatus
 from contracts.task import RequestSource
 from tests.fake_endpoint import FakeEndpoint, Received, Reply, fake_endpoint, sse
+from tests.session_text import activity_text
 from winapi.shapes import Rect
 
 

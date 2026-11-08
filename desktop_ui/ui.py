@@ -29,7 +29,6 @@ from contracts.desktop_link import (
     OpenReference,
     RecordingChanged,
     ReplyFailed,
-    RouteSpeech,
     RunRefused,
     SelectAttention,
     ShowWork,
@@ -404,9 +403,6 @@ class Ui:
 
     def desktop_state(self, state: State, *, agent_speaking: bool = False) -> None:
         self.show(VoiceChanged(state, agent_speaking=agent_speaking))
-
-    def route_speech(self, text: str) -> None:
-        self.show(RouteSpeech(text))
 
     def desktop_overlay(self, *, enabled: bool) -> None:
         self.report(OverlayPublished(enabled))

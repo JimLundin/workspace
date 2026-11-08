@@ -35,6 +35,7 @@ from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.agent_progress import Busy, Settled, Working, phases
 from desktop_ui.island_agent import notices
 from tests.personal_work_fixture import source
+from tests.session_text import all_text
 from tests.test_agent_window import Recording
 from winapi.shapes import Window
 
@@ -291,8 +292,8 @@ def test_new_chat_keeps_work_and_prevents_old_live_updates_entering_the_new_view
         rig.refresh()
         new = rig.task("Fresh conversation")
         assert old.source != new.source
-        assert "Late previous response" not in rig.panel.all_text()
-        assert "Previous conversation" not in rig.panel.all_text()
+        assert "Late previous response" not in all_text(rig.panel.state)
+        assert "Previous conversation" not in all_text(rig.panel.state)
         assert rig.tasks.get(old.id) is not None and len(rig.tasks.list_tasks()) == 2
 
 
@@ -326,11 +327,11 @@ def test_a_blocked_task_yields_to_queued_work_and_can_be_resumed_later(tmp_path:
         assert working is not None
         rig.agent.deliver(working.run, Said("Writing the summary now", rig.clock()))
         rig.refresh()
-        assert "The workbook is locked." in rig.panel.all_text()
-        assert "Writing the summary now" in rig.panel.all_text()
+        assert "The workbook is locked." in all_text(rig.panel.state)
+        assert "Writing the summary now" in all_text(rig.panel.state)
         rig.tasks.finish(working.run, Completed("Summary saved", ()), at=rig.clock())
         rig.refresh()
-        assert "Summary saved" in rig.panel.all_text() and not rig.agent.running()
+        assert "Summary saved" in all_text(rig.panel.state) and not rig.agent.running()
         rig.agent.command(ControlTask(blocked.task.id, Control.RESUME))
         rig.refresh()
         assert rig.agent.running()
@@ -347,14 +348,14 @@ def test_a_restart_does_not_replay_finished_work_but_shows_new_changes(tmp_path:
         rig.refresh()
     with work(tmp_path) as restarted:
         restarted.refresh()
-        assert "The old blocker." not in restarted.panel.all_text()
+        assert "The old blocker." not in all_text(restarted.panel.state)
         restarted.agent.start("New work")
         restarted.refresh()
         new = restarted.tasks.claim("worker-one", "new-run", at=restarted.clock())
         assert new is not None
         restarted.tasks.finish(new.run, Waiting(Blocked("The new blocker.")), at=restarted.clock())
         restarted.refresh()
-        assert "The new blocker." in restarted.panel.all_text()
+        assert "The new blocker." in all_text(restarted.panel.state)
 
 
 def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal(tmp_path: Path) -> None:
@@ -367,7 +368,7 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         assert claim is not None
         rig.agent.deliver(claim.run, Answer("reply", "Current streamed text", rig.clock(), StreamState.RUNNING))
         rig.refresh()
-        assert "Current streamed text" in rig.panel.all_text()
+        assert "Current streamed text" in all_text(rig.panel.state)
         rig.tasks.control(claim.task.id, Control.PAUSE, at=rig.clock())
         rig.tasks.control(claim.task.id, Control.RESUME, at=rig.clock())
         resumed = rig.tasks.claim("worker-one", "resumed-run", at=rig.clock())
@@ -375,10 +376,10 @@ def test_streaming_rejects_superseded_runs_and_completion_comes_from_the_journal
         rig.agent.deliver(claim.run, Said("Stale run text", rig.clock()))
         rig.agent.deliver(resumed.run, Said("Resumed run text", rig.clock()))
         rig.refresh()
-        assert "Stale run text" not in rig.panel.all_text() and "Resumed run text" in rig.panel.all_text()
+        assert "Stale run text" not in all_text(rig.panel.state) and "Resumed run text" in all_text(rig.panel.state)
         rig.tasks.finish(resumed.run, Completed("Verified durable result", ("Output exists",)), at=rig.clock())
         rig.refresh()
-        assert "Verified durable result" in rig.panel.all_text()
+        assert "Verified durable result" in all_text(rig.panel.state)
         rig.refresh()
         count = sum(isinstance(message, ChatMessage) and message.text == "Verified durable result" for message in rig.panel.state.messages)
         assert count == 1 and not rig.agent.running() and rig.finished == [False]
@@ -396,7 +397,7 @@ def test_output_said_just_before_completion_is_shown_before_the_result(tmp_path:
         rig.agent.deliver(claim.run, Said("Last progress before completing", rig.clock()))
         rig.tasks.finish(claim.run, Completed("Verified durable result", ("Output exists",)), at=rig.clock())
         rig.refresh()
-        text = rig.panel.all_text()
+        text = all_text(rig.panel.state)
         assert text.index("Last progress before completing") < text.index("Verified durable result")
 
 
@@ -429,7 +430,7 @@ def test_question_and_resumed_action_keep_one_phase_and_one_reply(tmp_path: Path
         assert [notice.text for notice in notices(rig.panel.snapshot())] == ["The workbook is open."]
         actions = tuple(message for message in rig.panel.snapshot().messages if isinstance(message, ToolActivity))
         assert len(actions) == 1 and actions[0].outcome == Succeeded("Opened")
-        assert "stopped" not in rig.panel.all_text().lower()
+        assert "stopped" not in all_text(rig.panel.state).lower()
 
 
 def test_cancelling_a_task_survives_reopening_the_journal(tmp_path: Path) -> None:

@@ -20,7 +20,8 @@ lazy import shiboken6
 lazy from PySide6.QtCore import Qt
 lazy from PySide6.QtTest import QTest
 
-from desktop_ui.island_model import Key
+from desktop_ui.bar_events import Pressed
+from desktop_ui.island_model import Action, Key
 from desktop_ui.island_motion import settled
 from desktop_ui.qt_runtime import prepare
 from scripts.preview import Files, Preview
@@ -203,7 +204,7 @@ def test_preview_uses_real_views_without_starting_native_services_and_closes_cle
         assert preview.control.isVisible()
         assert preview.bar.window.windowTitle().startswith("Workspace preview")
         for name, label in (("Windows taskbar: Hidden", "Windows taskbar"), ("Windows notification settings", "Windows notification settings")):
-            preview.bar.open_menu()
+            preview.bar.handle(Pressed(Action.OPEN_MENU))
             row = next(cell for cell in preview.bar.window.capsules[Key.STATUS].cells if cell.accessibleName() == name)
             QTest.mouseClick(row, Qt.MouseButton.LeftButton)
             assert preview.status.text() == "Preview action: " + label

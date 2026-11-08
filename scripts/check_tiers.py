@@ -22,7 +22,6 @@ SLOW below it.
 """
 
 CHECK_PROCESS: Final = "runs real check subprocesses (selfcheck or scripts.check) on a temporary tree; the defect is in that process boundary"
-REAL_GIT: Final = "drives real git repositories; the defect is in how publication or versions use git"
 
 SLOW: Final[frozendict[str, str]] = frozendict(
     {
@@ -59,9 +58,6 @@ SLOW: Final[frozendict[str, str]] = frozendict(
 They run with --native and --full. Before adding one, make it faster: a real
 wait, sleep or retry backoff usually has a seam that removes it."""
 
-SLOW_CAP: Final = 30
-"""At most this many slow portable tests: adding one beyond it means removing or fixing another."""
-
 NATIVE_BUDGET_S: Final = 3.0
 """A native test that takes longer fails --native and --full by name, unless NATIVE_SLOW lists it.
 
@@ -88,10 +84,10 @@ NATIVE_SLOW: Final[frozendict[str, str]] = frozendict(
         "tests/test_windows_development.py::test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits": (
             "real file watching and checks after each save"
         ),
-        "tests/test_windows_run_alone.py::test_the_assistant_runs_reports_ready_and_quits_with_no_desktop": (
+        "tests/test_windows_run_alone.py::test_the_assistant_runs_and_quits_with_no_desktop": (
             "the whole assistant starts and quits in a fresh interpreter"
         ),
-        "tests/test_windows_run_alone.py::test_the_desktop_runs_reports_ready_and_quits_with_no_assistant": (
+        "tests/test_windows_run_alone.py::test_the_desktop_runs_and_quits_with_no_assistant": (
             "the whole desktop starts and quits in a fresh interpreter"
         ),
         "tests/test_windows_test_desktop.py::test_desktop_bootstrap_preserves_arguments_streams_and_failure_status": (
@@ -100,9 +96,6 @@ NATIVE_SLOW: Final[frozendict[str, str]] = frozendict(
     }
 )
 """Native tests allowed over the native budget, each with the real thing only it can show."""
-
-NATIVE_SLOW_CAP: Final = 12
-"""At most this many slow native tests."""
 
 
 def test_functions(path: Path) -> tuple[str, ...]:

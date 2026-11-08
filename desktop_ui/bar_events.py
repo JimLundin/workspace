@@ -317,16 +317,6 @@ class Visibility:
 
 
 @dataclass(frozen=True, slots=True)
-class SystemObserved:
-    system: SystemStatus
-
-
-@dataclass(frozen=True, slots=True)
-class AmbientObserved:
-    ambient: Ambient
-
-
-@dataclass(frozen=True, slots=True)
 class TrayShown:
     """The tray icons the menu lists, by their tips."""
 
@@ -383,8 +373,6 @@ type Event = (
     | Sampled
     | Closing
     | Visibility
-    | SystemObserved
-    | AmbientObserved
     | TrayShown
     | Instruction
 )
@@ -721,8 +709,6 @@ type Observation = (
     | Sampled
     | Closing
     | Visibility
-    | SystemObserved
-    | AmbientObserved
     | TrayShown
 )
 
@@ -793,10 +779,6 @@ def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effe
             return replace(model, sampled_at=at), ()
         case Closing():
             return replace(model, closed=True), ()
-        case SystemObserved(system):
-            return replace(model, system=system), (Render(),)
-        case AmbientObserved(ambient):
-            return replace(model, ambient=ambient), (Render(),)
         case TrayShown(tips):
             return replace(model, tray_tips=tips), (Render(),)
         case _:
