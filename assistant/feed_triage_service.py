@@ -32,7 +32,7 @@ from assistant.feed_contracts import (
     SourceEvidence,
     StoredBoard,
 )
-from assistant.feed_history import Decision, Handoff
+from assistant.feed_history import Handoff, HandoffDecision
 from assistant.feed_sources import Candidate, PendingFeed, triage_evidence
 from assistant.feed_triage import (
     INSTRUCTIONS,
@@ -378,11 +378,11 @@ class Triage:
             except ValueError as error:
                 raise RejectedError(str(error)) from error
             task, prompt = solution_task(item, option)
-            recorded = next((entry for entry in self._state.get().board.history if entry.id == task), None)
+            recorded = next((entry for entry in self._state.get().board.history if isinstance(entry, HandoffDecision) and entry.id == task), None)
             if recorded is None:
-                decision = Decision(
+                decision = HandoffDecision(
                     task,
-                    "choice",
+                    "choose",
                     item.identity,
                     proposal_revision(item),
                     item.title,
@@ -396,13 +396,10 @@ class Triage:
             receipt = self._handoff(decision)
             return ChosenHandoff(receipt.queued, receipt.item, receipt.decision, option.identity)
 
-    def _handoff(self, decision: Decision) -> QueuedHandoff:
+    def _handoff(self, decision: HandoffDecision) -> QueuedHandoff:
         # The triage lock is held by choose/reply. Save the exact instruction
         # before queueing, so retries after failed acknowledgment or restart reuse it.
-        request = decision.handoff
-        if request is None:
-            raise ValueError("This decision has no work handoff.")
-        task, prompt = request.task_id, request.prompt
+        task, prompt = decision.handoff.task_id, decision.handoff.prompt
         if self.submit is None:
             raise RejectedError("The work agent is unavailable. This request has not been started.")
         if not any(entry.id == decision.id for entry in self._state.get().board.history):
@@ -421,7 +418,7 @@ class Triage:
     def reply(self, answer: FeedReply) -> QueuedHandoff:
         with self.lock:
             task = identity("feed-reply", answer.reply_id)
-            previous = next((entry for entry in self._state.get().board.history if entry.id == task), None)
+            previous = next((entry for entry in self._state.get().board.history if isinstance(entry, HandoffDecision) and entry.id == task), None)
             if previous is not None:
                 if (previous.item, previous.revision, previous.text) != (answer.item, answer.revision, answer.text):
                     raise RejectedError("That reply identity belongs to a different instruction.")
@@ -444,7 +441,7 @@ class Triage:
                     SolutionContext(item.identity, item.title, item.summary, answer.revision, answer.text, item.references)
                 ).decode()
             )
-            decision = Decision(
+            decision = HandoffDecision(
                 task, "reply", item.identity, answer.revision, item.title, item.summary, answer.text, self.clock(), Handoff(task, prompt)
             )
             return self._handoff(decision)

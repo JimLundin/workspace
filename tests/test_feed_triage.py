@@ -243,7 +243,7 @@ def test_voice_correction_replaces_solutions_immediately_even_without_live_sourc
     )
     assert revised.actions[0].solutions[0].label == "Draft clarification"
     assert revised.actions[0].question == "Which totals need review?"
-    assert revised.history[-1].kind == "propose" and revised.history[-1].text == "Prepare a short clarification."
+    assert revised.history[-1].operation == "propose" and revised.history[-1].text == "Prepare a short clarification."
     assert restored(saved(revised)).actions == revised.actions
     fallback = edited(board, ReviseProposal(item=item.identity, text="Investigate the discrepancy."), EditObservation((), 2))
     assert fallback.actions[0].solutions[0].detail == "Investigate the discrepancy."
@@ -269,7 +269,7 @@ def test_meaningful_rejection_records_reason_and_revision_without_completing_or_
     assert not changed.actions and changed.items[0].disposition is Disposition.REJECTED
     assert "figures are incomplete" in changed.items[0].decision
     assert restored(saved(changed)).items == changed.items
-    assert [(entry.kind, entry.revision, entry.at) for entry in changed.history] == [("reject", proposal_revision(item), 2)]
+    assert [(entry.operation, entry.revision, entry.at) for entry in changed.history] == [("reject", proposal_revision(item), 2)]
     assert edited(changed, rejection, observation).history == changed.history, "A retried edit recorded a second decision."
     assert edited(changed, SaveRule("Ignore routine reminders."), observation).items == changed.items
     assert not unassessed(reconcile(changed, (source,)), (source,))

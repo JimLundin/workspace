@@ -8,7 +8,7 @@ from unittest import TestCase
 from pydantic import TypeAdapter
 
 from assistant.feed_contracts import REVIEW_INPUT, DismissItem, Disposition, FeedRejected, FeedReply, StoredBoard
-from assistant.feed_history import Decision, Handoff
+from assistant.feed_history import Handoff, HandoffDecision
 from assistant.feed_sources import Excerpt
 from assistant.feed_triage import Board, decode, proposal_revision, restored, saved, unassessed
 from assistant.feed_triage_service import classify
@@ -59,9 +59,9 @@ def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answ
     work = FeedWork(tasks, context, lambda: desktop)
     source = captured("atlas", Excerpt("Atlas forecast", "Explain the variance before Friday.", 40))
     item = decode(output(([source.identity], "action")), (source,))[0]
-    decision = Decision(
+    decision = HandoffDecision(
         "correction",
-        "propose",
+        "choose",
         item.identity,
         proposal_revision(item),
         item.title,
@@ -75,13 +75,13 @@ def test_model_gets_project_facts_prior_decisions_task_results_and_recorded_answ
     )
     # Forty newer unrelated task links used to push this exact prior decision
     # and its result outside both the lookup page and the request text budget.
-    unrelated: list[Decision] = []
+    unrelated: list[HandoffDecision] = []
     for index in range(45):
         task_id = f"orion-{index}"
         prompt = "Orion unrelated work " + "detail " * 200
         tasks.submit(task_id, "Orion task", prompt, RequestSource("other"), at=20 + index / 100)
         unrelated.append(
-            Decision(
+            HandoffDecision(
                 task_id,
                 "reply",
                 "other",
@@ -229,6 +229,6 @@ def test_context_changes_reconsider_open_work_without_reopening_handled_items(tm
         triage.triage.edit(DismissItem(item.identity))
         triage.triage.context_changed((), ())
         assert not triage.triage.board.actions
-        assert triage.triage.board.history[-1].kind == "dismiss"
+        assert triage.triage.board.history[-1].operation == "dismiss"
     finally:
         triage.triage.close()

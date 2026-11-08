@@ -10,8 +10,6 @@ type Prompt = Annotated[str, StringConstraints(min_length=1, max_length=64000, p
 type DecisionText = Annotated[str, StringConstraints(max_length=4096, pattern=r"^[^\x00]*$")]
 type DecisionTime = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
-type DecisionKind = Literal["choice", "reply", "reject", "propose", "done", "quiet", "dismiss", "rule", "forget_rule", "clear_rules"]
-
 
 @dataclass(frozen=True, slots=True)
 class Handoff:
@@ -20,25 +18,49 @@ class Handoff:
 
 
 @dataclass(frozen=True, slots=True)
-class Decision:
-    """One user decision, scoped to the captured work rather than a guessed preference."""
+class BoardDecision:
+    """One user edit of the board, scoped to the captured work rather than a guessed preference."""
 
     id: Identity
-    kind: DecisionKind
+    # The board edits a decision records; each matches its edit's own tag.
+    operation: Literal["reject", "propose", "done", "quiet", "dismiss", "rule", "forget_rule", "clear_rules"]
     item: Annotated[str, Field(max_length=128)]
     revision: Annotated[str, Field(max_length=128)]
     title: Annotated[str, Field(max_length=160)]
     summary: Annotated[str, Field(max_length=1800)]
     text: DecisionText
     at: DecisionTime
-    handoff: Handoff | None = None
 
     def describe(self) -> str:
-        task = f"\nTask: {self.handoff.task_id}" if self.handoff is not None else ""
-        return (
-            f"Decision {self.id} ({self.kind}) at {self.at}\nWork: {self.title} ({self.item}, {self.revision})"
-            f"\nCaptured request: {self.summary}\nUser decision: {self.text}{task}"
-        )
+        return _described(self, "")
+
+
+@dataclass(frozen=True, slots=True)
+class HandoffDecision:
+    """A chosen solution or a reply: the user's instruction, handed to the work agent as one task."""
+
+    id: Identity
+    operation: Literal["choose", "reply"]
+    item: Annotated[str, Field(max_length=128)]
+    revision: Annotated[str, Field(max_length=128)]
+    title: Annotated[str, Field(max_length=160)]
+    summary: Annotated[str, Field(max_length=1800)]
+    text: DecisionText
+    at: DecisionTime
+    handoff: Handoff
+
+    def describe(self) -> str:
+        return _described(self, f"\nTask: {self.handoff.task_id}")
+
+
+type Decision = Annotated[BoardDecision | HandoffDecision, Field(discriminator="operation")]
+
+
+def _described(decision: BoardDecision | HandoffDecision, task: str) -> str:
+    return (
+        f"Decision {decision.id} ({decision.operation}) at {decision.at}\nWork: {decision.title} ({decision.item}, {decision.revision})"
+        f"\nCaptured request: {decision.summary}\nUser decision: {decision.text}{task}"
+    )
 
 
 _DECISIONS = TypeAdapter(tuple[Decision, ...])

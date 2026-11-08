@@ -33,7 +33,7 @@ from assistant.feed_contracts import (
     StoredItem,
     StoredSolution,
 )
-from assistant.feed_history import Decision, restored_history
+from assistant.feed_history import BoardDecision, Decision, restored_history
 from assistant.feed_sources import Candidate, chat_message
 from contracts.feed_origin import Origin
 from contracts.members import every_member
@@ -355,7 +355,7 @@ def _decided(board: Board, edit: BoardEdit, prior: Assessment | None, observatio
     if any(entry.id == key for entry in board.history):
         return board
     title, summary = (prior.title, prior.summary) if prior is not None else ("", "")
-    decision = Decision(key, edit.operation, item, revision, title, summary, reason, observation.at)
+    decision = BoardDecision(key, edit.operation, item, revision, title, summary, reason, observation.at)
     return replace(board, history=(*board.history, decision)[-200:])
 
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from itertools import accumulate, pairwise
 from typing import assert_never
 
-from assistant.feed_history import Decision
+from assistant.feed_history import Decision, HandoffDecision
 from assistant.feed_triage import Board
 from automation.activity import ContextSnapshot
 from automation.context import ContextSelection, ContextStore, select_context
@@ -139,7 +139,7 @@ class FeedWork:
         selected = select_context(self.context.list(), query[:20000], now)
         names = projects(selected)
         decisions = prioritized_decisions(board.history, names)
-        linked = tuple(entry.handoff.task_id for entry in decisions if entry.handoff is not None)[:40]
+        linked = tuple(entry.handoff.task_id for entry in decisions if isinstance(entry, HandoffDecision))[:40]
         tasks = self.tasks.get_many(linked)
         known = frozenset(task.id for task in tasks)
         tasks = (*tasks, *(task for task in self.tasks.list_tasks(limit=40) if task.id not in known))[:60]
