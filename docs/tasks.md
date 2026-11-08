@@ -70,7 +70,7 @@ new desktop connected. Still to watch by eye: the bar showing "reconnecting"
 then replaying the canvas, and an agent task continuing through a desktop
 restart.
 
-## 3. Code policy pass: enforce the modelling decisions, then replace `kind` fields
+## 3. Code policy pass: enforce the modelling decisions
 
 Decisions the user made, to write into AGENTS.md and enforce in the architecture
 or quality review wherever a rule can be checked mechanically:
@@ -98,10 +98,11 @@ or quality review wherever a rule can be checked mechanically:
 
 Written into AGENTS.md on 2026-11-07. The user chose fix first, then enforce:
 each check goes live in the architecture review only once its rule has no
-violations left, with no baseline of exceptions. The enum-translating `match`,
-bare numeric tuples, append in a loop and mutable parameters are done and
-enforced in production code (`enum-translation`, `bare-tuple`,
-`loop-accumulation`, `mutable-parameter`); tests aren't covered. Left:
+violations left, with no baseline of exceptions. `kind` fields, the
+enum-translating `match`, bare numeric tuples, append in a loop and mutable
+parameters are done and enforced in production code (`kind-field`,
+`enum-translation`, `bare-tuple`, `loop-accumulation`, `mutable-parameter`);
+tests aren't covered. Left:
 
 5. **Every class a frozen dataclass; no reassignment** (user, 2026-11-07): the
    point is that nothing reassigns an attribute of ours. Owners of changing
@@ -167,7 +168,6 @@ enforced in production code (`enum-translation`, `bare-tuple`,
       `Cell` is its one exception besides what a dependency dictates. Also
       reject `object.__setattr__`. Six test fixtures still match the
       `plain-record` rule, which doesn't cover tests.
-6. **`kind` fields**: the migration below, then the check.
 7. **Operators on domain types** (user, 2026-11-07): screen `Point`/`Offset`/`Rect`
    and canvas `ScenePoint`/`Box` have theirs. Still hand-written: the bar
    layout's `Box` scaled to a screen `Rect` (`island_surface`, `island_layout`),
@@ -196,29 +196,6 @@ enforced in production code (`enum-translation`, `bare-tuple`,
     3 `dict`), most in `desktop_ui.window_layout`, `automation.store`,
     `scripts.check`, `desktop_ui.island_menu` and `winapi.tray_host`. Each needs
     its callers checked: keep it where the value is stored, cached or reused.
-
-Then replace the enum `kind` fields:
-
-The `kind: Literal["…"]` fields (`TextAnswer`, `TaskRequest`, `SessionRequest`
-and about 60 others) are not the problem. Each is already its own frozen type;
-the constant `Literal` is only the JSON tag that tells a stored union apart. The
-problem is a single type whose enum `kind` decides which values are valid:
-
-- `assistant.feed_sources` (`kind: SourceKind`, twice);
-- `assistant.feed_contracts` (`kind: SolutionKind`);
-- `assistant.feed_history` (`kind: DecisionKind`);
-- `assistant.communications` (`kind: UpdateKind`);
-- `assistant.browser_host` (`kind: str`).
-- also found by the scan, to sort into migrations or plain display tags:
-  `assistant.feed_triage.Solution` (`SolutionKind`),
-  `desktop_ui.canvas_toolbar.Bubble`, `desktop_ui.keymap.Cap`,
-  `desktop_ui.navigation_log.Entry` (each `Kind`) and
-  `diagnostics.FailureInfo` (`kind: str`).
-
-Done 2026-11-08: `WorkSource` became `TeamsSource`, `OutlookSource`,
-`KanbanSource`, `DocumentSource` and `WebPageSource`. Take one type per
-session. Stored JSON needn't stay compatible (AGENTS.md: legacy data isn't a
-requirement).
 
 ## 4. Move inline JavaScript into real `.js` files
 

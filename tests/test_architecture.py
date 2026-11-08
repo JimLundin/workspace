@@ -447,3 +447,47 @@ def built(items):
         ("loop-accumulation", "collect", "index", "by_id"),
         ("loop-accumulation", "collect", "outer.inner", "seen"),
     ]
+
+
+def test_a_record_kind_field_is_only_a_constant_tag(tmp_path: Path) -> None:
+    # Defect: a record whose enum, string or multi-valued Literal `kind`
+    # decides what the rest of it means passes the review; or the review
+    # wrongly flags a union member's one-value JSON tag, or a non-record class.
+    source = """from dataclasses import dataclass
+from enum import Enum
+from typing import Literal
+
+class Shape(Enum):
+    ROUND = "round"
+    SQUARE = "square"
+
+@dataclass(frozen=True, slots=True)
+class Piece:
+    kind: Shape
+
+@dataclass(frozen=True, slots=True)
+class Named:
+    kind: str
+
+@dataclass(frozen=True, slots=True)
+class Either:
+    kind: Literal["round", "square"]
+
+@dataclass(frozen=True, slots=True)
+class Round:
+    kind: Literal["round"] = "round"
+
+@dataclass(frozen=True, slots=True)
+class Square:
+    kind: Literal[Shape.SQUARE] = Shape.SQUARE
+
+class Native:
+    kind: int
+"""
+    write_tree(tmp_path, {"pieces.py": source})
+    found = [(finding.rule, finding.declaration, finding.expression) for finding in review(tmp_path).failures]
+    assert found == [
+        ("kind-field", "Piece.kind", "Shape"),
+        ("kind-field", "Named.kind", "str"),
+        ("kind-field", "Either.kind", "Literal['round', 'square']"),
+    ]

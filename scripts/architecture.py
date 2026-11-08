@@ -276,6 +276,15 @@ def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> frozendict[st
     return reduce(_bound_alias, _scope_nodes(tree), frozendict(inherited))
 
 
+def _constant_tag(annotation: ast.expr, aliases: Mapping[str, str]) -> bool:
+    """`Literal[x]` with one value: the JSON tag of a union member, which decides nothing."""
+    match annotation:
+        case ast.Subscript(value=value, slice=ast.Constant() | ast.Attribute()):
+            return call_name(value, aliases) == "typing.Literal"
+        case _:
+            return False
+
+
 def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Mapping[str, str] | None = None) -> Iterator[Finding]:
     # Copy aliases once per lexical scope, not for every expression. Imports
     # inside conditional statements still belong to their enclosing scope.
@@ -301,6 +310,19 @@ def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Ma
                         function = decorator
                 if call_name(function, local) != "dataclasses.dataclass":
                     continue
+                yield from (
+                    Finding(
+                        "kind-field",
+                        module,
+                        declaration + ".kind",
+                        ast.unparse(field.annotation),
+                        field.lineno,
+                        "Give each kind its own type and tag it with one constant Literal, or name the attribute for what it is.",
+                    )
+                    for field in fields
+                    if isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name) and field.target.id == "kind"
+                    if not _constant_tag(field.annotation, local)
+                )
                 match flags.get("frozen"), flags.get("slots"):
                     case ast.Constant(value=True), ast.Constant(value=True):
                         pass

@@ -52,7 +52,9 @@ their tests. Legacy data and backwards compatibility are not requirements.
   payloads) and handle them with `match` and `assert_never`. Make invalid states
   unconstructible: no `kind` field whose enum decides which other values are
   valid; give each kind its own type. A constant `Literal` tag that tells a
-  stored union apart in JSON is fine.
+  stored union apart in JSON is fine. A record's `kind` field is only ever that
+  tag (the review's `kind-field` rule); an attribute every value of which is
+  valid gets a name for what it is (`role`, `approach`, `channel`).
 - Translate an enum to values with a `Final[frozendict[Enum, Value]]` or a value
   on its members (see `desktop_ui.icons.COLOURS`), not a `match` that only
   returns one constant per member. Build a total table with
