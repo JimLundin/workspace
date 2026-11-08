@@ -114,7 +114,9 @@ class PersonalWork:
     closed: threading.Event = field(default_factory=threading.Event, init=False)
     wake: threading.Event = field(default_factory=threading.Event, init=False)
     commands: queue.Queue[Command] = field(default_factory=lambda: queue.Queue[Command](maxsize=64), init=False)
-    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
+    _started: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    """Set when the worker thread's run returns; a started thread isn't kept."""
 
     @classmethod
     def open(  # noqa: PLR0913 - injected collaborators and test seams
@@ -148,10 +150,15 @@ class PersonalWork:
 
     def start(self) -> None:
         with self.lock:
-            if self._thread.get() is None:
-                thread = threading.Thread(target=self.run, name="personal work", daemon=True)
-                self._thread.set(thread)
-                thread.start()
+            if not self._started.is_set():
+                self._started.set()
+                threading.Thread(target=self._finishing, args=(self.run,), name="personal work", daemon=True).start()
+
+    def _finishing(self, run: Callable[[], None]) -> None:
+        try:
+            run()
+        finally:
+            self._finished.set()
 
     def refresh(self) -> None:
         with self.lock:
@@ -275,10 +282,8 @@ class PersonalWork:
     def close(self) -> None:
         self.closed.set()
         self.wake.set()
-        thread = self._thread.get()
-        if thread is not None:
-            thread.join(20)
-            if thread.is_alive():
+        if self._started.is_set():
+            if not self._finished.wait(20):
                 raise OSError("Personal work did not stop cleanly.")
         else:
             self.sources.close()

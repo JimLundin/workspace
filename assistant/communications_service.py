@@ -103,7 +103,9 @@ class Communications:
     draft_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     stop: threading.Event = field(default_factory=threading.Event, init=False)
     commands: queue.Queue[Command] = field(default_factory=lambda: queue.Queue[Command](maxsize=256), init=False)
-    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
+    _started: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    """Set when the worker thread's run returns; a started thread isn't kept."""
 
     @property
     def feed(self) -> Feed:
@@ -131,9 +133,14 @@ class Communications:
     def start(self) -> None:
         if not self._state.get().started:
             self._state.set(replace(self._state.get(), started=True))
-            thread = threading.Thread(target=self.run, name="Teams conversation", daemon=True)
-            self._thread.set(thread)
-            thread.start()
+            self._started.set()
+            threading.Thread(target=self._finishing, args=(self.run,), name="Teams conversation", daemon=True).start()
+
+    def _finishing(self, run: Callable[[], None]) -> None:
+        try:
+            run()
+        finally:
+            self._finished.set()
 
     def submit(self, command: Command) -> bool:
         if self.stop.is_set():
@@ -496,5 +503,5 @@ class Communications:
 
     def close(self) -> None:
         self.stop.set()
-        if (thread := self._thread.get()) is not None:
-            thread.join(timeout=5)
+        if self._started.is_set():
+            self._finished.wait(timeout=5)

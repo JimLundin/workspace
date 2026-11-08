@@ -68,7 +68,9 @@ class NotificationAgent:
     _state: Cell[_Admission] = field(default_factory=lambda: Cell(_Admission()), init=False, repr=False)
     lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     wake: threading.Event = field(default_factory=threading.Event, init=False)
-    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
+    _started: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    """Set when the worker thread's run returns; a started thread isn't kept."""
 
     @property
     def status(self) -> str:
@@ -83,10 +85,15 @@ class NotificationAgent:
         return self._state.get().candidates
 
     def start(self) -> None:
-        if self._thread.get() is None and self.submit is not None:
-            thread = threading.Thread(target=self.run, name="notification work", daemon=True)
-            self._thread.set(thread)
-            thread.start()
+        if not self._started.is_set() and self.submit is not None:
+            self._started.set()
+            threading.Thread(target=self._finishing, args=(self.run,), name="notification work", daemon=True).start()
+
+    def _finishing(self, run: Callable[[], None]) -> None:
+        try:
+            run()
+        finally:
+            self._finished.set()
 
     def offer(self, candidates: tuple[Candidate, ...]) -> None:
         with self.lock:
@@ -107,10 +114,8 @@ class NotificationAgent:
     def close(self) -> None:
         self.closed.set()
         self.wake.set()
-        if (thread := self._thread.get()) is not None:
-            thread.join(2)
-            if thread.is_alive():
-                raise OSError("Notification work did not stop cleanly.")
+        if self._started.is_set() and not self._finished.wait(2):
+            raise OSError("Notification work did not stop cleanly.")
 
     def activate(self, candidates: tuple[Candidate, ...]) -> bool:
         if self.submit is None:

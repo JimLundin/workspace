@@ -18,7 +18,6 @@ from urllib.parse import urlsplit
 from pydantic import TypeAdapter
 lazy import httpx
 
-from cell import Cell
 from gateway.upstream import Unconfigured, Upstream, request_headers, response_headers, target
 
 TIMEOUT_S: Final = 900.0
@@ -51,20 +50,17 @@ class Gateway:
     token: str
     _client: httpx.Client
     _server: ThreadingHTTPServer
-    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
-    """The background serving thread, when `start` serves."""
+    _serving: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    """Set once `start` serves on a background thread."""
+    _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
     def listen(cls, upstream: Upstream | Unconfigured, token: str, *, port: int = 0, client: Callable[[], httpx.Client] = provider_client) -> Gateway:
-        bound: Cell[Gateway | None] = Cell(None)
-
         def relay(request: BaseHTTPRequestHandler) -> None:
-            # Requests arrive only once serving starts, after the gateway exists.
-            if (gateway := bound.get()) is not None:
-                gateway.relay(request)
+            # Requests arrive only once serving starts, after the gateway below exists.
+            gateway.relay(request)
 
         gateway = cls(upstream, token, client(), _bind(port, _handler(relay)))
-        bound.set(gateway)
         return gateway
 
     @property
@@ -73,17 +69,22 @@ class Gateway:
 
     def start(self) -> None:
         """Serve on a background thread (tests); `serve` blocks instead."""
-        thread = threading.Thread(target=self._server.serve_forever, name="gateway", daemon=True)
-        self._thread.set(thread)
-        thread.start()
+        self._serving.set()
+        threading.Thread(target=self._serve_then_finish, name="gateway", daemon=True).start()
+
+    def _serve_then_finish(self) -> None:
+        try:
+            self._server.serve_forever()
+        finally:
+            self._finished.set()
 
     def serve(self) -> None:
         self._server.serve_forever()
 
     def close(self) -> None:
-        if (thread := self._thread.get()) is not None:
+        if self._serving.is_set():
             self._server.shutdown()
-            thread.join()
+            self._finished.wait()
         self._server.server_close()
         self._client.close()
 

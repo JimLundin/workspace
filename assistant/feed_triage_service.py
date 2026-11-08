@@ -181,11 +181,11 @@ class Triage:
     """How often the loop rechecks for a new day or a retry without being woken."""
     notifications: NotificationAgent
     closed: threading.Event
+    thread: threading.Thread
     _state: Cell[_Triaging]
     """Replaced whole under the lock."""
     lock: threading.RLock = field(default_factory=threading.RLock, init=False)
     wake: threading.Event = field(default_factory=threading.Event, init=False)
-    _thread: Cell[threading.Thread | None] = field(default_factory=lambda: Cell[threading.Thread | None](None), init=False, repr=False)
 
     @classmethod
     def start(  # noqa: PLR0913 - injected collaborators and test seams
@@ -207,18 +207,16 @@ class Triage:
             board = Board(enabled=True, status="Saved feed preferences could not be loaded.")
         closed = threading.Event()
         notifications = NotificationAgent(submit, closed, tick_s=tick_s)
-        triage = cls(store, model, submit, wait, clock, work, personal, tick_s, notifications, closed, Cell(_Triaging(board)))
-        thread = threading.Thread(target=triage.run, name="Work feed triage", daemon=True)
-        triage._thread.set(thread)
+
+        # The thread runs the triage made just after it.
+        def run() -> None:
+            triage.run()
+
+        thread = threading.Thread(target=run, name="Work feed triage", daemon=True)
+        triage = cls(store, model, submit, wait, clock, work, personal, tick_s, notifications, closed, thread, Cell(_Triaging(board)))
         notifications.start()
         thread.start()
         return triage
-
-    @property
-    def thread(self) -> threading.Thread:
-        thread = self._thread.get()
-        assert thread is not None, "Triage.start sets the worker thread before returning."
-        return thread
 
     @property
     def board(self) -> Board:
