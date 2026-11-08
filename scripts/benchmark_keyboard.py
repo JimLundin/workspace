@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
-lazy from miryoku.engine import Engine, Indicator, Signal
+lazy from miryoku.engine import Engine, EngineState, Indicator, Signal
 lazy from miryoku.layout import Key, Mod, Scancode
 lazy from protocol import Request
 
@@ -188,13 +188,7 @@ def measure_latencies(
 
     gc.enable()
     # Warm up adaptive bytecode and tables before collecting latency samples.
-    warm = Engine()
-    for key, down, now in events[:1000]:
-        if key:
-            warm.on_key(host, key, down=down, now=now)
-        else:
-            warm.timeout(host, 1)
-    del warm
+    play(Engine(), host, events[:1000])
     measurements = tuple(round_latencies(host, events, rounds, observe_gc))
     return measurements, tuple(collections), tuple(pauses)
 
@@ -209,16 +203,16 @@ def round_latencies(
     # One preallocated buffer, written in place, so the timed loop never allocates a sample.
     latencies = array("Q", [0]) * len(events)
     for _ in range(rounds):
-        engine = Engine()
+        engine, state = Engine(), EngineState()
         gc.collect()
         gc.callbacks.append(observe_gc)
         try:
             for index, (key, down, now) in enumerate(events):
                 started = perf_counter_ns()
                 if key:
-                    engine.on_key(host, key, down=down, now=now)
+                    state, _ = engine.on_key(state, host, key, down=down, now=now)
                 else:
-                    engine.timeout(host, 1)
+                    state = engine.timeout(state, host, 1)
                 latencies[index] = perf_counter_ns() - started
         finally:
             gc.callbacks.remove(observe_gc)
@@ -234,12 +228,15 @@ def round_latencies(
         )
 
 
-def play(engine: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> None:
+def play(engine: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> EngineState:
+    """The engine's state after `events`, from a fresh start."""
+    state = EngineState()
     for key, down, now in events:
         if key:
-            engine.on_key(host, key, down=down, now=now)
+            state, _ = engine.on_key(state, host, key, down=down, now=now)
         else:
-            engine.timeout(host, 1)
+            state = engine.timeout(state, host, 1)
+    return state
 
 
 if __name__ == "__main__":

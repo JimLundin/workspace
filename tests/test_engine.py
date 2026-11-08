@@ -4,13 +4,25 @@ with `pytest`."""
 import unittest
 from dataclasses import replace
 
-from miryoku.engine import DEFAULT_CONFIGURATION, MAX_BUFFERED, Configuration, Engine, Indicator, Modifiers, Signal, Verdict
+from miryoku.engine import (
+    DEFAULT_CONFIGURATION,
+    MAX_BUFFERED,
+    Configuration,
+    Engine,
+    EngineState,
+    Indicator,
+    Modifiers,
+    Signal,
+    UnreleasedError,
+    Verdict,
+)
 from miryoku.layout import (
     ESCAPE,
     FUNCTION_KEYS,
     QUICK_TAP_MS,
     QUIT_HOLD_MS,
     STREAK_MS,
+    Action,
     Chord,
     Key,
     Layer,
@@ -87,15 +99,35 @@ class FakeHost:
 
 
 class Harness:
-    __slots__ = ("e", "h", "now")
+    """Holds the engine's state between calls, as the keyboard hook does."""
+
+    __slots__ = ("e", "h", "now", "state")
 
     def __init__(self, configuration: Configuration = DEFAULT_CONFIGURATION) -> None:
         self.e = Engine(configuration=configuration)
         self.h = FakeHost()
         self.now = 0
+        self.state = EngineState()
 
     def key(self, scancode: Scancode, *, down: bool, now: int) -> Verdict:
-        return self.e.on_key(self.h, scancode, down=down, now=now)
+        self.state, verdict = self.e.on_key(self.state, self.h, scancode, down=down, now=now)
+        return verdict
+
+    def release_all(self) -> None:
+        try:
+            self.state = self.e.release_all(self.state, self.h)
+        except UnreleasedError as error:
+            self.state = error.state
+            raise
+
+    def toggle(self) -> None:
+        self.state = self.e.toggle(self.state, self.h)
+
+    def press(self, action: Action, now: int) -> None:
+        self.state = self.e.press(self.state, self.h, action, now)
+
+    def release(self, action: Action) -> None:
+        self.state = self.e.release(self.state, self.h, action)
 
     def at(self, ms: int) -> Harness:
         self.now = ms
@@ -113,7 +145,7 @@ class Harness:
 
     def timeout_last(self) -> None:
         """Fire the most recently started timer."""
-        self.e.timeout(self.h, self.h.timer)
+        self.state = self.e.timeout(self.state, self.h, self.h.timer)
 
     def take(self) -> str:
         log, self.h.log = self.h.log, []
@@ -219,7 +251,7 @@ def test_release_all_lets_go() -> None:
     t.d("r")
     t.tap("8")
     t.take()
-    t.e.release_all(t.h)
+    t.release_all()
     assert t.take() == "-SFT"
 
 
@@ -232,15 +264,16 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
                 raise OSError("Rejected release")
 
     host = RejectedRelease()
-    engine = Engine()
-    pressed = (Key.A, Key.B, Mod.SHIFT, Tool.DICTATE, *engine.pressed[4:])
-    engine.restore(replace(engine.state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), locked=Layer.NAV))
-    with unittest.TestCase().assertRaises(OSError):
-        engine.release_all(host)
+    state = EngineState()
+    pressed = (Key.A, Key.B, Mod.SHIFT, Tool.DICTATE, *state.pressed[4:])
+    state = replace(state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), locked=Layer.NAV)
+    with unittest.TestCase().assertRaises(UnreleasedError) as refused:
+        Engine().release_all(state, host)
     assert host.log == ["-a", "-b", "-SFT", "?dictate-"]
-    assert not engine.mods.counts
-    assert engine.layer() is None
-    assert all(action is None for action in engine.pressed)
+    cleared = refused.exception.state
+    assert not cleared.mods.counts
+    assert cleared.layer() is None
+    assert all(action is None for action in cleared.pressed)
 
 
 def test_rejected_modifier_release_does_not_skip_remaining_modifiers() -> None:
@@ -271,7 +304,7 @@ def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> None
     for function in FUNCTION_KEYS:
         assert t.key(function, down=True, now=0) == Verdict.PASS
         assert t.key(function, down=False, now=1) == Verdict.PASS
-    t.e.restore(replace(t.e.state, enabled=False))
+    t.state = replace(t.state, enabled=False)
     for code in (0x01, 0x0F, 0x1C, 0x0E, 0x2A, 0x36, 0x1D, 0x38, 0x4B, 0x5D):
         assert t.key(Scancode(code), down=True, now=2) == Verdict.PASS
         assert t.key(Scancode(code), down=False, now=3) == Verdict.PASS
@@ -332,13 +365,13 @@ def test_tray_toggle_releases_input_and_clears_the_locked_layer() -> None:
     t.d("o")  # left arrow
     t.take()
 
-    t.e.toggle(t.h)
+    t.toggle()
     assert t.take() == "-SFT -left !OFF"
     assert t.h.indicated[-1] == "-"
     assert t.h.used_features[-1] == "switch_off"
     assert t.key(sc("q"), down=True, now=20) is Verdict.PASS
     assert t.key(sc("q"), down=False, now=30) is Verdict.PASS
-    t.e.toggle(t.h)
+    t.toggle()
     t.tap("q")
     assert t.take() == "!ON +a -a"  # back to the base layout, not locked Nav
 
@@ -347,10 +380,10 @@ def test_tray_toggle_discards_pending_input_and_its_timer() -> None:
     t = Harness()
     t.d("r")  # undecided home-row modifier
     t.d("i")  # buffered on the opposite hand
-    t.e.toggle(t.h)
+    t.toggle()
     t.timeout_last()
     assert t.take() == "!OFF"
-    t.e.toggle(t.h)
+    t.toggle()
     t.tap("2")
     assert t.take() == "!ON +q -q"
 
@@ -358,7 +391,7 @@ def test_tray_toggle_discards_pending_input_and_its_timer() -> None:
 def test_tray_toggle_cancels_an_escape_key_already_held() -> None:
     t = Harness()
     t.key(ESC, down=True, now=0)
-    t.e.toggle(t.h)
+    t.toggle()
     assert t.key(ESC, down=False, now=QUIT_HOLD_MS) is Verdict.SWALLOW
     assert t.key(sc("q"), down=True, now=QUIT_HOLD_MS + 1) is Verdict.PASS
     assert t.take() == "!OFF"
@@ -706,30 +739,30 @@ def test_tap_hold_chords_release_only_the_modifiers_they_added() -> None:
     row = list(DEFAULT_CONFIGURATION.actions[None])
     row[cell] = redo
     t = Harness(replace(DEFAULT_CONFIGURATION, actions={**DEFAULT_CONFIGURATION.actions, None: tuple(row)}))
-    t.e.press(t.h, Mod.CTRL, 0)
+    t.press(Mod.CTRL, 0)
     assert t.take() == "+CTL"
     t.tap("2")
     assert t.take() == "+SFT +z -SFT -z"
-    t.e.release(t.h, Mod.CTRL)
+    t.release(Mod.CTRL)
     assert t.take() == "-CTL"
 
 
 def test_overlapping_layers_release_the_most_recent_copy_and_preserve_other_layers() -> None:
     t = Harness()
     for layer in (Layer.NAV, Layer.NUM, Layer.NAV):
-        t.e.press(t.h, layer, 0)
-    t.e.release(t.h, Layer.NAV)
-    assert t.e.layer() is Layer.NUM
+        t.press(layer, 0)
+    t.release(Layer.NAV)
+    assert t.state.layer() is Layer.NUM
     t.tap("w")
     assert t.take() == "+4 -4"
-    t.e.press(t.h, Layer.NAV, 0)
-    t.e.release(t.h, Layer.NUM)  # removing a layer below the top must preserve both NAV holds
-    t.e.release(t.h, Layer.NAV)
-    assert t.e.layer() is Layer.NAV
+    t.press(Layer.NAV, 0)
+    t.release(Layer.NUM)  # removing a layer below the top must preserve both NAV holds
+    t.release(Layer.NAV)
+    assert t.state.layer() is Layer.NAV
     t.tap("o")
     assert t.take() == "+left -left"
-    t.e.release(t.h, Layer.NAV)
-    assert t.e.layer() is None
+    t.release(Layer.NAV)
+    assert t.state.layer() is None
 
 
 def test_held_undo_repeats_like_any_key() -> None:
@@ -776,7 +809,7 @@ def test_switching_off_and_quitting_release_a_held_voice_request() -> None:
         verdict = t.key(ESC, down=False, now=10 + (QUIT_HOLD_MS if quitting else 10))
         assert verdict is (Verdict.QUIT if quitting else Verdict.SWALLOW)
         assert t.take() == "?dictate-" + ("" if quitting else " !OFF")
-        t.e.release_all(t.h)
+        t.release_all()
         assert t.take() == ""
 
 
@@ -840,8 +873,8 @@ def test_snippets_can_include_shifted_characters() -> None:
     t = Harness(replace(DEFAULT_CONFIGURATION, snippets=(("ABC", "Expanded."),)))
     for key in (Key.A, Key.B, Key.C):
         chord = Chord(key, frozenset({Mod.SHIFT}))
-        t.e.press(t.h, chord, 0)
-        t.e.release(t.h, chord)
+        t.press(chord, 0)
+        t.release(chord)
     assert "~Expanded." in t.take() and "snippet:ABC" in t.h.used_features
 
 
@@ -849,7 +882,7 @@ def test_disabled_snippets_do_not_accumulate_an_unbounded_typing_buffer() -> Non
     t = Harness(replace(DEFAULT_CONFIGURATION, snippets=()))
     for _ in range(100):
         type_thx(t)
-    assert "~Thanks!" not in t.take() and not t.e.typed
+    assert "~Thanks!" not in t.take() and not t.state.typed
     ordinary = Harness()
     type_thx(ordinary)
     assert "~Thanks!" in ordinary.take(), "One engine's configuration must not change another engine."
@@ -943,7 +976,7 @@ def test_native_function_key_invalidates_partial_snippets() -> None:
     t = Harness()
     for name in (";", ";", "r"):
         t.tap(name)
-    assert t.e.typed == ",,t"
+    assert t.state.typed == ",,t"
     assert t.key(Scancode(0x3B), down=True, now=1) is Verdict.PASS  # F1 can change focus or open application help.
     for name in ("l", "a"):
         t.tap(name)

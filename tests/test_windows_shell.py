@@ -154,7 +154,7 @@ def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown()
     assert desktop.requests == ((11, 0xF002041D), (11, 0x4090409), (22, 0x4090409))
     driver.devices = ()
     maintain_keyboard(keyboard, languages)
-    assert not keyboard.engine.enabled
+    assert not keyboard.engine_state.enabled
     assert_language_restored(desktop)
 
 
