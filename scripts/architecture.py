@@ -135,6 +135,8 @@ class Observation:
     """Attribute names the module assigns through a receiver other than `self`."""
     definitions: tuple[Definition, ...]
     shapes: tuple[Shape, ...]
+    natives: tuple[Finding, ...]
+    """Each Win32 export the module declares, as a `native-redeclaration` finding until another module declares it too."""
     referenced: frozendict[str, int]
     """How often the module names each name."""
 
@@ -732,6 +734,7 @@ def observation(source: Source, cache: Cache | None) -> Observation:
         assigned(tree),
         tuple(definitions(tree.body, module)),
         tuple(shapes(tree, module)),
+        tuple(natives(tree, module)),
         references(tree),
     )
     if cache is not None:
@@ -856,6 +859,27 @@ def duplicates(observations: Iterable[Observation]) -> Iterator[Finding]:
             yield replace(shape.finding, detail=f"{shape.finding.detail} First copy: {original.module}.{original.declaration}.")
 
 
+DECLARES: Final = frozenset({"fn", "optional_fn"})
+"""winapi._core's foreign-function declarations: `fn(user32, "GetForegroundWindow", HWND)`."""
+
+
+def natives(tree: ast.AST, module: str) -> Iterator[Finding]:
+    for node in ast.walk(tree):
+        match node:
+            case ast.Call(func=ast.Name(id=name), args=[_, ast.Constant(value=str() as export), *_]) if name in DECLARES:
+                detail = "Declare a Win32 function once, in winapi._core when more than one module calls it."
+                yield Finding("native-redeclaration", module, export, export, node.lineno, detail)
+            case _:
+                pass
+
+
+def redeclarations(observations: Iterable[Observation]) -> Iterator[Finding]:
+    """Each declaration of an export that another module declares as well."""
+    declared = tuple(finding for observed in observations for finding in observed.natives)
+    modules = Counter(export for export, _ in frozenset((finding.expression, finding.module) for finding in declared))
+    return (finding for finding in declared if modules[finding.expression] > 1)
+
+
 def cached_references(source: Source, cache: Cache | None) -> frozenset[str]:
     key = cache.key("references", source) if cache is not None else ""
     if cache is not None and (saved := cache.read(key, REFERENCES)) is not None:
@@ -971,6 +995,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *process_isolation(imported_by),
         *unused_definitions(observations.values(), production, tested),
         *duplicates(observations.values()),
+        *redeclarations(observations.values()),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = (
