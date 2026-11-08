@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cell import Cell
-from winapi._core import fn, kernel32, last_error
+from winapi._core import CloseHandle, OpenProcess, WaitForSingleObject, fn, kernel32, last_error
 
 
 class _Limits(ctypes.Structure):
@@ -150,8 +150,6 @@ _QueryInformationJobObject = fn(
 )
 _AssignProcessToJobObject = fn(kernel32, "AssignProcessToJobObject", wintypes.BOOL, wintypes.HANDLE, wintypes.HANDLE)
 _TerminateJobObject = fn(kernel32, "TerminateJobObject", wintypes.BOOL, wintypes.HANDLE, wintypes.UINT)
-_OpenProcess = fn(kernel32, "OpenProcess", wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-_CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _CreateProcess = fn(
     kernel32,
     "CreateProcessW",
@@ -168,7 +166,6 @@ _CreateProcess = fn(
     ctypes.POINTER(_ProcessInfo),
 )
 _ResumeThread = fn(kernel32, "ResumeThread", wintypes.DWORD, wintypes.HANDLE)
-_WaitForSingleObject = fn(kernel32, "WaitForSingleObject", wintypes.DWORD, wintypes.HANDLE, wintypes.DWORD)
 _GetExitCodeProcess = fn(kernel32, "GetExitCodeProcess", wintypes.BOOL, wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
 _TerminateProcess = fn(kernel32, "TerminateProcess", wintypes.BOOL, wintypes.HANDLE, wintypes.UINT)
 
@@ -200,14 +197,14 @@ class Process:
         return self._owned.get().returncode
 
     def poll(self) -> int | None:
-        if not self.handle or _WaitForSingleObject(self.handle, 0) == 258:  # WAIT_TIMEOUT
+        if not self.handle or WaitForSingleObject(self.handle, 0) == 258:  # WAIT_TIMEOUT
             return self.returncode
         return self.wait(timeout=0)
 
     def wait(self, timeout: float) -> int:
         if self.returncode is not None:
             return self.returncode
-        result = _WaitForSingleObject(self.handle, max(0, int(timeout * 1000)))
+        result = WaitForSingleObject(self.handle, max(0, int(timeout * 1000)))
         if result == 258:
             raise subprocess.TimeoutExpired(str(self.pid), timeout)
         if result != 0:
@@ -215,7 +212,7 @@ class Process:
         code = wintypes.DWORD()
         if not _GetExitCodeProcess(self.handle, ctypes.byref(code)):
             raise last_error()
-        _CloseHandle(self.handle)
+        CloseHandle(self.handle)
         self._owned.set(_Owned(0, int(code.value)))
         return int(code.value)
 
@@ -250,14 +247,14 @@ class ProcessJob:
         return self._handle.get()
 
     def add(self, pid: int) -> None:
-        process = _OpenProcess(0x0101, False, pid)  # PROCESS_SET_QUOTA | PROCESS_TERMINATE
+        process = OpenProcess(0x0101, False, pid)  # PROCESS_SET_QUOTA | PROCESS_TERMINATE
         if not process:
             raise last_error()
         try:
             if not _AssignProcessToJobObject(self.handle, process):
                 raise last_error()
         finally:
-            _CloseHandle(process)
+            CloseHandle(process)
 
     def start(self, arguments: Sequence[str]) -> Process:
         """Assign the suspended process before it can create any browser children."""
@@ -279,7 +276,7 @@ class ProcessJob:
             process.wait(timeout=2)
             raise
         finally:
-            _CloseHandle(info.thread)
+            CloseHandle(info.thread)
 
     def close(self) -> None:
         if self.handle:
@@ -297,7 +294,7 @@ class ProcessJob:
                         raise OSError("The owned browser processes did not finish exiting in time.")
                     time.sleep(0.02)
             finally:
-                _CloseHandle(self.handle)
+                CloseHandle(self.handle)
                 self._handle.set(0)
 
 

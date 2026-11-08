@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import Final
 
-from winapi._core import LRESULT, ULONG_PTR, fn, kernel32, user32
+from winapi._core import LRESULT, ULONG_PTR, GetCursorPos, GetModuleHandleW, fn, user32
 from winapi.shapes import Point, require_input_count, utf16_units
 
 
@@ -78,10 +78,8 @@ HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.L
 _SetWindowsHookExW = fn(user32, "SetWindowsHookExW", wintypes.HHOOK, ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD)
 _CallNextHookEx = fn(user32, "CallNextHookEx", LRESULT, wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
 _UnhookWindowsHookEx = fn(user32, "UnhookWindowsHookEx", wintypes.BOOL, wintypes.HHOOK)
-_GetModuleHandleW = fn(kernel32, "GetModuleHandleW", wintypes.HMODULE, wintypes.LPCWSTR)
 _SendInput = fn(user32, "SendInput", wintypes.UINT, wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 _MapVirtualKeyW = fn(user32, "MapVirtualKeyW", wintypes.UINT, wintypes.UINT, wintypes.UINT)
-_GetCursorPos = fn(user32, "GetCursorPos", wintypes.BOOL, ctypes.POINTER(wintypes.POINT))
 
 LLKHF_EXTENDED, LLKHF_INJECTED = 0x01, 0x10
 KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, KEYEVENTF_SCANCODE = 0x0001, 0x0002, 0x0004, 0x0008
@@ -120,7 +118,7 @@ def read_key_event(lparam: int) -> KeyEvent:
 
 def set_keyboard_hook(proc: HookProc) -> Hook | None:
     callback = HOOKPROC(proc)
-    handle: int | None = _SetWindowsHookExW(_WH_KEYBOARD_LL, callback, _GetModuleHandleW(None), 0)
+    handle: int | None = _SetWindowsHookExW(_WH_KEYBOARD_LL, callback, GetModuleHandleW(None), 0)
     return Hook(handle, callback) if handle else None
 
 
@@ -179,5 +177,5 @@ def type_text(text: str, extra: int) -> None:
 
 def cursor_position() -> Point:
     point = wintypes.POINT()
-    _GetCursorPos(ctypes.byref(point))
+    GetCursorPos(ctypes.byref(point))
     return Point(int(point.x), int(point.y))

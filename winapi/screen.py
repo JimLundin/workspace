@@ -5,7 +5,22 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from typing import Final
 
-from winapi._core import fn, gdi32, last_error, optional_fn, rect, user32
+from winapi._core import (
+    CreateCompatibleDC,
+    CreateDIBSection,
+    DeleteDC,
+    DeleteObject,
+    GetDC,
+    ReleaseDC,
+    SelectObject,
+    fn,
+    gdi32,
+    last_error,
+    optional_fn,
+    rect,
+    top_down,
+    user32,
+)
 from winapi.shapes import Rect
 
 
@@ -74,39 +89,6 @@ class DisplaySourceName(ctypes.Structure):
     _fields_ = (("header", DisplayInfoHeader), ("viewGdiDeviceName", wintypes.WCHAR * 32))
 
 
-class BITMAPINFOHEADER(ctypes.Structure):
-    biSize: int
-    biWidth: int
-    biHeight: int
-    biPlanes: int
-    biBitCount: int
-    biCompression: int
-    biSizeImage: int
-    biXPelsPerMeter: int
-    biYPelsPerMeter: int
-    biClrUsed: int
-    biClrImportant: int
-    _fields_ = (
-        ("biSize", wintypes.DWORD),
-        ("biWidth", wintypes.LONG),
-        ("biHeight", wintypes.LONG),
-        ("biPlanes", wintypes.WORD),
-        ("biBitCount", wintypes.WORD),
-        ("biCompression", wintypes.DWORD),
-        ("biSizeImage", wintypes.DWORD),
-        ("biXPelsPerMeter", wintypes.LONG),
-        ("biYPelsPerMeter", wintypes.LONG),
-        ("biClrUsed", wintypes.DWORD),
-        ("biClrImportant", wintypes.DWORD),
-    )
-
-
-class BITMAPINFO(ctypes.Structure):
-    bmiHeader: BITMAPINFOHEADER
-    bmiColors: ctypes.Array[ctypes.c_ulong]
-    _fields_ = (("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 3))
-
-
 MONITORENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
 _EnumDisplayMonitors = fn(user32, "EnumDisplayMonitors", wintypes.BOOL, wintypes.HDC, ctypes.c_void_p, MONITORENUMPROC, wintypes.LPARAM)
 _GetMonitorInfoW = fn(user32, "GetMonitorInfoW", wintypes.BOOL, wintypes.HMONITOR, ctypes.POINTER(MONITORINFOEXW))
@@ -129,23 +111,6 @@ _MonitorFromWindow = fn(user32, "MonitorFromWindow", wintypes.HMONITOR, wintypes
 _GetSystemMetrics = fn(user32, "GetSystemMetrics", ctypes.c_int, ctypes.c_int)
 _SetProcessDpiAwarenessContext = optional_fn(user32, "SetProcessDpiAwarenessContext", wintypes.BOOL, ctypes.c_ssize_t)
 _SetProcessDPIAware = fn(user32, "SetProcessDPIAware", wintypes.BOOL)
-_GetDC = fn(user32, "GetDC", wintypes.HDC, wintypes.HWND)
-_ReleaseDC = fn(user32, "ReleaseDC", ctypes.c_int, wintypes.HWND, wintypes.HDC)
-_CreateCompatibleDC = fn(gdi32, "CreateCompatibleDC", wintypes.HDC, wintypes.HDC)
-_DeleteDC = fn(gdi32, "DeleteDC", wintypes.BOOL, wintypes.HDC)
-_CreateDIBSection = fn(
-    gdi32,
-    "CreateDIBSection",
-    wintypes.HBITMAP,
-    wintypes.HDC,
-    ctypes.POINTER(BITMAPINFO),
-    wintypes.UINT,
-    ctypes.POINTER(ctypes.c_void_p),
-    wintypes.HANDLE,
-    wintypes.DWORD,
-)
-_SelectObject = fn(gdi32, "SelectObject", wintypes.HGDIOBJ, wintypes.HDC, wintypes.HGDIOBJ)
-_DeleteObject = fn(gdi32, "DeleteObject", wintypes.BOOL, wintypes.HGDIOBJ)
 _SetStretchBltMode = fn(gdi32, "SetStretchBltMode", ctypes.c_int, wintypes.HDC, ctypes.c_int)
 _SetBrushOrgEx = fn(gdi32, "SetBrushOrgEx", wintypes.BOOL, wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)
 _StretchBlt = fn(
@@ -264,20 +229,19 @@ def monitor_of(hwnd: int) -> Monitor:
 
 def capture(area: Rect, width: int, height: int) -> bytes:
     """The pixels in `area`, scaled to width x height: BGRA, top row first."""
-    info = BITMAPINFO()
-    info.bmiHeader = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), width, -height, 1, 32, 0, 0, 0, 0, 0, 0)
-    screen = _GetDC(None)
-    memory = _CreateCompatibleDC(screen)
+    header = top_down(width, height)
+    screen = GetDC(None)
+    memory = CreateCompatibleDC(screen)
     bits = ctypes.c_void_p()
-    bitmap = _CreateDIBSection(memory, ctypes.byref(info), _DIB_RGB_COLORS, ctypes.byref(bits), None, 0)
-    previous = _SelectObject(memory, bitmap)
+    bitmap = CreateDIBSection(memory, ctypes.byref(header), _DIB_RGB_COLORS, ctypes.byref(bits), None, 0)
+    previous = SelectObject(memory, bitmap)
     try:
         _SetStretchBltMode(memory, _HALFTONE)  # averages pixels when shrinking, so text stays legible
         _SetBrushOrgEx(memory, 0, 0, None)
         _StretchBlt(memory, 0, 0, width, height, screen, area.left, area.top, area.width, area.height, _SRCCOPY | _CAPTUREBLT)
         return ctypes.string_at(bits, width * height * 4)
     finally:
-        _SelectObject(memory, previous)
-        _DeleteObject(bitmap)
-        _DeleteDC(memory)
-        _ReleaseDC(None, screen)
+        SelectObject(memory, previous)
+        DeleteObject(bitmap)
+        DeleteDC(memory)
+        ReleaseDC(None, screen)

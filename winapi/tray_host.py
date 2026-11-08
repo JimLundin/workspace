@@ -12,29 +12,13 @@ from enum import Enum
 
 from cell import Cell
 from winapi import desktop_shell, windows
-from winapi._core import LRESULT, ULONG_PTR, fn, user32
+from winapi._core import ULONG_PTR, AllowSetForegroundWindow, SendMessageTimeoutW, SetWindowPos, fn, user32
 from winapi.icon_pixels import Pixels, native_pixels
 from winapi.shapes import Point, Rect
 from winapi.shell import TASKBAR_CREATED, AppWindow
 
 _SetProp = fn(user32, "SetPropW", wintypes.BOOL, wintypes.HWND, wintypes.LPCWSTR, wintypes.HANDLE)
-_SetWindowPos = fn(
-    user32, "SetWindowPos", wintypes.BOOL, wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT
-)
 _SendNotifyMessage = fn(user32, "SendNotifyMessageW", wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
-_SendMessageTimeout = fn(
-    user32,
-    "SendMessageTimeoutW",
-    LRESULT,
-    wintypes.HWND,
-    wintypes.UINT,
-    wintypes.WPARAM,
-    wintypes.LPARAM,
-    wintypes.UINT,
-    wintypes.UINT,
-    ctypes.POINTER(ULONG_PTR),
-)
-_AllowSetForegroundWindow = fn(user32, "AllowSetForegroundWindow", wintypes.BOOL, wintypes.DWORD)
 
 
 class CopyData(ctypes.Structure):
@@ -204,7 +188,7 @@ def _proxied(hosted: Cell[_Hosted], message: int, wparam: int, lparam: int) -> i
             hosted.update(lambda current: replace(current, explorer=explorer))
         if explorer := hosted.get().explorer:
             result = ULONG_PTR()
-            if _SendMessageTimeout(explorer, message, wparam, lparam, 2, 100, ctypes.byref(result)):
+            if SendMessageTimeoutW(explorer, message, wparam, lparam, 2, 100, ctypes.byref(result)):
                 return ctypes.c_ssize_t(result.value).value
         return 0
     return None
@@ -237,7 +221,7 @@ class TrayHost:
         return self._hosted.get().entries
 
     def poll(self) -> tuple[Entry, ...]:
-        _SetWindowPos(self.window.handle, -1, 0, 0, 0, 0, 0x13)
+        SetWindowPos(self.window.handle, -1, 0, 0, 0, 0, 0x13)
         hosted = self._hosted.update(
             lambda current: replace(current, entries=tuple(entry for entry in current.entries if windows.exists(entry.window)))
         )
@@ -249,7 +233,7 @@ class TrayHost:
     def click(self, entry: Entry, click: Click, point: Point) -> None:
         # The three inputs are the registered owner, action, and native click coordinates.
         if entry in self.entries and windows.exists(entry.window):
-            _AllowSetForegroundWindow(windows.process_id(entry.window))
+            AllowSetForegroundWindow(windows.process_id(entry.window))
             for notify in callbacks(entry, click, point):
                 _SendNotifyMessage(entry.window, entry.callback, notify.wparam, notify.lparam)
 

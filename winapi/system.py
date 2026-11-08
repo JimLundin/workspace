@@ -6,7 +6,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final, NewType
 
-from winapi._core import ULONG_PTR, fn, kernel32, last_error, user32
+from winapi._core import ULONG_PTR, CloseHandle, CreateEventW, GetCurrentThreadId, PostMessageW, fn, kernel32, last_error, user32
 
 WM_CLOSE: Final = 0x0010
 WM_TIMER: Final = 0x0113
@@ -24,20 +24,16 @@ _GetMessageW = fn(user32, "GetMessageW", wintypes.BOOL, ctypes.POINTER(wintypes.
 _TranslateMessage = fn(user32, "TranslateMessage", wintypes.BOOL, ctypes.POINTER(wintypes.MSG))
 _DispatchMessageW = fn(user32, "DispatchMessageW", ULONG_PTR, ctypes.POINTER(wintypes.MSG))
 _PostQuitMessage = fn(user32, "PostQuitMessage", None, ctypes.c_int)
-_PostMessageW = fn(user32, "PostMessageW", wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 _PostThreadMessageW = fn(user32, "PostThreadMessageW", wintypes.BOOL, wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 _SetTimer = fn(user32, "SetTimer", ULONG_PTR, wintypes.HWND, ULONG_PTR, wintypes.UINT, ctypes.c_void_p)
 _KillTimer = fn(user32, "KillTimer", wintypes.BOOL, wintypes.HWND, ULONG_PTR)
 _MessageBeep = fn(user32, "MessageBeep", wintypes.BOOL, wintypes.UINT)
 _MessageBoxW = fn(user32, "MessageBoxW", ctypes.c_int, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT)
-_GetCurrentThreadId = fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
 _GetTickCount = fn(kernel32, "GetTickCount", wintypes.DWORD)
 _GetCurrentProcess = fn(kernel32, "GetCurrentProcess", wintypes.HANDLE)
 _SetPriorityClass = fn(kernel32, "SetPriorityClass", wintypes.BOOL, wintypes.HANDLE, wintypes.DWORD)
 _SetProcessInformation = fn(kernel32, "SetProcessInformation", wintypes.BOOL, wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
 _CreateMutexW = fn(kernel32, "CreateMutexW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
-_CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
-_CreateEventW = fn(kernel32, "CreateEventW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR)
 _WaitForMultipleObjects = fn(
     kernel32, "WaitForMultipleObjects", wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE), wintypes.BOOL, wintypes.DWORD
 )
@@ -99,7 +95,7 @@ def post_quit() -> None:
 
 def post_message(hwnd: int, message: int, wparam: int, lparam: int) -> bool:
     """Queues a message for a window (any process's); doesn't wait for it."""
-    return bool(_PostMessageW(hwnd, message, wparam, lparam))
+    return bool(PostMessageW(hwnd, message, wparam, lparam))
 
 
 def post_thread_message(thread: int, message: int, wparam: int, lparam: int) -> bool:
@@ -107,7 +103,7 @@ def post_thread_message(thread: int, message: int, wparam: int, lparam: int) -> 
 
 
 def thread_id() -> int:
-    return int(_GetCurrentThreadId())
+    return int(GetCurrentThreadId())
 
 
 def tick_count() -> int:
@@ -150,25 +146,25 @@ def create_lock(name: str) -> Lock | None:
     """A named lock for this Windows session; None if another process holds it."""
     handle: int | None = _CreateMutexW(None, False, name)
     if handle and ctypes.get_last_error() == _ERROR_ALREADY_EXISTS:
-        _CloseHandle(handle)
+        CloseHandle(handle)
         return None
     return Lock(handle) if handle else None
 
 
 def release_lock(lock: Lock) -> None:
-    _CloseHandle(lock)
+    CloseHandle(lock)
 
 
 def create_event() -> EventHandle:
     """An auto-reset event, private to this program."""
-    handle: int | None = _CreateEventW(None, False, False, None)
+    handle: int | None = CreateEventW(None, False, False, None)
     if not handle:
         raise last_error()
     return EventHandle(handle)
 
 
 def close_event(event: EventHandle) -> None:
-    _CloseHandle(event)
+    CloseHandle(event)
 
 
 def wait_any(events: Sequence[EventHandle], timeout_ms: int | None = None) -> int | None:

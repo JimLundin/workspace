@@ -1,6 +1,5 @@
 """Windows input layouts, selected without changing the user's installed languages."""
 
-import ctypes
 import os
 import winreg
 from ctypes import wintypes
@@ -8,14 +7,11 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from cell import Cell
-from winapi._core import fn, user32
+from winapi._core import GetForegroundWindow, GetWindowThreadProcessId, PostMessageW, fn, user32
 
 _LoadKeyboardLayout = fn(user32, "LoadKeyboardLayoutW", wintypes.HANDLE, wintypes.LPCWSTR, wintypes.UINT)
 _ActivateKeyboardLayout = fn(user32, "ActivateKeyboardLayout", wintypes.HANDLE, wintypes.HANDLE, wintypes.UINT)
 _GetKeyboardLayout = fn(user32, "GetKeyboardLayout", wintypes.HANDLE, wintypes.DWORD)
-_GetForegroundWindow = fn(user32, "GetForegroundWindow", wintypes.HWND)
-_GetWindowThreadProcessId = fn(user32, "GetWindowThreadProcessId", wintypes.DWORD, wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
-_PostMessage = fn(user32, "PostMessageW", wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 
 
 def _values(path: str) -> tuple[str, ...]:
@@ -75,11 +71,11 @@ class NativeLanguageDesktop:
             raise OSError("Windows refused to activate the requested input keyboard.")
 
     def foreground(self) -> Foreground:
-        hwnd = int(_GetForegroundWindow() or 0)
-        return Foreground(hwnd, int(_GetKeyboardLayout(_GetWindowThreadProcessId(hwnd, None)) or 0) if hwnd else 0)
+        hwnd = int(GetForegroundWindow() or 0)
+        return Foreground(hwnd, int(_GetKeyboardLayout(GetWindowThreadProcessId(hwnd, None)) or 0) if hwnd else 0)
 
     def request(self, hwnd: int, layout: int) -> None:
-        if not _PostMessage(hwnd, 0x0050, 0, layout):
+        if not PostMessageW(hwnd, 0x0050, 0, layout):
             raise OSError("The foreground application refused the keyboard-language request.")
 
 

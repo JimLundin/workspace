@@ -4,24 +4,21 @@ import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass
 
-from winapi._core import ULONG_PTR, fn, gdi32, user32
-from winapi.shell import BITMAPINFOHEADER, ICONINFO
-
-_CreateDIBSection = fn(
+from winapi._core import (
+    ULONG_PTR,
+    CreateCompatibleDC,
+    CreateDIBSection,
+    DeleteDC,
+    DeleteObject,
+    SelectObject,
+    SendMessageTimeoutW,
+    fn,
     gdi32,
-    "CreateDIBSection",
-    wintypes.HBITMAP,
-    wintypes.HDC,
-    ctypes.POINTER(BITMAPINFOHEADER),
-    wintypes.UINT,
-    ctypes.POINTER(ctypes.c_void_p),
-    wintypes.HANDLE,
-    wintypes.DWORD,
+    top_down,
+    user32,
 )
-_CreateCompatibleDC = fn(gdi32, "CreateCompatibleDC", wintypes.HDC, wintypes.HDC)
-_SelectObject = fn(gdi32, "SelectObject", wintypes.HGDIOBJ, wintypes.HDC, wintypes.HGDIOBJ)
-_DeleteObject = fn(gdi32, "DeleteObject", wintypes.BOOL, wintypes.HGDIOBJ)
-_DeleteDC = fn(gdi32, "DeleteDC", wintypes.BOOL, wintypes.HDC)
+from winapi.shell import ICONINFO
+
 _DrawIconEx = fn(
     user32,
     "DrawIconEx",
@@ -35,18 +32,6 @@ _DrawIconEx = fn(
     wintypes.UINT,
     wintypes.HBRUSH,
     wintypes.UINT,
-)
-_SendMessageTimeout = fn(
-    user32,
-    "SendMessageTimeoutW",
-    wintypes.LPARAM,
-    wintypes.HWND,
-    wintypes.UINT,
-    wintypes.WPARAM,
-    wintypes.LPARAM,
-    wintypes.UINT,
-    wintypes.UINT,
-    ctypes.POINTER(ULONG_PTR),
 )
 _GetClassLongPtr = fn(user32, "GetClassLongPtrW", ULONG_PTR, wintypes.HWND, ctypes.c_int)
 _GetIconInfo = fn(user32, "GetIconInfo", wintypes.BOOL, wintypes.HICON, ctypes.POINTER(ICONINFO))
@@ -76,16 +61,16 @@ def pixels(handle: int, size: int = 32) -> Pixels | None:
     """The adapter owns and releases its temporary DC/bitmap; the HICON is borrowed."""
     if not handle:
         return None
-    dc = _CreateCompatibleDC(None)
+    dc = CreateCompatibleDC(None)
     if not dc:
         return None
     bits = ctypes.c_void_p()
-    header = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), size, -size, 1, 32, 0, 0, 0, 0, 0, 0)
-    bitmap = _CreateDIBSection(dc, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
+    header = top_down(size, size)
+    bitmap = CreateDIBSection(dc, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
     try:
         if not bitmap:
             return None
-        previous = _SelectObject(dc, bitmap)
+        previous = SelectObject(dc, bitmap)
         try:
             ctypes.memset(bits, 0, size * size * 4)
             if not _DrawIconEx(dc, 0, 0, handle, size, size, 0, None, 3):
@@ -110,11 +95,11 @@ def pixels(handle: int, size: int = 32) -> Pixels | None:
                 )
             return Pixels(size, data)
         finally:
-            _SelectObject(dc, previous)
+            SelectObject(dc, previous)
     finally:
         if bitmap:
-            _DeleteObject(bitmap)
-        _DeleteDC(dc)
+            DeleteObject(bitmap)
+        DeleteDC(dc)
 
 
 def icon_size(handle: int) -> int | None:
@@ -132,7 +117,7 @@ def icon_size(handle: int) -> int | None:
         # GetIconInfo hands the caller copies of both bitmaps.
         for owned in (info.hbmColor, info.hbmMask):
             if owned:
-                _DeleteObject(owned)
+                DeleteObject(owned)
 
 
 def native_pixels(handle: int) -> Pixels | None:
@@ -147,6 +132,6 @@ def window_pixels(hwnd: int) -> Pixels | None:
     """
     for kind in (2, 0, 1):
         result = ULONG_PTR()
-        if _SendMessageTimeout(hwnd, 0x007F, kind, 0, 2, 30, ctypes.byref(result)) and result.value:
+        if SendMessageTimeoutW(hwnd, 0x007F, kind, 0, 2, 30, ctypes.byref(result)) and result.value:
             return native_pixels(result.value)
     return native_pixels(_GetClassLongPtr(hwnd, -34) or _GetClassLongPtr(hwnd, -14))

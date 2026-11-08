@@ -7,7 +7,25 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from typing import Final
 
-from winapi._core import LRESULT, NativeFunction, fn, gdi32, kernel32, last_error, shell32, user32
+from winapi._core import (
+    GUID,
+    LRESULT,
+    CreateDIBSection,
+    CreateWindowExW,
+    DeleteObject,
+    DestroyWindow,
+    GetCursorPos,
+    GetModuleHandleW,
+    NativeFunction,
+    PostMessageW,
+    SetForegroundWindow,
+    fn,
+    gdi32,
+    last_error,
+    shell32,
+    top_down,
+    user32,
+)
 from winapi.shapes import Rect
 
 WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
@@ -36,14 +54,6 @@ class WNDCLASSW(ctypes.Structure):
         ("lpszMenuName", wintypes.LPCWSTR),
         ("lpszClassName", wintypes.LPCWSTR),
     )
-
-
-class GUID(ctypes.Structure):
-    Data1: int
-    Data2: int
-    Data3: int
-    Data4: ctypes.Array[ctypes.c_ubyte]
-    _fields_ = (("Data1", wintypes.DWORD), ("Data2", wintypes.WORD), ("Data3", wintypes.WORD), ("Data4", wintypes.BYTE * 8))
 
 
 class NOTIFYICONDATAW(ctypes.Structure):
@@ -104,33 +114,6 @@ class NOTIFYICONIDENTIFIER(ctypes.Structure):
     _fields_ = (("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uID", wintypes.UINT), ("guidItem", GUID))
 
 
-class BITMAPINFOHEADER(ctypes.Structure):
-    biSize: int
-    biWidth: int
-    biHeight: int
-    biPlanes: int
-    biBitCount: int
-    biCompression: int
-    biSizeImage: int
-    biXPelsPerMeter: int
-    biYPelsPerMeter: int
-    biClrUsed: int
-    biClrImportant: int
-    _fields_ = (
-        ("biSize", wintypes.DWORD),
-        ("biWidth", wintypes.LONG),
-        ("biHeight", wintypes.LONG),
-        ("biPlanes", wintypes.WORD),
-        ("biBitCount", wintypes.WORD),
-        ("biCompression", wintypes.DWORD),
-        ("biSizeImage", wintypes.DWORD),
-        ("biXPelsPerMeter", wintypes.LONG),
-        ("biYPelsPerMeter", wintypes.LONG),
-        ("biClrUsed", wintypes.DWORD),
-        ("biClrImportant", wintypes.DWORD),
-    )
-
-
 if ctypes.sizeof(NOTIFYICONDATAW) != (976 if ctypes.sizeof(ctypes.c_void_p) == 8 else 956):
     raise ImportError(f"NOTIFYICONDATAW is {ctypes.sizeof(NOTIFYICONDATAW)} bytes; Windows expects a different size")
 
@@ -138,26 +121,7 @@ _RegisterClassW = fn(user32, "RegisterClassW", wintypes.ATOM, ctypes.POINTER(WND
 _RegisterWindowMessage = fn(user32, "RegisterWindowMessageW", wintypes.UINT, wintypes.LPCWSTR)
 TASKBAR_CREATED: Final = _RegisterWindowMessage("TaskbarCreated")
 _UnregisterClassW = fn(user32, "UnregisterClassW", wintypes.BOOL, wintypes.LPCWSTR, wintypes.HINSTANCE)
-_CreateWindowExW = fn(
-    user32,
-    "CreateWindowExW",
-    wintypes.HWND,
-    wintypes.DWORD,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    wintypes.DWORD,
-    ctypes.c_int,
-    ctypes.c_int,
-    ctypes.c_int,
-    ctypes.c_int,
-    wintypes.HWND,
-    wintypes.HMENU,
-    wintypes.HINSTANCE,
-    wintypes.LPVOID,
-)
 _DefWindowProcW = fn(user32, "DefWindowProcW", LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
-_DestroyWindow = fn(user32, "DestroyWindow", wintypes.BOOL, wintypes.HWND)
-_GetModuleHandleW = fn(kernel32, "GetModuleHandleW", wintypes.HMODULE, wintypes.LPCWSTR)
 _Shell_NotifyIconW = fn(shell32, "Shell_NotifyIconW", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW))
 _Shell_NotifyIconGetRect = fn(shell32, "Shell_NotifyIconGetRect", wintypes.LONG, ctypes.POINTER(NOTIFYICONIDENTIFIER), ctypes.POINTER(wintypes.RECT))
 _CreatePopupMenu = fn(user32, "CreatePopupMenu", wintypes.HMENU)
@@ -166,24 +130,9 @@ _TrackPopupMenu = fn(
     user32, "TrackPopupMenu", wintypes.BOOL, wintypes.HMENU, wintypes.UINT, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.HWND, ctypes.c_void_p
 )
 _DestroyMenu = fn(user32, "DestroyMenu", wintypes.BOOL, wintypes.HMENU)
-_SetForegroundWindow = fn(user32, "SetForegroundWindow", wintypes.BOOL, wintypes.HWND)
-_PostMessageW = fn(user32, "PostMessageW", wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
-_GetCursorPos = fn(user32, "GetCursorPos", wintypes.BOOL, ctypes.POINTER(wintypes.POINT))
 _CreateIconIndirect = fn(user32, "CreateIconIndirect", wintypes.HICON, ctypes.POINTER(ICONINFO))
 _DestroyIcon = fn(user32, "DestroyIcon", wintypes.BOOL, wintypes.HICON)
 _CreateBitmap = fn(gdi32, "CreateBitmap", wintypes.HBITMAP, ctypes.c_int, ctypes.c_int, wintypes.UINT, wintypes.UINT, ctypes.c_void_p)
-_CreateDIBSection = fn(
-    gdi32,
-    "CreateDIBSection",
-    wintypes.HBITMAP,
-    wintypes.HDC,
-    ctypes.POINTER(BITMAPINFOHEADER),
-    wintypes.UINT,
-    ctypes.POINTER(ctypes.c_void_p),
-    wintypes.HANDLE,
-    wintypes.DWORD,
-)
-_DeleteObject = fn(gdi32, "DeleteObject", wintypes.BOOL, wintypes.HGDIOBJ)
 
 _NIM_ADD, _NIM_MODIFY, _NIM_DELETE = 0, 1, 2
 _NIF_MESSAGE, _NIF_ICON, _NIF_TIP, _NIF_INFO = 0x01, 0x02, 0x04, 0x10
@@ -214,17 +163,17 @@ class AppWindow:
             return int(_DefWindowProcW(hwnd, message, wparam, lparam)) if result is None else result
 
         callback = WNDPROC(call)
-        instance = _GetModuleHandleW(None)
+        instance = GetModuleHandleW(None)
         window_class = WNDCLASSW(0, callback, 0, 0, instance, None, None, None, None, class_name or f"{title} class")
         if not _RegisterClassW(ctypes.byref(window_class)):
             raise last_error()
-        hwnd: int | None = _CreateWindowExW(0, window_class.lpszClassName, title, 0, 0, 0, 0, 0, None, None, instance, None)
+        hwnd: int | None = CreateWindowExW(0, window_class.lpszClassName, title, 0, 0, 0, 0, 0, None, None, instance, None)
         if not hwnd:
             raise last_error()
         return cls(int(hwnd), callback, window_class)
 
     def destroy(self) -> None:
-        _DestroyWindow(self.handle)
+        DestroyWindow(self.handle)
         _UnregisterClassW(self._class.lpszClassName, self._class.hInstance)
 
 
@@ -236,15 +185,15 @@ class Icon:
 
     @classmethod
     def draw(cls, size: int, bgra: bytes) -> Icon:
-        header = BITMAPINFOHEADER(ctypes.sizeof(BITMAPINFOHEADER), size, -size, 1, 32, 0, 0, 0, 0, 0, 0)
+        header = top_down(size, size)
         bits = ctypes.c_void_p()
-        color = _CreateDIBSection(None, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
+        color = CreateDIBSection(None, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
         ctypes.memmove(bits, bgra, size * size * 4)
         mask = _CreateBitmap(size, size, 1, 1, ctypes.create_string_buffer(size * size // 8))
         info = ICONINFO(True, 0, 0, mask, color)
         handle: int | None = _CreateIconIndirect(ctypes.byref(info))
-        _DeleteObject(mask)
-        _DeleteObject(color)
+        DeleteObject(mask)
+        DeleteObject(color)
         if not handle:
             raise last_error()
         return cls(int(handle))
@@ -325,10 +274,10 @@ def show_menu(window: int, items: Sequence[MenuItem]) -> int:
                 flags = _MF_STRING | (0 if item.enabled else _MF_GRAYED) | (_MF_CHECKED if item.checked else 0)
                 _AppendMenuW(menu, flags, item.id, item.text)
         point = wintypes.POINT()
-        _GetCursorPos(ctypes.byref(point))
-        _SetForegroundWindow(window)  # without this the menu doesn't close when clicking elsewhere
+        GetCursorPos(ctypes.byref(point))
+        SetForegroundWindow(window)  # without this the menu doesn't close when clicking elsewhere
         chosen = int(_TrackPopupMenu(menu, _TPM_RIGHTBUTTON | _TPM_NONOTIFY | _TPM_RETURNCMD, point.x, point.y, 0, window, None))
-        _PostMessageW(window, _WM_NULL, 0, 0)
+        PostMessageW(window, _WM_NULL, 0, 0)
         return chosen
     finally:
         _DestroyMenu(menu)

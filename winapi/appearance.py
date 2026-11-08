@@ -16,7 +16,7 @@ from enum import Enum, auto
 from typing import Protocol
 
 from cell import Cell
-from winapi._core import fn, gdi32, user32
+from winapi._core import GetDC, ReleaseDC, fn, gdi32, user32, winmm
 from winapi.shapes import Rect
 
 
@@ -97,12 +97,9 @@ class _HighContrast(ctypes.Structure):
 
 _SystemParametersInfoW = fn(user32, "SystemParametersInfoW", wintypes.BOOL, wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT)
 _GetSysColor = fn(user32, "GetSysColor", wintypes.DWORD, ctypes.c_int)
-_GetDC = fn(user32, "GetDC", wintypes.HDC, wintypes.HWND)
-_ReleaseDC = fn(user32, "ReleaseDC", ctypes.c_int, wintypes.HWND, wintypes.HDC)
 _GetPixel = fn(gdi32, "GetPixel", wintypes.DWORD, wintypes.HDC, ctypes.c_int, ctypes.c_int)
-_winmm = ctypes.WinDLL("winmm", use_last_error=True)
-_TimeBeginPeriod = fn(_winmm, "timeBeginPeriod", wintypes.UINT, wintypes.UINT)
-_TimeEndPeriod = fn(_winmm, "timeEndPeriod", wintypes.UINT, wintypes.UINT)
+_TimeBeginPeriod = fn(winmm, "timeBeginPeriod", wintypes.UINT, wintypes.UINT)
+_TimeEndPeriod = fn(winmm, "timeEndPeriod", wintypes.UINT, wintypes.UINT)
 
 
 class TimerPeriod(Protocol):
@@ -187,7 +184,7 @@ def background_frost(bounds: Rect) -> Frost:
     ink. Mixed or unavailable backgrounds need more shading. Only neighboring
     pixels are read, and no desktop image is retained.
     """
-    dc = _GetDC(None)
+    dc = GetDC(None)
     if not dc:
         return Frost.SMOKED
     # Sample the sides: above/below can contain a neighboring conversation bubble.
@@ -195,7 +192,7 @@ def background_frost(bounds: Rect) -> Frost:
     try:
         colors = tuple(color for px, py in points if (color := int(_GetPixel(dc, px, py))) != 0xFFFF_FFFF)
     finally:
-        _ReleaseDC(None, dc)
+        ReleaseDC(None, dc)
     return frost_for(colors)
 
 

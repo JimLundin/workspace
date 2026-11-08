@@ -16,11 +16,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from winapi._core import NativeFunction, fn, user32
-
-_ole32 = ctypes.WinDLL("ole32", use_last_error=True)
-_CoCreateInstance = fn(_ole32, "CoCreateInstance", ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)
-_AllowSetForegroundWindow = fn(user32, "AllowSetForegroundWindow", wintypes.BOOL, wintypes.DWORD)
+from winapi._core import AllowSetForegroundWindow, CoCreateInstance, NativeFunction
 
 type GuidBuffer = ctypes.Array[ctypes.c_char]
 
@@ -99,9 +95,9 @@ class VirtualDesktops:
         try:
             context = _CLSCTX_INPROC_SERVER | _CLSCTX_LOCAL_SERVER
             _check(
-                _CoCreateInstance(_DESKTOP_MANAGER, None, context, _IID_DESKTOP_MANAGER, ctypes.byref(desktops.manager)), "open the desktop manager"
+                CoCreateInstance(_DESKTOP_MANAGER, None, context, _IID_DESKTOP_MANAGER, ctypes.byref(desktops.manager)), "open the desktop manager"
             )
-            _check(_CoCreateInstance(_IMMERSIVE_SHELL, None, _CLSCTX_LOCAL_SERVER, _IID_SERVICE_PROVIDER, ctypes.byref(shell)), "reach the shell")
+            _check(CoCreateInstance(_IMMERSIVE_SHELL, None, _CLSCTX_LOCAL_SERVER, _IID_SERVICE_PROVIDER, ctypes.byref(shell)), "reach the shell")
             query = _method(shell, _QUERY_SERVICE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
             _check(query(shell, _SERVICE_DESKTOP_MANAGER_INTERNAL, _IID_DESKTOP_MANAGER_INTERNAL, ctypes.byref(desktops.internal)), "manage desktops")
             _check(query(shell, _IID_VIEW_COLLECTION, _IID_VIEW_COLLECTION, ctypes.byref(desktops.views)), "read application views")
@@ -181,7 +177,7 @@ class VirtualDesktops:
         target = ctypes.c_void_p()
         try:
             self._find(desktop, target)
-            _AllowSetForegroundWindow(_ASFW_ANY)
+            AllowSetForegroundWindow(_ASFW_ANY)
             _check(_method(self.internal, _SWITCH, ctypes.c_void_p)(self.internal, target), "switch desktops")
         finally:
             _release(target)

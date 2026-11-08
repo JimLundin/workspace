@@ -14,15 +14,13 @@ from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
 from cell import Cell
-from winapi._core import fn, kernel32
+from winapi._core import CoCreateInstance, fn, kernel32, ole32
 from winapi.audio import WAVEFORMATEX
 from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, Problem, Stall, dropout
 
-_ole32 = ctypes.WinDLL("ole32", use_last_error=True)
-_CoInitializeEx = fn(_ole32, "CoInitializeEx", ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)
-_CoUninitialize = fn(_ole32, "CoUninitialize", None)
-_CoCreateInstance = fn(_ole32, "CoCreateInstance", ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)
-_CoTaskMemFree = fn(_ole32, "CoTaskMemFree", None, ctypes.c_void_p)
+_CoInitializeEx = fn(ole32, "CoInitializeEx", ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)
+_CoUninitialize = fn(ole32, "CoUninitialize", None)
+_CoTaskMemFree = fn(ole32, "CoTaskMemFree", None, ctypes.c_void_p)
 _QueryPerformanceCounter = fn(kernel32, "QueryPerformanceCounter", wintypes.BOOL, ctypes.POINTER(ctypes.c_longlong))
 _QueryPerformanceFrequency = fn(kernel32, "QueryPerformanceFrequency", wintypes.BOOL, ctypes.POINTER(ctypes.c_longlong))
 
@@ -86,7 +84,7 @@ class NativeWasapi:
         _CoUninitialize()
 
     def create_enumerator(self, pointer: ctypes.c_void_p) -> int:
-        return _CoCreateInstance(_ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(pointer))
+        return CoCreateInstance(_ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(pointer))
 
     def free_format(self, pointer: ctypes.c_void_p) -> None:
         _CoTaskMemFree(pointer)

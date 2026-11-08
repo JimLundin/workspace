@@ -7,7 +7,31 @@ from ctypes import wintypes
 from pathlib import PureWindowsPath
 from typing import Final
 
-from winapi._core import LRESULT, ULONG_PTR, comctl32, dwmapi, fn, gdi32, kernel32, rect, user32
+from winapi._core import (
+    LRESULT,
+    ULONG_PTR,
+    CloseHandle,
+    CreateWindowExW,
+    DeleteObject,
+    DestroyWindow,
+    GetAsyncKeyState,
+    GetCurrentThreadId,
+    GetForegroundWindow,
+    GetModuleHandleW,
+    GetWindowThreadProcessId,
+    IsWindowVisible,
+    OpenProcess,
+    SetForegroundWindow,
+    SetWindowPos,
+    ShowWindow,
+    comctl32,
+    dwmapi,
+    fn,
+    gdi32,
+    kernel32,
+    rect,
+    user32,
+)
 from winapi.shapes import Rect, Window
 
 
@@ -29,13 +53,11 @@ class GUITHREADINFO(ctypes.Structure):
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 _EnumWindows = fn(user32, "EnumWindows", wintypes.BOOL, WNDENUMPROC, wintypes.LPARAM)
-_IsWindowVisible = fn(user32, "IsWindowVisible", wintypes.BOOL, wintypes.HWND)
 _IsWindow = fn(user32, "IsWindow", wintypes.BOOL, wintypes.HWND)
 _IsIconic = fn(user32, "IsIconic", wintypes.BOOL, wintypes.HWND)
 _IsZoomed = fn(user32, "IsZoomed", wintypes.BOOL, wintypes.HWND)
 _GetWindowTextLengthW = fn(user32, "GetWindowTextLengthW", ctypes.c_int, wintypes.HWND)
 _GetWindowTextW = fn(user32, "GetWindowTextW", ctypes.c_int, wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
-_GetWindowThreadProcessId = fn(user32, "GetWindowThreadProcessId", wintypes.DWORD, wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
 _GetWindowLongW = fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int)
 _SetWindowLongW = fn(user32, "SetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int, wintypes.LONG)
 _GetWindow = fn(user32, "GetWindow", wintypes.HWND, wintypes.HWND, wintypes.UINT)
@@ -43,44 +65,14 @@ _GetWindowRect = fn(user32, "GetWindowRect", wintypes.BOOL, wintypes.HWND, ctype
 _SetWindowRgn = fn(user32, "SetWindowRgn", ctypes.c_int, wintypes.HWND, wintypes.HRGN, wintypes.BOOL)
 _GetWindowRgnBox = fn(user32, "GetWindowRgnBox", ctypes.c_int, wintypes.HWND, ctypes.POINTER(wintypes.RECT))
 _CreateRectRgn = fn(gdi32, "CreateRectRgn", wintypes.HRGN, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int)
-_DeleteObject = fn(gdi32, "DeleteObject", wintypes.BOOL, wintypes.HGDIOBJ)
 _GetDpiForWindow = fn(user32, "GetDpiForWindow", wintypes.UINT, wintypes.HWND)
-_GetForegroundWindow = fn(user32, "GetForegroundWindow", wintypes.HWND)
-_SetForegroundWindow = fn(user32, "SetForegroundWindow", wintypes.BOOL, wintypes.HWND)
 _BringWindowToTop = fn(user32, "BringWindowToTop", wintypes.BOOL, wintypes.HWND)
 _AttachThreadInput = fn(user32, "AttachThreadInput", wintypes.BOOL, wintypes.DWORD, wintypes.DWORD, wintypes.BOOL)
-_ShowWindow = fn(user32, "ShowWindow", wintypes.BOOL, wintypes.HWND, ctypes.c_int)
-_GetAsyncKeyState = fn(user32, "GetAsyncKeyState", ctypes.c_short, ctypes.c_int)
 _GetGUIThreadInfo = fn(user32, "GetGUIThreadInfo", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(GUITHREADINFO))
-_SetWindowPos = fn(
-    user32, "SetWindowPos", wintypes.BOOL, wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT
-)
 _FindWindowW = fn(user32, "FindWindowW", wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)
-_CreateWindowExW = fn(
-    user32,
-    "CreateWindowExW",
-    wintypes.HWND,
-    wintypes.DWORD,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    wintypes.DWORD,
-    ctypes.c_int,
-    ctypes.c_int,
-    ctypes.c_int,
-    ctypes.c_int,
-    wintypes.HWND,
-    wintypes.HMENU,
-    wintypes.HINSTANCE,
-    wintypes.LPVOID,
-)
-_DestroyWindow = fn(user32, "DestroyWindow", wintypes.BOOL, wintypes.HWND)
-_GetCurrentThreadId = fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
-_GetModuleHandleW = fn(kernel32, "GetModuleHandleW", wintypes.HMODULE, wintypes.LPCWSTR)
-_OpenProcess = fn(kernel32, "OpenProcess", wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
 _QueryFullProcessImageNameW = fn(
     kernel32, "QueryFullProcessImageNameW", wintypes.BOOL, wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
 )
-_CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _DwmGetWindowAttribute = fn(dwmapi, "DwmGetWindowAttribute", ctypes.c_long, wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD)
 _SUBCLASSPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM, ULONG_PTR, ULONG_PTR)
 _SetWindowSubclass = fn(comctl32, "SetWindowSubclass", wintypes.BOOL, wintypes.HWND, _SUBCLASSPROC, ULONG_PTR, ULONG_PTR)
@@ -126,8 +118,8 @@ def _title(hwnd: int) -> str:
 
 def _exe(hwnd: int) -> str:
     pid = wintypes.DWORD()
-    _GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    process = _OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    process = OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
     if not process:
         return ""
     try:
@@ -137,7 +129,7 @@ def _exe(hwnd: int) -> str:
             return ""
         return PureWindowsPath(str(buffer.value)).name.lower()
     finally:
-        _CloseHandle(process)
+        CloseHandle(process)
 
 
 def _cloaked(hwnd: int) -> bool:
@@ -147,7 +139,7 @@ def _cloaked(hwnd: int) -> bool:
 
 
 def _on_taskbar(hwnd: int, *, include_cloaked: bool = False) -> bool:
-    if not _IsWindowVisible(hwnd) or _GetWindow(hwnd, _GW_OWNER) or (not include_cloaked and _cloaked(hwnd)):
+    if not IsWindowVisible(hwnd) or _GetWindow(hwnd, _GW_OWNER) or (not include_cloaked and _cloaked(hwnd)):
         return False
     return not (int(_GetWindowLongW(hwnd, _GWL_EXSTYLE)) & _WS_EX_TOOLWINDOW) and _GetWindowTextLengthW(hwnd) > 0
 
@@ -170,12 +162,12 @@ def exists(hwnd: int) -> bool:
 
 
 def foreground() -> int:
-    return int(_GetForegroundWindow() or 0)
+    return int(GetForegroundWindow() or 0)
 
 
 def process_id(hwnd: int) -> int:
     pid = wintypes.DWORD()
-    _GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return int(pid.value)
 
 
@@ -194,17 +186,17 @@ def focus(hwnd: int, timeout_s: float = 1.0) -> bool:
 
 def _focus(hwnd: int) -> bool:
     if _IsIconic(hwnd):
-        _ShowWindow(hwnd, SW_RESTORE)
-    if _SetForegroundWindow(hwnd) and foreground() == hwnd:
+        ShowWindow(hwnd, SW_RESTORE)
+    if SetForegroundWindow(hwnd) and foreground() == hwnd:
         return True
     # Windows only lets the program the user is using change the foreground window.
     # Joining its input queue for a moment makes this thread count as that program.
-    current = _GetWindowThreadProcessId(foreground(), None)
-    ours = _GetCurrentThreadId()
+    current = GetWindowThreadProcessId(foreground(), None)
+    ours = GetCurrentThreadId()
     attached = bool(current and current != ours and _AttachThreadInput(ours, current, True))
     try:
         _BringWindowToTop(hwnd)
-        _SetForegroundWindow(hwnd)
+        SetForegroundWindow(hwnd)
     finally:
         if attached:
             _AttachThreadInput(ours, current, False)
@@ -221,7 +213,7 @@ def exe(hwnd: int) -> str:
 
 def show(hwnd: int, command: int) -> None:
     """SW_MAXIMIZE, SW_MINIMIZE or SW_RESTORE."""
-    _ShowWindow(hwnd, command)
+    ShowWindow(hwnd, command)
 
 
 def is_maximized(hwnd: int) -> bool:
@@ -237,7 +229,7 @@ def dragging() -> bool:
     info = GUITHREADINFO()
     info.cbSize = ctypes.sizeof(GUITHREADINFO)
     in_loop = bool(_GetGUIThreadInfo(0, ctypes.byref(info))) and bool(info.flags & _GUI_INMOVESIZE)
-    return in_loop or bool(_GetAsyncKeyState(_VK_LBUTTON) & 0x8000)
+    return in_loop or bool(GetAsyncKeyState(_VK_LBUTTON) & 0x8000)
 
 
 def cloaked(hwnd: int) -> bool:
@@ -287,12 +279,12 @@ def set_region(hwnd: int, box: Rect | None) -> None:
     shape = _CreateRectRgn(box.left, box.top, box.right, box.bottom) if box is not None else None
     # On success Windows owns the region; it remains ours to delete only on failure.
     if not _SetWindowRgn(hwnd, shape, True) and shape:
-        _DeleteObject(shape)
+        DeleteObject(shape)
 
 
 def move(hwnd: int, to: Rect) -> None:
     """Positions by the outer rectangle (see `outer_rect`)."""
-    _SetWindowPos(hwnd, None, to.left, to.top, to.width, to.height, _SWP_NOZORDER | _SWP_NOACTIVATE)
+    SetWindowPos(hwnd, None, to.left, to.top, to.width, to.height, _SWP_NOZORDER | _SWP_NOACTIVATE)
 
 
 def make_overlay(hwnd: int, *, click_through: bool = True) -> None:
@@ -312,10 +304,10 @@ def show_quietly(hwnd: int, *, visible: bool, topmost: bool = True) -> None:
     SW_SHOWNA preserves it. Overlays stay on top by default.
     """
     if visible:
-        _ShowWindow(hwnd, _SW_SHOWNA)
-        _SetWindowPos(hwnd, _HWND_TOPMOST if topmost else -2, 0, 0, 0, 0, _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE)
+        ShowWindow(hwnd, _SW_SHOWNA)
+        SetWindowPos(hwnd, _HWND_TOPMOST if topmost else -2, 0, 0, 0, 0, _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE)
     else:
-        _ShowWindow(hwnd, _SW_HIDE)
+        ShowWindow(hwnd, _SW_HIDE)
 
 
 def allow_activation(hwnd: int, *, allowed: bool) -> None:
@@ -334,11 +326,11 @@ def find(title: str) -> int | None:
 def create_hidden(title: str) -> int:
     """A window that is never shown: something other processes can `find` and post
     messages to. The messages arrive in this thread's message loop."""
-    hwnd: int | None = _CreateWindowExW(0, "STATIC", title, _WS_POPUP, 0, 0, 0, 0, None, None, _GetModuleHandleW(None), None)
+    hwnd: int | None = CreateWindowExW(0, "STATIC", title, _WS_POPUP, 0, 0, 0, 0, None, None, GetModuleHandleW(None), None)
     if not hwnd:
         raise ctypes.WinError(ctypes.get_last_error())
     return int(hwnd)
 
 
 def destroy(hwnd: int) -> None:
-    _DestroyWindow(hwnd)
+    DestroyWindow(hwnd)

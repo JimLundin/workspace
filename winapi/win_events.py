@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from winapi import system
-from winapi._core import fn, user32
+from winapi._core import GetAsyncKeyState, fn, user32
 
 _EVENT_SYSTEM_FOREGROUND: Final = 0x0003
 _EVENT_SYSTEM_CAPTURESTART: Final = 0x0008
@@ -40,7 +40,6 @@ _SetWinEventHook = fn(
     wintypes.DWORD,
 )
 _UnhookWinEvent = fn(user32, "UnhookWinEvent", wintypes.BOOL, wintypes.HANDLE)
-_GetAsyncKeyState = fn(user32, "GetAsyncKeyState", ctypes.c_short, ctypes.c_int)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +78,7 @@ type WinEvent = Foreground | CaptureStart | SwitchStart | SwitchEnd
 
 
 def _button_held() -> bool:
-    return any(_GetAsyncKeyState(key) & 0x8000 for key in (_VK_LBUTTON, _VK_RBUTTON, _VK_MBUTTON))
+    return any(GetAsyncKeyState(key) & 0x8000 for key in (_VK_LBUTTON, _VK_RBUTTON, _VK_MBUTTON))
 
 
 def _event(kind: int, window: int, object_id: int) -> WinEvent | None:

@@ -10,7 +10,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from winapi._core import ULONG_PTR, fn, kernel32, last_error
+from winapi._core import GUID, ULONG_PTR, CloseHandle, CreateEventW, fn, kernel32, last_error
 
 _cfgmgr32 = ctypes.WinDLL("cfgmgr32", use_last_error=True)
 _hid = ctypes.WinDLL("hid", use_last_error=True)
@@ -24,10 +24,6 @@ _DEADLINE_MS: Final = 250
 _GET_VALUE, _SET_VALUE, _UNHANDLED = 0x08, 0x07, 0xFF
 _RGB_MATRIX, _EFFECT = 3, 2
 """VIA's id_qmk_rgb_matrix_channel and its effect value: 0 turns the matrix off without saving."""
-
-
-class Guid(ctypes.Structure):
-    _fields_ = (("Data1", wintypes.DWORD), ("Data2", wintypes.WORD), ("Data3", wintypes.WORD), ("Data4", wintypes.BYTE * 8))
 
 
 class Overlapped(ctypes.Structure):
@@ -56,7 +52,7 @@ class HidCaps(ctypes.Structure):
     )
 
 
-_HidD_GetHidGuid = fn(_hid, "HidD_GetHidGuid", None, ctypes.POINTER(Guid))
+_HidD_GetHidGuid = fn(_hid, "HidD_GetHidGuid", None, ctypes.POINTER(GUID))
 _HidD_GetPreparsedData = fn(_hid, "HidD_GetPreparsedData", wintypes.BOOLEAN, wintypes.HANDLE, ctypes.POINTER(ctypes.c_void_p))
 _HidD_FreePreparsedData = fn(_hid, "HidD_FreePreparsedData", wintypes.BOOLEAN, ctypes.c_void_p)
 _HidP_GetCaps = fn(_hid, "HidP_GetCaps", wintypes.LONG, ctypes.c_void_p, ctypes.POINTER(HidCaps))
@@ -65,7 +61,7 @@ _CM_Get_Device_Interface_List_SizeW = fn(
     "CM_Get_Device_Interface_List_SizeW",
     wintypes.DWORD,
     ctypes.POINTER(wintypes.ULONG),
-    ctypes.POINTER(Guid),
+    ctypes.POINTER(GUID),
     wintypes.LPCWSTR,
     wintypes.ULONG,
 )
@@ -73,7 +69,7 @@ _CM_Get_Device_Interface_ListW = fn(
     _cfgmgr32,
     "CM_Get_Device_Interface_ListW",
     wintypes.DWORD,
-    ctypes.POINTER(Guid),
+    ctypes.POINTER(GUID),
     wintypes.LPCWSTR,
     wintypes.LPWSTR,
     wintypes.ULONG,
@@ -91,8 +87,6 @@ _CreateFileW = fn(
     wintypes.DWORD,
     wintypes.HANDLE,
 )
-_CreateEventW = fn(kernel32, "CreateEventW", wintypes.HANDLE, wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR)
-_CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 _WriteFile = fn(kernel32, "WriteFile", wintypes.BOOL, wintypes.HANDLE, wintypes.LPCVOID, wintypes.DWORD, wintypes.LPDWORD, ctypes.POINTER(Overlapped))
 _ReadFile = fn(kernel32, "ReadFile", wintypes.BOOL, wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, wintypes.LPDWORD, ctypes.POINTER(Overlapped))
 _GetOverlappedResultEx = fn(
@@ -138,7 +132,7 @@ def effect_reply(sent: bytes, reply: bytes) -> Effect | Absent:
 
 def _paths(vendor: int, product: int) -> tuple[str, ...]:
     """HID interface paths of this keyboard, from Windows' present device list."""
-    guid = Guid()
+    guid = GUID()
     _HidD_GetHidGuid(ctypes.byref(guid))
     for _ in range(3):
         size = wintypes.ULONG()
@@ -181,7 +175,7 @@ def _wait(handle: int, overlapped: Overlapped, *, started: bool) -> int | None:
 
 def _exchange(handle: int, message: bytes) -> bytes | None:
     """Send one message and return the report that answers it; None if the keyboard stays silent."""
-    event = _CreateEventW(None, True, False, None)
+    event = CreateEventW(None, True, False, None)
     if not event:
         raise last_error()
     try:
@@ -201,7 +195,7 @@ def _exchange(handle: int, message: bytes) -> bytes | None:
                 return reply
         return None
     finally:
-        _CloseHandle(event)
+        CloseHandle(event)
 
 
 def exchange(vendor: int, product: int, message: bytes) -> bytes | None:
@@ -214,5 +208,5 @@ def exchange(vendor: int, product: int, message: bytes) -> bytes | None:
             if _raw_hid(handle):
                 return _exchange(handle, message)
         finally:
-            _CloseHandle(handle)
+            CloseHandle(handle)
     return None
