@@ -2,12 +2,13 @@
 
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import Final, assert_never
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
@@ -180,49 +181,68 @@ class OverlayHandle(QtWidgets.QWidget):
         self.drag.end()
 
 
-class KeymapOverlay:
-    __slots__ = (
-        "__weakref__",
-        "_canvas",
-        "_desktop",
-        "_drag",
-        "_frame",
-        "_handle",
-        "_handle_frame",
-        "_heading",
-        "_highlight_timer",
-        "_highlights",
-        "_position",
-        "_view",
-        "_window",
-    )
+@dataclass(frozen=True, slots=True)
+class _Overlaid:
+    position: Point | None
+    """Where the person put the overlay's handle; None until it is first placed."""
+    drag: Offset | None = None
+    """The pointer's offset from the handle while dragging."""
+    view: tuple[Layer | None, str, tuple[Rect, ...]] | None = None
+    highlights: KeyHighlights = field(default_factory=KeyHighlights)
+    highlight_timer: QtCore.QTimer | None = None
 
-    def __init__(self, root: QtWidgets.QApplication, desktop: OverlayDesktop | None = None) -> None:
-        self._desktop: OverlayDesktop = desktop if desktop is not None else NativeOverlayDesktop()
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
+class KeymapOverlay:
+    _desktop: OverlayDesktop
+    _window: QtWidgets.QWidget
+    _heading: QtWidgets.QLabel
+    _canvas: KeymapCanvas
+    _frame: int
+    _handle: OverlayHandle
+    _handle_frame: int
+    _state: Cell[_Overlaid]
+
+    @classmethod
+    def open(cls, _root: QtWidgets.QApplication, desktop: OverlayDesktop | None = None) -> KeymapOverlay:
+        shown = desktop if desktop is not None else NativeOverlayDesktop()
         theme = tokens(scheme())
-        self._window = QtWidgets.QWidget()
-        self._window.setWindowTitle("Workspace keyboard overlay")
-        self._window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
-        self._window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self._window.setStyleSheet(window_style(theme))
-        self._window.setWindowOpacity(0.55)
-        layout = column(surface(self._window, theme, 20))
+        window = QtWidgets.QWidget()
+        window.setWindowTitle("Workspace keyboard overlay")
+        window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        window.setStyleSheet(window_style(theme))
+        window.setWindowOpacity(0.55)
+        layout = column(surface(window, theme, 20))
         layout.setContentsMargins(12, 10, 12, 12)
         layout.setSpacing(8)
-        self._heading = label("", "muted")
-        self._heading.setContentsMargins(4, 0, 0, 0)
-        layout.addWidget(self._heading)
-        self._canvas = KeymapCanvas(theme)
-        layout.addWidget(self._canvas)
-        self._frame = self._desktop.prepare(self._window, click_through=True)
-        self._handle = OverlayHandle(OverlayDrag(self._start_drag, self._drag_to, self._finish_drag), self._desktop.cursor)
-        self._handle.setWindowTitle("Workspace keyboard overlay handle")
-        self._handle_frame = self._desktop.prepare(self._handle, click_through=False)
-        self._position = self._desktop.load_position()
-        self._drag: Offset | None = None
-        self._view: tuple[Layer | None, str, tuple[Rect, ...]] | None = None
-        self._highlights = KeyHighlights()
-        self._highlight_timer: QtCore.QTimer | None = None
+        heading = label("", "muted")
+        heading.setContentsMargins(4, 0, 0, 0)
+        layout.addWidget(heading)
+        canvas = KeymapCanvas(theme)
+        layout.addWidget(canvas)
+        frame = shown.prepare(window, click_through=True)
+
+        # The handle reports its drag to the overlay made just after it.
+        def start(point: Point) -> None:
+            overlay._start_drag(point)
+
+        def move(point: Point) -> None:
+            overlay._drag_to(point)
+
+        def end() -> None:
+            overlay._finish_drag()
+
+        drag = OverlayDrag(start, move, end)
+        handle = OverlayHandle(drag, shown.cursor)
+        handle.setWindowTitle("Workspace keyboard overlay handle")
+        handle_frame = shown.prepare(handle, click_through=False)
+        overlay = cls(shown, window, heading, canvas, frame, handle, handle_frame, Cell(_Overlaid(shown.load_position())))
+        return overlay
+
+    @property
+    def _position(self) -> Point | None:
+        return self._state.get().position
 
     def show(self, layer: Layer | None, title: str, work: Rect, *, visible: bool, pressed: frozenset[Scancode] = frozenset()) -> None:
         if not visible:
@@ -230,45 +250,49 @@ class KeymapOverlay:
             self.set_pressed(frozenset(), reset=True)
             self._handle.hide()
             self._window.hide()
-            self._view = None
+            self._state.set(replace(self._state.get(), view=None))
             return
         areas = self._desktop.work_areas() or (work,)
         view = (layer, title, areas)
-        if view == self._view:
+        if view == self._state.get().view:
             self.set_pressed(pressed)
             return
-        if self._position is not None:
-            work = nearest_work_area(self._position, areas)
+        if (placed := self._position) is not None:
+            work = nearest_work_area(placed, areas)
         density = self._window.devicePixelRatioF()
         scale = max(0.2, min(0.85, (work.width / density - 32) / (14 * _UNIT), (work.height / density - 180) / (4 * (_HEIGHT + _GAP))))
         self._heading.setText(f"Workspace keyboard · {title}")
         self._canvas.draw(layer, scale)
-        self._view = view
+        self._state.set(replace(self._state.get(), view=view))
         self.set_pressed(pressed)
         self._window.adjustSize()
-        if self._position is None:
-            self._position = Point(work.left + work.width // 2, work.bottom - round((self._window.height() + self._handle.height() + 90) * density))
-        self._move(self._position)
+        placed = self._position
+        if placed is None:
+            placed = Point(work.left + work.width // 2, work.bottom - round((self._window.height() + self._handle.height() + 90) * density))
+        self._move(placed)
         self._desktop.present(self._window)
         self._desktop.present(self._handle)
 
     def set_pressed(self, pressed: frozenset[Scancode], *, reset: bool = False) -> None:
         if reset:
-            self._highlights = KeyHighlights()
-        if self._view is not None:
-            self._highlights = self._highlights.updated(pressed, self._desktop.clock())
+            new_highlights = KeyHighlights()
+            self._state.set(replace(self._state.get(), highlights=new_highlights))
+        if self._state.get().view is not None:
+            new_highlights = self._state.get().highlights.updated(pressed, self._desktop.clock())
+            self._state.set(replace(self._state.get(), highlights=new_highlights))
             self._paint_highlights()
 
     def _paint_highlights(self) -> None:
-        cancel(self._highlight_timer)
-        self._highlight_timer = None
+        cancel(self._state.get().highlight_timer)
+        self._state.set(replace(self._state.get(), highlight_timer=None))
         now = self._desktop.clock()
-        self._canvas.press(frozenset(PHYSICAL_NAMES[key] for key in self._highlights.visible(now)))
-        if (delay := self._highlights.delay(now)) is not None:
-            self._highlight_timer = later(self._window, delay, self._paint_highlights)
+        self._canvas.press(frozenset(PHYSICAL_NAMES[key] for key in self._state.get().highlights.visible(now)))
+        if (delay := self._state.get().highlights.delay(now)) is not None:
+            new_highlight_timer = later(self._window, delay, self._paint_highlights)
+            self._state.set(replace(self._state.get(), highlight_timer=new_highlight_timer))
 
     def _move(self, position: Point) -> None:
-        self._position = position
+        self._state.set(replace(self._state.get(), position=position))
         x, y = position.x, position.y
         scale = self._window.devicePixelRatioF()
         width, height = round(self._window.width() * scale), round(self._window.height() * scale)
@@ -279,30 +303,30 @@ class KeymapOverlay:
         self._desktop.move(self._handle_frame, Rect(left, y, left + handle_width, y + handle_height))
 
     def _start_drag(self, point: Point) -> None:
-        if self._position is not None and self._view is not None:
-            self._drag = point - self._position
+        overlaid = self._state.get()
+        if overlaid.position is not None and overlaid.view is not None:
+            self._state.set(replace(overlaid, drag=point - overlaid.position))
 
     def _drag_to(self, point: Point) -> None:
-        if self._drag is not None:
-            self._move(point - self._drag)
+        if (offset := self._state.get().drag) is not None:
+            self._move(point - offset)
 
     def _finish_drag(self) -> None:
-        if self._drag is None:
+        if self._state.get().drag is None:
             return
-        self._drag = None
-        if self._position is not None:
+        self._state.set(replace(self._state.get(), drag=None))
+        if (placed := self._position) is not None:
             areas = self._desktop.work_areas()
             if areas:
                 scale = self._window.devicePixelRatioF()
-                self._move(
-                    fit_position(
-                        self._position,
-                        Size(round(self._window.width() * scale), round((self._window.height() + self._handle.height() + 4) * scale)),
-                        nearest_work_area(self._position, areas),
-                    )
+                placed = fit_position(
+                    placed,
+                    Size(round(self._window.width() * scale), round((self._window.height() + self._handle.height() + 4) * scale)),
+                    nearest_work_area(placed, areas),
                 )
+                self._move(placed)
             try:
-                self._desktop.save_position(self._position)
+                self._desktop.save_position(placed)
             except OSError:
                 traceback.print_exc()
 

@@ -436,7 +436,7 @@ class Ui:
             if overlay is None:
                 if not visible:
                     return
-                overlay = KeymapOverlay(root)
+                overlay = KeymapOverlay.open(root)
                 self._built.set(replace(self._built.get(), overlay=overlay))
             overlay.show(layer, title, work, visible=visible, pressed=pressed)
 

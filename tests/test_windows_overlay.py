@@ -74,7 +74,7 @@ class HiddenDesktop:
 def hidden_overlay() -> Generator[tuple[QtWidgets.QApplication, KeymapOverlay, HiddenDesktop]]:
     root = application()
     desktop = HiddenDesktop()
-    overlay = KeymapOverlay(root, desktop)
+    overlay = KeymapOverlay.open(root, desktop)
     try:
         overlay.show(None, "BASE", WORK, visible=True)
         yield root, overlay, desktop
