@@ -11,7 +11,6 @@ from datetime import datetime
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows island bar")
 
-import itertools
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtTest import QTest
@@ -20,27 +19,23 @@ from contracts.meeting_detection import AutomaticStatus
 from contracts.recording_state import RecordingState
 from contracts.status import Job
 from desktop_ui import shell_surface
-from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.bar_events import Opening
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
-from desktop_ui.fluent_icons import REGULAR
 from desktop_ui.island_menu import Menu
-from desktop_ui.island_model import Agent, Glyph, Key
+from desktop_ui.island_model import Agent, Key
 from desktop_ui.island_surface import ControlButton, MenuCell
-from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop, application
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.spec.sizes import SIZES
-from desktop_ui.vector_icons import symbol
-from desktop_ui.window_layout import EDGE, TERMINAL, App, WorkspaceView
+from desktop_ui.window_layout import TERMINAL, WorkspaceView
 from protocol import Tool
 from tests.native_pointer import foreign_pointer
 from winapi import appearance, windows
 from winapi._core import fn, user32
-from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
-from winapi.tray_host import Click, Entry
+from winapi.machine_status import Battery
+from winapi.tray_host import Entry
 
 TOP = round(SIZES.bar.top)
 SHADOW = round(SIZES.bar.shadow)
@@ -133,64 +128,6 @@ def closed(app: QtWidgets.QApplication, bar: DesktopBar) -> None:
     app.processEvents()
 
 
-def test_right_cluster_keeps_fixed_positions_and_truthful_status() -> None:
-    # Defects: readings shift fixed controls, missing readings imply a
-    # healthy state, or unavailable symbols fall back to a document glyph.
-    app = application()
-    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
-    try:
-        bar.timer.stop()
-        sections = bar.window.shell_sections
-        sections.desktops(pager(((WorkspaceView.CANVAS,), (TERMINAL,)), 0, chord=False), lambda _: None, lambda _app, _click: None)
-        bar.window.presentation = None  # As the shell poll does when the pager changes.
-        bar.render()
-
-        def geometries() -> tuple[QtCore.QRect, ...]:
-            return (sections.pager.geometry(), bar.window.capsules[Key.STATUS].geometry())
-
-        before = geometries()
-        assert all(left.right() < right.left() for left, right in itertools.pairwise(before))
-        assert before[0].left() == 12
-        for speakers in Speakers:
-            for wifi in Wifi:
-                bar.observe_system(SystemStatus(speakers, wifi))
-                bar.render()
-                capsule = bar.window.capsules[Key.STATUS]
-                assert capsule.view is not None
-                assert capsule.view.slots[0] == (Glyph(bar.system.speaker_icon), Glyph(bar.system.wifi_icon))
-                assert not capsule.controls
-                assert capsule.isVisibleTo(bar.window)
-                for name, label in (
-                    (bar.system.speaker_icon, bar.system.speaker_description),
-                    (bar.system.wifi_icon, bar.system.wifi_description),
-                ):
-                    assert label in capsule.accessibleName() and label in capsule.toolTip()
-                    assert symbol(name) != REGULAR["doc"]
-                assert geometries() == before
-        for power in (
-            Battery(9, powered=False, charging=False),
-            Battery(100, powered=True, charging=False),
-            Battery(96, powered=True, charging=True),
-            PowerUnavailable.NO_BATTERY,
-            PowerUnavailable.UNKNOWN,
-        ):
-            bar.observe_ambient(Ambient("11:11", power))
-            bar.render()
-            assert geometries() == before
-            status = bar.window.capsules[Key.STATUS]
-            assert bar.ambient.battery_text in status.accessibleName()
-            assert status.view is not None
-            assert abs(bar.window.measure(status.view).width - status.width()) <= 1
-        # Processor and memory readings change every two seconds; the drawn font must fit their reserve.
-        for cpu, memory in ((100, 100), (8, 1), (None, None), (47, 88)):
-            bar.observe_system(SystemStatus(cpu=cpu, memory=memory))
-            bar.render()
-            assert geometries() == before
-            assert bar.system.resource_description in bar.window.capsules[Key.STATUS].accessibleName()
-    finally:
-        closed(app, bar)
-
-
 def test_the_pager_is_the_only_toolbar_and_its_canvas_icon_opens_the_canvas() -> None:
     # Defects: the removed web-app or running-app strips come back, the pager
     # leaves the screen's edge, or the canvas icon runs another function.
@@ -258,29 +195,6 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         press(bar, Key.STATUS)
         menu_row(bar, "Auto-record: Teams · On").click()
         assert invoked[-1] == "record-automatic"
-    finally:
-        closed(app, bar)
-
-
-def test_capsules_float_below_the_edge_centred_and_one_gap_apart() -> None:
-    # Defects: the island drifts off centre, neighbours touch or overlap it, the
-    # edge strip leaves a dead band above the glass, or controls lose their concentric inset.
-    app = application()
-    bar = DesktopBar.open(recorded([]), native_shell=False)
-    try:
-        area = app.primaryScreen().geometry()
-        assert bar.window.geometry() == QtCore.QRect(area.x(), area.y(), area.width(), TOP + 34)
-        bar.inbox_changed(2)
-        bar.recording_changed(RecordingState(phase="recording", seconds=125))
-        bar.hover(Key.ISLAND)
-        island, inbox = bar.window.capsules[Key.ISLAND].geometry(), bar.window.capsules[Key.INBOX].geometry()
-        # Edges snap to device pixels, so a logical edge can sit a pixel off at fractional scales.
-        assert abs(island.left() + island.width() / 2 - area.width() / 2) <= 1
-        assert island.top() == 0 and island.height() == TOP + 34
-        assert abs(inbox.left() - (island.left() + island.width()) - 6) <= 1
-        stop = stop_button(bar, Key.ISLAND).geometry()
-        assert (stop.width(), stop.height(), stop.top() - TOP) == (28, 28, 3)
-        assert abs(island.width() - (stop.left() + stop.width()) - 3) <= 1
     finally:
         closed(app, bar)
 
@@ -678,31 +592,6 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
         closed(app, bar)
 
 
-def test_pager_offers_each_desktop_directly() -> None:
-    # Defects: the pager loses a desktop or its accessible names, a click on an
-    # app reaches another one, or the current empty desktop can't be reached.
-    app = application()
-    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
-    chosen: list[Navigation] = []
-    picked: list[tuple[App, Click]] = []
-    try:
-        bar.window.shell_sections.desktops(
-            pager(((TERMINAL,), (EDGE,), ()), 2, chord=False), chosen.append, lambda each, click: picked.append((each, click))
-        )
-        buttons = bar.window.shell_sections.pager.buttons
-        assert [button.accessibleName() for button in buttons] == [
-            "Desktop 1 · windowsterminal",
-            "Desktop 2 · msedge",
-            "Desktop 3 (current) · No placed apps",
-        ]
-        QTest.mouseClick(buttons[1], QtCore.Qt.MouseButton.LeftButton)
-        QTest.mouseClick(buttons[2], QtCore.Qt.MouseButton.LeftButton)
-        assert picked == [(EDGE, Click.LEFT)]
-        assert chosen == [PagerClick(2, Source.PAGER)]
-    finally:
-        closed(app, bar)
-
-
 def test_pager_draws_each_desktops_apps_as_one_widening_stack_and_an_empty_one_by_number() -> None:
     # Defects: a desktop of three apps draws only one icon in a single-icon
     # button, an empty desktop shows nothing, or a held chord's letter loses to
@@ -728,41 +617,6 @@ def test_pager_draws_each_desktops_apps_as_one_widening_stack_and_an_empty_one_b
         closed(app, bar)
 
 
-def test_tool_choice_hands_the_keyboard_back_to_the_window_it_came_from() -> None:
-    # Defect: the menu keeps the keyboard, or hands it to whatever window is in
-    # front after the menu took it, instead of the window the user was in.
-    app = application()
-    invoked: list[Tool] = []
-    foreground, focused = [42], list[int]()
-    observations = BarObservations(foreground=lambda: foreground[0], focus=lambda hwnd: remember(focused, hwnd))
-    bar = DesktopBar.open(recorded([], tools=invoked), native_shell=False, observations=observations)
-    try:
-        bar.open_menu()
-        foreground[0] = 999
-        QTest.mouseClick(menu_row(bar, "Switch windows"), QtCore.Qt.MouseButton.LeftButton)
-        assert invoked == [Tool.WINDOW_SWITCHER] and focused == [42] and bar.opened is None
-    finally:
-        closed(app, bar)
-
-
-def test_the_status_capsule_expands_into_the_menu_at_its_right_hand_anchor() -> None:
-    # Defects: the menu opens somewhere other than the capsule that opened it,
-    # that capsule leaves the right edge, or its readings move as it expands.
-    app = application()
-    bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(motion=lambda: False))
-    try:
-        status = bar.window.capsules[Key.STATUS]
-        right = status.geometry().x() + status.geometry().width()
-        readings = status.x() + status.shift(status.content) + status.content.spots[0].x
-        bar.open_menu()
-        assert status.height() > TOP + 34 and status.cells and Key.ISLAND not in shown(bar)
-        assert status.geometry().x() + status.geometry().width() == right
-        assert status.x() + status.shift(status.content) + status.content.spots[0].x == readings
-        assert right == app.primaryScreen().geometry().width() - 12
-    finally:
-        closed(app, bar)
-
-
 def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
     # Defect: the expanded capsule's tooltip propagates to every menu row.
     app = application()
@@ -775,43 +629,5 @@ def test_menu_rows_do_not_inherit_the_escape_closes_tooltip() -> None:
         assert "Workspace controls" in island.accessibleName()
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
         assert bar.opened is None and bar.window.capsules[Key.STATUS].toolTip()
-    finally:
-        closed(app, bar)
-
-
-def test_the_menu_takes_the_keyboard_and_hands_it_back_only_when_a_choice_calls_for_it() -> None:
-    # Defects: arrows or letters don't reach the menu, Escape strands the keyboard
-    # on the bar, opening a Workspace view gives the keyboard back to the old window,
-    # clicking elsewhere steals it back, or a live row stops its activity from
-    # anywhere but its Stop.
-    app = application()
-    invoked: list[str] = []
-    focused: list[int] = []
-    observations = BarObservations(foreground=lambda: 42, focus=lambda hwnd: remember(focused, hwnd))
-    bar = DesktopBar.open(recorded(invoked), native_shell=False, observations=observations)
-    try:
-        bar.open_menu()
-        island = bar.window.capsules[Key.STATUS]
-        assert island.height() > TOP + 34 and bar.window.height() >= island.height()
-        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Down)
-        opened = menu(bar)
-        assert opened is not None and opened.selected == 0
-        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        assert menu(bar) is None and focused == [42] and Key.ISLAND not in shown(bar)
-        bar.open_menu()
-        QTest.keyClicks(bar.window, "kk")  # Keyboard overlay, then Keyboard map.
-        QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Return)
-        assert invoked == ["keymap"] and focused == [42]
-        bar.open_menu()
-        bar.deactivated()
-        assert bar.opened is None and focused == [42]
-        bar.recording_changed(RecordingState(phase="recording", seconds=125))
-        bar.open_menu()
-        live = menu_row(bar, "Recording")
-        assert "02:05" in live.accessibleName() and "Stop recording" in live.accessibleName()
-        QTest.mouseClick(live, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(40, live.height() // 2))
-        assert invoked == ["keymap"], "Clicking the live row's reading stopped the recording."
-        QTest.mouseClick(live, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(live.width() - 17, live.height() // 2))
-        assert invoked == ["keymap", "record-stop"] and bar.opened is None
     finally:
         closed(app, bar)

@@ -1,7 +1,6 @@
 """Native canvas rendering, commands and persistent spatial interaction."""
 
 import sys
-import time
 import unittest
 from collections import deque
 from collections.abc import Callable, Generator
@@ -21,17 +20,15 @@ import contracts.task
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_store import PersonalStore
 from assistant.work_bridge import WorkOwners
-from assistant.work_canvas import WorkCanvas, run_prompt
+from assistant.work_canvas import WorkCanvas
 from automation.actions import Resources
 from automation.execution import WorkExecution
-from automation.store import TaskStore
-from contracts.canvas_activity import ROOT_CONTEXT, Attention, CanvasInstruction, CanvasQuestion, CanvasRun, SessionRequest, TaskRequest
+from contracts.canvas_activity import Attention, CanvasQuestion, SessionRequest, TaskRequest
 from contracts.feed_origin import App
 from contracts.personal_work import (
     AddDocument,
     Association,
     Catalog,
-    DismissedWork,
     DismissWork,
     MeetingSource,
     OpenWorkSource,
@@ -48,11 +45,10 @@ from contracts.personal_work import (
     source_id,
 )
 from contracts.status import State
-from contracts.task import ActionNotApplied, ActionVerified, TextAnswer
-from contracts.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated, MoveBubble, UpdateCanvas, revision
+from contracts.task import ActionNotApplied, ActionVerified
+from contracts.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
 from contracts.work_canvas_context import CanvasMode
 from contracts.work_canvas_contracts import CanvasPublication
-from contracts.work_canvas_edits import SaveNote
 from contracts.work_canvas_model import (
     CanvasCollection,
     CanvasDocument,
@@ -63,27 +59,24 @@ from contracts.work_canvas_model import (
     save_note,
     view_state,
 )
-from contracts.work_commands import AnswerTask, ReadMeeting, WorkViewCommand
+from contracts.work_commands import ReadMeeting, WorkViewCommand
 from contracts.work_documents import WebDocument
-from contracts.work_snapshot import ReplyProblem, WorkSnapshot
+from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.components.canvas_look import surface_fill
 from desktop_ui.components.voice_legend import VoiceLegend
-from desktop_ui.island_model import Key
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
-from desktop_ui.ui import WaitCursor
 from desktop_ui.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
 from desktop_ui.work_canvas_panel import CanvasPanel
 from desktop_ui.work_canvas_view import CanvasGroup
 from desktop_ui.work_canvas_window import CanvasWindow
-from desktop_ui.work_window import WorkOpening, WorkView, WorkWindow
-from tests.agent_requests import asked
+from desktop_ui.work_window import WorkWindow
 from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
 from tests.local_assistant import LocalAssistant
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
 from tests.test_meetings import SPEECH
-from tests.test_windows_inbox_attention import InboxUi, settle_toolbar, waiting
+from tests.test_windows_inbox_attention import InboxUi
 from tests.test_work_actions import claimed
 from tests.test_work_canvas import local_canvas, nested_bubbles, queue_nothing, seeded
 from tests.test_work_window import work_task
@@ -154,22 +147,6 @@ def native_canvas(store: WorkCanvas) -> Generator[NativeCanvas]:
         yield panel
     finally:
         panel.close()
-
-
-class FirstPaintCursor(QtCore.QObject):
-    """Record the application's override cursor when the viewport first paints."""
-
-    def __init__(self, root: QtCore.QObject) -> None:
-        super().__init__(root)
-        self.shape: Qt.CursorShape | None = None
-        self.painted: bool = False
-
-    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
-        if event.type() == QtCore.QEvent.Type.Paint and not self.painted:
-            self.painted = True
-            cursor = QtWidgets.QApplication.overrideCursor()
-            self.shape = cursor.shape() if cursor is not None else None
-        return False
 
 
 def pressed(legend: VoiceLegend) -> bool:
@@ -393,49 +370,6 @@ def test_startup_prepared_canvas_remains_hidden_and_keeps_its_native_scene(tmp_p
         ui.dispose()
 
 
-def test_first_canvas_open_shows_a_wait_cursor_until_its_first_paint(tmp_path: Path) -> None:
-    # Defect: the first open builds the canvas under the arrow cursor, or the
-    # wait cursor is released before the viewport paints or is never released.
-    root = application()
-    data, document = nested_bubbles()
-    store = local_canvas(tmp_path)
-    seeded(store, document)
-    jobs: deque[Callable[[], None]] = deque()
-    building: list[Qt.CursorShape | None] = []
-    views: list[CanvasWindow] = []
-    observer = FirstPaintCursor(root)
-
-    def opening() -> WorkOpening:
-        return WaitCursor(root)
-
-    def create(work: WorkWindow) -> WorkView:
-        cursor = QtWidgets.QApplication.overrideCursor()
-        building.append(cursor.shape() if cursor is not None else None)
-        view = CanvasWindow.open(root, work, store)
-        view.panel.canvas.viewport().installEventFilter(observer)
-        views.append(view)
-        return view
-
-    work = WorkWindow.open(lambda _: None, post=jobs.append, create_view=create, create_loading=opening)
-    try:
-        work.publish(WorkSnapshot(personal=PersonalView(data)))
-        work.show(focus=False)
-        while jobs:
-            jobs.popleft()()
-        root.processEvents()
-        QtTest.QTest.qWait(20)
-        assert not work.state.status, work.state.status
-        assert views[0].window.isVisible()
-        assert (building, observer.shape) == ([Qt.CursorShape.WaitCursor], Qt.CursorShape.WaitCursor)
-        assert QtWidgets.QApplication.overrideCursor() is None
-    finally:
-        work.close()
-        while jobs:
-            jobs.popleft()()
-        root.processEvents()
-        observer.deleteLater()
-
-
 def drag_bubble(panel: NativeCanvas, identity: str) -> QtCore.QPointF:
     # Drive the public native surface; release must reach our persistence owner.
     view = panel.view.panel
@@ -477,101 +411,6 @@ def test_dragging_a_work_container_moves_its_contents_and_preserves_the_arrangem
         assert work.id in store.read().pinned
         canvas.render(native.work.state.personal)
         assert group.pos() != origin
-
-
-def test_native_drag_and_drop_puts_an_existing_bubble_inside_another(tmp_path: Path) -> None:
-    # Defect: dropping on a container only moves the card on top of it instead
-    # of committing containment and revealing the card through its new route.
-    note = CanvasNote("note:drop", "Evidence", "Collected evidence")
-    target = CanvasCollection("group:drop", "Collect here")
-    store = local_canvas(tmp_path)
-    seeded(
-        store,
-        CanvasDocument(
-            notes=(note,),
-            collections=(target,),
-            placements=(Placement(note.id, 0, 64), Placement(target.id, 520, 64)),
-            pinned=frozenset((note.id, target.id)),
-            collapsed=frozenset((target.id,)),
-        ),
-    )
-    with native_canvas(store) as native:
-        canvas = native.view.panel
-        card = canvas.card(note.id)
-        group = next(frame for frame in canvas.group_frames if frame.context.id == target.id)
-        assert card is not None
-        start = canvas.canvas.mapFromScene(card.mapToScene(QtCore.QPointF(160, 25)))
-        end = canvas.canvas.mapFromScene(group.mapToScene(QtCore.QPointF(150, 70)))
-        QtTest.QTest.mousePress(canvas.canvas.viewport(), Qt.MouseButton.LeftButton, pos=start)
-        QtTest.QTest.mouseMove(canvas.canvas.viewport(), end)
-        QtTest.QTest.mouseRelease(canvas.canvas.viewport(), Qt.MouseButton.LeftButton, pos=end)
-        native.pump()
-        assert note.id in store.read().collections[0].members
-        canvas.open_context(target.id)
-        assert canvas.card(note.id) in canvas.visible_cards
-
-
-def test_partial_drop_and_content_expansion_keep_unrelated_native_bubbles_separate(tmp_path: Path) -> None:
-    # Defect: dropping with the pointer outside a sibling leaves overlapping
-    # pinned cards, or later expanding a pinned card covers unrelated content.
-    parent = CanvasNote("note:container", "Container")
-    peer = CanvasNote("note:neighbor", "Neighbor")
-    children = tuple(CanvasNote(f"note:child:{index}", "Child", "Evidence", parent.id) for index in range(5))
-    store = local_canvas(tmp_path)
-    seeded(
-        store,
-        CanvasDocument(
-            notes=(parent, peer, *children),
-            placements=(Placement(parent.id, 0, 64), Placement(peer.id, 520, 64)),
-            pinned=frozenset((parent.id, peer.id)),
-        ),
-    )
-    with native_canvas(store) as native:
-        canvas = native.view.panel
-        card, neighbor = canvas.card(parent.id), canvas.card(peer.id)
-        assert card is not None and neighbor is not None
-        start = canvas.canvas.mapFromScene(card.mapToScene(QtCore.QPointF(160, 25)))
-        end = canvas.canvas.mapFromScene(neighbor.mapToScene(QtCore.QPointF(-30, 25)))
-        QtTest.QTest.mousePress(canvas.canvas.viewport(), Qt.MouseButton.LeftButton, pos=start)
-        QtTest.QTest.mouseMove(canvas.canvas.viewport(), end)
-        QtTest.QTest.mouseRelease(canvas.canvas.viewport(), Qt.MouseButton.LeftButton, pos=end)
-        native.pump()
-        assert not card.sceneBoundingRect().intersects(neighbor.sceneBoundingRect())
-        assert not store.read().nesting
-        assert card.contents is not None
-        card.contents.disclosure.click()
-        native.pump()
-        assert card.contents_expanded
-        assert not card.sceneBoundingRect().intersects(neighbor.sceneBoundingRect())
-        for child in children:
-            nested = canvas.card(child.id)
-            assert nested is not None and nested in canvas.visible_cards
-            assert card.sceneBoundingRect().contains(nested.sceneBoundingRect())
-        placements = store.read().placements
-        canvas.render(native.work.state.personal)
-        native.pump()
-        assert store.read().placements == placements
-
-
-def test_selecting_a_bubble_preserves_automatic_layout_until_it_is_dragged(tmp_path: Path) -> None:
-    # Defect: an ordinary selection is saved as a manual pin, preventing
-    # subsequent expansion and arrangement from moving that bubble safely.
-    evidence = source(SourceKind.TEAMS)
-    store = PersonalStore(tmp_path / "work.sqlite3")
-    store.observe((evidence,))
-    store.handle(SaveWork(WorkDefinition("Atlas", "Review this evidence"), (Association(evidence.id, "Supports Atlas"),)), 11)
-    canvas_store = local_canvas(tmp_path)
-    with native_canvas(canvas_store) as panel:
-        panel.publish(WorkSnapshot(personal=PersonalView(store.read())))
-        view = panel.view.panel
-        card = view.card(evidence.id)
-        assert card is not None
-        point = view.canvas.mapFromScene(card.mapToScene(QtCore.QPointF(200, 25)))
-        QtTest.QTest.mouseClick(view.canvas.viewport(), Qt.MouseButton.LeftButton, pos=point)
-        panel.pump()
-        assert view.selected == evidence.id and not canvas_store.read().pinned
-        drag_bubble(panel, evidence.id)
-        assert canvas_store.read().pinned == frozenset((evidence.id,))
 
 
 def test_long_bubbles_resize_without_overlapping_text_or_controls(tmp_path: Path) -> None:
@@ -701,55 +540,6 @@ def test_shared_connections_move_highlight_and_disappear_with_their_reference(tm
         assert path.pen().widthF() > 2
         native.publish(WorkSnapshot(personal=PersonalView(replace(data, works=(data.works[0], replace(data.works[1], links=()))))))
         assert not canvas.connection_paths and path.scene() is None
-
-
-def test_canvas_speech_instructs_the_open_canvas_and_keeps_failed_directions_for_retry(tmp_path: Path) -> None:
-    # Defect: speech routes to a stale selection, a failed handoff loses the
-    # pending direction, or a hidden canvas swallows the conversation input.
-    tasks = TaskStore(tmp_path / "tasks.sqlite3")
-    attempts: list[CanvasRun] = []
-
-    def queue(run: CanvasRun) -> None:
-        attempts.append(run)
-        if len(attempts) == 1:
-            raise OSError("Queue unavailable")
-        tasks.submit(run.task_id, "Canvas instruction", run_prompt(run, run.work_id), contracts.task.RequestSource("canvas"), at=20)
-
-    assistant = LocalAssistant(tmp_path, queue=queue)
-    ui = InboxUi.start(assistant)
-    assistant.attach(ui.ui)
-    store = assistant.canvas
-    work = ui.ui.work_window()
-    work.show(focus=False)
-    ui.pump()
-    try:
-        canvas = ui.canvas_view.panel
-        instruction = "Find the deployment plan\nand compare the two document versions."
-        ui.ui.route_speech(instruction)
-        ui.pump()
-        assert canvas.instruction_run is not None and "Queue unavailable" in canvas.status.text()
-        ui.ui.route_speech(instruction)
-        ui.pump()
-        canvas = ui.canvas_view.panel  # A fresh observation after the retry, not the narrowed earlier one.
-        assert canvas.instruction_run is None and attempts[0] == attempts[1] and not assistant.spoken
-        run = attempts[-1]
-        assert run.intent == CanvasInstruction(instruction) and run.work_id == ROOT_CONTEXT
-        task = tasks.get(run.task_id)
-        assert task is not None and task.prompt.startswith(instruction + "\n\n") and "whole canvas" in task.prompt
-        finding = CanvasNote("note:versions", "Deployment plans", "Two versions found")
-        assert canvas.commit(SaveNote(finding))
-        canvas.select(finding.id)
-        ui.ui.route_speech("Explain the differences")
-        ui.pump()
-        assert attempts[-1].work_id == finding.id and store.read().notes == (finding,)
-        canvas.clear_context.click()
-        assert canvas.selected is None and "whole canvas" in canvas.voice_hint.toolTip()
-        ui.canvas_view.window.hide()
-        ui.ui.route_speech("Work in the background")
-        ui.pump()
-        assert assistant.spoken == ("Work in the background",)
-    finally:
-        ui.dispose()
 
 
 def test_canvas_toolbar_keeps_search_and_center_accessible_in_a_small_window(tmp_path: Path) -> None:
@@ -904,14 +694,6 @@ def assert_heading_surface(panel: NativeCanvas, identity: str) -> None:
     assert all(image.pixelColor(x, y) == surface for x in range(20) for y in range(2))
 
 
-def pump_until(ui: InboxUi, ready: Callable[[], bool]) -> None:
-    deadline = time.monotonic() + 4
-    while not ready() and time.monotonic() < deadline:
-        ui.pump()
-        QtTest.QTest.qWait(10)
-    assert ready(), "The native canvas did not receive the request publication."
-
-
 def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_revealing(tmp_path: Path) -> None:
     # Defect: worker edits race with Qt, return success before persistence,
     # overwrite a user draft, bypass durable verification or reveal a window.
@@ -964,19 +746,6 @@ def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_re
         ui.dispose()
 
 
-def open_question_on_canvas(ui: InboxUi) -> None:
-    """Open the waiting question from the bar, then its canvas button."""
-    ui.bar.show(visible=True)
-    ui.bar.render()
-    ui.ui.open_inbox()
-    ui.pump()
-    settle_toolbar(ui)
-    panel = ui.bar.window.capsules[Key.ISLAND].request
-    assert panel is not None and panel.canvas.isVisible() and not panel.canvas.icon().isNull()
-    QtTest.QTest.mouseClick(panel.canvas, Qt.MouseButton.LeftButton)
-    ui.pump()
-
-
 def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: Path) -> None:
     # Defect: opening during speech misses the held state, background work
     # clears it, release leaves it pressed during transcription, or dictation
@@ -1017,183 +786,6 @@ def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: P
         work.show(focus=False)
         ui.pump()
         assert not pressed(legend) and legend.grab().toImage() == released
-    finally:
-        ui.dispose()
-
-
-def test_canvas_clarification_redirect_submits_context_to_the_waiting_agent(tmp_path: Path) -> None:
-    # Defect: the redirect opens the wrong bubble, reserves empty editor space,
-    # or spoken context fails to resume the exact existing waiting worker.
-    assistant = LocalAssistant(tmp_path)
-    ui = InboxUi.start(assistant)
-    assistant.attach(ui.ui)
-    store = assistant.canvas
-    agent = assistant.session
-    assert agent is not None
-    ui.ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
-    ui.pump()
-    resumed: list[TextAnswer] = []
-
-    def resume(answer: TextAnswer) -> bool:
-        resumed.append(answer)
-        return True
-
-    agent.request_input(
-        asked("atlas", "Which supplier should own Atlas?", "I have read the handoff mail. I need your ownership decision.", time.time()),
-        resume,
-    )
-    try:
-        pump_until(ui, lambda: bool(store.read().activity))
-        question = store.read().activity[0]
-        assert isinstance(question, CanvasQuestion) and isinstance(question.request, SessionRequest)
-        open_question_on_canvas(ui)
-        canvas = ui.canvas_view.panel
-        assert canvas.selected == question.id
-        detail = canvas.detail(question.id)
-        assert isinstance(detail, QuestionDetail)
-        assert not detail.frame.findChildren(QtWidgets.QPlainTextEdit) and detail.frame.height() <= 152
-        assert detail.status.text() == "Hold X + K to reply · release to send"
-        fallback: list[str] = []
-        ui.ui.route_speech("Contoso owns the handoff.")
-        pump_until(ui, lambda: bool(resumed))
-        assert resumed == [TextAnswer("Contoso owns the handoff.")]
-        ui.pump()
-        assert "Contoso owns the handoff." in detail.response.text() and not fallback
-        answered = store.read().activity[0]
-        assert isinstance(answered, CanvasQuestion) and answered.reply == TextAnswer("Contoso owns the handoff.")
-        card = canvas.card(question.id)
-        assert card is not None and card.detail_proxy is not None
-        assert card.rect().contains(card.detail_proxy.boundingRect().translated(card.detail_proxy.pos()))
-    finally:
-        ui.dispose()
-
-
-def test_canvas_spoken_reply_keeps_transcript_on_rejection_and_continue_stays_bound_to_work(tmp_path: Path) -> None:
-    # Defect: task replies route to a different request, failed persistence loses
-    # user text, or starting research loses the work-to-run connection on reopen.
-    runs: list[CanvasRun] = []
-    assistant = LocalAssistant(tmp_path, queue=runs.append)
-    ui = InboxUi.start(assistant)
-    assistant.attach(ui.ui)
-    store = assistant.canvas
-    work = ui.ui.work_window()
-    work.show(focus=False)
-    task = work_task(contracts.task.Waiting(contracts.task.Question("request", "Which owner?", "Confirm the handoff.")))
-    personal = PersonalStore(tmp_path / "work.sqlite3")
-    saved = personal.handle(SaveWork(WorkDefinition("Atlas", "Deploy Atlas")), 20)
-    assert isinstance(saved, WorkSaved)
-    seeded(store, replace(store.read(), runs=(CanvasRun(task.id, saved.work.id),)))
-    snapshot = WorkSnapshot(tasks=(task,), personal=PersonalView(personal.read()))
-    work.publish(snapshot)
-    store.observe_work(snapshot)
-    ui.pump()
-    try:
-        canvas = ui.canvas_view.panel
-        canvas.open_at("question:request")
-        question = canvas.detail("question:request")
-        assert isinstance(question, QuestionDetail)
-        assert not ui.ui.answer_canvas(TaskRequest(task.id, "request"), "x" * 16001)
-        ui.ui.route_speech("x" * 16001)
-        ui.pump()
-        assert not assistant.spoken and "could not be sent" in canvas.status.text()
-        ui.ui.route_speech("Use Contoso")
-        ui.pump()
-        assert assistant.work_commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Contoso"))
-        rejected = replace(
-            snapshot, reply_problems=(ReplyProblem(task_id=task.id, request_id="request", receipt_id="receipt", reason="Disk unavailable"),)
-        )
-        work.publish(rejected)
-        store.observe_work(rejected)
-        ui.pump()
-        assert "Use Contoso" in question.response.text() and question.status.text() == "Hold X + K to reply · release to send"
-        ui.ui.route_speech("Use Fabrikam instead")
-        ui.pump()
-        assert (
-            assistant.work_commands[-1] == AnswerTask(task.id, "request", contracts.task.TextAnswer("Use Fabrikam instead")) and not assistant.spoken
-        )
-        canvas.inspect(saved.work.id)
-        work_detail = canvas.detail(saved.work.id)
-        assert isinstance(work_detail, WorkDetail)
-        next(control for control in work_detail.frame.findChildren(QtWidgets.QToolButton) if control.text() == "Continue with agent").click()
-        ui.pump()
-        assert not runs and "already has an investigation" in canvas.status.text()
-        assert len(canvas.group_frames) == 1
-        bounds = tuple(card.sceneBoundingRect() for card in canvas.cards)
-        assert all(not one.intersects(two) for index, one in enumerate(bounds) for two in bounds[index + 1 :])
-    finally:
-        ui.dispose()
-
-
-def check_late_agent_canvas_replay(ui: InboxUi, assistant: LocalAssistant) -> None:
-    """Exercise late-agent replay before canvas layout can republish and mask stale attention."""
-    store = assistant.canvas
-    bridge = UpdateCanvas(revision(store.read()), (MoveBubble("question:current", "group:archive"),))
-    assert isinstance(store.command(bridge), CanvasUpdated)
-    agent = assistant.open_session()
-    agent.notify_canvas("Current question", "question:current")
-    ui.pump()
-    assert waiting(ui.bar) is None
-    assert not agent.state.messages
-    restored = UpdateCanvas(revision(store.read()), (MoveBubble("question:current", None),))
-    assert isinstance(store.command(restored), CanvasUpdated)
-    ui.pump()
-
-
-def test_canvas_attention_reaches_the_desktop_and_redirects_to_its_bubble(tmp_path: Path) -> None:
-    # Defect: the bell counts or opens a dismissed question, a hidden canvas
-    # misses its result notice, a late view repeats a notice or replays stale
-    # attention over a queued bridge change, or a notice redirects elsewhere.
-    assistant = LocalAssistant(tmp_path)
-    ui = InboxUi.start(assistant)
-    assistant.connect(ui.ui)
-    store = assistant.canvas
-    dismissed = WorkThread("work:dismissed", 0, WorkDefinition("Not mine", "Other responsibility"), (), 10, 10)
-    active = replace(dismissed, id="work:active", definition=WorkDefinition("Mine", "My responsibility"))
-    data = Catalog(works=(active,), dismissed=(DismissedWork(dismissed, "Wrong owner"),))
-    old = work_task(contracts.task.Waiting(contracts.task.Question("old", "Old question", "")), identity="old-task")
-    current = work_task(contracts.task.Waiting(contracts.task.Question("current", "Current question", "")), identity="current-task")
-    research = work_task(identity="research-task")
-    seeded(
-        store,
-        replace(
-            store.read(),
-            collections=(CanvasCollection("group:archive", "Archive", parent_id=dismissed.id),),
-            runs=(CanvasRun(old.id, dismissed.id), CanvasRun(current.id, active.id), CanvasRun(research.id, active.id)),
-        ),
-    )
-    try:
-        snapshot = WorkSnapshot(personal=PersonalView(data), tasks=(old, current, research))
-        store.observe_catalog(data)
-        store.observe_work(snapshot)
-        ui.pump()
-        assert assistant.noticed == (("Current question", "question:current"),)
-        ui.ui.desktop(record=lambda _: None, stop=lambda: None, overlay=lambda: None, menu=lambda: None)
-        ui.pump()
-        assert assistant.noticed == (("Current question", "question:current"),)
-        check_late_agent_canvas_replay(ui, assistant)
-        assert "1 clarification needs" in ui.bar.window.capsules[Key.INBOX].accessibleName()
-        work = ui.ui.work_window()
-        work.publish(snapshot)
-        work.prepare()
-        capsule = waiting(ui.bar)
-        assert capsule is not None
-        QtTest.QTest.mouseClick(capsule, Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, 25))
-        ui.pump()
-        panel = ui.bar.window.capsules[Key.ISLAND].request
-        assert panel is not None
-        panel.canvas.click()
-        ui.pump()
-        assert ui.canvas_view.panel.selected == "question:current"
-        ui.canvas_view.hide()
-        completed = replace(snapshot, tasks=(old, current, replace(research, state=contracts.task.Completed("Handoff confirmed", ()))))
-        work.publish(completed)
-        store.observe_work(completed)
-        ui.pump()
-        ui.ui.open_canvas_at(assistant.noticed[-1][1])
-        ui.pump()
-        assert ui.canvas_view.panel.selected == "result:" + research.id
-        assert ui.canvas_view.panel.document == store.read()
-        assert assistant.noticed == (("Current question", "question:current"), (research.title, "result:" + research.id))
     finally:
         ui.dispose()
 

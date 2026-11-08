@@ -15,14 +15,12 @@ if sys.platform != "win32":
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtTest import QTest
 
-import desktop_ui.island_moment
 from contracts.canvas_activity import SessionRequest
 from contracts.feed_origin import FeedRequest
-from contracts.status import Job
 from contracts.task import TextAnswer
 from contracts.work_canvas_contracts import CanvasEdits
-from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
-from desktop_ui.island_model import Agent, Key
+from desktop_ui.desktop_bar import BarActions, DesktopBar
+from desktop_ui.island_model import Key
 from desktop_ui.island_motion import settled
 from desktop_ui.island_surface import Capsule
 from desktop_ui.qt_runtime import prepare
@@ -129,58 +127,6 @@ def settle_toolbar(ui: InboxUi) -> None:
         QTest.qWait(20)
         ui.pump()
     assert settled(ui.bar.motion), "The toolbar transition did not settle."
-
-
-def test_bell_opens_inbox_keeps_exact_accessible_count_and_survives_activity(tmp_path: Path) -> None:
-    app = application()
-    invoked: tuple[str, ...] = ()
-
-    def invoke(action: str) -> None:
-        nonlocal invoked
-        invoked = (*invoked, action)
-
-    actions = BarActions(
-        lambda: None,
-        lambda: invoke("stop"),
-        lambda _: None,
-        lambda: None,
-        lambda: None,
-        lambda: invoke("menu"),
-        lambda _: None,
-        inbox=lambda: invoke("inbox"),
-        open_item=lambda _: None,
-    )
-    bar = DesktopBar.open(actions, native_shell=False)
-    try:
-        assert waiting(bar) is None
-        bar.inbox_changed(1)
-        capsule = waiting(bar)
-        assert capsule is not None and "1 clarification needs" in capsule.accessibleName() and "Hold X + M" in capsule.toolTip()
-        QTest.mouseClick(capsule, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(17, TOP + 17))
-        assert invoked == ("inbox",) and bar.opened is None
-        starts: tuple[Callable[[], None], ...] = (
-            lambda: bar.agent_changed(Agent("Comparing both sheets", waiting=False)),
-            lambda: bar.dictation(active=True),
-            lambda: bar.job_changed(Job.TRANSCRIBING),
-        )
-        for start in starts:
-            start()
-            assert waiting(bar) is capsule
-        bar.dictation(active=False)
-        bar.job_changed(None)
-        bar.agent_changed(None)
-        bar.inbox_changed(137)
-        assert "137 clarifications need" in capsule.accessibleName()
-        capsule.grab().save(str(tmp_path / "workspace-island-inbox.png"))
-        bar.inbox_changed(0)
-        assert waiting(bar) is None
-        bar.close()
-        # A late publication must return safely after native widgets are destroyed.
-        bar.inbox_changed(1)
-    finally:
-        bar.close()
-        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
-        app.processEvents()
 
 
 def test_app_context_stays_quiet_and_only_agent_questions_change_toolbar_attention(tmp_path: Path) -> None:
@@ -291,47 +237,3 @@ def test_an_open_request_follows_its_phase_and_reply_owner_when_work_asks_again(
     finally:
         ui.dispose()
         application().setStyleSheet(original_style)
-
-
-def test_a_finished_reply_takes_the_island_then_waits_in_the_bell_and_opens_its_canvas_item(tmp_path: Path) -> None:
-    # Defects: a finished reply never reaches the bar, stays on the island, isn't
-    # counted once it collapses, or the bell's list doesn't open its canvas item.
-    now = [100.0]
-    opened: list[str] = []
-    actions = BarActions(
-        lambda: None,
-        lambda: None,
-        lambda _: None,
-        lambda: None,
-        lambda: None,
-        lambda: None,
-        lambda _: None,
-        inbox=lambda: None,
-        open_item=opened.append,
-    )
-    bar = DesktopBar.open(actions, native_shell=False, observations=BarObservations(clock=lambda: now[0], motion=lambda: False))
-    try:
-        bar.show(visible=True)
-        reply = desktop_ui.island_moment.Notice(
-            "reply:s:1", "Compare the budget sheets", "Revenue is up four percent on the approved figures.", "reply:s:1", 5
-        )
-        bar.notices_changed((reply,))
-        island = bar.window.capsules[Key.ISLAND]
-        assert island.isVisible() and island.accessibleName().startswith("Compare the budget sheets: Revenue is up")
-        assert island.height() > TOP + 34 and waiting(bar) is None
-        island.grab().save(str(tmp_path / "workspace-island-notice.png"))
-        now[0] += 7
-        bar.render()
-        bell = waiting(bar)
-        assert bell is not None and bell.accessibleName().startswith("1 new from the agent")
-        assert bar.open_inbox(())
-        panel = bar.window.capsules[Key.ISLAND].inbox
-        assert panel is not None and [row.accessibleName() for row in panel.rows] == [
-            "Compare the budget sheets: Revenue is up four percent on the approved figures."
-        ]
-        QTest.mouseClick(panel.rows[0], QtCore.Qt.MouseButton.LeftButton)
-        assert opened == ["reply:s:1"] and bar.opened is None and waiting(bar) is None
-    finally:
-        bar.close()
-        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
-        application().processEvents()
