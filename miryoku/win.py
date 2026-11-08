@@ -16,7 +16,7 @@ from typing import Final, Protocol, assert_never
 
 import usage
 from cell import Cell
-from components import ASSISTANT, DESKTOP, LAYOUT, Window
+from components import ASSISTANT_WINDOW, DESKTOP, LAYOUT, Window
 from config import APPS
 from diagnostics import FailureInfo, failure_info
 from miryoku import hook_watch
@@ -51,7 +51,7 @@ LOCK_NAME: Final = "Local\\miryoku"
 """Name of the lock that stops a second copy from running in this Windows session."""
 USAGE_FLUSH_MS: Final = 10 * 60 * 1000
 """How often usage counts are written to the usage log."""
-WINDOWS: Final = frozendict({Side.DESKTOP: DESKTOP.window, Side.ASSISTANT: ASSISTANT.window})
+WINDOWS: Final = frozendict({Side.DESKTOP: DESKTOP.window, Side.ASSISTANT: ASSISTANT_WINDOW})
 """The control window each side's messages are posted to."""
 
 

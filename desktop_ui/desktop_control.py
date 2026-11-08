@@ -21,7 +21,6 @@ from desktop_ui.desktop_controls import ChosenTool, ControlAction, FeatureReques
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, Source, keyed
 from desktop_ui.overlay import OverlayState
-from link.client import Status
 from miryoku.layout import Layer, Scancode
 from protocol import App, LayoutState, Request, Side, Tool, decode_indicator, owner
 
@@ -32,7 +31,6 @@ class Shown:
 
     state: State = State.LAYOUT_OFF
     capturing: bool = False
-    connected: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,11 +51,6 @@ class DesktopState:
 @dataclass(frozen=True, slots=True)
 class AssistantSaid:
     message: ToDesktop
-
-
-@dataclass(frozen=True, slots=True)
-class Connection:
-    status: Status
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +97,7 @@ class Problem:
     message: str
 
 
-type Fact = AssistantSaid | Connection | MenuRequested | MenuChosen | SpecLoaded | Controlled | Indicated | LayoutReported | OverlayToggled | Problem
+type Fact = AssistantSaid | MenuRequested | MenuChosen | SpecLoaded | Controlled | Indicated | LayoutReported | OverlayToggled | Problem
 
 # ---- requests: their own effect -----------------------------------------------------
 
@@ -291,7 +284,7 @@ type Effect = (
 
 
 def tray_state(shown: Shown) -> State:
-    return State.RECORDING if shown.capturing else shown.state if shown.connected else State.LAYOUT_OFF
+    return State.RECORDING if shown.capturing else shown.state
 
 
 def _said(shown: Shown, message: ToDesktop) -> Shown:
@@ -302,16 +295,6 @@ def _said(shown: Shown, message: ToDesktop) -> Shown:
             return replace(shown, capturing=recording.capturing)
         case _:
             return shown
-
-
-def _connected(state: DesktopState, status: Status) -> DesktopState:
-    match status:
-        case Status.CONNECTED:
-            return replace(state, shown=replace(state.shown, connected=True))
-        case Status.DISCONNECTED:
-            return replace(state, shown=replace(state.shown, connected=False), level=None)
-        case _:
-            assert_never(status)
 
 
 def _requested(request: Request) -> Iterator[Effect]:
@@ -420,8 +403,6 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
                 yield TrayNotify(message.title, message.text, message.warning)
             yield ShowViews(message)
             yield TrayShow(tray_state(after.shown))
-        case Connection():
-            yield TrayShow(tray_state(after.shown))
         case MenuRequested():
             menu = MenuState(layout=state.layout, overlay_enabled=state.overlay.enabled, capturing=state.shown.capturing)
             yield ShowMenu(menu, state.tray_spec)
@@ -458,8 +439,6 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
             return replace(state, level=level)
         case AssistantSaid(message):
             return replace(state, shown=_said(state.shown, message))
-        case Connection(status):
-            return _connected(state, status)
         case SpecLoaded(spec):
             return replace(state, tray_spec=spec)
         case Controlled(action):

@@ -3,13 +3,12 @@
 from collections.abc import Iterable
 from functools import reduce
 
-from contracts.desktop_link import MicLevel, Notify, RecordingChanged, UseTool, VoiceChanged
+from contracts.desktop_link import Notify, RecordingChanged, UseTool, VoiceChanged
 from contracts.recording_state import RecordingState
 from contracts.status import State
 from desktop_ui.desktop_control import (
     AssistantSaid,
     Beep,
-    Connection,
     Controlled,
     DesktopState,
     Effect,
@@ -28,7 +27,6 @@ from desktop_ui.desktop_control import (
     transition,
 )
 from desktop_ui.desktop_controls import ChosenTool, FeatureRequest, Menu
-from link.client import Status
 from protocol import LayoutState, Tool
 
 
@@ -41,15 +39,12 @@ def folded(events: Iterable[Event], state: DesktopState | None = None) -> tuple[
     return reduce(step, events, (state if state is not None else DesktopState(), ()))
 
 
-def test_the_tray_shows_recording_first_and_layout_off_while_the_assistant_is_away() -> None:
-    # Defect: a live recording is hidden behind the voice state, or a disconnected
-    # assistant's last state stays on the tray as if it were still running.
-    connected, effects = folded((Connection(Status.CONNECTED), AssistantSaid(VoiceChanged(State.LISTENING))))
+def test_the_tray_shows_a_live_recording_before_the_voice_state() -> None:
+    # Defect: a live recording is hidden behind the voice state.
+    listening, effects = folded((AssistantSaid(VoiceChanged(State.LISTENING)),))
     assert effects[-1] == TrayShow(State.LISTENING)
-    _, recording = folded((AssistantSaid(RecordingChanged(RecordingState(phase="recording"))),), connected)
+    _, recording = folded((AssistantSaid(RecordingChanged(RecordingState(phase="recording"))),), listening)
     assert recording[-1] == TrayShow(State.RECORDING)
-    away, gone = folded((AssistantSaid(MicLevel(0.4)), Connection(Status.DISCONNECTED)), connected)
-    assert gone[-1] == TrayShow(State.LAYOUT_OFF) and away.level is None and not away.shown.connected
 
 
 def test_a_warning_from_the_assistant_beeps_once_and_reaches_the_tray_and_the_views() -> None:

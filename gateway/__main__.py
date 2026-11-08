@@ -10,9 +10,9 @@ import os
 import secrets
 
 from components import endpoint
+lazy from gateway.endpoint import Endpoint, publish, read
 lazy from gateway.proxy import Gateway
 lazy from gateway.upstream import upstream_from
-lazy from link.endpoint import Endpoint, publish, read
 
 
 def main() -> None:

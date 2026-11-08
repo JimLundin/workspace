@@ -266,7 +266,7 @@ ban-relative-imports = "all"
 py-modules = ["cell", "components", "config", "diagnostics", "launch", "protocol", "usage"]
 
 [tool.setuptools.packages.find]
-include = ["assistant*", "contracts*", "desktop_ui*", "gateway*", "link*", "miryoku*", "winapi*"]
+include = ["assistant*", "contracts*", "desktop_ui*", "gateway*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
 desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]

@@ -8,9 +8,9 @@ from pathlib import Path
 import httpx
 
 from assistant.llm import Failure, Settings, transcribe, wav
+from gateway.endpoint import Endpoint, publish
 from gateway.proxy import Gateway
 from gateway.upstream import Unconfigured, Upstream
-from link.endpoint import Endpoint, publish
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint
 from winapi.pcm import RATE
 

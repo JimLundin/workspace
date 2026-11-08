@@ -24,14 +24,13 @@ import launch
 import usage
 from cell import Cell
 from config import APPS
-from contracts.desktop_link import Record, WireError, from_assistant
+from contracts.desktop_link import Record
 from desktop_ui import desktop_controls
-from desktop_ui.assistant_port import AssistantPort, LinkedAssistant
+from desktop_ui.assistant_port import AssistantPort, StartAssistant
 from desktop_ui.desktop_control import (
     AssistantSaid,
     Beep,
     Chord,
-    Connection,
     Controlled,
     DesktopState,
     Effect,
@@ -77,7 +76,6 @@ from desktop_ui.report import write_report
 from desktop_ui.tray import Tray
 from desktop_ui.ui import Ui, Views
 from desktop_ui.ui_spec import SpecError
-from link.client import Client, Status
 from protocol import (
     WM_CHORD,
     WM_INDICATOR,
@@ -99,8 +97,6 @@ WM_TRAY: Final = system.WM_APP + 20
 WM_SHOW_MENU: Final = 0x8056
 WM_EVENTS: Final = system.WM_APP + 22
 """Any thread -> Qt thread: events are waiting in the inbox."""
-UNAVAILABLE: Final = "The assistant is restarting; try again in a moment."
-"""Why a command for the assistant was refused."""
 
 
 def log(text: str) -> None:
@@ -111,14 +107,6 @@ def indicator_area() -> Rect:
     """Where the layer indicator goes: the bottom of the main monitor."""
     monitors = screen.monitors()
     return next((m.work for m in monitors if m.primary), monitors[0].work)
-
-
-@dataclass(frozen=True, slots=True)
-class Offline:
-    """The assistant when the desktop runs outside the keeper: never reachable."""
-
-    def send(self, command: object) -> bool:
-        return False
 
 
 def window_event(message: int, wparam: int, lparam: int) -> Event | None:
@@ -197,16 +185,6 @@ def _drain(pending: queue.SimpleQueue[Event], handler: Cell[Callable[[Event], No
             log(traceback.format_exc())
 
 
-def received(inbox: Inbox, frame: bytes) -> None:
-    """Link thread: the assistant's message, for the Qt thread."""
-    try:
-        message = from_assistant(frame)
-    except WireError as error:
-        log(f"Refused a frame from the assistant: {error}")
-        return
-    inbox.report(AssistantSaid(message))
-
-
 @dataclass(frozen=True, slots=True)
 class DesktopApp:
     """The desktop's views and tray, and the Qt-thread fold of their events into effects."""
@@ -255,8 +233,7 @@ class DesktopApp:
             case Fold(event):
                 yield event
             case Send(command):
-                if not self.assistant.send(command):
-                    yield Problem(UNAVAILABLE)
+                self.assistant.send(command)
             case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep():
                 self._tray(effect)
             case ShowViews() | Navigate() | SwitchWindows() | Chord() | ToggleTaskbar() | ShowKeymap():
@@ -393,30 +370,23 @@ def launched(command: str, *names: str) -> None:
     subprocess.Popen([str(launch.pythonw()), str(launch.ROOT / "launch.py"), command, *names], cwd=launch.ROOT, creationflags=launch.DETACHED)
 
 
-def run(*, window: components.Window = components.DESKTOP.window, lock_name: str = LOCK_NAME, views: Views | None = None) -> None:
+def run(
+    start_assistant: StartAssistant, *, window: components.Window = components.DESKTOP.window, lock_name: str = LOCK_NAME, views: Views | None = None
+) -> None:
     """Blocks until the desktop quits; a test names its own `window`, `lock_name` and `views`."""
     screen.use_physical_pixels()  # before any window exists
     lock = system.create_lock(lock_name)
     if lock is None:
         return
     try:
-        published = components.endpoint("assistant")
         inbox = Inbox.open(window)
-
-        def status(change: Status) -> None:
-            inbox.report(Connection(change))
-
-        client = Client(published, lambda frame: received(inbox, frame), status) if published is not None else None
-        port: AssistantPort = LinkedAssistant(client) if client is not None else Offline()
+        assistant = start_assistant(lambda message: inbox.report(AssistantSaid(message)))
         ui = Ui.start(views=views, on_problem=lambda message: inbox.report(Problem(message)))
-        app = DesktopApp.compose(ui, port, inbox)
+        app = DesktopApp.compose(ui, assistant, inbox)
         ui.post(lambda _: app.start())
-        if client is not None:
-            client.start()
         try:
             ui.run()
         finally:
-            if client is not None:
-                client.close()
+            assistant.close()
     finally:
         system.release_lock(lock)

@@ -1,10 +1,8 @@
-"""The assistant: dictation, meeting recording and the microphone, beside the desktop.
+"""The assistant: dictation, meeting recording and the microphone, on its own thread in the desktop's process.
 
-It runs without the desktop and the desktop without it. It never touches the
-desktop's windows: it sends `contracts.desktop_link` messages through a
-`DesktopPort` and takes the desktop's commands from the link. The keyboard
-sends it only the requests it owns (dictation and meetings), to its own hidden
-window.
+It never touches the desktop's windows: it publishes `contracts.desktop_link`
+messages and takes the desktop's commands as events. The keyboard sends it only
+the requests it owns (dictation and meetings), to its own hidden window.
 """
 
 import contextlib
@@ -15,7 +13,6 @@ import time
 import traceback
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from pathlib import Path
 from typing import Final, assert_never
 
@@ -23,11 +20,11 @@ import components
 import diagnostics
 import usage
 from assistant.control import (
+    Command,
     ControlState,
     Effect,
     Event,
     ExpireCapture,
-    HandleFrame,
     HandleKey,
     JobReported,
     LayoutReported,
@@ -50,22 +47,20 @@ from config import APPS
 from usage import DIRECTORY, Detail
 lazy from assistant import control_policy
 lazy from assistant.desktop import WinDesktop
-lazy from assistant.desktop_port import DesktopPort, LevelFeed, LinkedDesktop
 lazy from assistant.features import Assistant
+lazy from assistant.levels import LevelFeed, Publish
 lazy from assistant.lifecycle import Timings
 lazy from assistant.llm import MAX_SECONDS, Missing, Settings
 lazy from assistant.meeting_store import MeetingArchive
 lazy from assistant.meetings import Meetings
 lazy from contracts import desktop_link
-lazy from contracts.desktop_link import UseTool, VoiceChanged, WireError, from_desktop
+lazy from contracts.desktop_link import ToAssistant, UseTool, VoiceChanged
 lazy from contracts.recording_state import RecordingAction
 lazy from contracts.status import State
-lazy from link.server import Server
 lazy from protocol import WM_LAYOUT_STATE, WM_REQUEST, decode
-lazy from winapi import audio, recording, screen, shell, system, windows
+lazy from winapi import audio, recording, shell, system, windows
 lazy from winapi.pcm import RATE
 
-LOCK_NAME: Final = "Local\\workspace-assistant"
 LOG: Final = DIRECTORY / "assistant.log"
 WM_EVENTS: Final = system.WM_APP + 21
 """Any thread -> control thread: events are waiting in the inbox."""
@@ -73,11 +68,6 @@ WM_EVENTS: Final = system.WM_APP + 21
 
 def log(text: str) -> None:
     diagnostics.append(LOG, text)
-
-
-class Exit(Enum):
-    QUIT = auto()
-    ALREADY_RUNNING = auto()
 
 
 def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
@@ -174,7 +164,7 @@ class AssistantApp:
     """
 
     inbox: Inbox
-    desktop: DesktopPort
+    publish: Publish
     startup_effects: control_policy.StartupEffects
     timings: Timings
     mic_event: system.EventHandle
@@ -189,7 +179,7 @@ class AssistantApp:
     def compose(
         cls,
         settings: Settings | Missing,
-        desktop: DesktopPort,
+        publish: Publish,
         inbox: Inbox,
         *,
         startup_effects: control_policy.StartupEffects | None = None,
@@ -206,7 +196,7 @@ class AssistantApp:
             on_notify=lambda title, text: report(Notified(title, text)),
             on_problem=lambda message: report(Problem(message)),
         )
-        levels = LevelFeed.start(mic.level, desktop)
+        levels = LevelFeed.start(mic.level, publish)
         timings.mark("control window and microphone")
         usable, missing = configured(settings)
         meetings = Meetings.open(
@@ -224,7 +214,7 @@ class AssistantApp:
             report(Notified("Workspace", f"Dictation and meeting transcripts need {', '.join(missing.names)}; the layout works without them."))
         return cls(
             inbox,
-            desktop,
+            publish,
             NativeStartup() if startup_effects is None else startup_effects,
             timings,
             mic_event,
@@ -279,13 +269,13 @@ class AssistantApp:
     def perform(self, effect: Effect, state: ControlState) -> None:
         match effect:
             case Send(message):
-                self.desktop.send(message)
+                self.publish(message)
             case Log(text):
                 log(text)
             case Show(shown):
                 listening = self.assistant.listening
                 self.levels.listen(enabled=listening is not None)
-                self.desktop.send(VoiceChanged(State.LISTENING if listening is not None else shown))
+                self.publish(VoiceChanged(State.LISTENING if listening is not None else shown))
             case ShowIdle():
                 self.perform(Show(idle_state(listening=self.assistant.listening, layout_on=self.assistant.layout_on)), state)
             case Record(action):
@@ -302,8 +292,8 @@ class AssistantApp:
                     self.assistant.idle()
             case ExpireCapture(at):
                 self.assistant.expire_capture(at)
-            case HandleFrame(frame):
-                self._command(frame)
+            case Command(command):
+                self._command(command)
             case Quit():
                 self.quit(state.capture_timer)
             case _:
@@ -326,15 +316,12 @@ class AssistantApp:
         except (OSError, ValueError) as error:
             self.inbox.report(Problem(str(error)))
 
-    def _command(self, frame: bytes) -> None:
-        try:
-            match from_desktop(frame):
-                case UseTool(tool=tool):
-                    self.inbox.report(HandleKey(tool, down=True))
-                case desktop_link.Record(action=action):
-                    self._record_meeting(action)
-        except WireError as error:
-            log(f"Refused a frame from the desktop: {error}")
+    def _command(self, command: ToAssistant) -> None:
+        match command:
+            case UseTool(tool=tool):
+                self.inbox.report(HandleKey(tool, down=True))
+            case desktop_link.Record(action=action):
+                self._record_meeting(action)
 
     def quit(self, capture_timer: int | None) -> None:
         timings = Timings("shutdown")
@@ -356,34 +343,35 @@ class AssistantApp:
         system.post_quit()
 
 
-def run(
-    settings: Settings | Missing,
-    *,
-    timings: Timings | None = None,
-    window: components.Window = components.ASSISTANT.window,
-    lock_name: str = LOCK_NAME,
-) -> Exit:
-    """Blocks until asked to close; a test names its own `window` and `lock_name`."""
-    screen.use_physical_pixels()  # before any window exists
-    lock = system.create_lock(lock_name)
-    if lock is None:
-        return Exit.ALREADY_RUNNING
-    try:
-        timings = timings or Timings("startup")
+@dataclass(frozen=True, slots=True)
+class Running:
+    """The assistant's control thread, which the desktop sends its commands to."""
+
+    inbox: Inbox
+    thread: threading.Thread
+
+    def send(self, command: ToAssistant) -> None:
+        self.inbox.report(Command(command))
+
+    def close(self) -> None:
+        """Ask the control thread to finish its meetings and captures, and wait for it."""
+        system.post_message(self.inbox.window.handle, system.WM_CLOSE, 0, 0)
+        self.thread.join(timeout=30)
+
+
+def start(settings: Settings | Missing, publish: Publish, *, window: components.Window = components.ASSISTANT_WINDOW) -> Running:
+    """The assistant on its own control thread, once its control window exists; a test names its own `window`."""
+    opened: queue.Queue[Inbox] = queue.Queue(maxsize=1)
+
+    def control() -> None:
         inbox = Inbox.open(window.title)
-        published = components.endpoint("assistant")
-        server = Server.listen(os.urandom(24).hex(), lambda frame: inbox.report(HandleFrame(frame)))
-        app = AssistantApp.compose(settings, LinkedDesktop(server), inbox)
-        server.start(published)
-        timings.mark("link")
+        opened.put(inbox)
         try:
-            app.run()
-        finally:
-            server.close()
-        return Exit.QUIT
-    finally:
-        system.release_lock(lock)
+            AssistantApp.compose(settings, publish, inbox).run()
+        except Exception:
+            log(traceback.format_exc())
+            raise
 
-
-def show_error(message: str) -> None:
-    system.message_box(message, "Workspace", system.MB_ICONHAND)
+    thread = threading.Thread(target=control, name="assistant control", daemon=True)
+    thread.start()
+    return Running(opened.get(), thread)

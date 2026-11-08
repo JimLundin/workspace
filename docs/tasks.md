@@ -50,8 +50,7 @@ or quality review wherever a rule can be checked mechanically:
   `desktop_ui.icons.COLOURS`.
 - **No append-to-a-mutable-container-in-a-loop.** Prefer comprehensions, tuples
   and generator expressions, and immutable data. Use `frozendict`, not `dict`,
-  for mappings that leave their owner, with replacement instead of mutation
-  (for example, `link.server.Server._retained`).
+  for mappings that leave their owner, with replacement instead of mutation.
 - **Already in AGENTS.md; keep them enforced:**
   - no mocks or patches;
   - no `Any`, `cast` or `getattr`;

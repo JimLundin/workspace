@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
 
-type Component = Literal["gateway", "layout", "assistant", "desktop"]
+type Component = Literal["gateway", "layout", "desktop"]
 
 WM_CLOSE: Final = 0x0010
 WM_QUIT_LAYOUT: Final = 0x8000 + 3
@@ -43,28 +43,24 @@ class Entry:
 
 # The AI connection holds no state: it creates no window, so the keeper ends it at once.
 GATEWAY: Final = Entry(name="gateway", module="gateway", window=Window("workspace gateway", None), quit_message=WM_CLOSE, shutdown_s=0.0)
-# Assistant cleanup is bounded to a minute. The keyboard has nothing to drain, so a
-# stuck one is replaced quickly.
+# The keyboard has nothing to drain, so a stuck one is replaced quickly.
 LAYOUT: Final = Entry(name="layout", module="miryoku", window=Window("workspace layout", None), quit_message=WM_QUIT_LAYOUT, shutdown_s=5.0)
-ASSISTANT: Final = Entry(
-    name="assistant",
-    module="assistant",
-    window=Window("workspace assistant", "workspace assistant class"),
-    quit_message=WM_CLOSE,
-    shutdown_s=60.0,
-)
-# The desktop holds no work of its own: it closes its windows and the tray icon.
+# The desktop closes its windows and the tray icon, and the assistant inside it
+# finishes a meeting's capture and stops dictation: half a minute at most.
 DESKTOP: Final = Entry(
     name="desktop",
     module="desktop",
     window=Window("workspace desktop", "workspace desktop class"),
     quit_message=WM_CLOSE,
-    shutdown_s=15.0,
+    shutdown_s=30.0,
     live_assets=("desktop_ui/spec/",),
 )
 
-CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (GATEWAY, LAYOUT, ASSISTANT, DESKTOP)})
+CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (GATEWAY, LAYOUT, DESKTOP)})
 """In startup order; shutdown reverses it."""
+
+ASSISTANT_WINDOW: Final = Window("workspace assistant", "workspace assistant class")
+"""The assistant's hidden control window in the desktop's process: the keyboard sends it dictation and meeting requests."""
 
 BAR_WINDOW: Final = "Workspace floating bar"
 """The desktop's visible surface."""

@@ -109,8 +109,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
   same values, so two such types no longer tell each other apart at runtime. Signatures and types
   an external dependency dictates (Qt overrides, SDK callbacks, ctypes
   structures) are exempt from these rules. A mapping that leaves its owner
-  is a `frozendict`, replaced rather than mutated (see
-  `link.server.Server._retained`). Put decisions in pure functions and keep
+  is a `frozendict`, replaced rather than mutated. Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
 - Use direct typed attributes, not `getattr`/`hasattr`.
 - Write JavaScript as a real `.js` file beside the module that runs it, not in
@@ -120,9 +119,10 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Boolean parameters are keyword-only. Functions take at most five inputs; Ruff
   blocks more. Where a wider signature is genuinely needed, add
   `# noqa: PLR0913 - <reason>` on the `def` line. Never suppress a whole file.
-- The desktop (`desktop_ui`, `desktop`) and the assistant (`assistant`)
-  never import each other, even indirectly; they share only `contracts`, and talk
-  over `link` (`contracts.desktop_link`). The architecture review enforces it.
+- The desktop (`desktop_ui`) and the assistant (`assistant`) never import each
+  other, even indirectly; they share only `contracts` and pass
+  `contracts.desktop_link` messages. `desktop` composes the two in one process.
+  The architecture review enforces it.
 - Before writing general-purpose code, check for a small focused dependency and
   prefer it when its footprint and integration cost are reasonable.
 - Use the type system's newer tools where they model the data better: PEP 695

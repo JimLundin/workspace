@@ -257,12 +257,12 @@ def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Fi
 
 PROCESSES: Final = frozendict(
     {
-        ("desktop_ui", "desktop"): ("assistant",),
+        ("desktop_ui",): ("assistant",),
         ("assistant",): ("desktop_ui", "desktop", "PySide6", "PyQt6"),
     }
 )
-"""Each program's packages, and what none of them may reach even through others: the desktop
-and the assistant run without each other and share only `contracts`."""
+"""Each side's packages, and what none of them may reach even through others: the desktop
+and the assistant share only `contracts`; `desktop` composes the two in one process."""
 
 
 def process_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:

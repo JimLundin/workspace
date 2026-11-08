@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from typing import assert_never
 
-from contracts.desktop_link import JobChanged, Notify, RecordingChanged, ToDesktop
+from contracts.desktop_link import JobChanged, Notify, RecordingChanged, ToAssistant, ToDesktop
 from contracts.recording_state import Phase, RecordingAction, RecordingState
 from contracts.status import Job, State
 from protocol import LayoutState, Request, Tool
@@ -95,10 +95,10 @@ class ExpireCapture:
 
 
 @dataclass(frozen=True, slots=True)
-class HandleFrame:
-    """A command frame from the desktop."""
+class Command:
+    """A command from the desktop."""
 
-    frame: bytes
+    command: ToAssistant
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +106,7 @@ class Quit:
     pass
 
 
-type Instruction = Show | Record | ToggleMeeting | HandleKey | ExpireCapture | HandleFrame | Quit
+type Instruction = Show | Record | ToggleMeeting | HandleKey | ExpireCapture | Command | Quit
 
 type Event = Fact | Instruction
 """Everything a part, Windows or the desktop can tell the assistant."""
@@ -208,7 +208,7 @@ def _remembered(state: ControlState, fact: Fact) -> ControlState:
 def transition(state: ControlState, event: Event) -> tuple[ControlState, Iterator[Effect]]:
     """The state after `event` and the effects it calls for, in order, produced lazily."""
     match event:
-        case Show() | Record() | ToggleMeeting() | HandleKey() | ExpireCapture() | HandleFrame() | Quit():
+        case Show() | Record() | ToggleMeeting() | HandleKey() | ExpireCapture() | Command() | Quit():
             return state, iter((event,))
         case _:
             return _remembered(state, event), _reacted(state, event)

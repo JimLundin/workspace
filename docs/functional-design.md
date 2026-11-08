@@ -12,18 +12,17 @@ these.
 | Process | Entry | Owns |
 | --- | --- | --- |
 | Launcher | `StartWorkspace.cmd`, `launch.py` | Starts, stops and restarts the components from the checkout's `.venv`; it supervises nothing |
-| AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway`, `components` and `link` |
+| AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway` and `components` |
 | Layout | `miryoku.pyw`, `miryoku/` | The keyboard hook and remapping. Standard library and `winapi/` only |
-| Assistant | `assistant/__main__.py`, `assistant/` | Dictation and meeting recording, on a native message loop plus worker threads. No Qt and no UI |
-| Desktop | `desktop/__main__.py`, `desktop_ui/` | The bar, tray, key map, overlay and window placement, on Qt's event loop. Reaches the assistant only through `desktop_ui.assistant_port` |
+| Desktop | `desktop/__main__.py`, `desktop_ui/`, `assistant/` | The bar, tray, key map, overlay and window placement, on Qt's event loop; and the assistant's dictation and meeting recording, on its own control thread (a native message loop) plus worker threads, with no Qt. `desktop/__main__.py` composes the two |
 
 The desktop and the assistant never import each other, even indirectly (the
 architecture review's `process-isolation` rule). They share only `contracts/`
-(frozen values) and talk over `link/`: a loopback socket with a per-boot token,
-carrying `contracts.desktop_link` messages. The assistant publishes states
-(`VoiceChanged`, `JobChanged`, `RecordingChanged`, `MicLevel`, replayed to a
-desktop that connects later) and events (`Notify`); the desktop sends commands
-(`UseTool`, `Record`). The layout posts each request to its owner
+(frozen values) and pass `contracts.desktop_link` messages in process: the
+assistant publishes states (`VoiceChanged`, `JobChanged`, `RecordingChanged`,
+`MicLevel`) and notices (`Notify`) into the desktop's queue; the desktop sends
+commands (`UseTool`, `Record`) to the assistant's control thread
+(`desktop_ui.assistant_port`). The layout posts each request to its owner
 (`protocol.owner`): app, window and switcher keys to the desktop, the rest to
 the assistant; what the desktop shows (layer, chord, pressed keys) to the
 desktop; the layout's state to both. Quit in the tray runs `launch.py stop`,
@@ -34,13 +33,12 @@ which asks each program to quit in reverse start order.
 | Module | Role |
 | --- | --- |
 | `launch.py` | Starts, stops and restarts the components |
-| `components.py` | The component catalogue: the gateway, layout, assistant and desktop, their windows, quit messages and endpoint files |
+| `components.py` | The component catalogue: the gateway, layout and desktop, their windows, quit messages and endpoint files; the assistant's control window |
 | `protocol.py` | Window messages from the layout to the desktop and the assistant, the `Tool` and `App` requests, and each request's owner (`Side`, `owner`) |
 | `config.py` | User settings: apps, snippets, dark-screen delay |
 | `cell.py` | `Cell`, the one class that reassigns: an owner's changing state |
 | `usage.py`, `diagnostics.py` | The usage log and its failure details |
 | `winapi/` | Typed Win32 and COM bindings: the only `ctypes` code |
-| `link/` | Loopback links: published endpoints, framed messages, the server and client |
 
 ## `miryoku/`
 
@@ -60,7 +58,7 @@ removes the hook and reinstalls it. Measure latency with
 | `features.py`, `text.py` | What each tool key does, and making dictated text safe to type |
 | `llm.py` | `Settings` from the environment, the SDK client and transcription through the gateway |
 | `meetings.py`, `meeting_store.py`, `journal.py` | Meeting recording, its journal of queued audio and its Markdown transcript |
-| `desktop_port.py` | What the assistant tells the desktop |
+| `levels.py` | The microphone level the assistant publishes while dictation listens |
 | `lifecycle.py` | Optional lifecycle measurements, and how a background owner stops |
 
 ## `contracts/`
@@ -72,7 +70,7 @@ architecture review's `contract-isolation` rule enforces it.
 
 | Modules | Role |
 | --- | --- |
-| `desktop_link.py` | The messages between the desktop and the assistant, and their wire form |
+| `desktop_link.py` | The messages between the desktop and the assistant |
 | `status.py` | The tray's state and the bar's quick job |
 | `recording_state.py`, `meetings.py`, `capture.py` | Meeting recording values, events and transcripts, and what a recording captures |
 | `geometry.py`, `hotkeys.py` | Rectangle arithmetic, and every tool key's behaviour |

@@ -8,13 +8,12 @@ installed Python 3.15 and needs no admin rights. It runs five processes:
 - **The desktop** (`desktop/`, `desktop_ui/`) owns everything you see: the
   floating bar, the tray icon, the key map and overlay, and window placement.
   App and window keys go straight to it.
-- **The assistant** (`assistant/`) owns dictation and meeting recording. It has
-  no window of its own: the desktop shows its work over a loopback link. Either
-  runs without the other, so a meeting recording keeps running while the
-  desktop restarts.
+- **The assistant** (`assistant/`) owns dictation and meeting recording. It runs
+  on its own thread in the desktop's program and has no window of its own: the
+  desktop shows its work.
 - **The AI connection** (`gateway/`) is a local pass-through to your endpoint
   that dictation and meetings share. It holds the key.
-- **The launcher** (`launch.py`) starts the four programs from this folder's
+- **The launcher** (`launch.py`) starts the three programs from this folder's
   environment, and stops or restarts them. Nothing restarts a program that
   crashes; start Workspace again.
 
