@@ -22,7 +22,7 @@ from assistant.llm import Failure, Settings, transcribe, wav
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from cell import Cell
 from contracts.capture import AudioSource
-from contracts.recording_state import Exhausted, Phase, Publication, RecordingState, RetryPolicy, capture_report, published, source_name
+from contracts.recording_state import SOURCE_NAMES, Exhausted, Phase, Publication, RecordingState, RetryPolicy, capture_report, published
 from usage import DIRECTORY
 from winapi.pcm import RATE, Problem
 
@@ -554,7 +554,7 @@ class Meetings:
     def describe(self) -> str:
         state = self.snapshot()
         return (
-            f"{state.phase}: {state.title}\n{source_name(state.source)}\n"
+            f"{state.phase}: {state.title}\n{SOURCE_NAMES[state.source]}\n"
             f"Captured {state.seconds:.1f}s; pending {state.pending_seconds:.1f}s.\n"
             f"Transcript: {state.path or 'No recording yet.'}\n{state.detail}"
         )

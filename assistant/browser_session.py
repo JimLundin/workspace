@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Annotated, Protocol, assert_never
+from typing import Annotated, Final, Protocol, assert_never
 from urllib.parse import urlsplit
 
 from pydantic import Field, TypeAdapter
@@ -47,16 +47,13 @@ class Separate(Enum):
 type Source = Product | Separate
 
 
+_SOURCES: Final[frozendict[str, Source]] = frozendict({"edge": Product.EDGE, "chrome": Product.CHROME, "separate": Separate.PROFILE})
+
+
 def source_of(value: str) -> Source:
-    match value:
-        case "edge":
-            return Product.EDGE
-        case "chrome":
-            return Product.CHROME
-        case "separate":
-            return Separate.PROFILE
-        case _:
-            raise BrowserError("browser must be edge, chrome or separate.")
+    if (source := _SOURCES.get(value)) is None:
+        raise BrowserError("browser must be edge, chrome or separate.")
+    return source
 
 
 def user_data_root(product: Product) -> Path:

@@ -4,9 +4,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from math import isfinite
-from typing import Literal, assert_never
+from typing import Final, Literal, assert_never
 
 from contracts.capture import AudioSource
+from contracts.members import every_literal
 from winapi.pcm import RATE, Dropout, LateAudio, Problem, Skipped, Stall
 
 type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]
@@ -223,11 +224,4 @@ def duration(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
-def source_name(source: AudioSource) -> str:
-    match source:
-        case "both":
-            return "Microphone + computer audio"
-        case "microphone":
-            return "Microphone"
-        case _:
-            assert_never(source)
+SOURCE_NAMES: Final[frozendict[AudioSource, str]] = every_literal(AudioSource, {"both": "Microphone + computer audio", "microphone": "Microphone"})

@@ -19,7 +19,7 @@ from pydantic import TypeAdapter
 from automation import journal
 from contracts.capture import AudioSource
 from contracts.meetings import CONVERSATION, MEETING, Ended, InProgress, Meeting, MeetingConversation, TranscriptEntry, TranscriptState, UnknownEnd
-from contracts.recording_state import Batch, StoredState, duration, source_name
+from contracts.recording_state import SOURCE_NAMES, Batch, StoredState, duration
 from winapi.pcm import RATE, quiet_tail
 
 MAX_PENDING_BYTES: Final = 256 * 1024 * 1024
@@ -296,7 +296,7 @@ class MeetingStore:
                 output.write(f"# {state.title}\n\n{datetime.fromtimestamp(state.started).isoformat(timespec='seconds')}\n\n")
                 if state.ended_at is not None:
                     output.write(f"Ended {datetime.fromtimestamp(state.ended_at).isoformat(timespec='seconds')}\n\n")
-                output.write(f"{source_name(state.source)} · {duration(state.frames / RATE)} captured · {status}\n\n")
+                output.write(f"{SOURCE_NAMES[state.source]} · {duration(state.frames / RATE)} captured · {status}\n\n")
                 if state.problem:
                     output.write(f"> {state.problem}\n\n")
                 if state.gap_note:

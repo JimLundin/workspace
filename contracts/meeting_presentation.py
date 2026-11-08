@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import assert_never
 
 from contracts.meetings import Ended, InProgress, Meeting, MeetingConversation, TranscriptState, UnknownEnd
-from contracts.recording_state import duration, source_name
+from contracts.recording_state import SOURCE_NAMES, duration
 
 
 def time_range(meeting: Meeting) -> str:
@@ -24,7 +24,7 @@ def meeting_text(conversation: MeetingConversation) -> str:
     meeting = conversation.meeting
     progress = "Transcript complete" if meeting.transcript_state is TranscriptState.COMPLETE else "Transcription pending"
     header = (
-        f"{time_range(meeting)}\n{source_name(meeting.audio_source)}\n"
+        f"{time_range(meeting)}\n{SOURCE_NAMES[meeting.audio_source]}\n"
         f"{duration(meeting.captured_seconds)} captured · {progress}\n"
         "Times below are captured-audio offsets. Speakers have not been identified."
     )

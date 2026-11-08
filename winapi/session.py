@@ -86,6 +86,10 @@ def unsubscribe(hwnd: int) -> None:
     _WTSUnRegisterSessionNotification(hwnd)
 
 
+_LOCKED: Final = frozendict({0: True, 1: False})
+"""WTS_SESSIONSTATE_LOCK and WTS_SESSIONSTATE_UNLOCK; Windows may report neither."""
+
+
 def locked() -> bool | None:
     """Whether this session is locked now; None when Windows doesn't say."""
     info = ctypes.POINTER(SessionInfo)()
@@ -95,12 +99,6 @@ def locked() -> bool | None:
     try:
         if size.value < ctypes.sizeof(SessionInfo) or info.contents.Level != 1:
             return None
-        match info.contents.Data.SessionFlags:  # WTS_SESSIONSTATE_LOCK, then WTS_SESSIONSTATE_UNLOCK.
-            case 0:
-                return True
-            case 1:
-                return False
-            case _:
-                return None
+        return _LOCKED.get(info.contents.Data.SessionFlags)
     finally:
         _WTSFreeMemory(info)
