@@ -154,9 +154,32 @@ violations left, with no baseline of exceptions. Counted in production code on
       its presentation (`work_presentation.present`), the canvas gestures fold
       through `work_canvas_gestures.transition`, `DesktopBar` folds
       `bar_events`, and `Triage` keeps its decisions in pure board functions.
-      The keyboard engine keeps one state Cell, as chosen (a fold would need
-      its timer ids fed back as events); `Communications` and the other
-      service loops record I/O results and have no machine left to reduce.
+      `Communications` and the other service loops record I/O results and
+      have no machine left to reduce.
+      **Avoid Cells unless necessary** (user, 2026-11-08: "make things more
+      pure wherever possible"). A Cell stays only where outside code (an OS
+      hook, a window procedure, Qt signals, another thread) reaches a
+      long-lived owner and no loop of ours can carry the state. Otherwise:
+      the run loop carries the state as a local (`AssistantApp.run`,
+      `application_observer.Worker`, the meeting journal); a value returns
+      the next value (`EngineState`, `Modifiers`, `WindowsKeyTap`); closures
+      replace late-bound Cells; threads aren't kept (started/finished
+      events); flags are events, one-shot results are Futures, counters are
+      `itertools.count`. Done 2026-11-08: about 111 `Cell[` uses down to 81,
+      among them the assistant's control state, the observer, the keyboard
+      engine (pure, and faster: p50 8.0 µs), seven thread Cells and `Ui`
+      (six to one). Left:
+      - shared service state read by other threads (`Communications`,
+        `Triage`, `PersonalWork`, `Meetings`, `WorkAgent`, link server and
+        client): one Cell each; move their loop-private fields (poll times,
+        cursors) into the run loops;
+      - Qt and Win32 owners (`desktop_ui`, `winapi`): covered only by native
+        tests, so do them with the native-tier task above, not blind;
+      - dictated by a dependency: `agent_history.History` (the SDK session),
+        `contracts.publication`, the desktop `Inbox` handler and the bar's
+        `deliver` (bindings at the window-procedure boundary);
+      - `scripts.check.Phases` and the other script owners: with the next
+        check-script change, since that needs the native tier.
       Patterns that held up:
       - one record per owner works only where every writer holds the owner's
         lock (audit with a scan for unlocked `Cell` writes); state another
