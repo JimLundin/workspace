@@ -10,6 +10,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
+from concurrent.futures import Future
 from dataclasses import dataclass, field, replace
 from typing import Protocol, assert_never
 
@@ -138,6 +139,12 @@ class _Built:
 
 
 @dataclass(frozen=True, slots=True)
+class _OnQt:
+    state: UiState = field(default_factory=UiState)
+    built: _Built = field(default_factory=_Built)
+
+
+@dataclass(frozen=True, slots=True)
 class Ui:
     """The desktop's views on the Qt thread, and the fold of what the assistant publishes into them.
 
@@ -152,18 +159,15 @@ class Ui:
     _poll_timer: QtCore.QTimer
     _thread: threading.Thread
     _canvas: RemoteCanvas
-    _state: Cell[UiState] = field(default_factory=lambda: Cell(UiState()), init=False, repr=False)
-    _built: Cell[_Built] = field(default_factory=lambda: Cell(_Built()), init=False, repr=False)
-    """Replaced on the Qt thread as views are built and closed."""
-    _work: Cell[WorkWindow | None] = field(default_factory=lambda: Cell[WorkWindow | None](None), init=False, repr=False)
-    """The work controller, made on first use from any thread under `_work_lock`."""
-    _work_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _work: WorkWindow
+    """The work controller; its view is made on first use."""
+    _qt: Cell[_OnQt] = field(default_factory=lambda: Cell(_OnQt()), init=False, repr=False)
+    """The fold's state and the views built so far: the Qt thread alone replaces it."""
     _jobs: queue.Queue[Job] = field(default_factory=queue.Queue[Job], init=False, repr=False)
-    _draining: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
+    _draining: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     """Qt can deliver nested events inside a native job; the queue still runs serially."""
     _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
-    _inputs_closed: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
-    _input_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _inputs_closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
     def start(cls, assistant: AssistantPort, *, views: Views | None = None, on_problem: Callable[[str], None] | None = None) -> Ui:
@@ -174,7 +178,23 @@ class Ui:
         root.setStyleSheet(tooltip_style(tokens(scheme())))
         timer = QtCore.QTimer(root)
         timer.setInterval(20)
-        ui = cls(Views() if views is None else views, assistant, on_problem, root, timer, threading.current_thread(), RemoteCanvas(assistant))
+
+        # The work controller posts to, and builds its view through, the Ui made just after it.
+        def post(job: Callable[[], None]) -> None:
+            ui.post(lambda _: job())
+
+        def create_work(work: WorkWindow) -> CanvasWindow:
+            return ui.create_work(work)
+
+        def send(command: WorkViewCommand) -> None:
+            ui.work_command(command)
+
+        def problem(message: str) -> None:
+            ui.problem(message)
+
+        work = WorkWindow.open(send, post=post, create_view=create_work, on_problem=problem, create_loading=lambda: WaitCursor(root))
+        canvas = RemoteCanvas(assistant)
+        ui = cls(Views() if views is None else views, assistant, on_problem, root, timer, threading.current_thread(), canvas, work)
         timer.timeout.connect(ui.drain)
         timer.start()
         return ui
@@ -201,6 +221,13 @@ class Ui:
             finally:
                 self._closed.set()
 
+    @property
+    def _built(self) -> _Built:
+        return self._qt.get().built
+
+    def _set_built(self, built: _Built) -> None:
+        self._qt.set(replace(self._qt.get(), built=built))
+
     def close_views(self) -> None:
         """Close every view on the Qt thread, running queued jobs until each acknowledges."""
         self._poll_timer.stop()
@@ -208,17 +235,15 @@ class Ui:
             self.close_desktop()
         finally:
             self.close_windows()
-            self._built.set(replace(self._built.get(), canvas=None))
-            while (work := self._work.get()) is not None and not work.publication.closed_ready.is_set():
+            self._set_built(replace(self._built, canvas=None))
+            while not self._work.publication.closed_ready.is_set():
                 self.drain()
 
     def _close_inputs(self) -> None:
-        with self._input_lock:
-            self._inputs_closed.set(True)
+        self._inputs_closed.set()
 
     def _accepting(self) -> bool:
-        with self._input_lock:
-            return not self._inputs_closed.get()
+        return not self._inputs_closed.is_set()
 
     def drain(self) -> None:
         """Yield after 4 ms of queued work; call only on the Qt thread.
@@ -226,9 +251,9 @@ class Ui:
         A quarter of a 60 Hz frame leaves room for painting and input. One job
         still runs to completion; expensive preparation belongs off this queue.
         """
-        if self._draining.get():
+        if self._draining.is_set():
             return
-        self._draining.set(True)
+        self._draining.set()
         deadline = time.monotonic() + 0.004
         try:
             for _ in range(64):
@@ -243,7 +268,7 @@ class Ui:
                 if time.monotonic() >= deadline:
                     break
         finally:
-            self._draining.set(False)
+            self._draining.clear()
 
     def close(self) -> None:
         if self._closed.is_set():
@@ -273,18 +298,18 @@ class Ui:
         self.post(lambda _: self._fold(fact))
 
     def _fold(self, fact: Fact) -> None:
-        state, effects = transition(self._state.get(), fact)
-        self._state.set(state)
+        state, effects = transition(self._qt.get().state, fact)
+        self._qt.set(replace(self._qt.get(), state=state))
         for effect in effects:
             self._perform(effect)
 
     @property
     def _bar(self) -> DesktopBar | None:
-        return self._built.get().bar
+        return self._built.bar
 
     @property
     def _canvas_view(self) -> CanvasWindow | None:
-        return self._built.get().canvas
+        return self._built.canvas
 
     def _perform(self, effect: Effect) -> None:
         match effect:
@@ -412,9 +437,9 @@ class Ui:
 
     def show_keymap(self) -> None:
         def job(root: QtWidgets.QApplication) -> None:
-            built = self._built.get()
+            built = self._built
             if built.keymap is None or not shiboken6.isValid(built.keymap.window):
-                self._built.set(replace(built, keymap=KeymapWindow.open(root)))
+                self._set_built(replace(built, keymap=KeymapWindow.open(root)))
             else:
                 bring_forward(built.keymap.window, built.keymap.canvas)
 
@@ -432,12 +457,12 @@ class Ui:
         """A faded key map that follows the current layer without taking keyboard focus."""
 
         def job(root: QtWidgets.QApplication) -> None:
-            overlay = self._built.get().overlay
+            overlay = self._built.overlay
             if overlay is None:
                 if not visible:
                     return
                 overlay = KeymapOverlay.open(root)
-                self._built.set(replace(self._built.get(), overlay=overlay))
+                self._set_built(replace(self._built, overlay=overlay))
             overlay.show(layer, title, work, visible=visible, pressed=pressed)
 
         self.post(job)
@@ -446,15 +471,15 @@ class Ui:
         """Update feedback on the Qt thread without opening a hidden overlay."""
 
         def job(_: QtWidgets.QApplication) -> None:
-            if (overlay := self._built.get().overlay) is not None:
+            if (overlay := self._built.overlay) is not None:
                 overlay.set_pressed(pressed, reset=reset)
 
         self.post(job)
 
     def _indicator(self, root: QtWidgets.QApplication) -> Indicator:
-        if (indicator := self._built.get().indicator) is None:
+        if (indicator := self._built.indicator) is None:
             indicator = Indicator.build(root)
-            self._built.set(replace(self._built.get(), indicator=indicator))
+            self._set_built(replace(self._built, indicator=indicator))
         return indicator
 
     def indicate(self, text: str | None, work: Rect) -> None:
@@ -469,37 +494,25 @@ class Ui:
 
     def close_windows(self) -> None:
         """Close the work window; off the Qt thread, wait briefly for its view to release."""
-        if (work := self._work.get()) is None:
-            return
+        work = self._work
         work.close()
         if self._closed.is_set():
             work.publication.abandon()
         elif threading.current_thread() is not self._thread:
             work.publication.closed_ready.wait(timeout=3)
 
-    def _work_command(self, command: WorkViewCommand) -> None:
+    def work_command(self, command: WorkViewCommand) -> None:
         if not self._assistant.send(WorkCommand(command)):
             raise OSError(UNAVAILABLE)
 
     def work_window(self) -> WorkWindow:
         """The work controller; native preparation and showing are explicit."""
-        with self._work_lock:
-            if (work := self._work.get()) is None:
-                root = self._root
-                work = WorkWindow.open(
-                    self._work_command,
-                    post=lambda job: self.post(lambda _: job()),
-                    create_view=self._create_work,
-                    on_problem=self.problem,
-                    create_loading=lambda: WaitCursor(root),
-                )
-                self._work.set(work)
-            return work
+        return self._work
 
-    def _create_work(self, work: WorkWindow) -> CanvasWindow:
+    def create_work(self, work: WorkWindow) -> CanvasWindow:
         view = self._views.canvas(self._root, work, self._canvas)
-        self._built.set(replace(self._built.get(), canvas=view))
-        view.voice_pressed(pressed=self._state.get().agent_speaking)
+        self._set_built(replace(self._built, canvas=view))
+        view.voice_pressed(pressed=self._qt.get().state.agent_speaking)
         return view
 
     def open_canvas_at(self, identity: str) -> None:
@@ -564,7 +577,7 @@ class Ui:
                     open_item=self.open_canvas_at,
                     requests=RequestActions(self.request_action, self.select_request),
                 )
-                self._built.set(replace(self._built.get(), bar=self._views.desktop(actions, audio_level=audio_level)))
+                self._set_built(replace(self._built, bar=self._views.desktop(actions, audio_level=audio_level)))
                 self._fold(BarBuilt())
             except Exception:
                 traceback.print_exc()
@@ -593,16 +606,16 @@ class Ui:
 
     def switch_windows(self, choices: tuple[winapi.shapes.Window, ...], focus: Callable[[int], None]) -> None:
         def show(_: QtWidgets.QApplication) -> None:
-            built = self._built.get()
+            built = self._built
             if built.switcher is not None and built.switcher.isVisible():
                 built.switcher.activate()
                 return
             current = WindowSwitcher(choices, focus)
-            self._built.set(replace(built, switcher=current))
+            self._set_built(replace(built, switcher=current))
 
             def cleared(_: int) -> None:
-                if self._built.get().switcher is current:
-                    self._built.set(replace(self._built.get(), switcher=None))
+                if self._built.switcher is current:
+                    self._set_built(replace(self._built, switcher=None))
 
             current.finished.connect(cleared)
             near_pointer(current, current.width(), current.height())
@@ -613,24 +626,23 @@ class Ui:
     def close_desktop(self) -> None:
         if self._closed.is_set():
             return
-        done = threading.Event()
-        problem: Cell[str] = Cell("")
+        closed: Future[None] = Future()
 
         def close(_: QtWidgets.QApplication) -> None:
             try:
                 if (bar := self._bar) is not None:
                     bar.close()
-                    self._built.set(replace(self._built.get(), bar=None))
+                    self._set_built(replace(self._built, bar=None))
             except Exception as error:
-                problem.set(str(error))
-            finally:
-                done.set()
+                closed.set_exception(OSError(str(error)))
+            else:
+                closed.set_result(None)
 
         if threading.current_thread() is self._thread:
             close(self._root)
         else:
             self.post(close)
-            if not done.wait(timeout=10):
-                raise OSError("The Workspace bar did not finish closing.")
-        if problem.get():
-            raise OSError(problem.get())
+        try:
+            closed.result(timeout=10)
+        except TimeoutError:
+            raise OSError("The Workspace bar did not finish closing.") from None
