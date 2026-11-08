@@ -136,9 +136,11 @@ violations left, with no baseline of exceptions. Counted in production code on
       into the root; a pure `transition(state, event) -> (state, effects)`
       decides, lazily; one `perform` carries effects out, and an effect may
       report a result as the next event (`Fold`). A request is its own effect.
-      Left, in order: `DesktopBar`, `CanvasPanel`, `application_observer.Worker`,
-      `WorkWindow`, the other `desktop_ui` owners (about 25), then owners whose
-      Cells hold a reducible state machine.
+      Done 2026-11-08 for every plain `desktop_ui` owner: `DesktopBar` (its
+      model folds `bar_events`), `CanvasPanel`, `CanvasInteraction`,
+      `CanvasWindow`, `WorkWindow`, the canvas details,
+      `application_observer.Worker`, `KeymapOverlay` and the smaller views.
+      Left: owners whose Cells hold a reducible state machine.
       Patterns that held up:
       - one record per owner works only where every writer holds the owner's
         lock (audit with a scan for unlocked `Cell` writes); state another
