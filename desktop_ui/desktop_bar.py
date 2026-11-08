@@ -102,6 +102,7 @@ lazy from desktop_ui.bar_events import (
     Work,
     inbox_rows,
     menu,
+    next_frame,
     transition,
 )
 lazy from desktop_ui.bar_status import StatusObserver
@@ -112,9 +113,9 @@ lazy from desktop_ui.island_layout import Content, Metrics, expansion, frame, sn
 lazy from desktop_ui.island_menu import (
     Menu,
 )
-lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Key, Marker, Observed, Spinner, island, order
+lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Key, Marker, Observed, island, order
 lazy from desktop_ui.island_moment import Inbox, Notice, Row
-lazy from desktop_ui.island_motion import IslandMotion, Shown, advance, finish, placed, retarget, settled
+lazy from desktop_ui.island_motion import IslandMotion, Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
@@ -622,25 +623,18 @@ class DesktopBar:
 
     def _paint(self) -> Iterator[Event]:
         model = self.model
-        now, animate = self.observations.clock(), self.visible and self.observations.motion()
-        # A frame after the loop was idle starts the motion now, rather than from the last frame.
-        elapsed = now - (model.last_frame if model.last_frame is not None else now)
-        motion = advance(model.motion, elapsed) if animate else finish(model.motion)
-        model = replace(model, motion=motion)
-        spinning = animate and _spinning(model)
-        waving = animate and model.dictating and model.opened is None
-        self.window.wave_progress = min(1.0, max(0.0, (now - model.sampled_at) / 0.05)) if waving and model.sampled_at is not None else 1.0
-        self.window.spin_angle = (90 - now * 300) % 360 if spinning else 90.0
-        self._draw(model)
-        moving = not settled(motion)
-        if _spinning(model) or waving:
+        now = self.observations.clock()
+        drawn = next_frame(model, now, animate=self.visible and self.observations.motion())
+        self.window.wave_progress = drawn.wave_progress
+        self.window.spin_angle = drawn.spin_angle
+        self._draw(replace(model, motion=drawn.motion))
+        if drawn.indicators:
             for key, capsule in self.window.capsules.items():
                 if key in (Key.ISLAND, Key.STATUS, Key.AGENT, Key.JOB):
                     capsule.update_indicators()
-        running = moving or spinning or waving
-        self.resolution.update(active=running)
-        self.loop.watch(visible=running)
-        yield Framed(motion, now if running else None)
+        self.resolution.update(active=drawn.running)
+        self.loop.watch(visible=drawn.running)
+        yield Framed(drawn.motion, now if drawn.running else None)
 
     def _tick(self) -> Iterator[Event]:
         try:
@@ -888,15 +882,3 @@ def _style(model: BarModel, tint: Tint, height: float) -> Look:
         else desktop_ui.components.appearance.Capsule(model.frost)
     )
     return look(model.preference, pane, tint)
-
-
-def _spinning(model: BarModel) -> bool:
-    def spinner(part: object) -> bool:
-        match part:
-            case Spinner() | Marker.DOTS:
-                return True
-            case _:
-                return False
-
-    menu_spinner = isinstance(model.opened, Menu) and model.agent is not None and not model.agent.waiting
-    return menu_spinner or any(spinner(part) for view in model.views for slot in view.slots for part in slot)

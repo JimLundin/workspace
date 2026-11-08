@@ -9,7 +9,7 @@ facts, so even the motion it draws changes only through the fold.
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
-from typing import assert_never
+from typing import Final, assert_never
 
 from config import DARK_WHEN_IDLE_MINUTES
 from contracts.canvas_activity import CanvasRequest
@@ -34,9 +34,9 @@ from desktop_ui.island_menu import (
     entries,
     restores_focus,
 )
-from desktop_ui.island_model import Action, Agent, CapsuleView, Key, capture
+from desktop_ui.island_model import Action, Agent, CapsuleView, Key, Marker, Spinner, capture
 from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
-from desktop_ui.island_motion import IslandMotion
+from desktop_ui.island_motion import IslandMotion, advance, finish, settled
 from desktop_ui.navigation import Order, Placing
 from desktop_ui.shell_items import EMPTY_SHELF, Shelf
 from protocol import Tool
@@ -831,4 +831,58 @@ def _ticked(model: BarModel, ticked: Ticked) -> BarModel:
         taskbar_revealed=ticked.taskbar_revealed,
         dark_when_away=ticked.dark_when_away,
         tray_tips=ticked.tray_tips,
+    )
+
+
+# ---- frames -------------------------------------------------------------------------
+
+
+def spinning(model: BarModel) -> bool:
+    """Work is running where the bar shows it: a capsule's spinner or dots, or the open menu's spinner."""
+
+    def spinner(part: object) -> bool:
+        match part:
+            case Spinner() | Marker.DOTS:
+                return True
+            case _:
+                return False
+
+    menu_spinner = isinstance(model.opened, Menu) and model.agent is not None and not model.agent.waiting
+    return menu_spinner or any(spinner(part) for view in model.views for slot in view.slots for part in slot)
+
+
+@dataclass(frozen=True, slots=True)
+class Frame:
+    """What one frame draws, and whether another frame should follow."""
+
+    motion: IslandMotion
+    spin_angle: float
+    """Degrees; 90 is the spinner at rest."""
+    wave_progress: float
+    """How far the dictation wave has moved from its last sample to the next, 0 to 1."""
+    indicators: bool
+    """An activity indicator or the wave is showing, so their capsules repaint."""
+    running: bool
+    """Something is still moving: the frame loop keeps going."""
+
+
+WAVE_SAMPLE_S: Final = 0.05
+"""The microphone trace's sampling period: the wave moves across it between samples."""
+
+
+def next_frame(model: BarModel, now: float, *, animate: bool) -> Frame:
+    """The frame at `now`; without `animate` (hidden, or Windows' reduced motion) everything rests."""
+    # A frame after the loop was idle starts the motion now, rather than from the last frame.
+    elapsed = now - (model.last_frame if model.last_frame is not None else now)
+    motion = advance(model.motion, elapsed) if animate else finish(model.motion)
+    working = spinning(replace(model, motion=motion))
+    spins = animate and working
+    waving = animate and model.dictating and model.opened is None
+    wave = min(1.0, max(0.0, (now - model.sampled_at) / WAVE_SAMPLE_S)) if waving and model.sampled_at is not None else 1.0
+    return Frame(
+        motion,
+        (90 - now * 300) % 360 if spins else 90.0,
+        wave,
+        indicators=working or waving,
+        running=not settled(motion) or spins or waving,
     )
