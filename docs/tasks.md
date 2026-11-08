@@ -290,3 +290,19 @@ a few in `browser_dom`, `meeting_browser` and `browser`. Each script becomes a
 arguments (CDP `callFunctionOn` or a JSON-encoded argument) instead of
 f-string interpolation; then the review can reject JavaScript in string literals.
 
+## 5. Fix the Charybdis backlight degrading the keyboard
+
+Since `desktop_ui.keyboard_light` arrived (2026-11-06), the Charybdis degrades
+after a while: the second half flickers, the trackball polls slowly and keys
+need a longer press. Replugging the keyboard cleared it (2026-11-08), so it's
+firmware state in RAM, not hardware. The feature switches the RGB matrix effect
+off and back on over VIA (`winapi.via`, id_qmk_rgb_matrix_channel, never
+saved) at every away edge, 362 times between 2026-11-06 and 2026-11-08 morning,
+sometimes a second apart (an idle darken followed by input). Keep the feature
+(the user wants the keyboard dark while away); find what the toggling leaves
+behind. Candidates: effect 0 versus the matrix's own off switch
+(`rgb_matrix_disable_noeeprom`, VIA's brightness channel) and how the split
+half syncs a mode change; rapid off/on pairs; the HID handle opened per
+message. Check against the keyboard's QMK version, and debounce edges that
+reverse within a few seconds.
+
