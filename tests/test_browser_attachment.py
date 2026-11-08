@@ -1,6 +1,7 @@
 """Borrowed browser lifetime and cancellable consent, without a personal profile."""
 
 import json
+import msvcrt
 import socket
 import threading
 import time
@@ -15,7 +16,7 @@ from websockets.http11 import Request, Response
 from websockets.sync.server import ServerConnection, serve
 
 from assistant.browser import MAX_OUTPUT, Browser
-from assistant.browser_session import Attached, Cdp, NativeSessions, Product, SocketConnector, connect_socket, endpoint
+from assistant.browser_session import Attached, Cdp, NativeSessions, Product, SocketConnector, connect_socket, endpoint, read_endpoint
 from assistant.browser_values import BrowserError, InterruptedError
 from contracts.json_value import Json
 from tests.test_browser import Channel, ScriptedSessions, command, connected_browser, decoded
@@ -265,3 +266,18 @@ def test_opening_deadline_closes_pending_consent_without_pressing_stop() -> None
             Cdp.connect(f"ws://127.0.0.1:{port}/devtools/browser/fixture", cancel, timeout=0.25)
         assert time.monotonic() - started < 2 and not cancel.is_set()
         assert pending_server.result(timeout=2), "The expired connection is still open."
+
+
+def test_endpoint_publication_recovers_after_a_native_file_lock(tmp_path: Path) -> None:
+    with (tmp_path / "DevToolsActivePort").open("w+b") as stream:
+        stream.write(b"12345\n/devtools/browser/fixture\n")
+        stream.flush()
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        try:
+            with TestCase().assertRaises(BrowserError):
+                read_endpoint(tmp_path)
+        finally:
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+    assert read_endpoint(tmp_path) == "ws://127.0.0.1:12345/devtools/browser/fixture"

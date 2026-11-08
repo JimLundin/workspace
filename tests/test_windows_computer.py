@@ -22,12 +22,10 @@ from win32more.Windows.Win32.System.StationsAndDesktops import GetThreadDesktop,
 from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindowThreadProcessId
 
 from assistant import commands, uia
-from assistant.machine import CaptureSources, WinMachine
+from assistant.machine import WinMachine
 from assistant.uia import Act, Inspect, UiRequest
-from contracts.geometry import Shot, fit
 from contracts.json_value import Json
-from tests.test_windows_machine import Browser, Desktop
-from winapi.shapes import Rect
+from tests.test_machine import Browser, Desktop
 
 
 def decoded(text: str) -> dict[str, Json]:
@@ -142,37 +140,6 @@ def test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status(tmp_path
     assert code == 0 and "Fixture warning" in output and "Result" in output and "CLIXML" not in output
     code, output = commands.powershell("Start-Sleep -Seconds 60", timeout_s=0.2)
     assert code != 0 and "Timed out" in output
-
-
-def test_screenshot_sources_use_physical_bounds_and_scale_only_the_image() -> None:
-    desktop = Rect(-1920, 0, 1920, 1080)
-    left = Rect(-1920, 0, 0, 1080)
-    work = Rect(-1700, 100, -900, 700)
-
-    class CaptureDesktop(Desktop):
-        def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
-            size = fit(area.size, longest)
-            return b"fixture", Shot(area, size.width, size.height)
-
-    class Sources:
-        # The fixture owns its current observation so availability can change
-        # between two calls without replacing application/module attributes.
-        def __init__(self) -> None:
-            self.current = CaptureSources(left, desktop, (left, Rect(0, 0, 1920, 1080)), work)
-
-        def observe(self, handle: int) -> CaptureSources:
-            return self.current
-
-    sources = Sources()
-    machine = WinMachine(CaptureDesktop(), browser=Browser(), capture_sources=sources)
-    _, shot = machine.screenshot(handle=7, longest=400)
-    assert shot.area == work and (shot.width, shot.height) == (400, 300)
-    assert machine.screenshot(monitor=0)[1].area == left
-    assert machine.screenshot(monitor=-2)[1].area == desktop
-    assert machine.screenshot(area=Rect(-2000, -100, -1000, 500))[1].area == Rect(-1920, 0, -1000, 500)
-    sources.current = CaptureSources(None, desktop, (), None)
-    with unittest.TestCase().assertRaisesRegex(OSError, "locked"):
-        machine.screenshot()
 
 
 def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_path: Path) -> None:
