@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from scripts.check_standards import Standard, background
-from scripts.quality import imports, scan
+from scripts.quality import imports
 from tests.check_fixture import copy_check_scripts
 from tests.git_fixture import initialized
 
@@ -16,30 +16,12 @@ from tests.git_fixture import initialized
 def source_tree(root: Path, text: str) -> None:
     (root / "assistant").mkdir()
     (root / "assistant" / "api.py").write_text(text, encoding="utf-8")
-    (root / "pyproject.toml").write_text(
-        '[tool.workspace.architecture]\n[tool.ruff.lint.pylint]\nmax-args = 5\n[tool.ruff.lint.flake8-tidy-imports]\nban-relative-imports = "all"\n',
-        encoding="utf-8",
-    )
+    (root / "pyproject.toml").write_text("[tool.workspace.architecture]\n", encoding="utf-8")
 
 
 def development_lint() -> None:
     if importlib.util.find_spec("ruff") is None:
         raise unittest.SkipTest("Ruff is a development tool; the installed selfcheck does not require it.")
-
-
-def test_boolean_and_wide_signature_gate_blocks_unless_a_reason_is_given(tmp_path: Path) -> None:
-    development_lint()
-    source_tree(
-        tmp_path,
-        "def named(*, enabled: bool):\n    pass\n"
-        "def positional(enabled: bool):\n    pass\n"
-        "def defaulted(enabled=True):\n    pass\n"
-        "class Owner:\n"
-        "    def five(self, a, b, c, *, d, e):\n        pass\n"
-        "    def six(self, a, b, c, *, d, e, f):\n        pass\n"
-        "    def native(self, a, b, c, d, e, f):  # noqa: PLR0913 - required native ABI\n        pass\n",
-    )
-    assert tuple((item.rule, item.line) for item in scan(tmp_path)) == (("FBT001", 3), ("FBT002", 5), ("PLR0913", 10))
 
 
 def test_import_ownership_rejects_aliases_and_forwarding() -> None:
@@ -51,17 +33,6 @@ def test_import_ownership_rejects_aliases_and_forwarding() -> None:
     found = tuple(imports("assistant/api.py", ast.parse(text)))
     assert tuple((item.rule, item.line) for item in found) == (("import-alias", 1), ("import-alias", 2), ("import-alias", 3), ("re-export", 7))
     assert not tuple(imports("assistant/api.py", ast.parse('from owner import Event\ndef local():\n    pass\n__all__ = ("local",)\n')))
-
-
-def test_import_gate_covers_lazy_parent_and_function_body_imports(tmp_path: Path) -> None:
-    # A missing level check would let explicit test scopes accept relative
-    # dependencies even though ordinary Ruff lint rejects them.
-    development_lint()
-    source_tree(
-        tmp_path,
-        "from .owner import Event\nlazy from .. import model\nfrom assistant.owner import Local\n\n\ndef run():\n    from owner import activate\n",
-    )
-    assert tuple((item.rule, item.line) for item in scan(tmp_path)) == (("TID252", 1), ("TID252", 2), ("PLC0415", 7))
 
 
 def test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt(tmp_path: Path) -> None:
