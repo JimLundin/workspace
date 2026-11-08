@@ -97,6 +97,7 @@ lazy from desktop_ui.bar_events import (
     TrayShown,
     UseSizes,
     UseTool,
+    Visibility,
     VolumeSet,
     Work,
     inbox_rows,
@@ -260,7 +261,6 @@ class DesktopBar:
     audio_timer: QtCore.QTimer
     """The 50 ms microphone trace while dictating."""
     _model: Cell[BarModel]
-    _visible: Cell[bool]
 
     # Actions, native-shell lifetime, audio ownership and desktop observations
     # are separate composition dependencies rather than UI options.
@@ -289,7 +289,12 @@ class DesktopBar:
         audio.setInterval(50)
         audio.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         audio.timeout.connect(lambda: reporter.report(SampleDue()))
-        model = BarModel(specs, preference=observed.material(), ambient=Ambient(observed.local_time().strftime("%H:%M"), PowerUnavailable.UNKNOWN))
+        model = BarModel(
+            specs,
+            visible=native_shell,
+            preference=observed.material(),
+            ambient=Ambient(observed.local_time().strftime("%H:%M"), PowerUnavailable.UNKNOWN),
+        )
         bar = cls(
             actions,
             observed,
@@ -306,7 +311,6 @@ class DesktopBar:
             tick,
             audio,
             Cell(model),
-            Cell(native_shell),
         )
         try:
             bar = replace(bar, audio_meter=AudioMeter.start(audio_level) if audio_level is not None else None)
@@ -363,7 +367,7 @@ class DesktopBar:
 
     @property
     def visible(self) -> bool:
-        return self._visible.get()
+        return self.model.visible
 
     @property
     def opened(self) -> Opened | None:
@@ -770,7 +774,7 @@ class DesktopBar:
 
     def show(self, *, visible: bool) -> None:
         """Show or hide the bar; hidden, it lays out without animating."""
-        self._visible.set(visible)
+        self.handle(Visibility(visible))
 
     def observe_system(self, system: SystemStatus) -> None:
         """Show this system status until the next tick observes another."""

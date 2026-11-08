@@ -55,6 +55,8 @@ class BarModel:
 
     specs: ui_spec.Specs
     closed: bool = False
+    visible: bool = True
+    """Whether the bar's window is meant to be on screen."""
     opened: Opened | None = None
     menu_target: int = 0
     """The window that had the keyboard before the island opened."""
@@ -308,6 +310,13 @@ class Closing:
 
 
 @dataclass(frozen=True, slots=True)
+class Visibility:
+    """The bar was shown or hidden; hidden, it lays out without animating."""
+
+    visible: bool
+
+
+@dataclass(frozen=True, slots=True)
 class SystemObserved:
     system: SystemStatus
 
@@ -373,6 +382,7 @@ type Event = (
     | Framed
     | Sampled
     | Closing
+    | Visibility
     | SystemObserved
     | AmbientObserved
     | TrayShown
@@ -710,6 +720,7 @@ type Observation = (
     | Framed
     | Sampled
     | Closing
+    | Visibility
     | SystemObserved
     | AmbientObserved
     | TrayShown
@@ -758,6 +769,8 @@ def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effe
         case Showing(change):
             changed = _shown(model, change)
             return changed, ((Render(),) if changed != model else ())
+        case Visibility(visible):
+            return replace(model, visible=visible), ()
         case ChordHeld(held):
             return replace(model, chord_held=held), (ShowHints(),)
         case RequestsShown(choices):
