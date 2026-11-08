@@ -18,7 +18,7 @@ lazy from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, T
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.widgets import Window, column, glyph, row, segmented, surface, window_style
 lazy from desktop_ui.dialogs import bring_forward, near_pointer
-lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Kind, keymap
+lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
 lazy from miryoku.layout import Layer, Scancode
@@ -27,26 +27,26 @@ prepare()
 
 
 _HUES: Final = {
-    Kind.MOD: ("#64d2ff", "#0071a4"),
-    Kind.LAYER: ("#7ab0f2", "#2f6fc4"),
-    Kind.TOOL: ("#ffb340", "#b25000"),
-    Kind.APP: ("#30d158", "#248a3d"),
-    Kind.SPECIAL: ("#da8fff", "#8944ab"),
+    Role.MOD: ("#64d2ff", "#0071a4"),
+    Role.LAYER: ("#7ab0f2", "#2f6fc4"),
+    Role.TOOL: ("#ffb340", "#b25000"),
+    Role.APP: ("#30d158", "#248a3d"),
+    Role.SPECIAL: ("#da8fff", "#8944ab"),
 }
 """Each binding's hue, legible as text on the dark and the light scheme."""
 
 
-def _keycap(kind: Kind, theme: Tokens) -> tuple[str, str]:
+def _keycap(role: Role, theme: Tokens) -> tuple[str, str]:
     """A key's fill and ink: plain keys are solid, a binding tints its key with its hue, the held thumb takes the accent."""
-    match kind:
-        case Kind.KEY:
+    match role:
+        case Role.KEY:
             return theme.solid, theme.ink.argb
-        case Kind.HELD:
+        case Role.HELD:
             return GLASS_ACCENT, "#ffffff"
-        case Kind.BLANK:
+        case Role.BLANK:
             return theme.fill.argb, theme.ink3.argb
-        case Kind.MOD | Kind.LAYER | Kind.TOOL | Kind.APP | Kind.SPECIAL:
-            dark, light = _HUES[kind]
+        case Role.MOD | Role.LAYER | Role.TOOL | Role.APP | Role.SPECIAL:
+            dark, light = _HUES[role]
             match theme.scheme:
                 case Scheme.DARK:
                     return Shade(dark, 0.16).argb, dark
@@ -55,7 +55,7 @@ def _keycap(kind: Kind, theme: Tokens) -> tuple[str, str]:
                 case _:
                     assert_never(theme.scheme)
         case _:
-            assert_never(kind)
+            assert_never(role)
 
 
 PRESSED: Final = every_member(Scheme, {Scheme.DARK: ("#f5f5f7", "#161618"), Scheme.LIGHT: ("#1d1d1f", "#ffffff")})
@@ -97,7 +97,7 @@ class KeymapCanvas(QtWidgets.QWidget):
         self.update()
 
     def colors(self, name: str) -> tuple[str, str]:
-        return _pressed(self.theme) if name in self.highlighted else _keycap(self.caps[name].kind, self.theme)
+        return _pressed(self.theme) if name in self.highlighted else _keycap(self.caps[name].role, self.theme)
 
     def press(self, names: frozenset[str]) -> None:
         changed = names ^ self.highlighted

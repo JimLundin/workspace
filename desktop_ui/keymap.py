@@ -86,7 +86,7 @@ def shortcut_hint(binding: Shortcut | None, *, compact: bool = False) -> str:
             return ""
 
 
-class Kind(Enum):
+class Role(Enum):
     """What a key does, for its colour."""
 
     KEY = auto()
@@ -109,7 +109,7 @@ class Cap:
     """What it does on this layer; for a tap-hold key, the tap."""
     hold: str
     """What it does held, if that's something else."""
-    kind: Kind
+    role: Role
 
 
 _KEY_NAMES: Final = {
@@ -140,31 +140,31 @@ def _output(key: Key, label: str | None = None) -> str:
     return label or _KEY_NAMES.get(key) or (c.upper() if c else key.name.title())
 
 
-def describe(a: Action) -> tuple[str, Kind]:
-    """A key's label and kind, as drawn."""
+def describe(a: Action) -> tuple[str, Role]:
+    """A key's label and role, as drawn."""
     match a:
         case Key():
-            return _output(a), Kind.KEY
+            return _output(a), Role.KEY
         case Chord(key, mods) if a in _CHORD_NAMES:
-            return _CHORD_NAMES[a], Kind.KEY
+            return _CHORD_NAMES[a], Role.KEY
         case Chord(key, mods) if mods == frozenset({Mod.SHIFT}) and (c := character(key, shifted=True)):
-            return c, Kind.KEY
+            return c, Role.KEY
         case Chord(key, mods):
-            return "+".join([*(_MOD_NAMES[m] for m in Mod if m in mods), _output(key)]), Kind.KEY
+            return "+".join([*(_MOD_NAMES[m] for m in Mod if m in mods), _output(key)]), Role.KEY
         case TapHold(tap):
             return describe(tap)
         case Mod():
-            return _MOD_NAMES[a], Kind.MOD
+            return _MOD_NAMES[a], Role.MOD
         case Layer():
-            return a.name.title(), Kind.LAYER
+            return a.name.title(), Role.LAYER
         case Command.LOCK_LAYER:
-            return "Lock", Kind.LAYER
+            return "Lock", Role.LAYER
         case Command.NOTHING:
-            return "", Kind.BLANK
+            return "", Role.BLANK
         case Tool():
-            return TOOL_NAMES[a], Kind.TOOL
+            return TOOL_NAMES[a], Role.TOOL
         case App():
-            return a.name[:1].upper() + a.name[1:], Kind.APP
+            return a.name[:1].upper() + a.name[1:], Role.APP
 
 
 def _hold(a: Action) -> str:
@@ -187,16 +187,16 @@ def _holding(layer: Layer | None) -> int | None:
 def _cap(layer: Layer | None, held: int | None, scancode: Scancode, name: str) -> Cap:
     """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
     if scancode == ESCAPE:
-        return Cap(name, "On/off", "hold: quit", Kind.SPECIAL)
+        return Cap(name, "On/off", "hold: quit", Role.SPECIAL)
     match slot(scancode):
         case Unmapped():
-            return Cap(name, "", "", Kind.BLANK)
+            return Cap(name, "", "", Role.BLANK)
         case int(cell) if cell == held and layer is not None:
-            return Cap(name, layer.name.title(), "held", Kind.HELD)
+            return Cap(name, layer.name.title(), "held", Role.HELD)
         case int(cell):
             a = action(layer, cell)
-            label, kind = describe(a)
-            return Cap(name, label, _hold(a), kind)
+            label, role = describe(a)
+            return Cap(name, label, _hold(a), role)
 
 
 def keymap(layer: Layer | None) -> tuple[tuple[Cap, ...], ...]:
