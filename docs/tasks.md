@@ -22,25 +22,16 @@ Left:
   what a plain test already covers. Don't run the native tier per change
   meanwhile; once per batch at most, for the modules a change can't be
   checked without.
-  Done 2026-11-08: about 190 native tests down to 78. Fake-driven tests moved
-  to plain unchanged (`test_keyboard_hook` with `tests/keyboard_fixture.py`,
-  `test_shell_owners`, `test_microphone`, `test_meeting_audio`,
-  `test_machine`, `test_shell_items`, and others); duplicates of plain fold and
-  model tests deleted; the inbox and three canvas tests replaced by plain
-  fold tests. Machine-heavy tests (real Edge, the nested native check and
-  watch, PowerShell/UIA, whole-process run-alone) skip unless
-  `WORKSPACE_HEAVY=1` (`tests/heavy.py`). A plain-only check no longer starts
-  the Windows runner (4-12 s each), and a native check's source work starts
-  from the plain tier's last pass, not a stale native one.
-  Left (pure decisions to extract, then a plain test each): the bar's frame
-  decision in `DesktopBar._paint`/`_retarget` (motion, spin, wave, running,
-  listening: 6 island-bar tests), the pager's canvas-icon routing and stack
+  Down from about 190 native tests to about 71 (2026-11-08). Machine-heavy
+  tests (real Edge, the nested native check and watch, PowerShell/UIA,
+  whole-process run-alone) skip unless `WORKSPACE_HEAVY=1` (`tests/heavy.py`).
+  Left (pure decisions to extract, then a plain test each): the remaining
+  three frame tests in `test_windows_island_bar` (the frame decision is now
+  `bar_events.next_frame`), the pager's canvas-icon routing and stack
   faces, `bar_events._pressed` per action, canvas `escape` order, wheel
-  pan/zoom clamping, attention redirect expansion, dismissal tiles, `Ui.drain`
-  (clock and queue seam: both ui_scheduling tests), the overlay's drag in
-  physical pixels, the notification observer's poll/clock seam (2 tests with
-  real waits), `window_switcher.matching`, and the machine import-hygiene
-  test through `test_architecture`'s reachability.
+  pan/zoom clamping, attention redirect expansion, dismissal tiles, the
+  overlay's drag in physical pixels, `window_switcher.matching`, and the
+  machine import-hygiene test through `test_architecture`'s reachability.
 - **Stop polling the work journal and the task controller.** The assistant
   burns about half a core and the desktop a quarter (2026-11-08): the work
   frontend reads the journal every 0.25 s (`WorkAgent._observe`, about 47 ms a
@@ -107,76 +98,31 @@ or quality review wherever a rule can be checked mechanically:
 
 Written into AGENTS.md on 2026-11-07. The user chose fix first, then enforce:
 each check goes live in the architecture review only once its rule has no
-violations left, with no baseline of exceptions. Counted in production code on
-2026-11-07:
+violations left, with no baseline of exceptions. The enum-translating `match`,
+bare numeric tuples, append in a loop and mutable parameters are done and
+enforced in production code (`enum-translation`, `bare-tuple`,
+`loop-accumulation`, `mutable-parameter`); tests aren't covered. Left:
 
-1. **Enum-translating `match`**: done 2026-11-07. 23 matches became tables
-   built with `contracts.members.every_member`, which fails at import unless
-   every member is present; the architecture review's `enum-translation` rule
-   now rejects new ones.
-2. **Bare numeric tuples**: done 2026-11-07. `winapi.shapes` gained `Point`,
-   `Size` and `Offset`; single-owner shapes got their own frozen records. The
-   review's `bare-tuple` rule rejects new ones in production code; 20 remain in
-   test fixtures. Adding `Point` to the hook costs about 0.5 µs per key; the
-   engine benchmark is unchanged.
-3. **Append in a loop**: done 2026-11-07. 76 sites rewritten with
-   comprehensions, generators and generator functions; the review's
-   `loop-accumulation` rule rejects new ones. The keeper's 17 went with the
-   keeper and `scripts/selfcheck`'s 11 were rewritten once it stopped being protected. 11 remain in tests, which the rule doesn't cover.
-   `island_layout.arrange` is about 6 µs slower per call (a frozen step per
-   part), negligible beside its font measurement.
-4. **Mutable parameter types**: done 2026-11-07. 44 production sites: read-only
-   ones take `Sequence`/`Mapping`/`Set`; the voice job notes its evidence on a
-   `features.Progress` owner; the check's source steps yield their problems and
-   a `check.Phases` owner times its phases. The review's `mutable-parameter`
-   rule rejects new ones; `@override` methods are exempt, and four
-   SDK/`gc.callbacks` signatures are exact exceptions. 18 remain in tests, which
-   the rule doesn't cover.
 5. **Every class a frozen dataclass; no reassignment** (user, 2026-11-07): the
    point is that nothing reassigns an attribute of ours. Owners of changing
    state hold a `cell.Cell` of a frozen state record and replace it whole; the
    keyboard follows the same model, benchmarked. Counted in production code on
    2026-11-07:
-   1. **Classes that only held their inputs**: done. 29 became frozen records;
-      the review's `plain-record` rule rejects new ones. `MemorySession` is an
-      exact exception: the SDK's `Session` protocol needs writable attributes.
-   2. **Classes that build state in `__init__` but never rebind**: done
-      2026-11-07, 43 classes. Patterns, for the owners still to come:
-      - stateless adapters just take the decorator;
-      - a defaulted input is a `default_factory` field;
-      - a part built from inputs (a socket, a window, an icon, a thread) comes
-        from a named classmethod (`Server.bind`, `AppWindow.create`,
-        `Icon.draw`, `ViewThread.start`, `WinDesktop.following`);
-      - a store creates its schema in `__post_init__`, which rebinds nothing;
-      - a thread that runs the owner's own method isn't kept: it sets the
-        owner's `finished` event on exit, and `close` waits on that.
-      `Conversations` holds its recent histories as a `frozendict` in a `Cell`.
-   3. **Owners that rebind their own attributes** (85 classes, about 700
-      sites), plus five from step 2 that mutate a held container or are written
-      from outside: `meetings._Writer` (`bytearray`), `sdk.Timeline` (with its
-      `TextBuffer` exception), `scripts.selfcheck.Lanes`, `worker.OwnerCalls`
-      (`BoundRunner` sets `current`) and `benchmark_island.Clock`. Each gets a
-      frozen state record in a `Cell`. Done 2026-11-07: `link`, `winapi`,
-      `automation`, `contracts`, `scripts`, `gateway`, and `assistant`.
-      **Composition roots fold reported events** (user, 2026-11-07: frozen
-      everywhere is meant to make state explicit; hidden state, even when
-      faster, is harder to follow in a language that tracks no side effects).
-      Done 2026-11-08 for `AssistantApp` (`assistant.control`), `DesktopApp`
-      (`desktop_ui.desktop_control`) and `Ui` (`desktop_ui.ui_control`): parts
-      report facts or requests through one `report(event)`, never calling back
-      into the root; a pure `transition(state, event) -> (state, effects)`
-      decides, lazily; one `perform` carries effects out, and an effect may
-      report a result as the next event (`Fold`). A request is its own effect.
-      Done 2026-11-08 for every plain `desktop_ui` owner: `DesktopBar` (its
-      model folds `bar_events`), `CanvasPanel`, `CanvasInteraction`,
-      `CanvasWindow`, `WorkWindow`, the canvas details,
-      `application_observer.Worker`, `KeymapOverlay` and the smaller views.
-      Owners whose Cells held a reducible state machine: `WorkAgent` folds
-      its presentation (`work_presentation.present`), the canvas gestures fold
-      through `work_canvas_gestures.transition`, `DesktopBar` folds
-      `bar_events`, and `Triage` keeps its decisions in pure board functions.
-      `Communications` and the other service loops record I/O results and
-      have no machine left to reduce.
+   Patterns for the owners still to come:
+   - stateless adapters just take the decorator;
+   - a defaulted input is a `default_factory` field;
+   - a part built from inputs (a socket, a window, an icon, a thread) comes
+     from a named classmethod (`Server.bind`, `AppWindow.create`,
+     `Icon.draw`, `ViewThread.start`, `WinDesktop.following`);
+   - a store creates its schema in `__post_init__`, which rebinds nothing;
+   - a thread that runs the owner's own method isn't kept: it sets the
+     owner's `finished` event on exit, and `close` waits on that.
+   3. **Owners that rebind their own attributes**: done for `link`,
+      `winapi`, `automation`, `contracts`, `scripts`, `gateway`, `assistant`
+      and every plain `desktop_ui` owner. Composition roots fold reported
+      events: parts `report(event)`, a pure `transition(state, event) ->
+      (state, effects)` decides, one `perform` carries effects out (user,
+      2026-11-07: frozen everywhere is meant to make state explicit).
       **Avoid Cells unless necessary** (user, 2026-11-08: "make things more
       pure wherever possible"). A Cell stays only where outside code (an OS
       hook, a window procedure, Qt signals, another thread) reaches a
@@ -186,10 +132,7 @@ violations left, with no baseline of exceptions. Counted in production code on
       the next value (`EngineState`, `Modifiers`, `WindowsKeyTap`); closures
       replace late-bound Cells; threads aren't kept (started/finished
       events); flags are events, one-shot results are Futures, counters are
-      `itertools.count`. Done 2026-11-08: about 111 `Cell[` uses down to 81,
-      among them the assistant's control state, the observer, the keyboard
-      engine (pure, and faster: p50 8.0 µs), seven thread Cells and `Ui`
-      (six to one). Left:
+      `itertools.count`. 81 `Cell[` uses remain (2026-11-08). Left:
       - shared service state read by other threads (`Communications`,
         `Triage`, `PersonalWork`, `Meetings`, `WorkAgent`, link server and
         client): one Cell each; move their loop-private fields (poll times,
@@ -217,18 +160,6 @@ violations left, with no baseline of exceptions. Counted in production code on
         state uses an explicit seam (`Triage.set_board`) or a test-side `Cell`.
       - The audio mixer's 160 000-sample ring stays one buffer written in
         place: copying it per 10 ms packet would cost about 64 MB/s.
-   4. **The keyboard** (`miryoku.win.Keyboard`, 36 sites, and the engine's
-      mutable `Modifiers` and the record at `engine.py:193`): the same model,
-      measured with `scripts/benchmark_keyboard.py` before and after. Keep an
-      exact exception only if latency or allocation regresses.
-      Done 2026-11-08: the engine is pure over `EngineState` (each key, timer
-      and toggle takes the state and returns the next; a refused cleanup
-      raises `UnreleasedError` carrying the cleared state), `Modifiers` and
-      `WindowsKeyTap` are values, and `Keyboard` holds the engine state in
-      its one hook-boundary Cell. Engine latency (5 × 100 000 synthetic
-      events, GC on, no collections): mutable p50 4.7 µs, p99 27 µs; one Cell
-      15.5 / 108 µs; pure 8.0 / 52 µs. Each `replace` of the 13-field record
-      costs about 6 µs.
    5. **Classes with an external base** (22 Qt widgets rebind): set attributes
       only in `__init__` and keep changing state in a `Cell`.
    6. **The rule**: every class with no base (or only `Generic`) is a frozen,
@@ -266,10 +197,6 @@ violations left, with no baseline of exceptions. Counted in production code on
     `scripts.check`, `desktop_ui.island_menu` and `winapi.tray_host`. Each needs
     its callers checked: keep it where the value is stored, cached or reused.
 
-Items 3–5 and 7–8 were added by the user on 2026-11-07: no loop-appending, no
-function requiring mutable data, frozen dataclasses wherever possible (external
-dependencies are exempt), operators on domain types, enums over their values.
-
 Then replace the enum `kind` fields:
 
 The `kind: Literal["…"]` fields (`TextAnswer`, `TaskRequest`, `SessionRequest`
@@ -277,17 +204,6 @@ and about 60 others) are not the problem. Each is already its own frozen type;
 the constant `Literal` is only the JSON tag that tells a stored union apart. The
 problem is a single type whose enum `kind` decides which values are valid:
 
-- `contracts.personal_work.WorkSource` (`kind: SourceKind`). `MEETING` is
-  constructible but always rejected, and each application's URL rules hide in
-  `__post_init__`. Split it into `TeamsSource`, `OutlookSource`, `KanbanSource`,
-  `DocumentSource` and `WebPageSource` beside the existing `MeetingSource`.
-  About 33 sites match on `SourceKind`, but only two build a `WorkSource`
-  (`personal_work_sources.observed_source` and `PersonalStore`'s document
-  intake). Keep the stored JSON identical: give each new type
-  `kind: Literal[SourceKind.X]` and the same field names, so existing catalog rows
-  validate into the right type. The catalog is one blob that
-  `CATALOG.validate_json` rejects whole, so a changed shape would hide all of
-  the user's saved work.
 - `assistant.feed_sources` (`kind: SourceKind`, twice);
 - `assistant.feed_contracts` (`kind: SolutionKind`);
 - `assistant.feed_history` (`kind: DecisionKind`);
@@ -299,7 +215,10 @@ problem is a single type whose enum `kind` decides which values are valid:
   `desktop_ui.navigation_log.Entry` (each `Kind`) and
   `diagnostics.FailureInfo` (`kind: str`).
 
-Take one type per session, `WorkSource` first.
+Done 2026-11-08: `WorkSource` became `TeamsSource`, `OutlookSource`,
+`KanbanSource`, `DocumentSource` and `WebPageSource`. Take one type per
+session. Stored JSON needn't stay compatible (AGENTS.md: legacy data isn't a
+requirement).
 
 ## 4. Move inline JavaScript into real `.js` files
 
