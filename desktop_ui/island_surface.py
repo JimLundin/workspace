@@ -144,8 +144,7 @@ def _veil(look: GlassLook, frost: Frost) -> Veil:
     Rebuilding their stops and veil added 1.50 KB at p95 per frame in the
     island benchmark; geometry still changes independently on every frame.
     """
-    shadow = 0.14 if frost is Frost.BRIGHT else 0.36
-    return Veil(look.veil.color, look.veil.opacity, rim_stops(look.rim), shadow)
+    return Veil(look.veil.color, look.veil.opacity, rim_stops(look.rim), appearance.FROSTS[frost].shadow)
 
 
 def pane(drawn: Drawn, presented: Presented, scale: float) -> Pane | None:

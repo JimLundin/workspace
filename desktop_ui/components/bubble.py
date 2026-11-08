@@ -14,7 +14,7 @@ lazy from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainte
 from contracts.feed_origin import App
 from contracts.members import every_member
 from desktop_ui.components import typeface
-from desktop_ui.components.appearance import BRANDS, Rim, Shade, rim_stops
+from desktop_ui.components.appearance import GLASS_ACCENT, Rim, Shade, rim_stops
 from desktop_ui.components.text import color, face
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
@@ -65,19 +65,27 @@ class Symbol:
 type Glyph = Letter | Symbol
 
 
-GLYPHS: Final = every_member(
+@dataclass(frozen=True, slots=True)
+class Badge:
+    """An app's own colour, shown only on its badge, and the letter or symbol on it."""
+
+    colour: str
+    glyph: Glyph
+
+
+BADGES: Final = every_member(
     App,
     {
-        App.TEAMS: Letter("T"),
-        App.OUTLOOK: Letter("O"),
-        App.KANBAN: Letter("K"),
-        App.CODEX: Letter("X"),
-        App.CLAUDE: Letter("C"),
-        App.EDGE: Letter("E"),
-        App.WINDOWS: Symbol("grid"),
-        App.DOCUMENT: Symbol("doc"),
-        App.WEB_PAGE: Symbol("globe"),
-        App.WORKSPACE: Symbol("agent"),
+        App.TEAMS: Badge("#6264a7", Letter("T")),
+        App.OUTLOOK: Badge("#0f6cbd", Letter("O")),
+        App.KANBAN: Badge("#c28a2c", Letter("K")),
+        App.CODEX: Badge("#10a37f", Letter("X")),
+        App.CLAUDE: Badge("#d97757", Letter("C")),
+        App.EDGE: Badge("#1b9de2", Letter("E")),
+        App.WINDOWS: Badge("#0078d4", Symbol("grid")),
+        App.DOCUMENT: Badge("#2b7cd3", Symbol("doc")),
+        App.WEB_PAGE: Badge("#5e9ad6", Symbol("globe")),
+        App.WORKSPACE: Badge(GLASS_ACCENT, Symbol("agent")),
     },
 )
 """Brands have distinct letters; Workspace and generic content use symbols."""
@@ -88,7 +96,8 @@ def paint_badge(painter: QPainter, at: QPointF, app: App) -> None:
     bounds = QRectF(at.x(), at.y(), BADGE, BADGE)
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    tint = QColor(BRANDS[app])
+    badge = BADGES[app]
+    tint = QColor(badge.colour)
     tile = QLinearGradient(bounds.topLeft(), bounds.bottomRight())
     tile.setColorAt(0, tint.lighter(118))
     tile.setColorAt(1, tint)
@@ -100,7 +109,7 @@ def paint_badge(painter: QPainter, at: QPointF, app: App) -> None:
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.setPen(QPen(QColor(255, 255, 255, 76), 0.5))
     painter.drawPath(edge)
-    value = GLYPHS[app]
+    value = badge.glyph
     match value:
         case Letter(text=letter):
             painter.setPen(QColor("#ffffff"))

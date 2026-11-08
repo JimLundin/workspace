@@ -12,7 +12,6 @@ from enum import Enum, auto
 from functools import lru_cache
 from typing import Final, assert_never
 
-from contracts.feed_origin import App
 from contracts.members import every_member
 from desktop_ui.components import typeface
 from desktop_ui.components.meaning import Tint, Tone
@@ -178,24 +177,6 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 """ + tooltip_style(theme)
 
 
-BRANDS: Final = every_member(
-    App,
-    {
-        App.TEAMS: "#6264a7",
-        App.OUTLOOK: "#0f6cbd",
-        App.CODEX: "#10a37f",
-        App.CLAUDE: "#d97757",
-        App.EDGE: "#1b9de2",
-        App.WEB_PAGE: "#5e9ad6",
-        App.DOCUMENT: "#2b7cd3",
-        App.KANBAN: "#c28a2c",
-        App.WINDOWS: "#0078d4",
-        App.WORKSPACE: GLASS_ACCENT,
-    },
-)
-"""Each app's own colour, shown only on its badge."""
-
-
 # Every glass surface shares its ink and rim vocabulary.
 @dataclass(frozen=True, slots=True)
 class Lettering:
@@ -278,19 +259,23 @@ def rim_stops(rim: Rim) -> tuple[Stop, ...]:
     return (Stop(0, "#ffffff", rim.high), Stop(0.34, "#ffffff", rim.low), Stop(0.72, "#ffffff", rim.low), Stop(1, "#ffffff", rim.end))
 
 
-GLASS_SCHEMES: Final = every_member(
-    appearance.Frost,
-    {appearance.Frost.BRIGHT: Scheme.LIGHT, appearance.Frost.LIGHT: Scheme.DARK, appearance.Frost.SMOKED: Scheme.DARK},
-)
-"""A glass capsule or menu's scheme follows the desktop behind it."""
+@dataclass(frozen=True, slots=True)
+class FrostLook:
+    """How glass reads over a desktop of this frost: its scheme, the veil behind small text, and its shadow's strength."""
 
-SMALL_VEILS: Final = every_member(
+    scheme: Scheme
+    """A glass capsule or menu's scheme follows the desktop behind it."""
+    small_veil: Shade
+    shadow: float
+
+
+FROSTS: Final = every_member(
     appearance.Frost,
     {
-        appearance.Frost.BRIGHT: Shade("#ffffff", 0.2),
-        appearance.Frost.LIGHT: Shade("#1c1c20", 0.26),
+        appearance.Frost.BRIGHT: FrostLook(Scheme.LIGHT, Shade("#ffffff", 0.2), 0.14),
+        appearance.Frost.LIGHT: FrostLook(Scheme.DARK, Shade("#1c1c20", 0.26), 0.36),
         # A mixed desktop needs a heavier veil to keep small text legible.
-        appearance.Frost.SMOKED: Shade("#1c1c20", 0.62),
+        appearance.Frost.SMOKED: FrostLook(Scheme.DARK, Shade("#1c1c20", 0.62), 0.36),
     },
 )
 CARD_VEILS: Final = every_member(Scheme, {Scheme.DARK: Shade("#222226", 0.64), Scheme.LIGHT: Shade("#fafafc", 0.66)})
@@ -309,7 +294,7 @@ def _scheme(pane: Pane, material: appearance.Material) -> Scheme:
                     pass
                 case _:
                     assert_never(material)
-            return GLASS_SCHEMES[frost]
+            return FROSTS[frost].scheme
         case Card(scheme=scheme) | CanvasBar(scheme=scheme):
             return scheme
         case _:
@@ -319,9 +304,9 @@ def _scheme(pane: Pane, material: appearance.Material) -> Scheme:
 def _veil(pane: Pane) -> Shade:
     match pane:
         case Capsule(frost=frost):
-            return SMALL_VEILS[frost]
+            return FROSTS[frost].small_veil
         case Menu(frost=frost):
-            small = SMALL_VEILS[frost]
+            small = FROSTS[frost].small_veil
             return Shade(small.color, max(small.opacity, 0.64))
         case Card(scheme=scheme):
             return CARD_VEILS[scheme]
