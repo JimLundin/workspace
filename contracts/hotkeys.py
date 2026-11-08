@@ -49,10 +49,6 @@ ROUTES: Final = every_member(
 """The route each tool key takes."""
 
 
-def route(tool: Tool) -> Route:
-    return ROUTES[tool]
-
-
 NEEDS_SETTINGS: Final = every_member(
     Route,
     {
@@ -67,8 +63,3 @@ NEEDS_SETTINGS: Final = every_member(
         Route.MEETING: False,
     },
 )
-
-
-def needs_settings(kind: Route) -> bool:
-    """Only model routes need AI settings; desktop controls remain available."""
-    return NEEDS_SETTINGS[kind]

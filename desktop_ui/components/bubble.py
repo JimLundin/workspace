@@ -14,7 +14,7 @@ lazy from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainte
 from contracts.feed_origin import App
 from contracts.members import every_member
 from desktop_ui.components import typeface
-from desktop_ui.components.appearance import Rim, Shade, brand, rim_stops
+from desktop_ui.components.appearance import BRANDS, Rim, Shade, rim_stops
 from desktop_ui.components.text import color, face
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
@@ -83,17 +83,12 @@ GLYPHS: Final = every_member(
 """Brands have distinct letters; Workspace and generic content use symbols."""
 
 
-def glyph(app: App) -> Glyph:
-    """Brands have distinct letters; Workspace and generic content use symbols."""
-    return GLYPHS[app]
-
-
 def paint_badge(painter: QPainter, at: QPointF, app: App) -> None:
     """A 22 px tile with 7 px corners, a 14 px symbol or an 11 px bold letter."""
     bounds = QRectF(at.x(), at.y(), BADGE, BADGE)
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    tint = QColor(brand(app))
+    tint = QColor(BRANDS[app])
     tile = QLinearGradient(bounds.topLeft(), bounds.bottomRight())
     tile.setColorAt(0, tint.lighter(118))
     tile.setColorAt(1, tint)
@@ -105,7 +100,7 @@ def paint_badge(painter: QPainter, at: QPointF, app: App) -> None:
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.setPen(QPen(QColor(255, 255, 255, 76), 0.5))
     painter.drawPath(edge)
-    value = glyph(app)
+    value = GLYPHS[app]
     match value:
         case Letter(text=letter):
             painter.setPen(QColor("#ffffff"))

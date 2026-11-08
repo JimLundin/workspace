@@ -155,10 +155,6 @@ AUTOMATIC_DETAILS: Final = every_member(
 )
 
 
-def automatic_detail(status: AutomaticStatus) -> str:
-    return AUTOMATIC_DETAILS[status]
-
-
 @dataclass(frozen=True, slots=True)
 class Controls:
     """What the menu reads: running activities' readings, each toggle's state and the speaker's."""
@@ -315,7 +311,7 @@ def entry(spec: CellSpec, controls: Controls) -> Entry | None:
     """The entry `spec` places, as it reads now; None while it doesn't apply."""
     match spec.entry:
         case EntryId.AUTO_RECORD:
-            return toggle(spec, automatic_detail(controls.automatic), Command.AUTOMATIC_RECORDING, on=controls.automatic is not AutomaticStatus.OFF)
+            return toggle(spec, AUTOMATIC_DETAILS[controls.automatic], Command.AUTOMATIC_RECORDING, on=controls.automatic is not AutomaticStatus.OFF)
         case EntryId.OVERLAY:
             return toggle(spec, "On" if controls.overlay else "Off", Command.OVERLAY, on=controls.overlay)
         case EntryId.TASKBAR:

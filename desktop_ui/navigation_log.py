@@ -218,10 +218,6 @@ def navigation_name(navigation: Navigation) -> NavigationName:
 CAUSES: Final[frozendict[Source, Cause]] = every_member(Source, {Source.KEY: "key", Source.PAGER: "pager", Source.TOOLBAR: "toolbar"})
 
 
-def cause(source: Source) -> Cause:
-    return CAUSES[source]
-
-
 def dwell_ms(focused: Focused | None, at: float) -> int | None:
     return round((at - focused.since) * 1000) if focused is not None and focused.since is not None else None
 
@@ -327,7 +323,7 @@ def navigated(tracker: Tracker, decided: tuple[Effect, Navigated], moment: Momen
         moment.time,
         setup_name(moment.setup),
         navigation_name(record.navigation),
-        cause(record.navigation.source),
+        CAUSES[record.navigation.source],
         app_name(record.from_app),
         app_name(record.to_app),
         record.from_desktop,

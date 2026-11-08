@@ -102,10 +102,6 @@ def card_shape(bounds: QtCore.QRectF, surface: Surface) -> QtCore.QRectF:
 RADII: Final = every_member(Surface, {Surface.CARD: CARD_RADIUS, Surface.QUESTION: CARD_RADIUS, Surface.GROUP: GROUP_RADIUS})
 
 
-def radius(surface: Surface) -> float:
-    return RADII[surface]
-
-
 def surface_fill(theme: Tokens, surface: Surface) -> QtGui.QColor:
     match surface:
         case Surface.CARD:
@@ -133,10 +129,10 @@ def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, theme: Tokens,
             edge = text.color(Shade(theme.ink.color, 0.07))
         case _:
             assert_never(surface)
-    painter.fillPath(rounded(shape, radius(surface)), surface_fill(theme, surface))
+    painter.fillPath(rounded(shape, RADII[surface]), surface_fill(theme, surface))
     painter.setPen(QtGui.QPen(edge, 1))
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    painter.drawPath(rounded(shape, radius(surface)))
+    painter.drawPath(rounded(shape, RADII[surface]))
     painter.restore()
 
 
@@ -146,10 +142,10 @@ def paint_selection(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Sur
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
     shape = card_shape(bounds, surface).adjusted(0.5, 0.5, -0.5, -0.5)
     if drop:
-        painter.fillPath(rounded(shape, radius(surface)), text.color(Shade(GLASS_ACCENT, 0.10)))
+        painter.fillPath(rounded(shape, RADII[surface]), text.color(Shade(GLASS_ACCENT, 0.10)))
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.setPen(QtGui.QPen(QtGui.QColor(GLASS_ACCENT), 2))
-    painter.drawPath(rounded(shape, radius(surface) - 0.5))
+    painter.drawPath(rounded(shape, RADII[surface] - 0.5))
     painter.restore()
 
 

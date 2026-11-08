@@ -16,7 +16,7 @@ from typing import Final, Literal, Protocol, assert_never
 from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, transcribe, wav
 from assistant.text import typed_text
 from cell import Cell
-from contracts.hotkeys import Route, needs_settings, route
+from contracts.hotkeys import NEEDS_SETTINGS, ROUTES, Route
 from contracts.status import Job, State
 from diagnostics import failure_info
 from protocol import App, Request, Side, Tool, owner
@@ -166,10 +166,10 @@ class Assistant:
             case App():
                 return
             case Tool():
-                kind = route(request)
+                kind = ROUTES[request]
             case _:
                 assert_never(request)
-        if self.missing is not None and needs_settings(kind):
+        if self.missing is not None and NEEDS_SETTINGS[kind]:
             if down:
                 self.desktop.problem(f"Set {', '.join(self.missing.names)} to use the AI tools (see the README).")
             return

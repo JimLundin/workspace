@@ -196,10 +196,6 @@ BRANDS: Final = every_member(
 """Each app's own colour, shown only on its badge."""
 
 
-def brand(app: App) -> str:
-    return BRANDS[app]
-
-
 # Every glass surface shares its ink and rim vocabulary.
 @dataclass(frozen=True, slots=True)
 class Lettering:

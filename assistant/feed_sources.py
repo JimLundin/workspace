@@ -153,7 +153,7 @@ def attention(source: FeedSource) -> Attention:
         case ChatTicketSource() | UpdateSource():
             return Attention.TRIAGE
         case ReplySource(reply=reply):
-            return _delivery(reply.delivery)
+            return DELIVERY_ATTENTION[reply.delivery]
         case _:
             assert_never(source)
 
@@ -170,10 +170,6 @@ DELIVERY_ATTENTION: Final = every_member(
     },
 )
 """How much attention a message needs, by its delivery state."""
-
-
-def _delivery(delivery: Delivery) -> Attention:
-    return DELIVERY_ATTENTION[delivery]
 
 
 def key(source: FeedSource) -> SourceKey:
