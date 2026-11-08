@@ -18,7 +18,7 @@ from desktop_ui.qt_ui import EventLoop, application
 from desktop_ui.shell_items import EMPTY_SHELF, Application, Shelf
 from desktop_ui.window_layout import Program
 from winapi import appearance
-from winapi.composition import Glass, GlassScene, stack_behind
+from winapi.composition import GlassScene, stack_behind
 from winapi.shapes import Pane, Rect, Stop, Veil, Window
 
 prepare()
@@ -145,7 +145,7 @@ def test_glass_stacks_only_when_real_window_order_needs_correction() -> None:
         placements = (*placements, (handle, front))
         stack_behind(handle, front)
 
-    layer = Glass.create(owner.composition, stack=observe_stack)
+    layer = GlassScene.create(owner.composition, "Workspace stacking glass", stack=observe_stack)
     try:
         front_window.show()
         other_window.show()
@@ -168,27 +168,4 @@ def test_glass_stacks_only_when_real_window_order_needs_correction() -> None:
         other_window.deleteLater()
         app.processEvents()
         QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
-        owner.close()
-
-
-def test_glass_resizes_its_retained_geometry_and_shadow_mask_across_dpi_changes() -> None:
-    # Defects: a resize rebuilds native geometry and its clip, or the shadow mask
-    # keeps an old size or DPI.
-    app = application()
-    owner = EventLoop.start(app, lambda: None)
-    if owner.composition is None:
-        owner.close()
-        raise unittest.SkipTest("Desktop composition is unavailable.")
-    layer = Glass.create(owner.composition)
-    try:
-        layer.position(Rect(40, 60, 260, 88), 1.0, 1.0)
-        geometry, clip = layer.geometry, layer.group.Clip.value
-        for width, scale in ((260, 1.0), (220, 1.25)):
-            layer.position(Rect(40, 60, 40 + round(width * scale), 60 + round(28 * scale)), scale, 1.0)
-            assert layer.geometry is geometry and layer.group.Clip.value == clip, "A resize rebuilt native geometry."
-            size = layer.mask_surface.SourceSize
-            expected = (round(width * scale), round(28 * scale))
-            assert expected == (size.X, size.Y), "The shadow mask retained an old size or DPI."
-    finally:
-        layer.close()
         owner.close()
