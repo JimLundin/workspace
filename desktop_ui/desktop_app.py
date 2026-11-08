@@ -34,7 +34,6 @@ from desktop_ui.desktop_control import (
     Event,
     ExpireCapture,
     Flash,
-    Fold,
     HandleKey,
     Indicate,
     Indicated,
@@ -77,7 +76,7 @@ from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.report import write_report
 from desktop_ui.tray import Tray
-from desktop_ui.ui import Ui, Views
+from desktop_ui.ui import Ui
 from desktop_ui.ui_spec import SpecError
 from desktop_ui.voice import Voice
 from protocol import (
@@ -98,7 +97,6 @@ prepare()
 LOCK_NAME: Final = "Local\\workspace-desktop"
 LOG: Final = DIRECTORY / "desktop.log"
 WM_TRAY: Final = system.WM_APP + 20
-WM_SHOW_MENU: Final = 0x8056
 WM_EVENTS: Final = system.WM_APP + 22
 """Any thread -> Qt thread: events are waiting in the inbox."""
 CAPTURE_TIMER_MS: Final = 1000
@@ -119,9 +117,9 @@ def window_event(message: int, wparam: int, lparam: int) -> Event | None:
     """What a message to the control window reports."""
     if message == shell.TASKBAR_CREATED:
         return RestoreTray()
-    if message == WM_SHOW_MENU or (message == WM_TRAY and lparam in (system.WM_LBUTTONUP, system.WM_RBUTTONUP)):
+    if message == WM_TRAY and lparam in (system.WM_LBUTTONUP, system.WM_RBUTTONUP):
         return MenuRequested()
-    if message in (WM_KEY_STATE, WM_REQUEST, desktop_controls.WM_TOOL_CHOSEN):
+    if message in (WM_KEY_STATE, WM_REQUEST):
         return Controlled(desktop_controls.control_event(desktop_controls.WindowInput(message, wparam, lparam), APPS))
     if message == WM_INDICATOR:
         return Indicated(wparam)
@@ -240,8 +238,6 @@ class DesktopApp:
     def perform(self, effect: Effect) -> Iterator[Event]:
         """Carry out `effect`; what it reports back (a menu choice, a refusal) is folded next."""
         match effect:
-            case Fold(event):
-                yield event
             case ShowVoice() | ShowIdle() | HandleKey() | UseLayout() | ExpireCapture() | Record() | ToggleMeeting():
                 yield from self._voice(effect)
             case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep():
@@ -403,16 +399,16 @@ def launched(command: str, *names: str) -> None:
     subprocess.Popen([str(launch.pythonw()), str(launch.ROOT / "launch.py"), command, *names], cwd=launch.ROOT, creationflags=launch.DETACHED)
 
 
-def run(*, window: components.Window = components.DESKTOP.window, lock_name: str = LOCK_NAME, views: Views | None = None) -> None:
-    """Blocks until the desktop quits; a test names its own `window`, `lock_name` and `views`."""
+def run() -> None:
+    """Blocks until the desktop quits."""
     screen.use_physical_pixels()  # before any window exists
-    lock = system.create_lock(lock_name)
+    lock = system.create_lock(LOCK_NAME)
     if lock is None:
         return
     try:
-        inbox = Inbox.open(window)
+        inbox = Inbox.open(components.DESKTOP.window)
         voice = Voice.open(settings_from(os.environ, components.endpoint("gateway")), inbox.window.handle, inbox.report, log)
-        ui = Ui.start(views=views, on_problem=lambda message: inbox.report(Problem(message)))
+        ui = Ui.start(lambda message: inbox.report(Problem(message)))
         app = DesktopApp.compose(ui, voice, inbox)
         ui.post(lambda _: app.start())
         try:

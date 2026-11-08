@@ -10,7 +10,6 @@ import traceback
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field, replace
-from typing import Protocol, assert_never
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtWidgets
@@ -20,12 +19,12 @@ from cell import Cell
 from desktop_ui import job_queue
 from desktop_ui.bar_events import ChordHeld, DictationShown, JobShown, LayoutShown, OverlayShown, RecordingShown
 from desktop_ui.qt_runtime import prepare
-from desktop_ui.ui_control import BarBuilt, BarOverlay, Effect, Fact, OverlayPublished, UiState, transition
 from winapi.shapes import Rect
 lazy from contracts.recording_state import RecordingAction
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
+lazy from desktop_ui.components.widgets import show_window
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
-lazy from desktop_ui.dialogs import Job, bring_forward, near_pointer
+lazy from desktop_ui.dialogs import Job, near_pointer
 lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import Indicator
 lazy from desktop_ui.navigation import Order
@@ -36,22 +35,6 @@ lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
 
 prepare()
-
-
-class DesktopFactory(Protocol):
-    def __call__(self, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar: ...
-
-
-def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
-    # Resolve the lazy native module only when Qt owns this view's construction.
-    return DesktopBar.open(actions, audio_level=audio_level)
-
-
-@dataclass(frozen=True, slots=True)
-class Views:
-    """How Ui builds its native views; a test builds isolated ones and keeps what it built."""
-
-    desktop: DesktopFactory = _native_desktop
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,24 +50,24 @@ class _Built:
 
 @dataclass(frozen=True, slots=True)
 class _OnQt:
-    state: UiState = field(default_factory=UiState)
+    overlay_enabled: bool = False
+    """What the bar shows once it is built, if it isn't yet."""
     built: _Built = field(default_factory=_Built)
 
 
 @dataclass(frozen=True, slots=True)
 class Ui:
-    """The desktop's views on the Qt thread, and the fold of what they must replay.
+    """The desktop's views on the Qt thread, and what a view built later must replay.
 
-    Any thread posts a job or reports a fact; the Qt thread drains them in order.
+    Any thread posts a job; the Qt thread drains them in order.
     """
 
-    _views: Views
-    _on_problem: Callable[[str], None] | None
+    _on_problem: Callable[[str], None]
     _root: QtWidgets.QApplication
     _poll_timer: QtCore.QTimer
     _thread: threading.Thread
     _qt: Cell[_OnQt] = field(default_factory=lambda: Cell(_OnQt()), init=False, repr=False)
-    """The fold's state and the views built so far: the Qt thread alone replaces it."""
+    """What to replay and the views built so far: the Qt thread alone replaces it."""
     _jobs: queue.Queue[Job] = field(default_factory=queue.Queue[Job], init=False, repr=False)
     _draining: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     """Qt can deliver nested events inside a native job; the queue still runs serially."""
@@ -92,7 +75,7 @@ class Ui:
     _inputs_closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
-    def start(cls, *, views: Views | None = None, on_problem: Callable[[str], None] | None = None) -> Ui:
+    def start(cls, on_problem: Callable[[str], None]) -> Ui:
         """Qt on the process's main thread, polling the job queue every 20 ms."""
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
@@ -100,7 +83,7 @@ class Ui:
         root.setStyleSheet(tooltip_style(tokens(scheme())))
         timer = QtCore.QTimer(root)
         timer.setInterval(20)
-        ui = cls(Views() if views is None else views, on_problem, root, timer, threading.current_thread())
+        ui = cls(on_problem, root, timer, threading.current_thread())
         timer.timeout.connect(ui.drain)
         timer.start()
         return ui
@@ -168,37 +151,12 @@ class Ui:
         if not self._closed.is_set():
             self._jobs.put(job)
 
-    def settled(self) -> bool:
-        """Whether no job is waiting for the Qt thread."""
-        return self._jobs.empty()
-
     def problem(self, message: str) -> None:
-        if self._on_problem is not None:
-            self._on_problem(message)
-
-    # ---- the fold ----------------------------------------------------------------------
-
-    def report(self, fact: Fact) -> None:
-        """Any thread: fold `fact` on the Qt thread, in order with the other jobs."""
-        self.post(lambda _: self._fold(fact))
-
-    def _fold(self, fact: Fact) -> None:
-        state, effects = transition(self._qt.get().state, fact)
-        self._qt.set(replace(self._qt.get(), state=state))
-        for effect in effects:
-            self._perform(effect)
+        self._on_problem(message)
 
     @property
     def _bar(self) -> DesktopBar | None:
         return self._built.bar
-
-    def _perform(self, effect: Effect) -> None:
-        match effect:
-            case BarOverlay(enabled):
-                if (bar := self._bar) is not None:
-                    bar.handle(OverlayShown(enabled))
-            case _:
-                assert_never(effect)
 
     # ---- what dictation and meetings do ------------------------------------------------
 
@@ -207,7 +165,14 @@ class Ui:
         self._with_bar(lambda bar: bar.handle(change))
 
     def desktop_overlay(self, *, enabled: bool) -> None:
-        self.report(OverlayPublished(enabled))
+        """Any thread: the bar shows whether the keyboard overlay is on; a bar built later shows it too."""
+
+        def job(_: QtWidgets.QApplication) -> None:
+            self._qt.set(replace(self._qt.get(), overlay_enabled=enabled))
+            if (bar := self._bar) is not None:
+                bar.handle(OverlayShown(enabled))
+
+        self.post(job)
 
     # ---- the key map and the layer indicator ------------------------------------------
 
@@ -217,7 +182,7 @@ class Ui:
             if built.keymap is None or not shiboken6.isValid(built.keymap.window):
                 self._set_built(replace(built, keymap=KeymapWindow.open(root)))
             else:
-                bring_forward(built.keymap.window, built.keymap.canvas)
+                show_window(built.keymap.window, focus=True, target=built.keymap.canvas)
 
         self.post(job)
 
@@ -276,8 +241,8 @@ class Ui:
         record: Callable[[RecordingAction], None],
         overlay: Callable[[], None],
         menu: Callable[[], None],
-        audio_level: Callable[[], float | None] | None = None,
-        tool: Callable[[Tool], None] | None = None,
+        audio_level: Callable[[], float | None],
+        tool: Callable[[Tool], None],
     ) -> None:
         """Create only Workspace's floating native controls."""
 
@@ -285,9 +250,9 @@ class Ui:
             if not self._accepting() or self._bar is not None:
                 return
             try:
-                actions = BarActions(record, self.show_keymap, overlay, menu, self.problem, tool or (lambda _tool: None))
-                self._set_built(replace(self._built, bar=self._views.desktop(actions, audio_level=audio_level)))
-                self._fold(BarBuilt())
+                bar = DesktopBar.open(BarActions(record, self.show_keymap, overlay, menu, self.problem, tool), audio_level=audio_level)
+                self._set_built(replace(self._built, bar=bar))
+                bar.handle(OverlayShown(self._qt.get().overlay_enabled))
             except Exception:
                 traceback.print_exc()
                 self.problem("The Workspace bar could not start. The tray remains available.")
@@ -328,7 +293,7 @@ class Ui:
 
             current.finished.connect(cleared)
             near_pointer(current, current.width(), current.height())
-            bring_forward(current, current.search)
+            show_window(current, focus=True, target=current.search)
 
         self.post(show)
 

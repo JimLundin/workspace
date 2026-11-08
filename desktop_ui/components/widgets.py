@@ -11,6 +11,7 @@ from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens, contro
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
 from winapi import windows
+from winapi.shapes import Size
 
 prepare()
 
@@ -42,9 +43,23 @@ def surface_style(theme: Tokens, radius: int) -> str:
     return f"QFrame#surface {{ background: {theme.window}; border: 1px solid {theme.solid_edge.css}; border-radius: {radius}px; }}"
 
 
-def surface(window: QtWidgets.QWidget, theme: Tokens, radius: int) -> QtWidgets.QFrame:
-    """Draw a frameless window as one rounded surface; its corners stay transparent."""
+def tool_window(window: QtWidgets.QWidget, title: str | None, *, on_top: bool) -> None:
+    """A frameless, translucent tool window that shows without activating; `on_top` keeps it above other windows."""
+    if title is not None:
+        window.setWindowTitle(title)
+    flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+    window.setWindowFlags(flags | Qt.WindowType.WindowStaysOnTopHint if on_top else flags)
     window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+
+
+def device_size(widget: QtWidgets.QWidget, scale: float) -> Size:
+    """A widget's logical size in device pixels at `scale`."""
+    return Size(round(widget.width() * scale), round(widget.height() * scale))
+
+
+def surface(window: QtWidgets.QWidget, theme: Tokens, radius: int) -> QtWidgets.QFrame:
+    """Draw a `tool_window` as one rounded surface; its corners stay transparent."""
     frame = QtWidgets.QFrame(window)
     frame.setObjectName("surface")
     frame.setStyleSheet(surface_style(theme, radius))

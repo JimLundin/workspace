@@ -13,11 +13,11 @@ from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Offset, Point, Rect, Size
-lazy from desktop_ui.components import typeface
 lazy from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
-lazy from desktop_ui.components.widgets import Window, column, glyph, row, segmented, surface, window_style
-lazy from desktop_ui.dialogs import bring_forward, near_pointer
+lazy from desktop_ui.components.text import inter
+lazy from desktop_ui.components.widgets import Window, column, device_size, glyph, row, segmented, show_window, surface, tool_window, window_style
+lazy from desktop_ui.dialogs import near_pointer
 lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
@@ -120,24 +120,21 @@ class KeymapCanvas(QtWidgets.QWidget):
             painter.setBrush(QtGui.QColor(fill))
             corner = max(4.0, 9 * self.scale)
             painter.drawRoundedRect(bounds.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner)
-            face = QtGui.QFont(typeface.FAMILY)
-            face.setPixelSize(max(8, round(10 * self.scale)))
-            painter.setFont(face)
+            small = inter(max(8, round(10 * self.scale)), QtGui.QFont.Weight.Normal)
+            painter.setFont(small)
             painter.setPen(QtGui.QColor(ink if pressed else self.theme.ink3.argb))
             painter.drawText(bounds.adjusted(5 * self.scale, 3 * self.scale, -3, -3), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, name)
-            face.setWeight(QtGui.QFont.Weight.DemiBold)
             # Long labels shrink until they fit their key.
             size = round((15 if len(cap.label) <= 5 else 12) * self.scale)
-            face.setPixelSize(max(7, size))
-            while size > 7 and QtGui.QFontMetricsF(face).horizontalAdvance(cap.label) > bounds.width() - 6 * self.scale:
+            while (
+                size > 7
+                and QtGui.QFontMetricsF(inter(size, QtGui.QFont.Weight.DemiBold)).horizontalAdvance(cap.label) > bounds.width() - 6 * self.scale
+            ):
                 size -= 1
-                face.setPixelSize(size)
-            painter.setFont(face)
+            painter.setFont(inter(max(7, size), QtGui.QFont.Weight.DemiBold))
             painter.setPen(QtGui.QColor(ink))
             painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, cap.label)
-            face.setPixelSize(max(8, round(10 * self.scale)))
-            face.setWeight(QtGui.QFont.Weight.Normal)
-            painter.setFont(face)
+            painter.setFont(small)
             painter.drawText(bounds.adjusted(0, 0, 0, -3 * self.scale), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, cap.hold)
 
 
@@ -155,8 +152,7 @@ class OverlayHandle(QtWidgets.QWidget):
         super().__init__()
         self.drag: OverlayDrag = drag
         self.read_cursor: Callable[[], Point] = cursor
-        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        tool_window(self, "Workspace keyboard overlay handle", on_top=False)
         self.setAccessibleName("Drag to move the keyboard overlay")
         theme = tokens(scheme())
         self.setStyleSheet(window_style(theme))
@@ -214,9 +210,7 @@ class KeymapOverlay:
         shown = desktop if desktop is not None else NativeOverlayDesktop()
         theme = tokens(scheme())
         window = QtWidgets.QWidget()
-        window.setWindowTitle("Workspace keyboard overlay")
-        window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
-        window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        tool_window(window, "Workspace keyboard overlay", on_top=False)
         window.setStyleSheet(window_style(theme))
         window.setWindowOpacity(0.55)
         layout = column(surface(window, theme, 20))
@@ -241,7 +235,6 @@ class KeymapOverlay:
 
         drag = OverlayDrag(start, move, end)
         handle = OverlayHandle(drag, shown.cursor)
-        handle.setWindowTitle("Workspace keyboard overlay handle")
         handle_frame = shown.prepare(handle, click_through=False)
         overlay = cls(shown, window, heading, canvas, frame, handle, handle_frame, Cell(_Overlaid(shown.load_position())))
         return overlay
@@ -301,12 +294,11 @@ class KeymapOverlay:
         self._state.set(replace(self._state.get(), position=position))
         x, y = position.x, position.y
         scale = self._window.devicePixelRatioF()
-        width, height = round(self._window.width() * scale), round(self._window.height() * scale)
-        handle_width, handle_height = round(self._handle.width() * scale), round(self._handle.height() * scale)
-        left, top = x - width // 2, y + handle_height + 4
-        self._desktop.move(self._frame, Rect(left, top, left + width, top + height))
-        left = x - handle_width // 2
-        self._desktop.move(self._handle_frame, Rect(left, y, left + handle_width, y + handle_height))
+        window, handle = device_size(self._window, scale), device_size(self._handle, scale)
+        left, top = x - window.width // 2, y + handle.height + 4
+        self._desktop.move(self._frame, Rect(left, top, left + window.width, top + window.height))
+        left = x - handle.width // 2
+        self._desktop.move(self._handle_frame, Rect(left, y, left + handle.width, y + handle.height))
 
     def _start_drag(self, point: Point) -> None:
         overlaid = self._state.get()
@@ -378,7 +370,7 @@ class KeymapWindow:
         shown = cls(window, canvas, keys, shortcuts)
         shown.draw(None)
         near_pointer(window, 940, 390)
-        bring_forward(window, canvas)
+        show_window(window, focus=True, target=canvas)
         return shown
 
     def draw(self, layer: Layer | None) -> None:

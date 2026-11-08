@@ -7,7 +7,6 @@ controls are, so no stylesheet can pad, re-font or restyle it.
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from functools import lru_cache
 from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -16,10 +15,10 @@ lazy from PySide6.QtCore import Qt
 from cell import Cell
 from desktop_ui import ui_spec
 from desktop_ui.bar_control import KeyboardFocus
-from desktop_ui.components import typeface
-from desktop_ui.components.appearance import GlassLook, Look, SolidLook
-from desktop_ui.components.text import color
+from desktop_ui.components.appearance import Look
+from desktop_ui.components.text import color, inter, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
+from desktop_ui.island_layout import on_pixels
 from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.shell_items import WEB_APPS, PinnedApp, Shelf
 from desktop_ui.vector_icons import icon
@@ -39,15 +38,6 @@ def pixmap(image: Pixels) -> QtGui.QPixmap:
     converted = QtGui.QPixmap()
     converted.convertFromImage(copied)
     return converted
-
-
-@lru_cache(maxsize=1)
-def page_font() -> QtGui.QFont:
-    value = QtGui.QFont(typeface.FAMILY)
-    value.setPixelSize(12)
-    value.setWeight(QtGui.QFont.Weight.Medium)
-    value.setFeature(QtGui.QFont.Tag("tnum"), 1)
-    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +95,11 @@ class ShellButton(KeyboardFocus):
                 self.pictures = tuple(pixmap(each) if isinstance(each, Pixels) else None for each in icons)
                 width = control + STACK_STEP * (len(icons) - 1)
             case str() as text:
-                width = max(control, math.ceil(QtGui.QFontMetricsF(page_font()).horizontalAdvance(text)) + 2 * face_inset(capsule))
+                width = max(
+                    control,
+                    math.ceil(QtGui.QFontMetricsF(inter(12, QtGui.QFont.Weight.Medium, tabular=True)).horizontalAdvance(text))
+                    + 2 * face_inset(capsule),
+                )
             case _:
                 assert_never(target.face)
         self.setFixedSize(width, control)
@@ -170,7 +164,7 @@ class ShellButton(KeyboardFocus):
         scale = self.devicePixelRatioF()
         origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
         corner = origin + QtCore.QPointF((self.width() - capsule.icon) / 2, face_inset(capsule))
-        return QtCore.QPointF(round(corner.x() * scale) / scale, round(corner.y() * scale) / scale) - origin
+        return QtCore.QPointF(on_pixels(corner.x(), scale), on_pixels(corner.y(), scale)) - origin
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -207,7 +201,7 @@ class ShellButton(KeyboardFocus):
                         case _:
                             assert_never(each)
             case str() as text:
-                painter.setFont(page_font())
+                painter.setFont(inter(12, QtGui.QFont.Weight.Medium, tabular=True))
                 painter.setPen(color(ink))
                 painter.drawText(QtCore.QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, text)
             case _:
@@ -290,22 +284,10 @@ class Section(QtWidgets.QWidget):
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        outline = QtGui.QPainterPath()
-        outline.addRoundedRect(QtCore.QRectF(self.rect()), self.height() / 2, self.height() / 2)
-        match self.appearance:
-            case GlassLook():
-                # GlassScene owns the material; this invisible fill keeps native hit testing.
-                painter.fillPath(outline, QtGui.QColor(0, 0, 0, 1))
-            case SolidLook(fill=fill, edge=edge):
-                painter.fillPath(outline, color(fill))
-                painter.setPen(QtGui.QPen(color(edge), 1))
-                painter.drawPath(outline)
-            case None:
-                pass
-            case _:
-                assert_never(self.appearance)
+        if self.appearance is not None:
+            painter = QtGui.QPainter(self)
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+            paint_capsule(painter, outline(QtCore.QRectF(self.rect()), self.height() / 2), self.appearance)
 
 
 def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
@@ -357,26 +339,15 @@ class ShellSections:
     def build(cls, parent: QtWidgets.QWidget, sizes: ui_spec.Sizes) -> ShellSections:
         return cls(Section(parent, sizes))
 
-    @property
-    def app_snapshot(self) -> tuple[Shelf, int] | None:
-        return self._state.get().app_snapshot
-
-    @property
-    def pager_view(self) -> tuple[PagerView, Mapping[str, Pixels | None]] | None:
-        return self._state.get().pager_view
-
-    def sections(self) -> tuple[Section]:
-        return (self.pager,)
-
-    def desktops(self, view: PagerView, invoke: Callable[[Navigation], None], on_app: Callable[[App, Click], None]) -> None:
-        """Each desktop with its apps; a click on an app goes to it (and so to its desktop).
+    def desktops(self, view: PagerView, invoke: Callable[[Navigation], None], on_app: Callable[[App, Click], None]) -> bool:
+        """Each desktop with its apps, a click on an app going to it (and so to its desktop); whether the pager changed.
 
         An empty desktop other than the current one is left out. Programs' icons come from
         the running apps, so a newly read icon redraws the pager too.
         """
         images: Mapping[str, Pixels | None] = self._state.get().icons
         if (view, images) == self._state.get().pager_view:
-            return
+            return False
         hints = view.hints
 
         def jump(index: int) -> Callable[[Click], None]:
@@ -402,14 +373,16 @@ class ShellSections:
 
         self.pager.show_targets(pages() if len(view.desktops) > 1 else ())
         self._state.set(replace(self._state.get(), pager_view=(view, images)))
+        return True
 
-    def applications(self, snapshot: tuple[Shelf, int]) -> None:
-        """Remember the running apps' windows and icons; the pager draws them."""
+    def applications(self, snapshot: tuple[Shelf, int]) -> bool:
+        """Remember the running apps' windows and icons, which the pager draws; whether they changed."""
         if snapshot == self._state.get().app_snapshot:
-            return
+            return False
         shelved = self._state.get()
         read = frozendict((app.identity, app.image) for app in snapshot[0].running if app.image is not None)
         self._state.set(replace(shelved, app_snapshot=snapshot, icons=shelved.icons | read))
+        return True
 
     def place(self, left: int, width: int) -> None:
         """The pager from the screen's edge, stopping before the leftmost capsule at `left`."""

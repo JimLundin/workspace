@@ -13,7 +13,6 @@ from desktop_ui.desktop_control import (
     Effect,
     Event,
     Flash,
-    Fold,
     HandleKey,
     LayoutReported,
     LayoutShown,
@@ -114,8 +113,7 @@ def test_the_tray_records_meetings_and_opens_their_folder() -> None:
 
 def test_the_overlay_menu_choice_toggles_and_saves_the_overlay() -> None:
     # Defect: the tray's overlay item changes the view without saving the setting, or saves the old value.
-    _, chosen = folded((MenuChosen(Menu.OVERLAY.value),))
-    assert chosen == (Fold(OverlayToggled()),)
-    toggled, effects = folded((OverlayToggled(),))
-    assert not toggled.overlay.enabled and OverlayEnabled(enabled=False) in effects
+    for event in (MenuChosen(Menu.OVERLAY.value), OverlayToggled()):
+        toggled, effects = folded((event,))
+        assert not toggled.overlay.enabled and OverlayEnabled(enabled=False) in effects
     assert folded((MenuChosen(0),))[1] == ()

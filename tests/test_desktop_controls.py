@@ -3,8 +3,6 @@
 from components import LAYOUT
 from config import APPS
 from desktop_ui.desktop_controls import (
-    WM_TOOL_CHOSEN,
-    ChosenTool,
     FeatureRequest,
     Menu,
     MenuState,
@@ -92,12 +90,3 @@ def test_control_event_preserves_voice_release_and_rejects_unknown_requests() ->
     """Detect dropping a capture's key-up or forwarding an invalid wire request."""
     assert control_event(WindowInput(WM_REQUEST, Tool.DICTATE.value, 0), APPS) == FeatureRequest(Tool.DICTATE, down=False)
     assert control_event(WindowInput(WM_REQUEST, 999, 1), APPS) is None
-
-
-def test_menu_tool_message_decodes_its_tool_and_rejects_other_requests() -> None:
-    # Defects: decoding drops the chosen tool, accepts a non-Tool wire request,
-    # or handles another private message as a choice.
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, Tool.WINDOW_SWITCHER.value, 0), APPS) == ChosenTool(Tool.WINDOW_SWITCHER)
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, 999, 0), APPS) is None
-    assert control_event(WindowInput(WM_TOOL_CHOSEN, 1000, 0), APPS) is None
-    assert control_event(WindowInput(0x8056, Tool.WINDOW_SWITCHER.value, 0), APPS) is None

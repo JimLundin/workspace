@@ -8,7 +8,7 @@ tests use those same interfaces without constructing a partial assistant or UI.
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Final, Protocol, assert_never
+from typing import Protocol, assert_never
 
 import protocol
 from components import LAYOUT
@@ -137,10 +137,6 @@ def toggle_layout(effects: LayoutTransport) -> bool:
     return window is not None and effects.post(window, protocol.WM_TOGGLE_LAYOUT, 0, 0)
 
 
-WM_TOOL_CHOSEN: Final = 0x8057
-"""Bar menu -> desktop control window: Tool value in wparam, target HWND in lparam (0 for foreground)."""
-
-
 @dataclass(frozen=True, slots=True)
 class WindowInput:
     """One native message observation; the HWND remains with its native owner."""
@@ -177,7 +173,7 @@ type ControlAction = PhysicalKey | FeatureRequest | ChosenTool
 
 
 def control_event(event: WindowInput, apps: Sequence[App]) -> ControlAction | None:
-    """Preserve key edges and press-only menu choices."""
+    """Preserve key edges and requests' presses and releases."""
     match event:
         case WindowInput(message=protocol.WM_KEY_STATE, wparam=scancode, lparam=down):
             return PhysicalKey(Scancode(scancode), down=bool(down))
@@ -188,11 +184,5 @@ def control_event(event: WindowInput, apps: Sequence[App]) -> ControlAction | No
                     return None
                 case _:
                     return FeatureRequest(request, down=bool(down))
-        case WindowInput(message=message, wparam=code) if message == WM_TOOL_CHOSEN:
-            try:
-                tool = Tool(code)
-            except ValueError:
-                return None
-            return ChosenTool(tool)
         case _:
             return None

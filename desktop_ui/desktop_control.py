@@ -191,13 +191,6 @@ type Event = Fact | Instruction
 
 
 @dataclass(frozen=True, slots=True)
-class Fold:
-    """Fold another event next, as if it had just been reported."""
-
-    event: Event
-
-
-@dataclass(frozen=True, slots=True)
 class Log:
     text: str
 
@@ -333,7 +326,6 @@ class OpenLogs:
 
 type Effect = (
     Instruction
-    | Fold
     | Log
     | Beep
     | TrayNotify
@@ -456,7 +448,7 @@ def _chosen(choice: int) -> Iterator[Effect]:
             # The launcher closes this program and starts it again.
             yield Launch("restart", ("desktop",))
         case Menu.OVERLAY:
-            yield Fold(OverlayToggled())
+            pass  # `transition` folds it as `OverlayToggled`.
         case Menu.KEYMAP:
             yield ShowKeymap()
         case Menu.TASKBAR:
@@ -552,6 +544,8 @@ def transition(state: DesktopState, event: Event) -> tuple[DesktopState, Iterato
     match event:
         case ShowVoice() | ShowIdle() | Record() | ExpireCapture() | RestoreTray() | Chord() | ToggleTaskbar() | Quit():
             return state, iter((event,))
+        case MenuChosen(Menu.OVERLAY.value):
+            return transition(state, OverlayToggled())
         case _:
             after = _remembered(state, event)
             return after, _reacted(state, after, event)

@@ -19,6 +19,7 @@ from typing import assert_never
 from desktop_ui import ui_spec
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
 from desktop_ui.island_model import Control, Glyph, Key, Marker, Part, Slot, Text, Zone
+from winapi.shapes import Rect
 
 # Every size comes from `ui_spec.Sizes` (`desktop_ui/spec/sizes.py`), which the
 # desktop reloads while it runs; nothing here keeps a size of its own.
@@ -178,6 +179,20 @@ class Box:
     width: float
     height: float
 
+    def on_device(self, scale: float) -> Rect:
+        """The box in device pixels, each edge rounded on its own."""
+        return Rect(round(self.x * scale), round(self.y * scale), round((self.x + self.width) * scale), round((self.y + self.height) * scale))
+
+    def on_screen(self, outer: Rect, scale: float) -> Rect:
+        """A window-relative box on screen in device pixels: its corner rounds from the window's, its extent from its size."""
+        left, top = outer.left + round(self.x * scale), outer.top + round(self.y * scale)
+        return Rect(left, top, left + round(self.width * scale), top + round(self.height * scale))
+
+
+def on_pixels(value: float, scale: float) -> float:
+    """A logical coordinate moved to the nearest whole device pixel at `scale`."""
+    return round(value * scale) / scale
+
 
 @dataclass(frozen=True, slots=True)
 class Framed:
@@ -272,9 +287,7 @@ def snap(framed: Sequence[Framed], scale: float) -> tuple[Framed, ...]:
     """Round every box to whole device pixels, so Qt and composition draw the same edges."""
 
     def device(box: Box) -> Box:
-        x, y = round(box.x * scale), round(box.y * scale)
-        return Box(
-            x / scale, y / scale, round((box.x + box.width) * scale) / scale - x / scale, round((box.y + box.height) * scale) / scale - y / scale
-        )
+        x, y = on_pixels(box.x, scale), on_pixels(box.y, scale)
+        return Box(x, y, on_pixels(box.x + box.width, scale) - x, on_pixels(box.y + box.height, scale) - y)
 
     return tuple(Framed(f.key, device(f.box), device(f.strip), f.presence) for f in framed)

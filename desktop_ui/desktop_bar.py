@@ -28,7 +28,7 @@ lazy import winapi.ambient
 lazy from config import APPS
 lazy from contracts.recording_state import RecordingAction
 lazy from desktop_ui import island_menu, ui_spec
-lazy from desktop_ui.ambient import Ambient, SystemStatus
+lazy from desktop_ui.ambient import Ambient
 lazy from desktop_ui.application_observer import ApplicationObserver, Arrangement
 lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.away_screens import AwayScreens
@@ -70,7 +70,6 @@ lazy from desktop_ui.bar_events import (
     ToggleAway,
     ToggleTaskbar,
     TrayClicked,
-    TrayShown,
     UseSizes,
     UseTool,
     Visibility,
@@ -88,7 +87,7 @@ lazy from desktop_ui.island_menu import (
     Menu,
 )
 lazy from desktop_ui.island_model import Action, CapsuleView, Key, Marker, Observed, island, order
-lazy from desktop_ui.island_motion import IslandMotion, Shown, placed, retarget
+lazy from desktop_ui.island_motion import Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
@@ -103,7 +102,7 @@ lazy from protocol import Installed, Tool
 lazy from usage import Detail
 lazy from winapi import appearance, inputs, session, shell, windows
 lazy from winapi.machine_status import Power, PowerUnavailable
-lazy from winapi.tray_host import Click, Entry, TrayHost
+lazy from winapi.tray_host import Click, TrayHost
 
 prepare()
 
@@ -115,7 +114,7 @@ class BarActions:
     overlay: Callable[[], None]
     menu: Callable[[], None]
     problem: Callable[[str], None]
-    tool: Callable[[Tool], None] = lambda tool: None
+    tool: Callable[[Tool], None]
     taskbar: Callable[[], None] | None = field(default=None, kw_only=True)
     """Toggle the taskbar; None toggles the real one."""
     notification_settings: Callable[[], None] | None = field(default=None, kw_only=True)
@@ -193,9 +192,6 @@ class _Reporter:
     def deactivated(self) -> None:
         self.report(Deactivated())
 
-    def render(self) -> None:
-        self.report(Rerender())
-
 
 @dataclass(frozen=True, slots=True)
 class DesktopBar:
@@ -228,9 +224,8 @@ class DesktopBar:
         *,
         native_shell: bool = True,
         audio_level: Callable[[], float | None] | None = None,
-        observations: BarObservations | None = None,
     ) -> DesktopBar:
-        observed = BarObservations() if observations is None else observations
+        observed = BarObservations()
         deliver: Cell[Callable[[Event], None] | None] = Cell(None)
         reporter = _Reporter(deliver)
         errors: queue.Queue[str] = queue.Queue()
@@ -323,29 +318,6 @@ class DesktopBar:
     @property
     def visible(self) -> bool:
         return self.model.visible
-
-    @property
-    def opened(self) -> Menu | None:
-        return self.model.opened
-
-    @property
-    def system(self) -> SystemStatus:
-        return self.model.system
-
-    @property
-    def ambient(self) -> Ambient:
-        return self.model.ambient
-
-    @property
-    def motion(self) -> IslandMotion:
-        return self.model.motion
-
-    @property
-    def closed(self) -> bool:
-        return self.model.closed
-
-    def menu(self) -> Menu:
-        return menu(self.model)
 
     # ---- the fold ----------------------------------------------------------------------
 
@@ -591,17 +563,16 @@ class DesktopBar:
         if self.shell is None:
             return model.applications, model.arrangement
         sections = self.window.shell_sections
-        previous = (sections.app_snapshot, sections.pager_view)
         self.window.show_tray(self.shell.tray.poll())  # The tick's render rebuilds an open menu's tray cells.
         arrangement = model.arrangement
         with suppress(queue.Empty):
             arrangement = self.shell.applications.results.get_nowait()
         applications = arrangement.shelf if arrangement is not model.arrangement else model.applications
-        sections.applications((applications, self.observations.foreground()))
-        sections.desktops(pager(arrangement.placed, arrangement.current, chord=model.chord_held), self.navigate, self.app_click)
+        changed = sections.applications((applications, self.observations.foreground()))
+        changed |= sections.desktops(pager(arrangement.placed, arrangement.current, chord=model.chord_held), self.navigate, self.app_click)
         # Changed apps or pager targets must also publish section geometry when the island is still,
         # or a pager that loses its hints keeps its wider capsule.
-        if previous != (sections.app_snapshot, sections.pager_view):
+        if changed:
             self.window.presentation = None
         if model.chord_held:
             self._show_hints()
@@ -631,7 +602,7 @@ class DesktopBar:
                 if running is not None and click is Click.RIGHT:
                     self._application_click(running, click)
                 elif click is not Click.RIGHT:
-                    self.close_menu(restore=False)
+                    self.handle(Deactivated())
                     # A configured app key also starts the app when it isn't running.
                     key = next((each for each in APPS if isinstance(each.target, Installed) and each.target.exe.lower() == exe), None)
                     self.navigate(AppKey(key, Source.TOOLBAR) if key is not None else CycleApp(app, Source.TOOLBAR))
@@ -639,7 +610,7 @@ class DesktopBar:
                 assert_never(app)
 
     def _application_click(self, item: Item, click: Click) -> None:
-        self.close_menu(restore=False)
+        self.handle(Deactivated())
         match item:
             case Pinned(windows=listed) | Application(windows=listed) if listed and click is Click.RIGHT:
                 chosen = shell.show_menu(int(self.window.winId()), tuple(shell.MenuItem(window.handle, window.title) for window in listed))
@@ -652,30 +623,13 @@ class DesktopBar:
 
     # ---- what others tell the bar ------------------------------------------------------
 
-    def render(self) -> None:
-        self.handle(Rerender())
-
     def show(self, *, visible: bool) -> None:
         """Show or hide the bar; hidden, it lays out without animating."""
         self.handle(Visibility(visible))
 
-    def show_tray(self, entries: tuple[Entry, ...]) -> None:
-        """The tray icons the menu lists."""
-        self.window.show_tray(entries)
-        self.handle(TrayShown(tuple(entry.tip or "Tray application" for entry in entries)))
-
     def navigate(self, order: Order) -> None:
         """The application observer owns windows and desktops; it carries out every navigation."""
         self.handle(Navigate(order))
-
-    def hover(self, key: Key | None) -> None:
-        self.handle(Hovered(key))
-
-    def deactivated(self) -> None:
-        self.handle(Deactivated())
-
-    def close_menu(self, *, restore: bool) -> None:
-        self.handle(Pressed(Action.CLOSE_MENU) if restore else Deactivated())
 
     def close(self) -> None:
         if self.model.closed:

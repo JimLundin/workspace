@@ -9,6 +9,7 @@ from functools import lru_cache
 lazy from PySide6 import QtCore, QtGui, QtSvg
 lazy from PySide6.QtCore import Qt
 
+from desktop_ui.components.appearance import Shade
 from desktop_ui.fluent_icons import FILLED, REGULAR
 from desktop_ui.qt_runtime import prepare
 
@@ -61,3 +62,11 @@ def icon(name: str, color: str, size: int = 16) -> QtGui.QIcon:
     painter.end()
     pixmap.setDevicePixelRatio(2)
     return QtGui.QIcon(pixmap)
+
+
+def paint_icon(painter: QtGui.QPainter, name: str, ink: Shade, bounds: QtCore.QRect) -> None:
+    """A symbol in translucent ink: SVG fills take no alpha, so the painter's opacity carries it."""
+    painter.save()
+    painter.setOpacity(ink.opacity)
+    icon(name, ink.color).paint(painter, bounds)
+    painter.restore()

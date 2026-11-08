@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field, replace
 
 lazy from PySide6 import QtCore, QtWidgets
-lazy from PySide6.QtCore import Qt
 
 from cell import Cell
 from desktop_ui.qt_runtime import prepare
@@ -11,7 +10,7 @@ from winapi import windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import GLASS_ACCENT, scheme, tokens
 lazy from desktop_ui.components.controls import label
-lazy from desktop_ui.components.widgets import row, surface, window_style
+lazy from desktop_ui.components.widgets import device_size, row, surface, tool_window, window_style
 lazy from desktop_ui.qt_ui import cancel, later
 
 prepare()
@@ -37,9 +36,8 @@ class Indicator:
     def build(cls, _root: QtWidgets.QApplication) -> Indicator:
         theme = tokens(scheme())
         window = QtWidgets.QWidget()
-        window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        tool_window(window, None, on_top=False)
         window.setStyleSheet(window_style(theme))
-        window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         window.setWindowOpacity(0.9)
         # A 34 px capsule, as the island's.
         layout = row(surface(window, theme, 17))
@@ -57,10 +55,9 @@ class Indicator:
         self._label.setText(text)
         self._label.setStyleSheet(f"color: {colour}; font-size: 13px; font-weight: 500;")
         self._window.adjustSize()
-        scale = self._window.devicePixelRatioF()
-        width, height = round(self._window.width() * scale), round(self._window.height() * scale)
-        x, y = work.left + (work.width - width) // 2, work.bottom - height - 28
-        windows.move(self._frame, Rect(x, y, x + width, y + height))
+        size = device_size(self._window, self._window.devicePixelRatioF())
+        x, y = work.left + (work.width - size.width) // 2, work.bottom - size.height - 28
+        windows.move(self._frame, Rect(x, y, x + size.width, y + size.height))
         self._window.show()
         windows.show_quietly(self._frame, visible=True)
 

@@ -5,16 +5,11 @@ from collections.abc import Callable
 lazy from PySide6 import QtGui, QtWidgets
 
 from desktop_ui.qt_runtime import prepare
-lazy from desktop_ui.components.widgets import show_window
 
 prepare()
 
 
 type Job = Callable[[QtWidgets.QApplication], None]
-
-
-def bring_forward(window: QtWidgets.QWidget, focus: QtWidgets.QWidget) -> None:
-    show_window(window, focus=True, target=focus)
 
 
 def near_pointer(window: QtWidgets.QWidget, width: int, height: int) -> None:

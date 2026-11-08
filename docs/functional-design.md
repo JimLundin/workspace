@@ -74,7 +74,7 @@ architecture review's `contract-isolation` rule enforces it.
 | Modules | Role |
 | --- | --- |
 | `desktop_app.py`, `desktop_control.py`, `desktop_controls.py`, `voice.py` | Composition, the desktop's control decisions, the tray menu, and dictation, meetings and the microphone |
-| `ui.py`, `qt_ui.py`, `qt_runtime.py`, `ui_control.py`, `job_queue.py`, `dialogs.py` | Qt dispatch, event-loop ownership and the views' decisions |
+| `ui.py`, `qt_ui.py`, `qt_runtime.py`, `job_queue.py`, `dialogs.py` | Qt dispatch, event-loop ownership and what views built later replay |
 | `desktop_bar.py`, `bar_*.py`, `island_*.py`, `ambient.py`, `audio_meter.py` | The bar ([policy](toolbar-design.md)) and the readings it shows |
 | `shell_*.py`, `desktop_pager.py`, `taskbar_guard.py` | The pager and app shelf, and the Windows taskbar |
 | `application_observer.py`, `window_layout.py`, `navigation.py`, `window_switcher.py` | [Window placement](window-placement.md) and navigation |

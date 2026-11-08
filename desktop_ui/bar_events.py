@@ -255,13 +255,6 @@ class Visibility:
     visible: bool
 
 
-@dataclass(frozen=True, slots=True)
-class TrayShown:
-    """The tray icons the menu lists, by their tips."""
-
-    tips: tuple[str, ...]
-
-
 # ---- requests: their own effect -----------------------------------------------------
 
 
@@ -308,7 +301,6 @@ type Event = (
     | Sampled
     | Closing
     | Visibility
-    | TrayShown
     | Instruction
 )
 
@@ -515,7 +507,7 @@ def _shown(model: BarModel, change: ActivityChange) -> BarModel:
 
 
 type Interaction = Pressed | Hovered | Selected | Picked | MenuKey | Deactivated | VolumeSet | TrayClicked | Rerender
-type Observation = ActivityChange | ChordHeld | Opening | Ticked | Respecced | Retargeted | Framed | Sampled | Closing | Visibility | TrayShown
+type Observation = ActivityChange | ChordHeld | Opening | Ticked | Respecced | Retargeted | Framed | Sampled | Closing | Visibility
 
 
 def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Effect, ...]]:
@@ -575,8 +567,6 @@ def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effe
             return replace(model, sampled_at=at), ()
         case Closing():
             return replace(model, closed=True), ()
-        case TrayShown(tips):
-            return replace(model, tray_tips=tips), (Render(),)
         case _:
             assert_never(event)
 

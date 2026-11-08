@@ -14,9 +14,10 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Lettering, Look, Rim, Scheme, Shade, SolidLook, look, rim_stops
+from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Look, Rim, Scheme, Shade, SolidLook, look, rim_stops
 from desktop_ui.components.meaning import Tint
-from desktop_ui.components.text import color, face
+from desktop_ui.components.text import color, face, outline, paint_capsule
+from desktop_ui.components.widgets import tool_window
 from desktop_ui.key_hints import ActionCap, AppCap, Badge, DirectionCap, Keycap
 from desktop_ui.navigation import Direction
 from desktop_ui.qt_runtime import prepare
@@ -54,10 +55,6 @@ class HintSurface(Protocol):
     def present(self, window: QtWidgets.QWidget) -> None: ...
 
 
-def letter_face() -> QtGui.QFont:
-    return face(12, 500)
-
-
 def keycap_text(keycap: Keycap) -> str:
     match keycap:
         case AppCap(letter=letter) | ActionCap(letter=letter):
@@ -87,7 +84,7 @@ class Face:
 
 def keycap_face(keycap: Keycap, style: Style) -> Face:
     """The app's letter sits in a well and the window its next press reaches takes the accent; actions read quietly."""
-    lettering, text = lettering_of(style.surface), keycap_text(keycap)
+    lettering, text = style.surface.lettering, keycap_text(keycap)
     match keycap:
         case AppCap(next=True) if style.contrast:
             # High contrast swaps the system colours instead of adding a hue.
@@ -136,26 +133,15 @@ def badge_width(keycaps: tuple[Keycap, ...], metrics: QtGui.QFontMetricsF) -> in
 
 def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look) -> None:
     """A capsule. Glass without composition: its veil and rim light, painted by Qt; solid and high contrast fill and edge."""
-    radius = bounds.height() / 2
     edge = bounds.adjusted(0.5, 0.5, -0.5, -0.5)
-    outline = QtGui.QPainterPath()
-    outline.addRoundedRect(edge, radius - 0.5, radius - 0.5)
+    path = outline(edge, bounds.height() / 2 - 0.5)
     match surface:
         case GlassLook(veil=veil, rim=rim):
-            painter.fillPath(outline, color(veil))
+            painter.fillPath(path, color(veil))
             painter.setPen(QtGui.QPen(rim_gradient(edge, rim), 1))
-        case SolidLook(fill=fill, edge=line):
-            painter.fillPath(outline, color(fill))
-            painter.setPen(QtGui.QPen(color(line), 1))
-        case _:
-            assert_never(surface)
-    painter.drawPath(outline)
-
-
-def lettering_of(surface: Look) -> Lettering:
-    match surface:
-        case GlassLook(lettering=lettering) | SolidLook(lettering=lettering):
-            return lettering
+            painter.drawPath(path)
+        case SolidLook():
+            paint_capsule(painter, path, surface)
         case _:
             assert_never(surface)
 
@@ -176,35 +162,28 @@ class BadgeWindow(QtWidgets.QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        prepared(self, "Workspace key hint")
+        tool_window(self, "Workspace key hint", on_top=True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.keycaps: tuple[Keycap, ...] = ()
         self.look = style(Material.SOLID)
 
     def draw(self, keycaps: tuple[Keycap, ...], look: Style) -> None:
         self.keycaps, self.look = keycaps, look
-        self.resize(badge_width(keycaps, QtGui.QFontMetricsF(letter_face())), HEIGHT)
+        self.resize(badge_width(keycaps, QtGui.QFontMetricsF(face(12, 500))), HEIGHT)
         self.update()
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        painter.setFont(letter_face())
+        painter.setFont(face(12, 500))
         paint_surface(painter, QtCore.QRectF(self.rect()), self.look.surface)
-        metrics = QtGui.QFontMetricsF(letter_face())
+        metrics = QtGui.QFontMetricsF(face(12, 500))
         left = (HEIGHT - CAP) / 2
         for keycap in self.keycaps:
             width = keycap_width(keycap, metrics)
             paint_keycap(painter, QtCore.QRectF(left, (HEIGHT - CAP) / 2, width, CAP), keycap_face(keycap, self.look))
             left += width + GAP
-
-
-def prepared(window: QtWidgets.QWidget, title: str) -> None:
-    window.setWindowTitle(title)
-    window.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
-    window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-    window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-    window.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
 
 def logical(x: int, y: int) -> QtCore.QPoint:
