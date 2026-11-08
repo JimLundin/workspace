@@ -6,35 +6,26 @@ hook and stall every key whenever the assistant is busy; a stalled hook that
 misses Windows' deadline lets the layout's swallowed keys through.
 """
 
+from dataclasses import dataclass
 from typing import Final
 
 WINDOWS_KEYS: Final = frozenset({0x5B, 0x5C})
 
 
+@dataclass(frozen=True, slots=True)
 class WindowsKeyTap:
-    """A bare Windows-key release is a tap; chords and repeats are not.
+    """A bare Windows-key release is a tap; chords and repeats are not."""
 
-    The hook calls `key` for every key, so it updates its own state in place
-    rather than allocating a record per event.
-    """
+    held: frozenset[int] = frozenset()
+    armed: int | None = None
+    """The Windows key pressed with nothing else held, until another key joins it."""
+    tapped: bool = False
+    """The event just observed completed a tap."""
 
-    __slots__ = ("armed", "held")
-
-    def __init__(self) -> None:
-        self.held: set[int] = set()
-        self.armed: int | None = None
-        """The Windows key pressed with nothing else held, until another key joins it."""
-
-    def key(self, vk: int, *, down: bool) -> bool:
-        """Observe one key event; True when it completes a tap."""
+    def key(self, vk: int, *, down: bool) -> WindowsKeyTap:
+        """Observe one key event."""
         if down:
             if vk in self.held:
-                return False
-            self.armed = vk if vk in WINDOWS_KEYS and not self.held else None
-            self.held.add(vk)
-            return False
-        self.held.discard(vk)
-        tapped = vk == self.armed
-        if vk in WINDOWS_KEYS:
-            self.armed = None
-        return tapped
+                return WindowsKeyTap(self.held, self.armed) if self.tapped else self
+            return WindowsKeyTap(self.held | {vk}, vk if vk in WINDOWS_KEYS and not self.held else None)
+        return WindowsKeyTap(self.held - {vk}, None if vk in WINDOWS_KEYS else self.armed, tapped=vk == self.armed)

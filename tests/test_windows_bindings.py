@@ -166,7 +166,7 @@ def hold_apps(keyboard: Keyboard, *, at: int) -> None:
 def observed_keyboard(*, platform: KeyboardFixture | None = None) -> Generator[tuple[Keyboard, list[tuple[int, int, int]]]]:
     """Use the same driver seam for input observations and captured notifications."""
     driver = platform if platform is not None else KeyboardFixture()
-    yield Keyboard(driver), driver.messages
+    yield Keyboard.open(driver), driver.messages
 
 
 def test_physical_press_is_reported_before_a_tap_hold_is_resolved() -> None:
@@ -188,7 +188,7 @@ def test_assistant_outage_keeps_remapping_and_reconnects_without_replaying_short
     # Detect routing temporary assistant unavailability into input-failure
     # recovery, or retaining the old HWND after a fresh assistant starts.
     driver = KeyboardFixture()
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.host.remember_windows(frozendict({Side.ASSISTANT: 2}))
     driver.handles[Side.ASSISTANT] = None
     hold_apps(keyboard, at=5)
@@ -219,7 +219,7 @@ def test_each_message_reaches_the_side_that_owns_it() -> None:
     # restarts), dictation goes to the desktop, what the desktop shows (pressed
     # keys, layer, chord) goes to the assistant, or one side misses the layout's state.
     driver = KeyboardFixture()
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 1, 0), down=True)
     keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 2, 0), down=False)
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
@@ -310,10 +310,10 @@ def test_picker_enter_release_passes_after_the_selected_window_takes_focus() -> 
     driver = KeyboardFixture()
     driver.current_title = SWITCHER_TITLE
     with observed_keyboard(platform=driver) as (keyboard, messages):
-        keyboard.foreground = 0
+        keyboard.restore(replace(keyboard.state, foreground=0))
         enter = inputs.KeyEvent(0x0D, 0x1C, 0, 0, 0)
         assert not keyboard.swallow(enter, down=True)
-        keyboard.picker_active = False
+        keyboard.restore(replace(keyboard.state, picker_active=False))
         assert not keyboard.swallow(enter, down=False)
         assert not keyboard.native_releases and messages == []
 
@@ -352,13 +352,13 @@ def test_reinstalling_a_dead_hook_ends_voice_capture_and_a_held_escape() -> None
     # Defects: real input the hook missed is never probed or reinstalled, dictation
     # stays captured, or the stale Escape press quits the layout on the next tap.
     driver = KeyboardFixture()
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     hold_apps(keyboard, at=990)
     for key in (inputs.KeyEvent(0, DICTATE_KEY, 0, 1_000, 0), inputs.KeyEvent(0xC0, ESCAPE, 0, 1_010, 0)):
         driver.key = key
         keyboard.hook_proc(0, system.WM_KEYDOWN, 0)
     # Windows drops the hook, so both key-ups reach only raw input.
-    keyboard.watch = hook_watch.keyboard_input(keyboard.watch, 5_000)
+    keyboard.raw_key(5_000)
     assert keyboard.watch_hook(5_300) is None
     assert driver.output[-2:] == [(Key.MENU_MASK, True), (Key.MENU_MASK, False)]
     outage = hook_watch.Reinstall(5_000, 1_010)
@@ -377,13 +377,13 @@ def test_a_refused_probe_keeps_the_hook_and_its_held_keys() -> None:
     # Defect: typing into an elevated window or on the lock screen, where Windows
     # refuses the probe, reads as a dead hook and drops held keys.
     driver = KeyboardFixture()
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     hold_apps(keyboard, at=990)
     hook_key(keyboard, driver, DICTATE_KEY, down=True, at=1_000)
     driver.send_error = OSError("Windows accepted 0 of 1 input events.")
     verdicts: list[hook_watch.Reinstall | None] = []
     for tick in range(5_000, 20_000, 200):
-        keyboard.watch = hook_watch.keyboard_input(keyboard.watch, tick - 100)
+        keyboard.raw_key(tick - 100)
         verdicts.append(keyboard.watch_hook(tick))
     assert verdicts == [None] * len(verdicts)
     assert driver.output.count((Key.MENU_MASK, True)) > 1
@@ -396,7 +396,7 @@ def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> Non
     driver.read_error = RuntimeError("Read failed")
     driver.send_error = OSError("Release failed")
     driver.delivery_error = OSError("Post failed")
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.engine.restore(replace(keyboard.engine.state, pressed=(Key.A, *keyboard.engine.pressed[1:])))
     keyboard.host.own(Key.A)
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
@@ -414,7 +414,7 @@ def test_rejected_chord_releases_its_added_modifier_and_defers_diagnostics() -> 
     driver.current_foreground = 0
     driver.key = inputs.KeyEvent(0x32, 0x03, 0, 10, 0)
     driver.reject_down = Key.LBRACKET
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.engine.restore(replace(keyboard.engine.state, locked=Layer.SYM))
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
     assert not bool(keyboard.engine.enabled) and not keyboard.host.owned
@@ -442,7 +442,7 @@ def test_native_output_ownership_survives_rejection_until_release_is_accepted() 
 def test_recovery_retries_are_bounded_and_enabling_waits_for_accepted_releases() -> None:
     driver = KeyboardFixture()
     driver.send_error = OSError("Rejected")
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.host.own(Key.A)
     keyboard.input_failed(OSError("Input rejected"))
     for _ in range(10):
@@ -472,7 +472,7 @@ def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
 def test_firmware_keyboard_bypasses_remapping_and_restores_the_previous_mode() -> None:
     """Detect firmware keys invoking voice/remapping, stuck output, or unwanted enable."""
     driver = KeyboardFixture()
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.swallow(inputs.KeyEvent(0x32, 0x03, 0, 10, 0), down=True)
     assert driver.output[-1] == (Key.Q, True)
     driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#connected",)
@@ -522,7 +522,7 @@ def assert_host_remapping_restored(keyboard: Keyboard) -> None:
 def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
     driver = KeyboardFixture()
     driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#voice",)
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.update_devices()
     driver.messages.clear()
     return keyboard, driver
@@ -734,8 +734,8 @@ def test_overlay_refuses_mouse_activation_but_still_delivers_other_messages() ->
 
 
 def test_layout_output_preserves_snippets_but_assistant_input_resets_them() -> None:
-    keyboard = Keyboard(KeyboardFixture())
-    keyboard.foreground = 1
+    keyboard = Keyboard.open(KeyboardFixture())
+    keyboard.restore(replace(keyboard.state, foreground=1))
     keyboard.engine.restore(replace(keyboard.engine.state, typed=",,t"))
     assert not keyboard.swallow(inputs.KeyEvent(0x54, 0, 0, 0, LAYOUT_MAGIC), down=True)
     assert keyboard.engine.typed == ",,t"
@@ -744,8 +744,8 @@ def test_layout_output_preserves_snippets_but_assistant_input_resets_them() -> N
 
 
 def test_native_arrow_reaches_apps_and_clears_snippets() -> None:
-    keyboard = Keyboard(KeyboardFixture())
-    keyboard.foreground = 1
+    keyboard = Keyboard.open(KeyboardFixture())
+    keyboard.restore(replace(keyboard.state, foreground=1))
     keyboard.engine.restore(replace(keyboard.engine.state, typed=",,t"))
     assert not keyboard.swallow(inputs.KeyEvent(0x25, 0x4B, inputs.LLKHF_EXTENDED, 0, 0), down=True)
     assert keyboard.engine.typed == ""
@@ -806,7 +806,7 @@ def test_native_function_key_clears_a_partial_snippet_without_remapping() -> Non
 
 def test_layout_replies_to_queries_and_tray_toggles_without_key_injection() -> None:
     driver = KeyboardFixture()
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
@@ -820,7 +820,7 @@ def test_layout_replies_to_queries_and_tray_toggles_without_key_injection() -> N
 def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> None:
     driver = KeyboardFixture()
     driver.send_error = OSError("input was refused")
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.engine.restore(replace(keyboard.engine.state, pressed=(Key.Q, *keyboard.engine.pressed[1:])))  # An output held before opening the tray.
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     assert not bool(keyboard.engine.enabled)
@@ -829,7 +829,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
 
 def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> None:
     driver = KeyboardFixture()
-    keyboard = Keyboard(driver)
+    keyboard = Keyboard.open(driver)
     keyboard.engine.restore(replace(keyboard.engine.state, shown=Indicator(Layer.SYM, locked=True, caps_word=True, chord=False)))
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     layers = [decode_indicator(wparam) for message, wparam, _ in driver.messages if message == WM_INDICATOR]
@@ -842,7 +842,7 @@ def test_a_bare_windows_key_tap_asks_the_assistant_for_the_taskbar_once() -> Non
     # another program's injected Win toggles the taskbar.
     for flags, extra, expected in ((0, 0, 1), (inputs.LLKHF_INJECTED, LAYOUT_MAGIC, 1), (inputs.LLKHF_INJECTED, 0, 0)):
         driver = KeyboardFixture()
-        keyboard = Keyboard(driver)
+        keyboard = Keyboard.open(driver)
         for message in (system.WM_KEYDOWN, system.WM_KEYUP):
             driver.key = inputs.KeyEvent(0x5B, 0x5B, flags | inputs.LLKHF_EXTENDED, 10, extra)
             keyboard.hook_proc(0, message, 0)
