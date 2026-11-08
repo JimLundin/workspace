@@ -1,9 +1,16 @@
 """The desktop views' decisions, as values: what a late-built bar replays and where speech goes."""
 
-from contracts.agent_session import Session
-from contracts.desktop_link import AutomaticChanged, CanvasChanged, JobChanged, RouteSpeech, VoiceChanged
+from dataclasses import replace
+
+from contracts import agent_session
+from contracts.agent_session import Begin, Resolution, Session
+from contracts.attention import observed_attention
+from contracts.canvas_activity import Attention, CanvasQuestion, TaskRequest
+from contracts.desktop_link import AutomaticChanged, CanvasChanged, JobChanged, RouteSpeech, SessionChanged, VoiceChanged
 from contracts.meeting_detection import AutomaticStatus
+from contracts.personal_work import Catalog
 from contracts.status import State
+from contracts.task import TextAnswer
 from contracts.work_canvas_contracts import CanvasPublication
 from contracts.work_canvas_model import CanvasDocument
 from desktop_ui.ui_control import (
@@ -13,14 +20,17 @@ from desktop_ui.ui_control import (
     BarOverlay,
     BarSession,
     CanvasVoice,
+    InboxOpened,
     OverlayPublished,
     PublishCanvas,
     Published,
     Route,
+    ShowInbox,
     ToView,
     UiState,
     transition,
 )
+from tests import agent_requests
 
 
 def test_a_bar_built_late_replays_what_it_missed_without_repeating_the_notice() -> None:
@@ -55,3 +65,32 @@ def test_a_publication_for_one_view_reaches_it_unchanged() -> None:
     # Defect: a job change is lost on its way to the bar.
     _, effects = transition(UiState(), Published(JobChanged(None)))
     assert tuple(effects) == (ToView(JobChanged(None)),)
+
+
+def test_speech_answers_the_question_the_session_selected_while_it_waits() -> None:
+    # Defect: a spoken reply to the open request goes to the conversation or the
+    # canvas instead of the exact waiting owner, or still goes there once answered.
+    asked = CanvasQuestion("question:sheet", "Which sheet?", "Revenue or costs.", 3, TaskRequest("review", "sheet"), Attention.WAITING, ())
+    attention = observed_attention(Catalog(), CanvasDocument(activity=(asked,)))
+    session = replace(Session(), attention=attention, selected_request=asked.request)
+    state, _ = transition(UiState(), Published(SessionChanged(session)))
+    _, effects = transition(state, Published(RouteSpeech("Revenue")))
+    assert tuple(effects) == (Route("Revenue", asked.request),)
+    unselected, _ = transition(state, Published(SessionChanged(replace(session, selected_request=None))))
+    _, effects = transition(unselected, Published(RouteSpeech("Revenue")))
+    assert tuple(effects) == (Route("Revenue", None),)
+
+
+def test_the_inbox_lists_only_questions_the_agent_is_waiting_on() -> None:
+    # Defect: routine arrivals count as attention, or an answered question still
+    # waits in the bell.
+    started = agent_session.transition(Session(identity="review"), Begin("Check the budget", 1))
+    waiting = agent_session.transition(started, agent_requests.asked("owned", "Which sheet?", "", 3))
+    for session, count in ((started, 0), (waiting, 1), (agent_session.transition(waiting, Resolution("owned", TextAnswer("Revenue"))), 0)):
+        state, _ = transition(UiState(), Published(SessionChanged(session)))
+        _, effects = transition(state, InboxOpened())
+        match tuple(effects):
+            case (ShowInbox(questions=shown),):
+                assert len(shown) == count
+            case other:
+                raise AssertionError(other)

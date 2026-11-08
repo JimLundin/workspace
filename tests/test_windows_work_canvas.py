@@ -13,6 +13,9 @@ from pathlib import Path
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows native canvas")
 
+import time
+from dataclasses import dataclass
+
 lazy from PySide6 import QtCore, QtGui, QtTest, QtWidgets
 lazy from PySide6.QtCore import Qt
 
@@ -23,6 +26,7 @@ from assistant.work_bridge import WorkOwners
 from assistant.work_canvas import WorkCanvas
 from automation.actions import Resources
 from automation.execution import WorkExecution
+from cell import Cell
 from contracts.canvas_activity import Attention, CanvasQuestion, SessionRequest, TaskRequest
 from contracts.feed_origin import App
 from contracts.personal_work import (
@@ -48,7 +52,7 @@ from contracts.status import State
 from contracts.task import ActionNotApplied, ActionVerified
 from contracts.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
 from contracts.work_canvas_context import CanvasMode
-from contracts.work_canvas_contracts import CanvasPublication
+from contracts.work_canvas_contracts import CanvasEdits, CanvasPublication
 from contracts.work_canvas_model import (
     CanvasCollection,
     CanvasDocument,
@@ -64,19 +68,21 @@ from contracts.work_documents import WebDocument
 from contracts.work_snapshot import WorkSnapshot
 from desktop_ui.components.canvas_look import surface_fill
 from desktop_ui.components.voice_legend import VoiceLegend
+from desktop_ui.desktop_bar import BarActions, DesktopBar
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
+from desktop_ui.ui import Ui, Views
 from desktop_ui.work_canvas_detail import NoteDetail, QuestionDetail, SourceDetail, WorkDetail
 from desktop_ui.work_canvas_panel import CanvasPanel
 from desktop_ui.work_canvas_view import CanvasGroup
 from desktop_ui.work_canvas_window import CanvasWindow
 from desktop_ui.work_window import WorkWindow
+from tests.desktop_fixture import Unreachable
 from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
 from tests.local_assistant import LocalAssistant
 from tests.personal_work_fixture import source
 from tests.test_agent import ToolRig
 from tests.test_meetings import SPEECH
-from tests.test_windows_inbox_attention import InboxUi
 from tests.test_work_actions import claimed
 from tests.test_work_canvas import local_canvas, nested_bubbles, queue_nothing, seeded
 from tests.test_work_window import work_task
@@ -1033,3 +1039,75 @@ def test_native_connector_relationships_and_menus_work_for_cards_and_containers(
         canvas.collapse()
         canvas.remove_relation(store.read().relations[0])
         assert not store.read().relations and not canvas.connection_paths
+
+
+@dataclass(frozen=True, slots=True)
+class _Recorded:
+    bar: DesktopBar | None = None
+    canvas: CanvasWindow | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InboxUi:
+    """The production Ui with isolated views; it keeps the views Ui built and reads nothing private."""
+
+    ui: Ui
+    assistant: LocalAssistant | Unreachable
+    recorded: Cell[_Recorded]
+
+    @classmethod
+    def start(cls, assistant: LocalAssistant | Unreachable) -> InboxUi:
+        recorded = Cell(_Recorded())
+
+        def create_bar(actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
+            bar = DesktopBar.open(actions, native_shell=False, audio_level=audio_level)
+            recorded.update(lambda views: replace(views, bar=bar))
+            return bar
+
+        def create_canvas(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
+            view = CanvasWindow.open(root, work, canvas)
+            recorded.update(lambda views: replace(views, canvas=view))
+            return view
+
+        return cls(Ui.start(assistant, views=Views(create_bar, create_canvas)), assistant, recorded)
+
+    @property
+    def root(self) -> QtWidgets.QApplication:
+        return application()
+
+    @property
+    def current_bar(self) -> DesktopBar | None:
+        return self.recorded.get().bar
+
+    @property
+    def current_canvas(self) -> CanvasWindow | None:
+        return self.recorded.get().canvas
+
+    def pump(self) -> None:
+        # Ui yields queued work between frames. This fixture waits across those
+        # turns before assertions that require every queued publication to land.
+        deadline = time.monotonic() + 4
+        while time.monotonic() < deadline:
+            if isinstance(self.assistant, LocalAssistant):
+                self.assistant.drain()
+            self.ui.drain()
+            application().processEvents()
+            if self.ui.settled() and not (isinstance(self.assistant, LocalAssistant) and self.assistant.jobs):
+                break
+        assert self.ui.settled(), "Queued UI publications did not settle."
+
+    @property
+    def bar(self) -> DesktopBar:
+        bar = self.current_bar
+        assert bar is not None
+        return bar
+
+    @property
+    def canvas_view(self) -> CanvasWindow:
+        view = self.current_canvas
+        assert view is not None
+        return view
+
+    def dispose(self) -> None:
+        self.ui.close_views()
+        self.pump()
