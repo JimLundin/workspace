@@ -6,12 +6,13 @@ import time
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Final, Literal, Protocol
 from urllib.parse import quote, urlsplit
 
 from pydantic import Field, TypeAdapter, ValidationError
 
 from assistant.browser import Browser, BrowserResult
+from assistant.browser_dom import script
 from assistant.browser_requests import BrowserRequest, Evaluate, Open
 from assistant.browser_session import Attached, BrowserConnection, Owner, Product
 from assistant.browser_values import (
@@ -43,9 +44,22 @@ _STATUS = TypeAdapter(BrowserStatus)
 _TEXT = TypeAdapter(str)
 
 
-def _literal(value: str) -> str:
-    """A JavaScript string literal for an exact identity or text in a page script."""
-    return _TEXT.dump_json(value).decode()
+def _called(function: str, *values: str) -> str:
+    """A page script function applied to exact identities or text, passed as its arguments."""
+    return "(" + function + ")(" + ", ".join(_TEXT.dump_json(value).decode() for value in values) + ")"
+
+
+ACTIVITY_MENU: Final = script("communications_browser.activity_menu")
+DISMISS_MENU: Final = script("communications_browser.dismiss_menu")
+MARK_READ: Final = script("communications_browser.mark_read")
+OPEN_ACTIVITY: Final = script("communications_browser.open_activity")
+OPEN_IN_BROWSER: Final = script("communications_browser.open_in_browser")
+PREPARE_REPLY: Final = script("communications_browser.prepare_reply")
+REOPEN_MENU: Final = script("communications_browser.reopen_menu")
+SELECT_CHAT: Final = script("communications_browser.select_chat")
+SEND_REPLY: Final = script("communications_browser.send_reply")
+SHOW_ACTIVITY: Final = script("communications_browser.show_activity")
+SHOW_CHATS: Final = script("communications_browser.show_chats")
 
 
 class BrowserPort(Protocol):
@@ -181,10 +195,7 @@ class TeamsWeb:
                     if found.ready:
                         return found
                     self.confirmed(
-                        """(() => {
-                      const button=document.querySelector('[data-tid="app-layout-area--nav"] button[aria-label="Activity"]');
-                      if(!button)return false;button.click();return true;
-                    })()""",
+                        SHOW_ACTIVITY,
                         cancel,
                         target=self.target,
                     )
@@ -199,16 +210,7 @@ class TeamsWeb:
         self.activity(cancel)
         with self.browser.awake(self.target, cancel):
             opened = self.confirmed(
-                """(() => {
-              const wrap=document.getElementById("""
-                + _literal(identity)
-                + """);
-              if(wrap?.getAttribute('data-tid')!=='activity-feed-list-item-wrap')return false;
-              const row=wrap.querySelector('[data-tid="activity-feed-list-item"]');
-              if(!row)return false;row.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
-              const button=row.querySelector('button[id^="activity-feed-item-context-menu-"]');
-              if(!button)return false;button.click();return true;
-            })()""",
+                _called(ACTIVITY_MENU, identity),
                 cancel,
                 target=self.target,
             )
@@ -222,10 +224,7 @@ class TeamsWeb:
                 self.dismiss_activity_menu(cancel)
                 return False
             self.confirmed(
-                """(() => {
-              const item=document.querySelector('[data-tid="toggleActivityRead"]');
-              if(item?.innerText!=='Mark as read')return false;item.click();return true;
-            })()""",
+                MARK_READ,
                 cancel,
                 target=self.target,
             )
@@ -233,12 +232,7 @@ class TeamsWeb:
                 return False
             # Reopen that same menu. A disappeared item or unchanged label is not confirmation.
             self.confirmed(
-                """(() => {
-              document.getElementById("""
-                + _literal(identity)
-                + """)
-                ?.querySelector('button[id^="activity-feed-item-context-menu-"]')?.click();return true;
-            })()""",
+                _called(REOPEN_MENU, identity),
                 cancel,
                 target=self.target,
             )
@@ -253,9 +247,7 @@ class TeamsWeb:
 
     def dismiss_activity_menu(self, cancel: threading.Event) -> None:
         self.confirmed(
-            """(() => {
-          document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true}));return true;
-        })()""",
+            DISMISS_MENU,
             cancel,
             target=self.target,
         )
@@ -264,14 +256,7 @@ class TeamsWeb:
         self.activity(cancel)
         with self.browser.awake(self.target, cancel):
             result = self.confirmed(
-                """(() => {
-              const wrap=document.getElementById("""
-                + _literal(identity)
-                + """);
-              if(wrap?.getAttribute('data-tid')!=='activity-feed-list-item-wrap')return false;
-              const row=wrap.querySelector('[data-tid="activity-feed-list-item"]');
-              if(!row)return false;row.click();return true;
-            })()""",
+                _called(OPEN_ACTIVITY, identity),
                 cancel,
                 target=self.target,
             )
@@ -344,12 +329,7 @@ class TeamsWeb:
 
     def show_chats(self, cancel: threading.Event, *, target: str = "") -> bool:
         return self.confirmed(
-            """(() => {
-          if(document.querySelector('[role="treeitem"][data-fui-tree-item-value]'))return false;
-          const chat=document.querySelector('[data-tid="app-layout-area--nav"] button[aria-label="Chat"]');
-          if(!chat)return false;
-          chat.click();return true;
-        })()""",
+            SHOW_CHATS,
             cancel,
             target=target,
         )
@@ -392,16 +372,7 @@ class TeamsWeb:
         if current.current == identity and current.editor_ready:
             self._forget(target or self.target)
             return current
-        encoded = _literal(identity)
-        expression = f"""(() => {{
-          const identity={encoded};
-          const row=[...document.querySelectorAll('[role="treeitem"]')].find(e=>{{
-            const match=(e.getAttribute('data-fui-tree-item-value')||'').match(/19:[^\\s/]+@(?:thread\\.v2|unq\\.gbl\\.spaces)/);
-            return match?.[0]===identity;
-          }});
-          if(!row) return false;
-          row.click(); return true;
-        }})()"""
+        expression = _called(SELECT_CHAT, identity)
         result = self.confirmed(expression, cancel, target=target)
         if not result:
             opened = self.show_chats(cancel, target=target)
@@ -445,12 +416,7 @@ class TeamsWeb:
         while not cancel.wait(0.3):
             try:
                 self.confirmed(
-                    """(() => {
-                  if(location.pathname!=='/dl/launcher/launcher.html')return false;
-                  const web=document.querySelector('#openTeamsClientInBrowser');
-                  if(!web || web.disabled)return false;
-                  web.click();return true;
-                })()""",
+                    OPEN_IN_BROWSER,
                     cancel,
                     target=target,
                 )
@@ -473,28 +439,14 @@ class TeamsWeb:
     def _send(self, identity: str, text: str, cancel: threading.Event) -> tuple[Message, ...]:
         before = self._select(identity, cancel)
         known = {message.identity for message in before.messages}
-        encoded, content = _literal(identity), _literal(text)
         prepared = self.confirmed(
-            f"""(() => {{
-          const send=document.querySelector('[data-tid="sendMessageCommands-send"]');
-          const editor=document.querySelector('[data-tid="ckeditor"][contenteditable="true"]');
-          if(send?.getAttribute('data-track-thread-id')!=={encoded} || !editor || editor.innerText.trim()) return false;
-          editor.focus();
-          return document.execCommand('insertText', false, {content});
-        }})()""",
+            _called(PREPARE_REPLY, identity, text),
             cancel,
         )
         if not prepared:
             raise BrowserError("The Teams reply editor is unavailable or already contains a draft. Nothing was sent.")
         sent = self.confirmed(
-            f"""(() => {{
-          const send=document.querySelector('[data-tid="sendMessageCommands-send"]');
-          const editor=document.querySelector('[data-tid="ckeditor"][contenteditable="true"]');
-          if(send?.getAttribute('data-track-thread-id')!=={encoded} || !editor ||
-             editor.innerText.replace(/\\u00a0/g,' ').trim()!=={content}.trim() || send.disabled ||
-             send.getAttribute('aria-disabled')==='true') return false;
-          send.click(); return true;
-        }})()""",
+            _called(SEND_REPLY, identity, text),
             cancel,
         )
         if not sent:

@@ -111,6 +111,12 @@ def asset_readers(name: str) -> tuple[str, ...] | None:
     """The source files a changed non-Python file affects: none for documents, None when unknown."""
     if name.startswith(_DOCUMENTS) or name in _TEXT:
         return ()
+    # A page script `<module>.<script>.js` is read by the module beside it.
+    match name.removesuffix(".js").partition("."):
+        case (module, ".", script) if name.endswith(".js") and script:
+            return (module + ".py",)
+        case _:
+            pass
     for asset, readers in ASSET_READERS.items():
         if name == asset or (asset.endswith("/") and name.startswith(asset)):
             return readers

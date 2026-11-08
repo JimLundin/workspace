@@ -302,7 +302,7 @@ py-modules = ["cell", "components", "config", "diagnostics", "launch", "protocol
 include = ["assistant*", "contracts*", "desktop_ui*", "automation*", "gateway*", "link*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
-assistant = ["*.ps1", "*.yaml"]
+assistant = ["*.js", "*.ps1", "*.yaml"]
 desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 
 [tool.workspace.architecture]

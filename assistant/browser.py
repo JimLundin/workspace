@@ -10,7 +10,7 @@ from collections.abc import Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal, assert_never
+from typing import Final, Literal, assert_never
 
 from pydantic import TypeAdapter
 
@@ -101,11 +101,10 @@ _CLOSED_PAGE = TypeAdapter(PageClosure)
 # animation frames, and focus emulation can report a visible document whose
 # widget still renders none; Chromium's capture forces frames for both, so the
 # wait gives up after one second instead of failing the capture.
-_PRESENTED = (
-    "new Promise(resolve => { if (document.visibilityState !== 'visible') return resolve(false);"
-    " setTimeout(() => resolve(false), 1000);"
-    " requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))); })"
-)
+_PRESENTED: Final = browser_dom.script("browser.presented")
+
+# Awaits an agent's expression and returns its JSON text, bounded to `limit` characters.
+_BOUNDED: Final = browser_dom.script("browser.bounded")
 
 
 def _remaining(deadline: float) -> float:
@@ -678,10 +677,7 @@ class Browser:
     def _evaluate_request(self, request: Evaluate, cancel: threading.Event) -> BrowserResult:
         session = self._session(request.target_id, cancel)
         context, _tree = self._world(session, request.frame_id, cancel)
-        wrapped = (
-            "(async () => { const value = await (" + request.expression + "); const text = JSON.stringify(value ?? null) ?? String(value); "
-            f"return text.length > {MAX_OUTPUT} ? text.slice(0, {MAX_OUTPUT - 30}) + '\\n[output truncated]' : text;" + "})()"
-        )
+        wrapped = "(" + _BOUNDED + ")(async () => (" + request.expression + "), " + str(MAX_OUTPUT) + ")"
         # The wrapper always returns its value's bounded JSON text.
         match self._evaluate(wrapped, session, context, cancel, timeout=request.timeout_seconds):
             case str() as value:

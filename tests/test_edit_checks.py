@@ -75,6 +75,8 @@ def test_pins_and_unknown_assets_fall_back_to_full_suite_but_known_assets_select
     for name in ("uv.lock", "app/assets.js"):
         result = select(tmp_path, previous | {name: "after"}, previous)
         assert set(result.tests) == {"tests/test_api.py", "tests/test_other.py"}
+    # Defect: a page script beside its module changes without selecting that module's tests.
+    assert select(tmp_path, previous | {"app/api.observe.js": "after"}, previous).tests == ("tests/test_api.py",)
     (tmp_path / "tests/test_quality.py").write_text("from scripts import quality\n")
     previous = previous | {"tests/test_quality.py": "before"}
     assert select(tmp_path, previous | {"pyproject.toml": "after"}, previous).tests == ("tests/test_quality.py",)
