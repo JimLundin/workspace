@@ -228,3 +228,11 @@ rate while moving the ball, VIA round-trip time; healthy: about 690 updates/s,
 onset). Next time it degrades, run both before replugging.
 Fixed meanwhile: a restart while dark no longer saves "off" as the effect to
 restore.
+A short episode at about 18:38 on 2026-11-08 cleared by itself: the left half
+flickered and the polling rate dropped. `via_watch` wasn't running (its log
+stops at 13:51). It came right after checks on this machine: a full check with
+its native tier 18:30–18:33, a native rerun of `test_windows_ambient` (it
+round-trips the default speaker endpoint's level; the Shure MVX2U shares the
+keyboard's hub) 18:33–18:34, then four editing checks 18:35–18:38. Worth
+testing next: run the native audio tests alone with `via_watch` on, and
+compare load alone (an editing check) against them.
