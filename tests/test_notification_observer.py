@@ -1,12 +1,7 @@
 """Notification mirroring must retain delivery when banner control fails."""
 
-import sys
 import threading
-import unittest
 from collections.abc import Callable, Mapping
-
-if sys.platform != "win32":
-    raise unittest.SkipTest("Native notification observer")
 
 from winapi.notification_banners import Coverage
 from winapi.notifications import FileStamp, NotificationObserver, Stamp
@@ -30,7 +25,7 @@ class Lease:
 
 
 class Source:
-    """Own fixture poll callbacks and lifecycle counters across the real worker thread."""
+    """Own fixture poll callbacks and lifecycle counters across the observer's worker thread."""
 
     __slots__ = ("closes", "known", "observe", "opens", "version", "writing")
 
@@ -70,7 +65,7 @@ def test_banner_failure_keeps_notice_delivery_and_repeated_read_failures_release
 
     lease = Lease()
     source = Source(read_fixture)
-    observer = NotificationObserver.start(source=source, banner_policy=lease)
+    observer = NotificationObserver.start(source=source, banner_policy=lease, poll_s=0.005)
     try:
         results = tuple(observer.results.get(timeout=2) for _ in range(5))
     finally:
@@ -93,10 +88,11 @@ def test_notification_reads_follow_database_changes_instead_of_every_poll() -> N
         return Observed(())
 
     source = Source(observe, writing=False)
-    observer = NotificationObserver.start(source=source, banner_policy=Lease())
+    # The clock stands still, so only a database change can bring the next read.
+    observer = NotificationObserver.start(source=source, banner_policy=Lease(), poll_s=0.005, clock=lambda: 0.0)
     try:
         observer.results.get(timeout=2)
-        assert not observer.stopped.wait(0.8) and reads == 1
+        assert not observer.stopped.wait(0.1) and reads == 1, "Polls read the database without a change."
         source.version += 1
         observer.results.get(timeout=2)
     finally:

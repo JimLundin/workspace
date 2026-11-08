@@ -4,7 +4,7 @@ import os
 import queue
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from itertools import islice
@@ -104,12 +104,24 @@ class NotificationObserver:
     stopped: threading.Event = field(default_factory=threading.Event, kw_only=True)
     finished: threading.Event = field(default_factory=threading.Event, kw_only=True)
     """Set when the worker thread exits."""
+    poll_s: float = field(default=0.25, kw_only=True)
+    """How often the database's stamp is compared."""
+    clock: Callable[[], float] = field(default=time.monotonic, kw_only=True)
 
     @classmethod
-    def start(cls, *, source: NotificationSource | None = None, banner_policy: BannerLease | None = None) -> NotificationObserver:
+    def start(
+        cls,
+        *,
+        source: NotificationSource | None = None,
+        banner_policy: BannerLease | None = None,
+        poll_s: float = 0.25,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> NotificationObserver:
         observer = cls(
             source=NativeNotifications() if source is None else source,
             banner_policy=BannerPolicy() if banner_policy is None else banner_policy,
+            poll_s=poll_s,
+            clock=clock,
         )
         threading.Thread(target=observer.run, name="Windows notifications", daemon=True).start()
         return observer
@@ -136,7 +148,7 @@ class NotificationObserver:
             due = 0.0
             while not self.stopped.is_set():
                 stamp = self.source.stamp()
-                if stamp != read_stamp or time.monotonic() >= due:
+                if stamp != read_stamp or self.clock() >= due:
                     observation = self.observe(known, failures)
                     match observation:
                         case Observed(notices=notices):
@@ -144,9 +156,9 @@ class NotificationObserver:
                         case Unavailable():
                             failures += 1
                     # A changed stamp triggers the next read; the timeout covers writes Windows leaves out of its database.
-                    read_stamp, due = stamp, time.monotonic() + (30 if stamp is not None and not failures else 1)
+                    read_stamp, due = stamp, self.clock() + (30 if stamp is not None and not failures else 1)
                     self.publish(observation)
-                if self.stopped.wait(0.25):
+                if self.stopped.wait(self.poll_s):
                     break
         finally:
             try:
