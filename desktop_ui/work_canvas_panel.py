@@ -256,7 +256,7 @@ def _toolbar(frame: CanvasSurface, theme: Tokens, act: Callable[[Callable[[Canva
     )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CanvasPanel:
     """Everything the canvas does is reached from its toolbar, built from `spec/canvas.py`."""
 
