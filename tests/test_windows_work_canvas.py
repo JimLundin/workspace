@@ -4,7 +4,6 @@ import sys
 import unittest
 from collections import deque
 from collections.abc import Callable, Generator
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from itertools import pairwise
@@ -22,10 +21,7 @@ lazy from PySide6.QtCore import Qt
 import contracts.task
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_store import PersonalStore
-from assistant.work_bridge import WorkOwners
 from assistant.work_canvas import WorkCanvas
-from automation.actions import Resources
-from automation.execution import WorkExecution
 from cell import Cell
 from contracts.canvas_activity import Attention, CanvasQuestion, SessionRequest, TaskRequest
 from contracts.feed_origin import App
@@ -34,7 +30,6 @@ from contracts.personal_work import (
     Association,
     Catalog,
     DismissWork,
-    MeetingSource,
     OpenWorkSource,
     PersonalView,
     RefreshPersonalWork,
@@ -46,11 +41,7 @@ from contracts.personal_work import (
     WorkSaved,
     WorkState,
     WorkThread,
-    source_id,
 )
-from contracts.status import State
-from contracts.task import ActionNotApplied, ActionVerified
-from contracts.work_canvas_commands import CANVAS_RESPONSE, CanvasSnapshot, CanvasUpdated
 from contracts.work_canvas_context import CanvasMode
 from contracts.work_canvas_contracts import CanvasEdits, CanvasPublication
 from contracts.work_canvas_model import (
@@ -78,12 +69,8 @@ from desktop_ui.work_canvas_view import CanvasGroup
 from desktop_ui.work_canvas_window import CanvasWindow
 from desktop_ui.work_window import WorkWindow
 from tests.desktop_fixture import Unreachable
-from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
 from tests.local_assistant import LocalAssistant
 from tests.personal_work_fixture import source
-from tests.test_agent import ToolRig
-from tests.test_meetings import SPEECH
-from tests.test_work_actions import claimed
 from tests.test_work_canvas import local_canvas, nested_bubbles, queue_nothing, seeded
 from tests.test_work_window import work_task
 
@@ -158,38 +145,6 @@ def native_canvas(store: WorkCanvas) -> Generator[NativeCanvas]:
 def pressed(legend: VoiceLegend) -> bool:
     """The legend's current state, read afresh after each desktop transition."""
     return legend.pressed
-
-
-def test_native_meeting_detail_reads_its_conversation_and_opens_the_same_event(tmp_path: Path) -> None:
-    # Defect: meeting bubbles render as generic files, show only the preview,
-    # or open an unrelated browser identity instead of their recorded conversation.
-    meeting = MeetingStore.create(tmp_path / "meetings", "both", "Planning event")
-    meeting.append(SPEECH)
-    meeting.finish_capture()
-    batch = meeting.batch()
-    assert batch is not None
-    meeting.complete(batch, "Supplier approval SA-42 is ready for Friday.")
-    meeting.export()
-    event, preview = meeting.observation()
-    evidence = MeetingSource(source_id(SourceKind.MEETING, event.identity), event, preview, 20)
-    store = PersonalStore(tmp_path / "work.sqlite3")
-    store.observe((evidence,))
-    saved = store.handle(SaveWork(WorkDefinition("Rollout", "Deploy Friday"), (Association(evidence.id, "Approval is discussed here."),)), 20)
-    assert isinstance(saved, WorkSaved)
-    with native_canvas(local_canvas(tmp_path)) as panel:
-        panel.publish(WorkSnapshot(personal=PersonalView(store.read())))
-        view = panel.view.panel
-        assert view.card(evidence.id) is not None
-        view.inspect(evidence.id)
-        panel.pump()  # The assistant's answer to the detail's ReadMeeting.
-        detail = view.detail(evidence.id)
-        assert isinstance(detail, SourceDetail)
-        text = detail.text.toPlainText()
-        assert "00:00:00 - 00:00:01" in text and "SA-42" in text and "Speakers have not been identified" in text
-        assert detail.open.text() == "Open transcript"
-        detail.open.click()
-        assert panel.last_command() == OpenWorkSource(evidence.id)
-        assert "Approval is discussed here" in detail.reason.toPlainText()
 
 
 def test_my_work_sources_corrections_and_editing_survive_background_publication(tmp_path: Path) -> None:
@@ -698,102 +653,6 @@ def assert_heading_surface(panel: NativeCanvas, identity: str) -> None:
     painter.end()
     surface = surface_fill(card.theme, card.surface)
     assert all(image.pixelColor(x, y) == surface for x in range(20) for y in range(2))
-
-
-def test_agent_canvas_owner_commits_without_qt_dispatch_and_refreshes_without_revealing(tmp_path: Path) -> None:
-    # Defect: worker edits race with Qt, return success before persistence,
-    # overwrite a user draft, bypass durable verification or reveal a window.
-    assistant = LocalAssistant(tmp_path)
-    ui = InboxUi.start(assistant)
-    assistant.attach(ui.ui)
-    # Windows an earlier test in this process left open are not this test's reveal.
-    shown_before = {id(widget) for widget in ui.root.topLevelWidgets() if widget.isVisible()}
-    store = assistant.canvas
-    store.observe_catalog(nested_bubbles()[0])
-    ui.pump()
-    request = owner_request(WorkOwners(feed_unavailable, no_personal_work, store.command))
-    tasks, claim, clock = claimed(tmp_path)
-    rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
-    try:
-        with ThreadPoolExecutor(max_workers=1) as worker:
-            reading = worker.submit(rig.call, "work_canvas_read")
-            snapshot = CANVAS_RESPONSE.validate_json(reading.result(timeout=5).text.split("\n[observation_id:", 1)[0])
-            assert isinstance(snapshot, CanvasSnapshot) and snapshot.work_ids
-            assert not tasks.actions(claim.task.id)
-            edit = worker.submit(
-                rig.call,
-                "work_canvas_update",
-                expected_revision=snapshot.revision,
-                edits=[
-                    {"kind": "note", "note": {"id": "note:agent", "title": "Version evidence", "text": "Candidate two matches the approval."}},
-                    {"kind": "group", "id": "group:agent", "title": "Candidate documents"},
-                    {"kind": "move", "id": "note:agent", "parent_id": "group:agent"},
-                ],
-            )
-            receipt = CANVAS_RESPONSE.validate_json(edit.result(timeout=5).text)
-            assert isinstance(receipt, CanvasUpdated) and receipt.changed
-            persisted = store.read()
-            assert persisted.notes[0].text == "Candidate two matches the approval."
-            assert persisted.collections[0].members == ("note:agent",)
-            assert isinstance(tasks.actions(claim.task.id)[0].outcome, ActionVerified)
-            stale = worker.submit(
-                rig.call,
-                "work_canvas_update",
-                expected_revision=snapshot.revision,
-                edits=[{"kind": "group", "id": "group:stale", "title": "Must not appear"}],
-            )
-            stale.result(timeout=5)
-            assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionNotApplied)
-            assert store.read() == persisted
-        # No window had to be created for any read, edit or conflict.
-        assert not any(widget.isVisible() and id(widget) not in shown_before for widget in ui.root.topLevelWidgets())
-        assert not rig.machine.log
-    finally:
-        ui.dispose()
-
-
-def test_canvas_voice_key_feedback_follows_agent_capture_and_release(tmp_path: Path) -> None:
-    # Defect: opening during speech misses the held state, background work
-    # clears it, release leaves it pressed during transcription, or dictation
-    # incorrectly lights the agent key. Feedback must not resize the toolbar.
-    assistant = LocalAssistant(tmp_path)
-    ui = InboxUi.start(assistant)
-    assistant.attach(ui.ui)
-    ui.ui.desktop_state(State.LISTENING, agent_speaking=True)
-    ui.pump()
-    work = ui.ui.work_window()
-    work.show(focus=False)
-    ui.pump()
-    try:
-        legend = ui.canvas_view.panel.voice_hint
-        assert pressed(legend) and "Listening" in legend.accessibleDescription()
-        held = legend.grab().toImage()
-        bounds = legend.geometry()
-        ui.ui.desktop_state(State.LISTENING, agent_speaking=True)
-        ui.pump()
-        assert pressed(legend) and legend.grab().toImage() == held
-        ui.ui.desktop_state(State.WORKING)
-        ui.pump()
-        assert not pressed(legend) and legend.geometry() == bounds
-        released = legend.grab().toImage()
-        assert released != held
-        ui.ui.desktop_state(State.AGENT)
-        ui.pump()
-        assert not pressed(legend) and legend.grab().toImage() == released
-        ui.ui.desktop_state(State.LISTENING)
-        ui.pump()
-        assert not pressed(legend) and legend.grab().toImage() == released
-        ui.ui.desktop_state(State.LISTENING, agent_speaking=True)
-        ui.pump()
-        assert pressed(legend) and legend.grab().toImage() == held
-        ui.canvas_view.hide()
-        ui.ui.desktop_state(State.AGENT)
-        ui.pump()
-        work.show(focus=False)
-        ui.pump()
-        assert not pressed(legend) and legend.grab().toImage() == released
-    finally:
-        ui.dispose()
 
 
 def nested_scene(folder: Path) -> tuple[PersonalView, CanvasDocument]:

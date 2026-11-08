@@ -94,3 +94,20 @@ def test_the_inbox_lists_only_questions_the_agent_is_waiting_on() -> None:
                 assert len(shown) == count
             case other:
                 raise AssertionError(other)
+
+
+def test_the_canvas_voice_key_is_pressed_only_while_the_agent_hears_speech() -> None:
+    # Defect: background work clears the held key, release leaves it pressed
+    # during transcription, dictation lights the agent key, or a canvas opened
+    # mid-speech starts unpressed (the canvas reads `agent_speaking` when built).
+    state = UiState()
+    for voice, speaking in (
+        (State.LISTENING, True),
+        (State.LISTENING, True),
+        (State.WORKING, False),
+        (State.AGENT, False),
+        (State.LISTENING, False),
+        (State.LISTENING, True),
+    ):
+        state, effects = transition(state, Published(VoiceChanged(voice, agent_speaking=speaking)))
+        assert CanvasVoice(pressed=speaking) in tuple(effects) and state.agent_speaking is speaking

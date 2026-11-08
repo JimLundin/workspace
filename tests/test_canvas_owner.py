@@ -7,14 +7,19 @@ from pathlib import Path
 from unittest import TestCase
 
 import contracts.task
+from assistant.work_bridge import WorkOwners
 from assistant.work_canvas import WorkCanvas
+from automation.actions import Resources
+from automation.execution import WorkExecution
 from contracts.agent_session import Session
 from contracts.canvas_activity import CanvasInstruction, CanvasQuestion, CanvasRequest, CanvasRun, CanvasUpdate, SessionRequest
 from contracts.personal_work import Catalog, DismissedWork, WorkState
-from contracts.task import Blocked, Completed, TextAnswer, Waiting
+from contracts.task import ActionNotApplied, ActionVerified, Blocked, Completed, TextAnswer, Waiting
 from contracts.work_canvas_commands import (
+    CANVAS_RESPONSE,
     ArrangeCanvas,
     CanvasRefused,
+    CanvasSnapshot,
     CanvasUpdated,
     MoveBubble,
     PutNote,
@@ -29,6 +34,9 @@ from contracts.work_canvas_edits import ArrangeView, NestBubble, PlaceBubbles, R
 from contracts.work_canvas_model import CanvasCollection, CanvasDocument, CanvasNote, CanvasRelation, Placement, view_state
 from contracts.work_snapshot import WorkSnapshot
 from tests.agent_requests import asked
+from tests.feed_fixture import feed_unavailable, no_personal_work, owner_request
+from tests.test_agent import ToolRig
+from tests.test_work_actions import claimed
 from tests.test_work_canvas import catalog, local_canvas, nested_bubbles, publish_nothing, seeded
 from tests.test_work_window import work_task
 
@@ -321,3 +329,45 @@ def test_user_edits_apply_to_the_latest_document_and_keep_bridge_updates(tmp_pat
     fresh = view_state(current, None)
     arranged = replace(fresh, placements=(pinned, Placement("work:two", 0, 64)))
     assert view_state(canvas.commit(UserEdit(CanvasScope(), ArrangeView(fresh, arranged))), None) == arranged == view_state(canvas.read(), None)
+
+
+def test_agent_canvas_edits_commit_on_a_worker_thread_and_stale_ones_change_nothing(tmp_path: Path) -> None:
+    # Defect: worker edits return success before persistence, overwrite newer
+    # work from a stale revision, or bypass durable verification. No Qt view
+    # exists here, so none can be needed for a read, an edit or a conflict.
+    store = local_canvas(tmp_path)
+    store.observe_catalog(nested_bubbles()[0])
+    request = owner_request(WorkOwners(feed_unavailable, no_personal_work, store.command))
+    tasks, claim, clock = claimed(tmp_path)
+    rig = ToolRig(work=WorkExecution.begin(claim, tasks, Resources(), clock=clock), feed_request=request)
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        reading = worker.submit(rig.call, "work_canvas_read")
+        snapshot = CANVAS_RESPONSE.validate_json(reading.result(timeout=5).text.split("\n[observation_id:", 1)[0])
+        assert isinstance(snapshot, CanvasSnapshot) and snapshot.work_ids
+        assert not tasks.actions(claim.task.id)
+        edit = worker.submit(
+            rig.call,
+            "work_canvas_update",
+            expected_revision=snapshot.revision,
+            edits=[
+                {"kind": "note", "note": {"id": "note:agent", "title": "Version evidence", "text": "Candidate two matches the approval."}},
+                {"kind": "group", "id": "group:agent", "title": "Candidate documents"},
+                {"kind": "move", "id": "note:agent", "parent_id": "group:agent"},
+            ],
+        )
+        receipt = CANVAS_RESPONSE.validate_json(edit.result(timeout=5).text)
+        assert isinstance(receipt, CanvasUpdated) and receipt.changed
+        persisted = store.read()
+        assert persisted.notes[0].text == "Candidate two matches the approval."
+        assert persisted.collections[0].members == ("note:agent",)
+        assert isinstance(tasks.actions(claim.task.id)[0].outcome, ActionVerified)
+        stale = worker.submit(
+            rig.call,
+            "work_canvas_update",
+            expected_revision=snapshot.revision,
+            edits=[{"kind": "group", "id": "group:stale", "title": "Must not appear"}],
+        )
+        stale.result(timeout=5)
+        assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionNotApplied)
+        assert store.read() == persisted
+    assert not rig.machine.log
