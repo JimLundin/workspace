@@ -30,7 +30,6 @@ class Menu(Enum):
     MEETING = 12
     TRANSCRIPTS = 13
     TASKBAR = 15
-    RESTART_ASSISTANT = 18
     RESTART_DESKTOP = 19
 
 
@@ -108,7 +107,7 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
             return MenuItem(item.action.value, "Stop recording" if state.capturing else "Record a meeting")
         case Menu.OVERLAY:
             return MenuItem(item.action.value, item.label + hint, checked=state.overlay_enabled)
-        case (Menu.KEYMAP | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.USAGE | Menu.LOGS) | Menu.RESTART_ASSISTANT | Menu.RESTART_DESKTOP | Menu.QUIT:
+        case (Menu.KEYMAP | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.USAGE | Menu.LOGS) | Menu.RESTART_DESKTOP | Menu.QUIT:
             return MenuItem(item.action.value, item.label + hint)
         case _:
             assert_never(item.action)

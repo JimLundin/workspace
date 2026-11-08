@@ -25,16 +25,7 @@ Left:
 - **Move ruff and pyright to the dev group.** They still sit in the runtime
   dependencies, though nothing at runtime uses them.
 
-## 2. Check that each side survives the other's restart, live
-
-Verified on 2026-11-06: restarting the assistant left the desktop's process
-running and its link reconnected to the new assistant, and restarting the
-desktop left the assistant running and the new desktop connected. Still to
-watch by eye (`launch.py restart`): the bar replaying the assistant's state
-after a reconnect, and a meeting recording continuing through a desktop
-restart.
-
-## 3. Code policy pass: enforce the modelling decisions
+## 2. Code policy pass: enforce the modelling decisions
 
 Decisions the user made, to write into AGENTS.md and enforce in the architecture
 or quality review wherever a rule can be checked mechanically:
@@ -91,8 +82,8 @@ tests aren't covered. Left:
       pure wherever possible"). A Cell stays only where outside code (an OS
       hook, a window procedure, Qt signals, another thread) reaches a
       long-lived owner and no loop of ours can carry the state. Otherwise:
-      the run loop carries the state as a local (`AssistantApp.run`,
-      `application_observer.Worker`, the meeting journal); a value returns
+      the run loop carries the state as a local
+      (`application_observer.Worker`, the meeting journal); a value returns
       the next value (`EngineState`, `Modifiers`, `WindowsKeyTap`); closures
       replace late-bound Cells; threads aren't kept (started/finished
       events); flags are events, one-shot results are Futures, counters are
@@ -150,7 +141,7 @@ tests aren't covered. Left:
     needs its callers checked: keep it where the value is stored, cached or
     reused.
 
-## 4. Find what degrades the Charybdis
+## 3. Find what degrades the Charybdis
 
 Since about 2026-11-06 the Charybdis Nano 3x5 (Splinky RP2040 halves, QMK with
 VIA, firmware rev 2.00) degrades after a while: the second half flickers, the

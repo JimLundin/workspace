@@ -49,27 +49,6 @@ def test_contracts_reach_no_effect_owner_service_or_qt(tmp_path: Path) -> None:
     assert {"assistant.store", "PySide6", "winapi.windows"} <= reached
 
 
-def test_the_desktop_and_the_assistant_reach_each_other_only_through_contracts(tmp_path: Path) -> None:
-    # Defect: a desktop module imports an assistant owner (or the assistant imports
-    # Qt or a view), even through a third module, so one program can no longer run
-    # or restart without the other.
-    write_tree(
-        tmp_path,
-        {
-            "contracts/__init__.py": "",
-            "contracts/values.py": "",
-            "desktop_ui/__init__.py": "",
-            "desktop_ui/view.py": "from contracts import values\nimport helper\n",
-            "helper.py": "lazy import assistant.store\n",
-            "assistant/__init__.py": "",
-            "assistant/store.py": "",
-            "assistant/owner.py": "from contracts import values\nlazy import PySide6\n",
-        },
-    )
-    found = {failure.module for failure in others(review(tmp_path)) if failure.rule == "process-isolation"}
-    assert found == {"desktop_ui.view", "assistant.owner"}
-
-
 def exception(root: Path, *, reason: str = "Read the optional native error code.") -> None:
     with (root / "pyproject.toml").open("a", encoding="utf-8") as output:
         output.write(

@@ -119,10 +119,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Boolean parameters are keyword-only. Functions take at most five inputs; Ruff
   blocks more. Where a wider signature is genuinely needed, add
   `# noqa: PLR0913 - <reason>` on the `def` line. Never suppress a whole file.
-- The desktop (`desktop_ui`) and the assistant (`assistant`) never import each
-  other, even indirectly; they share only `contracts` and pass
-  `contracts.desktop_link` messages. `desktop` composes the two in one process.
-  The architecture review enforces it.
+- The desktop (`desktop_ui.voice`) composes dictation and meetings
+  (`assistant`) and calls them on its Qt thread.
 - Before writing general-purpose code, check for a small focused dependency and
   prefer it when its footprint and integration cost are reasonable.
 - Use the type system's newer tools where they model the data better: PEP 695
@@ -165,7 +163,7 @@ runtime effect (comments, docstrings, docs) need only commit and push.
   stash or an unpushed branch.
 - Workspace runs straight from this checkout's `.venv`: `StartWorkspace.cmd`
   (also the login shortcut) syncs the environment from `uv.lock` and runs
-  `launch.py`, which starts the gateway, layout, assistant and desktop. After a
+  `launch.py`, which starts the gateway, layout and desktop. After a
   checked change, `Dev.cmd deploy` restarts them (`launch.py restart [NAME]`
   restarts one); the user has authorized this without asking. Nothing
   supervises the programs or undoes a change: revert the commit and restart.

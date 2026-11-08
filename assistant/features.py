@@ -2,8 +2,8 @@
 `Desktop`, so the behaviour can be tested without Windows (like the layout's
 engine and its `Host`).
 
-Requests arrive on the thread that receives the layout's messages, and anything
-quick happens right there: the microphone starts the moment a talk key goes down,
+Requests arrive on the desktop's Qt thread, which receives the layout's
+messages, and anything quick happens right there: the microphone starts the moment a talk key goes down,
 even while an earlier dictation is still being transcribed. Anything slow is
 handed to the worker thread (`submit`), which does one job at a time, in order.
 """
@@ -19,7 +19,7 @@ from cell import Cell
 from contracts.hotkeys import NEEDS_SETTINGS, ROUTES, Route
 from contracts.status import Job, State
 from diagnostics import failure_info
-from protocol import App, Request, Side, Tool, owner
+from protocol import Tool
 from usage import Detail
 from winapi.pcm import RATE
 
@@ -47,12 +47,6 @@ class Desktop(Protocol):
 
 Recorder = Callable[[str, Mapping[str, Detail]], None]
 """Writes one use of a feature to the usage log."""
-
-
-class Controls(Protocol):
-    """Assistant-owned effects the keys reach."""
-
-    def toggle_meeting(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,15 +112,14 @@ class _Keys:
 
 @dataclass(frozen=True, slots=True)
 class Assistant:
-    """Turns requests from the layout's tool and app keys into actions."""
+    """Turns the dictation and transcript keys into actions."""
 
-    # Desktop, settings, scheduling, usage and controls form the key-feature composition seam.
+    # Desktop, settings, scheduling and usage form the key-feature composition seam.
     desktop: Desktop
     settings: Settings
     record: Recorder = field(kw_only=True)
     submit: Callable[[Callable[[], None]], None] = field(kw_only=True)
     """Runs a job on the worker thread, after whatever is already queued."""
-    controls: Controls = field(kw_only=True)
     missing: Missing | None = field(default=None, kw_only=True)
     """Settings the AI tools need but don't have; the other keys work without them."""
     clock: Callable[[], float] = field(default=time.monotonic, kw_only=True)
@@ -155,17 +148,9 @@ class Assistant:
     def listening(self) -> Tool | None:
         return capture.tool if (capture := self.capture) is not None else None
 
-    def handle(self, request: Request, *, down: bool) -> None:
+    def handle(self, tool: Tool, *, down: bool) -> None:
         """Dispatch a key edge or menu press."""
-        if owner(request) is Side.DESKTOP:
-            return  # The layout sends app keys and window keys to the desktop, which owns them.
-        match request:
-            case App():
-                return
-            case Tool():
-                kind = ROUTES[request]
-            case _:
-                assert_never(request)
+        kind = ROUTES[tool]
         if self.missing is not None and NEEDS_SETTINGS[kind]:
             if down:
                 self.desktop.problem(f"Set {', '.join(self.missing.names)} to use the AI tools (see the README).")
@@ -174,18 +159,16 @@ class Assistant:
             return
         match kind:
             case Route.HOLD:
-                self.hold(request, down=down)
+                self.hold(tool, down=down)
             case Route.TOGGLE:
                 if self.listening is not None:
                     self.stop_capture(reason="toggle")
                 else:
-                    self.hold(request, down=True)
+                    self.hold(tool, down=True)
             case Route.TRANSCRIPT:
                 self.submit(self.copy_transcript)
-            case Route.NAVIGATE | Route.SWITCHER:
-                pass  # The desktop's (see `owner`).
-            case Route.MEETING:
-                self.controls.toggle_meeting()
+            case Route.NAVIGATE | Route.SWITCHER | Route.MEETING:
+                pass  # The desktop's own (see `desktop_ui.desktop_control`).
             case _:
                 assert_never(kind)
 

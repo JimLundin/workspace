@@ -1,7 +1,7 @@
 """Qt owns the desktop's main thread; callers enqueue work or await explicit input.
 
-The desktop shows what the assistant publishes (its voice, jobs and recording);
-nothing of the assistant runs here. No GUI objects cross the keyboard process.
+The views show what dictation and meetings report (the voice, jobs and recording).
+No GUI objects cross the keyboard process.
 """
 
 import queue
@@ -17,11 +17,10 @@ lazy from PySide6 import QtCore, QtWidgets
 
 import winapi.shapes
 from cell import Cell
-from contracts.desktop_link import JobChanged, RecordingChanged, ToDesktop
 from desktop_ui import job_queue
 from desktop_ui.bar_events import ChordHeld, DictationShown, JobShown, LayoutShown, OverlayShown, RecordingShown
 from desktop_ui.qt_runtime import prepare
-from desktop_ui.ui_control import BarBuilt, BarDictation, BarOverlay, Effect, Fact, OverlayPublished, Published, ToView, UiState, transition
+from desktop_ui.ui_control import BarBuilt, BarOverlay, Effect, Fact, OverlayPublished, UiState, transition
 from winapi.shapes import Rect
 lazy from contracts.recording_state import RecordingAction
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
@@ -74,7 +73,7 @@ class _OnQt:
 
 @dataclass(frozen=True, slots=True)
 class Ui:
-    """The desktop's views on the Qt thread, and the fold of what the assistant publishes into them.
+    """The desktop's views on the Qt thread, and the fold of what they must replay.
 
     Any thread posts a job or reports a fact; the Qt thread drains them in order.
     """
@@ -195,33 +194,17 @@ class Ui:
 
     def _perform(self, effect: Effect) -> None:
         match effect:
-            case BarDictation(active):
-                if (bar := self._bar) is not None:
-                    bar.handle(DictationShown(active))
             case BarOverlay(enabled):
                 if (bar := self._bar) is not None:
                     bar.handle(OverlayShown(enabled))
-            case ToView(message):
-                self._to_view(message)
             case _:
                 assert_never(effect)
 
-    def _to_view(self, message: JobChanged | RecordingChanged) -> None:
-        if (bar := self._bar) is None:
-            return
-        match message:
-            case JobChanged(job=job):
-                bar.handle(JobShown(job))
-            case RecordingChanged(recording=recording):
-                bar.handle(RecordingShown(recording))
-            case _:
-                assert_never(message)
+    # ---- what dictation and meetings do ------------------------------------------------
 
-    # ---- what the assistant publishes --------------------------------------------------
-
-    def show(self, message: ToDesktop) -> None:
-        """Any thread: show what the assistant published."""
-        self.report(Published(message))
+    def show_activity(self, change: DictationShown | JobShown | RecordingShown) -> None:
+        """Any thread: the bar shows what dictation or a meeting is doing."""
+        self._with_bar(lambda bar: bar.handle(change))
 
     def desktop_overlay(self, *, enabled: bool) -> None:
         self.report(OverlayPublished(enabled))

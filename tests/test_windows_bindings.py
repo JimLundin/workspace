@@ -31,8 +31,7 @@ def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
             message = next(system.messages())
         assert message.hwnd == hwnd and message.wparam == timer
     finally:
-        system.kill_window_timer(hwnd, timer)
-        windows.destroy(hwnd)
+        windows.destroy(hwnd)  # which kills its timer
 
 
 def test_overlay_handle_accepts_mouse_input_without_taking_keyboard_focus() -> None:

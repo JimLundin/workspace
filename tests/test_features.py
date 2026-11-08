@@ -8,7 +8,7 @@ from typing import cast, override
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from contracts.status import Job, State
-from protocol import App, Installed, Tool
+from protocol import Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
 from usage import Detail
 from winapi.pcm import RATE
@@ -61,26 +61,14 @@ class FakeDesktop:
         self.log.append(f"problem {message}")
 
 
-class FakeControls:
-    """Publish control effects to the fixture's action recorder."""
-
-    __slots__ = ("record",)
-
-    def __init__(self, record: Callable[[str], None]) -> None:
-        self.record: Callable[[str], None] = record
-
-    def toggle_meeting(self) -> None:
-        self.record("MEETING")
-
-
 def run_immediately(job: Callable[[], None]) -> None:
     job()
 
 
 class Rig:
-    """An assistant wired to fakes: what it did is in `desktop.log`, `used` and `controlled`."""
+    """An assistant wired to fakes: what it did is in `desktop.log` and `used`."""
 
-    __slots__ = ("assistant", "controlled", "desktop", "endpoint", "used")
+    __slots__ = ("assistant", "desktop", "endpoint", "used")
 
     # The fixture composes endpoint, credential gate, desktop effects and worker scheduling.
     def __init__(
@@ -95,21 +83,19 @@ class Rig:
         self.endpoint = endpoint
         self.desktop = desktop if desktop is not None else FakeDesktop()
         self.used: list[tuple[str, Mapping[str, Detail]]] = []
-        self.controlled: list[str] = []
         settings = Settings(endpoint.url, "k", "transcribe", "")
         self.assistant = Assistant(
             self.desktop,
             settings,
             record=lambda feature, details: self.used.append((feature, details)),
             submit=submit,
-            controls=FakeControls(self.controlled.append),
             missing=missing,
             clock=clock,
         )
 
-    def press(self, request: Tool | App) -> None:
-        self.assistant.handle(request, down=True)
-        self.assistant.handle(request, down=False)
+    def press(self, tool: Tool) -> None:
+        self.assistant.handle(tool, down=True)
+        self.assistant.handle(tool, down=False)
 
     def hold(self, tool: Tool) -> None:
         """Down, speak, up."""
@@ -372,32 +358,6 @@ def test_the_tray_shows_listening_then_working_then_ready() -> None:
         assert states == ["state LISTENING", "state WORKING", "state READY"]
 
 
-# ---- apps and windows ------------------------------------------------------------------
-
-TERMINAL = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
-
-
-def test_desktop_owned_keys_never_reach_the_assistants_features() -> None:
-    # Defect: an app, window or switcher key (the desktop's) also runs in
-    # the assistant, so it acts twice or records usage the desktop already did.
-    with fake_endpoint() as endpoint:
-        rig = Rig(endpoint)
-        for request in (TERMINAL, Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.WINDOW_SWITCHER):
-            rig.press(request)
-        assert not rig.take() and not rig.used and not rig.controlled
-
-
-def test_desktop_controls_run_on_press_without_worker_submission() -> None:
-    # Detect UI actions firing on release, entering the worker, or resetting recording state through timed().
-    with fake_endpoint() as endpoint:
-        # This test owns the bounded queue of submitted effects and never executes them.
-        jobs: list[Callable[[], None]] = []
-        rig = Rig(endpoint, submit=jobs.append)
-        rig.press(Tool.MEETING_TOGGLE)
-        assert rig.controlled == ["MEETING"]
-        assert not jobs and not rig.used and not rig.desktop.jobs and not rig.take()
-
-
 # ---- without the AI settings -----------------------------------------------------------
 
 
@@ -406,10 +366,8 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
         rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)))
         rig.hold(Tool.DICTATE)
         rig.press(Tool.DICTATE_TOGGLE)
-        rig.press(Tool.MEETING_TOGGLE)
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
         assert rig.take() == [problem, problem]
-        assert rig.controlled == ["MEETING"]
         assert endpoint.received == []
 
 

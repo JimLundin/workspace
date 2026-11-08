@@ -1,5 +1,5 @@
 """How the workspace's two programs talk. The layout (miryoku) owns the keyboard;
-the assistant does everything slow. Keys on the layout send the assistant
+the desktop does everything else. Keys on the layout send the desktop
 requests, as window messages: they are queued, ordered, cost the layout nothing
 to send, and need no admin rights. Plain Python: importable anywhere.
 """
@@ -16,28 +16,28 @@ MAGIC: Final = 0x4D49_524F
 """Tags input the workspace sends, so the layout's hook lets it through untouched."""
 
 SWITCHER_TITLE: Final = "Workspace window switcher"
-"""The assistant's window switcher; the layout passes Esc, Enter and Tab to it while it has focus."""
+"""The desktop's window switcher; the layout passes Esc, Enter and Tab to it while it has focus."""
 
 
 _WM_APP: Final = 0x8000
 WM_REQUEST: Final = _WM_APP + 1
-"""Layout -> assistant: a key went down (lparam 1) or up (lparam 0); wparam is `encode(request)`."""
+"""Layout -> desktop: a key went down (lparam 1) or up (lparam 0); wparam is `encode(request)`."""
 WM_LAYOUT_STATE: Final = _WM_APP + 2
-"""Layout -> assistant: wparam is a `LayoutState` value."""
+"""Layout -> desktop: wparam is a `LayoutState` value."""
 # _WM_APP + 3 is `components.WM_QUIT_LAYOUT` (keeper -> layout).
 WM_INDICATOR: Final = _WM_APP + 4
-"""Layout -> assistant: what the layer indicator shows; wparam is `encode_indicator(...)`."""
+"""Layout -> desktop: what the layer indicator shows; wparam is `encode_indicator(...)`."""
 WM_TOGGLE_LAYOUT: Final = _WM_APP + 5
-"""Assistant -> layout: toggle on/off, as if the escape key was tapped."""
+"""Desktop -> layout: toggle on/off, as if the escape key was tapped."""
 WM_QUERY_LAYOUT_STATE: Final = _WM_APP + 6
-"""Assistant -> layout: reply with the layout, layer and physically held keys."""
+"""Desktop -> layout: reply with the layout, layer and physically held keys."""
 WM_KEY_STATE: Final = _WM_APP + 7
-"""Layout -> assistant: physical scancode in wparam, down/up in lparam (1/0).
+"""Layout -> desktop: physical scancode in wparam, down/up in lparam (1/0).
 Scancode 0 clears the held keys, before a state replay or when the layout stops."""
 WM_CHORD: Final = _WM_APP + 8
-"""Layout -> assistant: wparam is 1 while either keyboard holds its Apps key, else 0."""
+"""Layout -> desktop: wparam is 1 while either keyboard holds its Apps key, else 0."""
 WM_WINDOWS_KEY_TAP: Final = _WM_APP + 9
-"""Layout -> assistant: the Windows key was tapped alone; show or hide the taskbar."""
+"""Layout -> desktop: the Windows key was tapped alone; show or hide the taskbar."""
 
 
 class LayoutState(Enum):
@@ -48,7 +48,7 @@ class LayoutState(Enum):
 
 
 class Tool(Enum):
-    """What a tool key asks the assistant to do. Hold-to-talk tools use the key's
+    """What a tool key asks Workspace to do. Hold-to-talk tools use the key's
     press and release; the rest act on press."""
 
     DICTATE = 1
@@ -102,40 +102,6 @@ class App:
 
 
 type Request = Tool | App
-
-
-class Side(Enum):
-    """Which program a request belongs to; the layout sends each to its owner's window."""
-
-    DESKTOP = 1
-    """Window placement, app keys and Workspace's own views."""
-    ASSISTANT = 2
-    """Dictation, the agent and meetings."""
-
-
-DESKTOP_TOOLS: Final = frozenset(
-    {
-        Tool.ZOOM,
-        Tool.FOCUS_LEFT,
-        Tool.FOCUS_DOWN,
-        Tool.FOCUS_UP,
-        Tool.FOCUS_RIGHT,
-        Tool.PLACEMENT_PAUSE,
-        Tool.PLACE_NOW,
-        Tool.DESKTOP_1,
-        Tool.DESKTOP_2,
-        Tool.DESKTOP_3,
-        Tool.DESKTOP_4,
-        Tool.DESKTOP_5,
-        Tool.WINDOW_SWITCHER,
-    }
-)
-"""The tools the desktop owns; every other tool is the assistant's."""
-
-
-def owner(request: Request) -> Side:
-    """App keys and window keys are the desktop's; the rest need the assistant."""
-    return Side.DESKTOP if isinstance(request, App) or request in DESKTOP_TOOLS else Side.ASSISTANT
 
 
 _APP_BASE: Final = 1000

@@ -113,8 +113,8 @@ Generated tests live in `tests/properties/` and need the `test` extra
 
 ## Running
 
-`StartWorkspace.cmd` syncs `.venv` from `uv.lock` and starts the gateway, layout,
-assistant and desktop with `launch.py`; the login shortcut runs it. After a
+`StartWorkspace.cmd` syncs `.venv` from `uv.lock` and starts the gateway, layout
+and desktop with `launch.py`; the login shortcut runs it. After a
 checked change, `Dev.cmd deploy` restarts them all (`launch.py restart`); name
 programs to restart only those, as the tray's restart items do. Nothing
 supervises the programs: a crashed one stays down until the next start, and a

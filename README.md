@@ -7,10 +7,8 @@ installed Python 3.15 and needs no admin rights. It runs five processes:
   in the Miryoku style, with home row mods, layers, caps word and snippets.
 - **The desktop** (`desktop/`, `desktop_ui/`) owns everything you see: the
   floating bar, the tray icon, the key map and overlay, and window placement.
-  App and window keys go straight to it.
-- **The assistant** (`assistant/`) owns dictation and meeting recording. It runs
-  on its own thread in the desktop's program and has no window of its own: the
-  desktop shows its work.
+  It also runs dictation and meeting recording (`assistant/`). Every key
+  request goes straight to it.
 - **The AI connection** (`gateway/`) is a local pass-through to your endpoint
   that dictation and meetings share. It holds the key.
 - **The launcher** (`launch.py`) starts the three programs from this folder's
@@ -151,7 +149,7 @@ Everything is in `%LOCALAPPDATA%\workspace`.
 | File | Contents |
 |---|---|
 | `usage.jsonl` | Feature use and timings, never what you typed or said |
-| `assistant.log`, `desktop.log` | Problems and crashes |
+| `desktop.log` | Problems and crashes |
 | `state\*.log` | Each program's output and crashes, written by the launcher |
 | `agent-ui.log` | View startup and errors |
 | `meetings\` | One folder per recorded meeting, with `transcript.md` |

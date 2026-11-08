@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 
+from contracts.hotkeys import ROUTES, Route
 from desktop_ui.navigation import (
     AppKey,
     Direction,
@@ -23,7 +24,7 @@ from desktop_ui.navigation import (
 )
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import CODE, EDGE, NOWHERE, TERMINAL, Group, Screens, place, screens
-from protocol import DESKTOP_TOOLS, App, Installed, PinnedWeb, Side, Tool, owner
+from protocol import App, Installed, PinnedWeb, Tool
 from tests.test_window_layout import ABOVE, FOUR_K, LAPTOP, SIDE
 from winapi.screen import Monitor
 
@@ -131,11 +132,9 @@ def test_navigation_keys_give_their_orders() -> None:
     ]
 
 
-def test_every_tool_has_one_owner_and_the_desktops_keys_need_no_assistant() -> None:
-    # Defect: a key the desktop handles alone is sent to the assistant (so it fails
-    # while the assistant restarts), or an assistant tool is swallowed by the desktop.
-    desktop = {tool for tool in Tool if owner(tool) is Side.DESKTOP}
-    assert desktop == DESKTOP_TOOLS
-    assert owner(App("terminal", Installed("windowsterminal.exe", "wt.exe"))) is Side.DESKTOP
-    assert all(keyed(tool) is not None for tool in desktop - {Tool.WINDOW_SWITCHER})
-    assert all(keyed(tool) is None for tool in set(Tool) - desktop)
+def test_every_navigation_tool_has_an_order_and_no_other_tool_does() -> None:
+    # Defect: a window key the desktop routes as navigation does nothing, or a
+    # dictation or meeting tool is swallowed as navigation.
+    navigation = {tool for tool in Tool if ROUTES[tool] is Route.NAVIGATE}
+    assert all(keyed(tool) is not None for tool in navigation)
+    assert all(keyed(tool) is None for tool in set(Tool) - navigation)

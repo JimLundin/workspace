@@ -1,11 +1,9 @@
-"""The desktop: Workspace's bar, tray, key map and window placement.
+"""The desktop: Workspace's bar, tray, key map, window placement, dictation and meetings.
 
-It runs without the assistant and the assistant without it. The keyboard sends
-it the requests it owns (app keys, window keys, the switcher) and its
-indicator, key and chord messages, to its own hidden window; tools the assistant
-owns go there as `contracts.desktop_link` commands over the link. What the
-assistant publishes (its voice, jobs and recording) arrives the same way and is
-shown here.
+The keyboard sends every request and its indicator, key, chord and layout
+messages to the desktop's hidden control window. Dictation and meetings
+(`desktop_ui.voice`) are called here on the Qt thread; what their workers
+report arrives as events in the same inbox and is shown here.
 """
 
 import contextlib
@@ -13,6 +11,7 @@ import os
 import queue
 import subprocess
 import threading
+import time
 import traceback
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -22,21 +21,21 @@ import components
 import diagnostics
 import launch
 import usage
+from assistant.llm import settings_from
 from cell import Cell
 from config import APPS
-from contracts.desktop_link import Record
 from desktop_ui import desktop_controls
-from desktop_ui.assistant_port import AssistantPort, StartAssistant
 from desktop_ui.desktop_control import (
-    AssistantSaid,
     Beep,
     Chord,
     Controlled,
     DesktopState,
     Effect,
     Event,
+    ExpireCapture,
     Flash,
     Fold,
+    HandleKey,
     Indicate,
     Indicated,
     Launch,
@@ -53,21 +52,25 @@ from desktop_ui.desktop_control import (
     PressedKeys,
     Problem,
     Quit,
+    Record,
     RecordUse,
     RestoreTray,
-    Send,
+    ShowActivity,
+    ShowIdle,
     ShowKeymap,
     ShowMenu,
     ShowOverlay,
-    ShowViews,
+    ShowVoice,
     SpecLoaded,
     SwitchWindows,
     ToggleLayout,
+    ToggleMeeting,
     ToggleTaskbar,
     TrayNotify,
     TrayShow,
+    UseLayout,
+    VoiceShown,
     transition,
-    tray_state,
 )
 from desktop_ui.navigation import Source, SwitcherPick
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
@@ -76,6 +79,7 @@ from desktop_ui.report import write_report
 from desktop_ui.tray import Tray
 from desktop_ui.ui import Ui, Views
 from desktop_ui.ui_spec import SpecError
+from desktop_ui.voice import Voice
 from protocol import (
     WM_CHORD,
     WM_INDICATOR,
@@ -97,6 +101,8 @@ WM_TRAY: Final = system.WM_APP + 20
 WM_SHOW_MENU: Final = 0x8056
 WM_EVENTS: Final = system.WM_APP + 22
 """Any thread -> Qt thread: events are waiting in the inbox."""
+CAPTURE_TIMER_MS: Final = 1000
+"""How often the control window checks a voice capture against its time limit."""
 
 
 def log(text: str) -> None:
@@ -125,6 +131,8 @@ def window_event(message: int, wparam: int, lparam: int) -> Event | None:
         return Chord(held=bool(wparam))
     if message == WM_WINDOWS_KEY_TAP:
         return ToggleTaskbar()
+    if message == system.WM_TIMER:  # the capture timer, the control window's only timer
+        return ExpireCapture(time.monotonic())
     if message == system.WM_CLOSE:  # Quit Workspace, or a test
         return Quit()
     return None
@@ -187,35 +195,37 @@ def _drain(pending: queue.SimpleQueue[Event], handler: Cell[Callable[[Event], No
 
 @dataclass(frozen=True, slots=True)
 class DesktopApp:
-    """The desktop's views and tray, and the Qt-thread fold of their events into effects."""
+    """The desktop's views, tray, dictation and meetings, and the Qt-thread fold of their events into effects."""
 
     inbox: Inbox
     ui: Ui
-    assistant: AssistantPort
+    voice: Voice
     tray: Tray
     state: Cell[DesktopState]
 
     @classmethod
-    def compose(cls, ui: Ui, assistant: AssistantPort, inbox: Inbox) -> DesktopApp:
+    def compose(cls, ui: Ui, voice: Voice, inbox: Inbox) -> DesktopApp:
         state = Cell(DesktopState(overlay=OverlayState(enabled=load_enabled())))
-        app = cls(inbox, ui, assistant, Tray.add(inbox.window.handle, WM_TRAY), state)
+        app = cls(inbox, ui, voice, Tray.add(inbox.window.handle, WM_TRAY), state)
         ui.desktop_overlay(enabled=state.get().overlay.enabled)
         inbox.connect(app.handle)
         return app
 
     def start(self) -> None:
-        """Qt thread: the bar, then the layout's state, then readiness."""
-        report, state = self.inbox.report, self.state
+        """Qt thread: the bar, the capture timer and the workers, then the layout's state, then readiness."""
+        report = self.inbox.report
         self.ui.desktop(
-            record=lambda action: report(Send(Record(action))),
+            record=lambda action: report(Record(action)),
             overlay=lambda: report(OverlayToggled()),
             menu=lambda: report(MenuRequested()),
-            audio_level=lambda: state.get().level,
+            audio_level=self.voice.level,
             tool=lambda tool: report(Controlled(desktop_controls.ChosenTool(tool))),
         )
+        system.set_window_timer(self.inbox.window.handle, CAPTURE_TIMER_MS)
+        self.voice.start()
         if (layout := windows.find(components.LAYOUT.window.title)) is not None:
             system.post_message(layout, WM_QUERY_LAYOUT_STATE, 0, 0)
-        self.perform(TrayShow(tray_state(state.get().shown)))
+        self.handle(ShowIdle())
 
     # ---- the fold ----------------------------------------------------------------------
 
@@ -232,11 +242,11 @@ class DesktopApp:
         match effect:
             case Fold(event):
                 yield event
-            case Send(command):
-                self.assistant.send(command)
+            case ShowVoice() | ShowIdle() | HandleKey() | UseLayout() | ExpireCapture() | Record() | ToggleMeeting():
+                yield from self._voice(effect)
             case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep():
                 self._tray(effect)
-            case ShowViews() | Navigate() | SwitchWindows() | Chord() | ToggleTaskbar() | ShowKeymap():
+            case ShowActivity() | Navigate() | SwitchWindows() | Chord() | ToggleTaskbar() | ShowKeymap():
                 self._views(effect)
             case ShowOverlay() | OverlayEnabled() | Flash() | LayoutShown() | PressedKeys() | Indicate() | ToggleLayout():
                 yield from self._keys(effect)
@@ -248,6 +258,29 @@ class DesktopApp:
                 self.quit()
             case _:
                 assert_never(effect)
+
+    def _voice(self, effect: ShowVoice | ShowIdle | HandleKey | UseLayout | ExpireCapture | Record | ToggleMeeting) -> Iterator[Event]:
+        voice = self.voice
+        try:
+            match effect:
+                case ShowVoice(shown):
+                    yield VoiceShown(voice.shown(shown))
+                case ShowIdle():
+                    yield VoiceShown(voice.idle())
+                case HandleKey(tool, down):
+                    voice.dictation.handle(tool, down=down)
+                case UseLayout(on):
+                    voice.use_layout(on=on)
+                case ExpireCapture(at):
+                    voice.dictation.expire_capture(at)
+                case Record(action):
+                    voice.record(action)
+                case ToggleMeeting():
+                    voice.toggle_meeting()
+                case _:
+                    assert_never(effect)
+        except (OSError, ValueError) as error:
+            yield Problem(str(error))
 
     def _tray(self, effect: RestoreTray | TrayNotify | TrayShow | Log | Beep) -> None:
         match effect:
@@ -264,10 +297,10 @@ class DesktopApp:
             case _:
                 assert_never(effect)
 
-    def _views(self, effect: ShowViews | Navigate | SwitchWindows | Chord | ToggleTaskbar | ShowKeymap) -> None:
+    def _views(self, effect: ShowActivity | Navigate | SwitchWindows | Chord | ToggleTaskbar | ShowKeymap) -> None:
         match effect:
-            case ShowViews(message):
-                self.ui.show(message)
+            case ShowActivity(change):
+                self.ui.show_activity(change)
             case Navigate(order):
                 self.ui.navigate(order)
             case SwitchWindows():
@@ -370,9 +403,7 @@ def launched(command: str, *names: str) -> None:
     subprocess.Popen([str(launch.pythonw()), str(launch.ROOT / "launch.py"), command, *names], cwd=launch.ROOT, creationflags=launch.DETACHED)
 
 
-def run(
-    start_assistant: StartAssistant, *, window: components.Window = components.DESKTOP.window, lock_name: str = LOCK_NAME, views: Views | None = None
-) -> None:
+def run(*, window: components.Window = components.DESKTOP.window, lock_name: str = LOCK_NAME, views: Views | None = None) -> None:
     """Blocks until the desktop quits; a test names its own `window`, `lock_name` and `views`."""
     screen.use_physical_pixels()  # before any window exists
     lock = system.create_lock(lock_name)
@@ -380,13 +411,13 @@ def run(
         return
     try:
         inbox = Inbox.open(window)
-        assistant = start_assistant(lambda message: inbox.report(AssistantSaid(message)))
+        voice = Voice.open(settings_from(os.environ, components.endpoint("gateway")), inbox.window.handle, inbox.report, log)
         ui = Ui.start(views=views, on_problem=lambda message: inbox.report(Problem(message)))
-        app = DesktopApp.compose(ui, assistant, inbox)
+        app = DesktopApp.compose(ui, voice, inbox)
         ui.post(lambda _: app.start())
         try:
             ui.run()
         finally:
-            assistant.close()
+            voice.close(log)
     finally:
         system.release_lock(lock)

@@ -1,9 +1,8 @@
 """Windows glue: installs a low-level keyboard hook, feeds keys to the engine,
-sends the results, and runs the message loop. Each request goes to its owner
-(`protocol.owner`): app and window keys to the desktop, the rest to the
-assistant. What the desktop shows (layer, chord, pressed keys, the Windows-key
-tap) goes to the desktop; the layout's state goes to both. Win32 is reached
-only through the typed bindings in `winapi`.
+sends the results, and runs the message loop. Every request, what the desktop
+shows (layer, chord, pressed keys, the Windows-key tap) and the layout's state
+go to the desktop's control window. Win32 is reached only through the typed
+bindings in `winapi`.
 """
 
 import contextlib
@@ -16,7 +15,7 @@ from typing import Final, Protocol, assert_never
 
 import usage
 from cell import Cell
-from components import ASSISTANT_WINDOW, DESKTOP, LAYOUT, Window
+from components import DESKTOP, LAYOUT, Window
 from config import APPS
 from diagnostics import FailureInfo, failure_info
 from miryoku import hook_watch
@@ -38,10 +37,8 @@ from protocol import (
     WM_WINDOWS_KEY_TAP,
     LayoutState,
     Request,
-    Side,
     encode,
     encode_indicator,
-    owner,
 )
 from usage import Detail
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
@@ -51,8 +48,6 @@ LOCK_NAME: Final = "Local\\miryoku"
 """Name of the lock that stops a second copy from running in this Windows session."""
 USAGE_FLUSH_MS: Final = 10 * 60 * 1000
 """How often usage counts are written to the usage log."""
-WINDOWS: Final = frozendict({Side.DESKTOP: DESKTOP.window, Side.ASSISTANT: ASSISTANT_WINDOW})
-"""The control window each side's messages are posted to."""
 
 
 class KeyboardSystem(Protocol):
@@ -120,8 +115,8 @@ class NativeKeyboardSystem:
 
 @dataclass(frozen=True, slots=True)
 class _Hosted:
-    found: frozendict[Side, int] = frozendict()
-    """Each side's window, once found."""
+    found: int | None = None
+    """The desktop's control window, once found."""
     counts: frozendict[str, int] = frozendict()
     """Feature uses since the last flush."""
     owned: frozenset[Key | Mod] = frozenset()
@@ -138,15 +133,15 @@ class WinHost:
     _state: Cell[_Hosted] = field(default_factory=lambda: Cell(_Hosted()), init=False, repr=False)
 
     @property
-    def found(self) -> frozendict[Side, int]:
+    def found(self) -> int | None:
         return self._state.get().found
 
     @property
     def owned(self) -> frozenset[Key | Mod]:
         return self._state.get().owned
 
-    def remember_windows(self, found: frozendict[Side, int]) -> None:
-        """Start from known windows, as after the sides were found before."""
+    def remember_window(self, found: int | None) -> None:
+        """Start from a known desktop window, as after it was found before."""
         self._state.set(replace(self._state.get(), found=found))
 
     def own(self, key: Key | Mod) -> None:
@@ -184,9 +179,9 @@ class WinHost:
                 self.platform.beep(system.MB_ICONASTERISK)
 
     def request(self, request: Request, *, down: bool) -> None:
-        # Neither side's availability owns remapping. Never replay a missed
+        # The desktop's availability doesn't own remapping. Never replay a missed
         # press after reconnecting: it could start an unwanted action.
-        if not self.tell(owner(request), WM_REQUEST, encode(request, APPS), int(down)) and down:
+        if not self.tell(WM_REQUEST, encode(request, APPS), int(down)) and down:
             self.platform.beep(system.MB_ICONHAND)
 
     def type_text(self, text: str) -> None:
@@ -198,29 +193,28 @@ class WinHost:
 
     def indicate(self, indicator: Indicator) -> None:
         layer: int = indicator.layer.value if indicator.layer else 0
-        self.tell(Side.DESKTOP, WM_INDICATOR, encode_indicator(layer, locked=indicator.locked, caps_word=indicator.caps_word), 0)
+        self.tell(WM_INDICATOR, encode_indicator(layer, locked=indicator.locked, caps_word=indicator.caps_word), 0)
         if indicator.chord != self._state.get().chord:
             self._state.set(replace(self._state.get(), chord=indicator.chord))
-            self.tell(Side.DESKTOP, WM_CHORD, int(indicator.chord), 0)
+            self.tell(WM_CHORD, int(indicator.chord), 0)
 
-    def tell(self, side: Side, message: int, wparam: int, lparam: int) -> bool:
-        """Posts to `side`'s window; nothing happens if it isn't running."""
-        for _ in range(2):  # a cached window may be gone (that side restarted): look again
-            handle = self.found.get(side)
+    def tell(self, message: int, wparam: int, lparam: int) -> bool:
+        """Posts to the desktop's window; nothing happens if it isn't running."""
+        for _ in range(2):  # a cached window may be gone (the desktop restarted): look again
+            handle = self.found
             if handle is None:
-                handle = self.platform.find_window(WINDOWS[side])
+                handle = self.platform.find_window(DESKTOP.window)
                 if handle is None:
                     return False
-                self.remember_windows(self.found | {side: handle})
+                self.remember_window(handle)
             if self.platform.post_message(handle, message, wparam, lparam):
                 return True
-            self.remember_windows(frozendict({key: value for key, value in self.found.items() if key is not side}))
+            self.remember_window(None)
         return False
 
     def layout_state(self, state: LayoutState) -> None:
-        """Both sides follow the layout: the desktop shows it, the assistant stops capture when it's off."""
-        for side in Side:
-            self.tell(side, WM_LAYOUT_STATE, state.value, 0)
+        """The desktop follows the layout: it shows it, and dictation stops capture when it's off."""
+        self.tell(WM_LAYOUT_STATE, state.value, 0)
 
     def flush_usage(self) -> None:
         counts = self._state.get().counts
@@ -400,10 +394,10 @@ class Keyboard:
             state = LayoutState.ON if self.engine_state.enabled else LayoutState.OFF
             self.host.layout_state(state)
             self.host.indicate(self.engine_state.shown)
-            self.host.tell(Side.DESKTOP, WM_KEY_STATE, 0, 0)
+            self.host.tell(WM_KEY_STATE, 0, 0)
             for scancode in sorted(self.pressed):
-                self.host.tell(Side.DESKTOP, WM_KEY_STATE, scancode, 1)
-            self.host.tell(Side.DESKTOP, WM_CHORD, int(self.chord_held or self.engine_state.shown.chord), 0)
+                self.host.tell(WM_KEY_STATE, scancode, 1)
+            self.host.tell(WM_CHORD, int(self.chord_held or self.engine_state.shown.chord), 0)
         if message != WM_TOGGLE_LAYOUT or self.firmware is not None:
             return
         self._state.set(replace(self._state.get(), busy=True))
@@ -496,7 +490,7 @@ class Keyboard:
                 self.host.release_owned()
             self.set_keys(replace(self.engine_state, shown=QUIET))
             with contextlib.suppress(Exception):
-                self.host.tell(Side.DESKTOP, WM_KEY_STATE, 0, 0)
+                self.host.tell(WM_KEY_STATE, 0, 0)
                 self.host.layout_state(LayoutState.OFF)
                 self.host.indicate(QUIET)
         finally:
@@ -541,11 +535,11 @@ class Keyboard:
             self._state.set(replace(self._state.get(), pressed=self.pressed | {scancode}))
         else:
             self._state.set(replace(self._state.get(), pressed=self.pressed - {scancode}))
-        self.host.tell(Side.DESKTOP, WM_KEY_STATE, scancode, int(down))
+        self.host.tell(WM_KEY_STATE, scancode, int(down))
 
     def clear_pressed(self) -> None:
         self._state.set(replace(self._state.get(), pressed=frozenset()))
-        self.host.tell(Side.DESKTOP, WM_KEY_STATE, 0, 0)
+        self.host.tell(WM_KEY_STATE, 0, 0)
 
     def hook_proc(self, code: int, wparam: int, lparam: int) -> int:
         """Called by Windows for every key, before any application sees it."""
@@ -572,7 +566,7 @@ class Keyboard:
         tap = state.windows_key.key(key.vk, down=down) if counted else state.windows_key
         self._state.set(replace(state, hook_tick=key.time, windows_key=tap))
         if counted and tap.tapped:
-            self.host.tell(Side.DESKTOP, WM_WINDOWS_KEY_TAP, 0, 0)
+            self.host.tell(WM_WINDOWS_KEY_TAP, 0, 0)
 
     def watch_hook(self, now: int) -> hook_watch.Reinstall | None:
         """Probe a hook suspected dead; the hook's owner acts on a reinstall."""
@@ -631,7 +625,7 @@ class Keyboard:
         held = self.firmware is not None and self.apps_held
         if held != self.chord_held:
             self._state.set(replace(self._state.get(), chord_held=held))
-            self.host.tell(Side.DESKTOP, WM_CHORD, int(held), 0)
+            self.host.tell(WM_CHORD, int(held), 0)
 
     def firmware_shortcut(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         """Own only explicit shortcut presses and their paired physical releases."""

@@ -45,8 +45,8 @@ class Entry:
 GATEWAY: Final = Entry(name="gateway", module="gateway", window=Window("workspace gateway", None), quit_message=WM_CLOSE, shutdown_s=0.0)
 # The keyboard has nothing to drain, so a stuck one is replaced quickly.
 LAYOUT: Final = Entry(name="layout", module="miryoku", window=Window("workspace layout", None), quit_message=WM_QUIT_LAYOUT, shutdown_s=5.0)
-# The desktop closes its windows and the tray icon, and the assistant inside it
-# finishes a meeting's capture and stops dictation: half a minute at most.
+# The desktop closes its windows and the tray icon, finishes a meeting's capture
+# and stops dictation: half a minute at most.
 DESKTOP: Final = Entry(
     name="desktop",
     module="desktop",
@@ -58,9 +58,6 @@ DESKTOP: Final = Entry(
 
 CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (GATEWAY, LAYOUT, DESKTOP)})
 """In startup order; shutdown reverses it."""
-
-ASSISTANT_WINDOW: Final = Window("workspace assistant", "workspace assistant class")
-"""The assistant's hidden control window in the desktop's process: the keyboard sends it dictation and meeting requests."""
 
 BAR_WINDOW: Final = "Workspace floating bar"
 """The desktop's visible surface."""

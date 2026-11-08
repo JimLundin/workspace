@@ -3,13 +3,10 @@
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
-from components import Window
+from components import DESKTOP, Window
 from miryoku.layout import Key, Mod, Scancode
-from miryoku.win import WINDOWS, Keyboard
-from protocol import (
-    WM_REQUEST,
-    Side,
-)
+from miryoku.win import Keyboard
+from protocol import WM_REQUEST
 from usage import Detail
 from winapi import inputs, system
 from winapi.shapes import Point
@@ -30,13 +27,11 @@ class KeyboardFixture:
         self.read_error: Exception | None = None
         self.send_error: Exception | None = None
         self.delivery_error: Exception | None = None
-        self.handles: dict[Side, int | None] = {Side.DESKTOP: 1, Side.ASSISTANT: 2}
-        """Each side's running window; None while that side is down."""
+        self.handle: int | None = 1
+        """The desktop's running window; None while it is down."""
         self.sounds: list[int] = []
         self.reject_down: Key | Mod | None = None
         self.messages: list[tuple[int, int, int]] = []
-        self.routes: list[Side] = []
-        """The side each of `messages` reached."""
         self.output: list[tuple[Key | Mod, bool]] = []
         self.recoveries: list[tuple[tuple[str, Detail], ...]] = []
         self.usage: list[tuple[tuple[str, int], ...]] = []
@@ -69,22 +64,16 @@ class KeyboardFixture:
         return 7
 
     def find_window(self, window: Window) -> int | None:
-        return next((self.handles[side] for side, known in WINDOWS.items() if known == window), None)
+        return self.handle if window == DESKTOP.window else None
 
     # Keep the native delivery fields together in the concrete driver fixture.
     def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool:
         if self.delivery_error is not None:
             raise self.delivery_error
-        side = next((side for side, handle in self.handles.items() if handle == hwnd), None)
-        if side is None:
+        if self.handle is None or hwnd != self.handle:
             return False
         self.messages.append((message, wparam, lparam))
-        self.routes.append(side)
         return True
-
-    def to(self, side: Side) -> list[tuple[int, int, int]]:
-        """What reached `side`'s window, in order."""
-        return [message for message, route in zip(self.messages, self.routes, strict=True) if route is side]
 
     def set_timer(self, ms: int) -> int:
         return 17

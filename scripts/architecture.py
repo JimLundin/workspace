@@ -210,11 +210,7 @@ def _keyboard(module: str) -> bool:
     return not any(_within(module, layer) for layer in APPLICATION_LAYERS)
 
 
-def _onward(_: str) -> bool:
-    return True
-
-
-def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward: Callable[[str], bool] = _onward) -> Iterator[tuple[str, ...]]:
+def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward: Callable[[str], bool]) -> Iterator[tuple[str, ...]]:
     """One shortest static import route per module, including package initializers, in breadth-first order.
 
     A route continues past its last module only where `onward` holds. Each level keeps
@@ -253,26 +249,6 @@ def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Fi
             ):
                 continue
             yield Finding("contract-isolation", module, "", "", 0, f"{module} → {target}")
-
-
-PROCESSES: Final = frozendict(
-    {
-        ("desktop_ui",): ("assistant",),
-        ("assistant",): ("desktop_ui", "desktop", "PySide6", "PyQt6"),
-    }
-)
-"""Each side's packages, and what none of them may reach even through others: the desktop
-and the assistant share only `contracts`; `desktop` composes the two in one process."""
-
-
-def process_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:
-    graph = imported_by
-    for packages, forbidden in PROCESSES.items():
-        for entry in sorted(module for module in graph if any(_within(module, package) for package in packages)):
-            for route in _routes(graph, (entry,)):
-                if any(_within(route[-1], package) for package in forbidden):
-                    yield Finding("process-isolation", entry, "", "", 0, " → ".join(route))
-                    break
 
 
 def _scope_nodes(tree: ast.AST) -> Iterator[ast.AST]:
@@ -993,7 +969,6 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
             )
         ),
         *contract_isolation(imported_by),
-        *process_isolation(imported_by),
         *unused_definitions(observations.values(), production, tested),
         *duplicates(observations.values()),
         *redeclarations(observations.values()),

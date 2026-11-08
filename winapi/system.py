@@ -68,18 +68,6 @@ def messages() -> Iterator[Message]:
         yield Message(int(msg.hWnd or 0), int(msg.message), int(msg.wParam), int(msg.lParam), int(msg.time))
 
 
-def messages_for(window: int) -> Iterator[Message]:
-    """Yields the messages posted to `window`, undispatched, and dispatches every other
-    message of this thread to its window procedure, until a quit message arrives."""
-    msg = wintypes.MSG()
-    while _GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-        if int(msg.hWnd or 0) == window:
-            yield Message(window, int(msg.message), int(msg.wParam), int(msg.lParam), int(msg.time))
-        else:
-            _TranslateMessage(ctypes.byref(msg))
-            _DispatchMessageW(ctypes.byref(msg))
-
-
 def run_message_loop() -> None:
     """Dispatches this thread's messages to their windows until a quit message."""
     msg = wintypes.MSG()
@@ -121,10 +109,6 @@ def set_window_timer(hwnd: int, ms: int) -> int:
     if not timer:
         raise OSError("Windows refused the capture watchdog timer.")
     return timer
-
-
-def kill_window_timer(hwnd: int, timer: int) -> None:
-    _KillTimer(hwnd, timer)
 
 
 def beep(sound: int) -> None:

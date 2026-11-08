@@ -35,7 +35,7 @@ desktops.
    dictate they detach beside the island as compact capsules.
 3. **Stoppable activities show Stop under the pointer.**
 4. **Each fact has one owner.** Dictation and transcription come from the
-   assistant's voice controller, the recording from meetings. Windows
+   dictation keys (`assistant.features`), the recording from meetings. Windows
    notifications never show in the bar.
 
 | Situation | Island | Beside it |

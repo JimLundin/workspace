@@ -37,27 +37,15 @@ class LayoutFixture:
     def __init__(self, handle: int | None) -> None:
         self.handle = handle
         self.messages: tuple[tuple[int, int, int, int], ...] = ()
-        self.timeline: tuple[str, ...] = ()
 
     def find_window(self, title: str) -> int | None:
         assert title == LAYOUT.window.title
-        self.timeline += ("find layout",)
         return self.handle
 
     # The four fields belong to one native message, not independent options.
     def post(self, handle: int, message: int, wparam: int, lparam: int) -> bool:
         self.messages += ((handle, message, wparam, lparam),)
-        self.timeline += ("post layout",)
         return True
-
-    def start_timer(self, handle: int) -> int:
-        assert handle == 7
-        self.timeline += ("timer",)
-        return 17
-
-    def start_workers(self) -> None:
-        assert self.timeline == ("timer",)
-        self.timeline += ("workers",)
 
 
 def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:

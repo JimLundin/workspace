@@ -14,27 +14,24 @@ these.
 | Launcher | `StartWorkspace.cmd`, `launch.py` | Starts, stops and restarts the components from the checkout's `.venv`; it supervises nothing |
 | AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway` and `components` |
 | Layout | `miryoku.pyw`, `miryoku/` | The keyboard hook and remapping. Standard library and `winapi/` only |
-| Desktop | `desktop/__main__.py`, `desktop_ui/`, `assistant/` | The bar, tray, key map, overlay and window placement, on Qt's event loop; and the assistant's dictation and meeting recording, on its own control thread (a native message loop) plus worker threads, with no Qt. `desktop/__main__.py` composes the two |
+| Desktop | `desktop/__main__.py`, `desktop_ui/`, `assistant/` | The bar, tray, key map, overlay and window placement, dictation and meeting recording, on Qt's event loop, with worker threads for slow jobs |
 
-The desktop and the assistant never import each other, even indirectly (the
-architecture review's `process-isolation` rule). They share only `contracts/`
-(frozen values) and pass `contracts.desktop_link` messages in process: the
-assistant publishes states (`VoiceChanged`, `JobChanged`, `RecordingChanged`,
-`MicLevel`) and notices (`Notify`) into the desktop's queue; the desktop sends
-commands (`UseTool`, `Record`) to the assistant's control thread
-(`desktop_ui.assistant_port`). The layout posts each request to its owner
-(`protocol.owner`): app, window and switcher keys to the desktop, the rest to
-the assistant; what the desktop shows (layer, chord, pressed keys) to the
-desktop; the layout's state to both. Quit in the tray runs `launch.py stop`,
-which asks each program to quit in reverse start order.
+The layout posts every request, what the desktop shows (layer, chord, pressed
+keys) and its state to the desktop's control window. The desktop's fold
+(`desktop_ui.desktop_control`) routes each key by its `contracts.hotkeys` route:
+app, window and switcher keys and the meeting key to the desktop's own effects,
+dictation and transcript keys to `assistant.features.Assistant`. What
+dictation's and meetings' worker threads report arrives as events in the same
+inbox. Quit in the tray runs `launch.py stop`, which asks each program to quit
+in reverse start order.
 
 ## Top-level modules
 
 | Module | Role |
 | --- | --- |
 | `launch.py` | Starts, stops and restarts the components |
-| `components.py` | The component catalogue: the gateway, layout and desktop, their windows, quit messages and endpoint files; the assistant's control window |
-| `protocol.py` | Window messages from the layout to the desktop and the assistant, the `Tool` and `App` requests, and each request's owner (`Side`, `owner`) |
+| `components.py` | The component catalogue: the gateway, layout and desktop, their windows, quit messages and endpoint files |
+| `protocol.py` | Window messages between the layout and the desktop, and the `Tool` and `App` requests |
 | `config.py` | User settings: apps, snippets, dark-screen delay |
 | `cell.py` | `Cell`, the one class that reassigns: an owner's changing state |
 | `usage.py`, `diagnostics.py` | The usage log and its failure details |
@@ -53,24 +50,20 @@ removes the hook and reinstalls it. Measure latency with
 
 | Modules | Role |
 | --- | --- |
-| `app.py`, `desktop.py` | Composition: the microphone, meetings and the `Desktop` adapter (typing and the clipboard) |
-| `control.py`, `control_policy.py` | The control thread's decisions (events in, state and effects out) and its startup effects |
+| `desktop.py` | The `Desktop` adapter: the microphone, typing and the clipboard |
 | `features.py`, `text.py` | What each tool key does, and making dictated text safe to type |
 | `llm.py` | `Settings` from the environment, the SDK client and transcription through the gateway |
 | `meetings.py`, `meeting_store.py`, `journal.py` | Meeting recording, its journal of queued audio and its Markdown transcript |
-| `levels.py` | The microphone level the assistant publishes while dictation listens |
-| `lifecycle.py` | Optional lifecycle measurements, and how a background owner stops |
 
 ## `contracts/`
 
-The values the desktop and the assistant share, so either side imports them
-without the other's effects. Contracts import only the standard library,
+Plain values the desktop, dictation, meetings and the layout's key map share,
+without anyone's effects. Contracts import only the standard library,
 pydantic, `cell`, `protocol`, `winapi.shapes`, `winapi.pcm` and each other; the
 architecture review's `contract-isolation` rule enforces it.
 
 | Modules | Role |
 | --- | --- |
-| `desktop_link.py` | The messages between the desktop and the assistant |
 | `status.py` | The tray's state and the bar's quick job |
 | `recording_state.py`, `meetings.py`, `capture.py` | Meeting recording values, events and transcripts, and what a recording captures |
 | `geometry.py`, `hotkeys.py` | Rectangle arithmetic, and every tool key's behaviour |
@@ -80,7 +73,7 @@ architecture review's `contract-isolation` rule enforces it.
 
 | Modules | Role |
 | --- | --- |
-| `desktop_app.py`, `desktop_control.py`, `desktop_controls.py`, `assistant_port.py` | Composition, the desktop's control decisions, the tray menu, and what it asks of the assistant |
+| `desktop_app.py`, `desktop_control.py`, `desktop_controls.py`, `voice.py` | Composition, the desktop's control decisions, the tray menu, and dictation, meetings and the microphone |
 | `ui.py`, `qt_ui.py`, `qt_runtime.py`, `ui_control.py`, `job_queue.py`, `dialogs.py` | Qt dispatch, event-loop ownership and the views' decisions |
 | `desktop_bar.py`, `bar_*.py`, `island_*.py`, `ambient.py`, `audio_meter.py` | The bar ([policy](toolbar-design.md)) and the readings it shows |
 | `shell_*.py`, `desktop_pager.py`, `taskbar_guard.py` | The pager and app shelf, and the Windows taskbar |

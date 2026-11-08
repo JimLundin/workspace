@@ -27,10 +27,8 @@ from protocol import (
     WM_TOGGLE_LAYOUT,
     WM_WINDOWS_KEY_TAP,
     LayoutState,
-    Side,
     Tool,
     decode_indicator,
-    encode,
 )
 from tests.keyboard_fixture import (
     ALT,
@@ -70,56 +68,34 @@ def test_physical_press_is_reported_before_a_tap_hold_is_resolved() -> None:
         assert not keyboard.pressed
 
 
-def test_assistant_outage_keeps_remapping_and_reconnects_without_replaying_shortcuts() -> None:
-    # Detect routing temporary assistant unavailability into input-failure
-    # recovery, or retaining the old HWND after a fresh assistant starts.
+def test_desktop_outage_keeps_remapping_and_reconnects_without_replaying_shortcuts() -> None:
+    # Detect routing temporary desktop unavailability into input-failure
+    # recovery, or retaining the old HWND after a fresh desktop starts.
     driver = KeyboardFixture()
     keyboard = Keyboard.open(driver)
-    keyboard.host.remember_windows(frozendict({Side.ASSISTANT: 2}))
-    driver.handles[Side.ASSISTANT] = None
+    keyboard.host.remember_window(1)
+    driver.handle = None
     hold_apps(keyboard, at=5)
     assert hook_key(keyboard, driver, DICTATE_KEY, down=True, at=10) == 1
     assert hook_key(keyboard, driver, DICTATE_KEY, down=False, at=20) == 1
     assert hook_key(keyboard, driver, APPS_THUMB, down=False, at=25) == 1
     assert keyboard.engine_state.enabled and keyboard.fault is None
     assert driver.sounds == [system.MB_ICONHAND]
-    assert driver.to(Side.ASSISTANT) == []
+    assert driver.messages == []
     keyboard.swallow(inputs.KeyEvent(0x34, 0x05, 0, 30, 0), down=True)
     keyboard.swallow(inputs.KeyEvent(0x34, 0x05, 0, 40, 0), down=False)
     assert driver.output
-    driver.handles[Side.ASSISTANT] = 3
+    driver.handle = 3
     hold_apps(keyboard, at=45)
     keyboard.swallow(inputs.KeyEvent(0, DICTATE_KEY, 0, 50, 0), down=True)
     keyboard.swallow(inputs.KeyEvent(0, DICTATE_KEY, 0, 60, 0), down=False)
     keyboard.swallow(inputs.KeyEvent(0, APPS_THUMB, 0, 65, 0), down=False)
-    assert keyboard.host.found[Side.ASSISTANT] == 3
+    assert keyboard.host.found == 3
     assert [(wparam, lparam) for message, wparam, lparam in driver.messages if message == WM_REQUEST] == [
         (Tool.DICTATE.value, 1),
         (Tool.DICTATE.value, 0),
     ]
     assert keyboard.engine_state.enabled
-
-
-def test_each_message_reaches_the_side_that_owns_it() -> None:
-    # Defects: an app or window key waits on the assistant (failing while it
-    # restarts), dictation goes to the desktop, what the desktop shows (pressed
-    # keys, layer, chord) goes to the assistant, or one side misses the layout's state.
-    driver = KeyboardFixture()
-    keyboard = Keyboard.open(driver)
-    keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 1, 0), down=True)
-    keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 2, 0), down=False)
-    keyboard.on_message(WM_QUERY_LAYOUT_STATE)
-    for request in (Tool.DICTATE, Tool.ZOOM, Tool.DESKTOP_2, APPS[0]):
-        keyboard.host.request(request, down=True)
-    desktop, assistant = driver.to(Side.DESKTOP), driver.to(Side.ASSISTANT)
-    assert {message for message, _, _ in desktop} == {WM_KEY_STATE, WM_LAYOUT_STATE, WM_INDICATOR, WM_CHORD, WM_REQUEST}
-    assert {message for message, _, _ in assistant} == {WM_LAYOUT_STATE, WM_REQUEST}
-    assert [wparam for message, wparam, _ in desktop if message == WM_REQUEST] == [Tool.ZOOM.value, Tool.DESKTOP_2.value, encode(APPS[0], APPS)]
-    assert [wparam for message, wparam, _ in assistant if message == WM_REQUEST] == [Tool.DICTATE.value]
-    driver.handles[Side.DESKTOP] = None
-    keyboard.host.remember_windows(frozendict())
-    keyboard.host.request(Tool.DICTATE, down=True)
-    assert driver.to(Side.ASSISTANT)[-1] == (WM_REQUEST, Tool.DICTATE.value, 1) and not driver.sounds
 
 
 def test_generated_and_extended_input_does_not_light_physical_keys() -> None:
@@ -210,9 +186,9 @@ def test_layout_query_resets_then_replays_all_physically_held_keys() -> None:
             keyboard.swallow(inputs.KeyEvent(0, scancode, 0, 10, 0), down=True)
         messages.clear()
         keyboard.on_message(WM_QUERY_LAYOUT_STATE)
-        assert messages[:2] == [(WM_LAYOUT_STATE, LayoutState.ON.value, 0)] * 2  # The desktop's, then the assistant's.
-        assert messages[2][0] == WM_INDICATOR
-        assert messages[3:] == [(WM_KEY_STATE, 0, 0), (WM_KEY_STATE, 0x10, 1), (WM_KEY_STATE, 0x32, 1), (WM_CHORD, 0, 0)]
+        assert messages[0] == (WM_LAYOUT_STATE, LayoutState.ON.value, 0)
+        assert messages[1][0] == WM_INDICATOR
+        assert messages[2:] == [(WM_KEY_STATE, 0, 0), (WM_KEY_STATE, 0x10, 1), (WM_KEY_STATE, 0x32, 1), (WM_CHORD, 0, 0)]
 
 
 def test_toggle_and_input_failure_clear_held_keys() -> None:
@@ -595,9 +571,8 @@ def test_layout_replies_to_queries_and_tray_toggles_without_key_injection() -> N
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     keyboard.on_message(WM_TOGGLE_LAYOUT)
-    for side in Side:
-        states = [wparam for message, wparam, _ in driver.to(side) if message == WM_LAYOUT_STATE]
-        assert states == [LayoutState.ON.value, LayoutState.OFF.value, LayoutState.OFF.value, LayoutState.ON.value], side
+    states = [wparam for message, wparam, _ in driver.messages if message == WM_LAYOUT_STATE]
+    assert states == [LayoutState.ON.value, LayoutState.OFF.value, LayoutState.OFF.value, LayoutState.ON.value]
     assert not keyboard.busy
 
 

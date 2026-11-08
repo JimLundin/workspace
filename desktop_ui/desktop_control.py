@@ -1,11 +1,11 @@
 """The desktop's control decisions: events in, a new state and effects out.
 
-The tray, the keyboard's messages, the assistant's link and the bar all report
+The tray, the keyboard's messages, dictation, meetings and the bar all report
 what happened as an `Event`; none calls back into the application. The Qt thread
 folds each event through `transition`, which returns the next `DesktopState` and
 the `Effect`s to perform, lazily and in order. Only `desktop_ui.desktop_app`
 performs effects, and an effect can report a result as a new event (a menu choice,
-a refused send), so every decision here can be checked with values alone.
+the voice state it resolved), so every decision here can be checked with values alone.
 
 An event is either a fact whose reaction depends on the state, or a request that
 is its own effect and passes straight through.
@@ -15,22 +15,25 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from typing import assert_never
 
-from contracts.desktop_link import MicLevel, Notify, Record, RecordingChanged, ToAssistant, ToDesktop, UseTool, VoiceChanged
-from contracts.status import State
+from contracts.hotkeys import ROUTES, Route
+from contracts.recording_state import RecordingAction, RecordingState
+from contracts.status import Job, State
+from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.desktop_controls import ChosenTool, ControlAction, FeatureRequest, Menu, MenuState, PhysicalKey, TraySpec
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, Source, keyed
 from desktop_ui.overlay import OverlayState
 from miryoku.layout import Layer, Scancode
-from protocol import App, LayoutState, Request, Side, Tool, decode_indicator, owner
+from protocol import App, LayoutState, Request, Tool, decode_indicator
 
 
 @dataclass(frozen=True, slots=True)
 class Shown:
-    """What the assistant last published that the tray and its menu read."""
+    """What dictation and meetings last reported that the tray and its menu read."""
 
     state: State = State.LAYOUT_OFF
-    capturing: bool = False
+    recording: RecordingState = field(default_factory=RecordingState)
+    """The meeting recorder's last state, which also tells an interruption from a finish."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,8 +42,6 @@ class DesktopState:
     overlay: OverlayState = field(default_factory=OverlayState)
     layout: LayoutState | None = None
     """What the layout last reported; None until it does."""
-    level: float | None = None
-    """The microphone's latest level from the assistant, for the bar's trace."""
     tray_spec: TraySpec | None = None
     """The tray menu's last good spec; None until the menu first opens."""
 
@@ -49,8 +50,28 @@ class DesktopState:
 
 
 @dataclass(frozen=True, slots=True)
-class AssistantSaid:
-    message: ToDesktop
+class VoiceShown:
+    """What the tray and the bar show of dictation, once listening has taken precedence."""
+
+    state: State
+
+
+@dataclass(frozen=True, slots=True)
+class JobChanged:
+    """The quick job dictation runs, for the bar; None once it has finished."""
+
+    job: Job | None
+
+
+@dataclass(frozen=True, slots=True)
+class Notified:
+    title: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecordingChanged:
+    recording: RecordingState
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +106,7 @@ class Indicated:
 @dataclass(frozen=True, slots=True)
 class LayoutReported:
     value: int
+    """The layout's raw `LayoutState`; an unknown value keeps the last known one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,19 +116,51 @@ class OverlayToggled:
 
 @dataclass(frozen=True, slots=True)
 class Problem:
+    """Something failed that the user should hear about; it is also logged."""
+
     message: str
 
 
-type Fact = AssistantSaid | MenuRequested | MenuChosen | SpecLoaded | Controlled | Indicated | LayoutReported | OverlayToggled | Problem
+type Fact = (
+    VoiceShown
+    | JobChanged
+    | Notified
+    | RecordingChanged
+    | MenuRequested
+    | MenuChosen
+    | SpecLoaded
+    | Controlled
+    | Indicated
+    | LayoutReported
+    | OverlayToggled
+    | Problem
+)
 
 # ---- requests: their own effect -----------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
-class Send:
-    """A command for the assistant; refused while it is unreachable."""
+class ShowVoice:
+    """Show `state` in the tray and the bar, unless listening takes precedence."""
 
-    command: ToAssistant
+    state: State
+
+
+@dataclass(frozen=True, slots=True)
+class ShowIdle:
+    """Show listening, ready or layout-off, whichever state the keys are in."""
+
+
+@dataclass(frozen=True, slots=True)
+class Record:
+    action: RecordingAction
+
+
+@dataclass(frozen=True, slots=True)
+class ExpireCapture:
+    """The control window's capture timer fired."""
+
+    at: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,7 +183,7 @@ class Quit:
     pass
 
 
-type Instruction = Send | RestoreTray | Chord | ToggleTaskbar | Quit
+type Instruction = ShowVoice | ShowIdle | Record | ExpireCapture | RestoreTray | Chord | ToggleTaskbar | Quit
 
 type Event = Fact | Instruction
 
@@ -166,10 +220,30 @@ class TrayShow:
 
 
 @dataclass(frozen=True, slots=True)
-class ShowViews:
-    """The views show what the assistant published."""
+class ShowActivity:
+    """The bar shows what dictation or a meeting is doing."""
 
-    message: ToDesktop
+    change: DictationShown | JobShown | RecordingShown
+
+
+@dataclass(frozen=True, slots=True)
+class HandleKey:
+    """A dictation or transcript key's edge, or its press from a menu."""
+
+    tool: Tool
+    down: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ToggleMeeting:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class UseLayout:
+    """Dictation follows the layout: it stops a capture when the layout goes off."""
+
+    on: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,7 +338,10 @@ type Effect = (
     | Beep
     | TrayNotify
     | TrayShow
-    | ShowViews
+    | ShowActivity
+    | HandleKey
+    | ToggleMeeting
+    | UseLayout
     | ShowMenu
     | Navigate
     | RecordUse
@@ -284,31 +361,46 @@ type Effect = (
 
 
 def tray_state(shown: Shown) -> State:
-    return State.RECORDING if shown.capturing else shown.state
+    return State.RECORDING if shown.recording.capturing else shown.state
 
 
-def _said(shown: Shown, message: ToDesktop) -> Shown:
-    match message:
-        case VoiceChanged(state=state):
-            return replace(shown, state=state)
-        case RecordingChanged(recording=recording):
-            return replace(shown, capturing=recording.capturing)
-        case _:
-            return shown
+def idle_state(*, listening: Tool | None, layout_on: bool) -> State:
+    """What the keys rest in: listening, ready, or the layout switched off."""
+    return State.LISTENING if listening is not None else State.READY if layout_on else State.LAYOUT_OFF
 
 
-def _requested(request: Request) -> Iterator[Effect]:
-    """A request the desktop owns: an app key, a window key or the switcher."""
+def recording_notice(prior: RecordingState, recording: RecordingState) -> Notified | None:
+    """A warning when a recording pauses, is interrupted, or a capture ends with a problem."""
+    failed_capture = prior.capturing and recording.phase == "finishing" and bool(recording.detail)
+    if (prior.phase != recording.phase and recording.phase in ("paused", "interrupted")) or failed_capture:
+        return Notified("Meeting transcript", recording.detail or "Recording was interrupted. Choose Open meeting transcripts for the saved part.")
+    return None
+
+
+def _requested(request: Request, *, down: bool) -> Iterator[Effect]:
+    """A key edge or a menu press: the desktop's own keys act on press, dictation's keys get both edges."""
     match request:
         case App():
-            yield Navigate(AppKey(request, Source.KEY))
-            yield RecordUse(f"app:{request.name}")
-        case Tool.WINDOW_SWITCHER:
-            yield SwitchWindows()
+            if down:
+                yield Navigate(AppKey(request, Source.KEY))
+                yield RecordUse(f"app:{request.name}")
         case Tool():
-            if (order := keyed(request)) is not None:
-                yield Navigate(order)
-            yield RecordUse(request.name.lower())
+            route = ROUTES[request]
+            match route:
+                case Route.HOLD | Route.TOGGLE | Route.TRANSCRIPT:
+                    yield HandleKey(request, down=down)
+                case _ if not down:
+                    pass
+                case Route.NAVIGATE:
+                    if (order := keyed(request)) is not None:
+                        yield Navigate(order)
+                    yield RecordUse(request.name.lower())
+                case Route.SWITCHER:
+                    yield SwitchWindows()
+                case Route.MEETING:
+                    yield ToggleMeeting()
+                case _:
+                    assert_never(route)
         case _:
             assert_never(request)
 
@@ -318,16 +410,9 @@ def _controlled(action: ControlAction | None, overlay: OverlayState) -> Iterator
         case PhysicalKey():
             yield PressedKeys(overlay.pressed, reset=action.reset)
         case FeatureRequest(request=request, down=down):
-            if down and owner(request) is Side.DESKTOP:
-                yield from _requested(request)
+            yield from _requested(request, down=down)
         case ChosenTool(tool=tool):
-            match owner(tool):
-                case Side.DESKTOP:
-                    yield from _requested(tool)
-                case Side.ASSISTANT:
-                    yield Send(UseTool(tool))
-                case _:
-                    assert_never(owner(tool))
+            yield from _requested(tool, down=True)
         case None:
             pass
         case _:
@@ -367,10 +452,8 @@ def _chosen(choice: int) -> Iterator[Effect]:
             yield ToggleLayout()
         case Menu.RESTART_LAYOUT:
             yield Launch("restart", ("layout",))
-        case Menu.RESTART_ASSISTANT:
-            yield Launch("restart", ("assistant",))
         case Menu.RESTART_DESKTOP:
-            # The launcher closes this program and starts it again; the assistant keeps working meanwhile.
+            # The launcher closes this program and starts it again.
             yield Launch("restart", ("desktop",))
         case Menu.OVERLAY:
             yield Fold(OverlayToggled())
@@ -379,9 +462,9 @@ def _chosen(choice: int) -> Iterator[Effect]:
         case Menu.TASKBAR:
             yield ToggleTaskbar()
         case Menu.MEETING:
-            yield Send(UseTool(Tool.MEETING_TOGGLE))
+            yield ToggleMeeting()
         case Menu.TRANSCRIPTS:
-            yield Send(Record("folder"))
+            yield Record("folder")
         case Menu.USAGE:
             yield OpenUsage()
         case Menu.LOGS:
@@ -396,15 +479,22 @@ def _chosen(choice: int) -> Iterator[Effect]:
 def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[Effect]:
     """The effects of `fact`, given the state before it and after it."""
     match fact:
-        case AssistantSaid(message):
-            if isinstance(message, Notify):
-                if message.warning:
-                    yield Beep()
-                yield TrayNotify(message.title, message.text, message.warning)
-            yield ShowViews(message)
+        case VoiceShown(shown):
+            yield ShowActivity(DictationShown(active=shown is State.LISTENING))
             yield TrayShow(tray_state(after.shown))
+        case JobChanged(job):
+            yield ShowActivity(JobShown(job))
+        case Notified(title, text):
+            yield TrayNotify(title, text, warning=False)
+        case RecordingChanged(recording):
+            yield ShowActivity(RecordingShown(recording))
+            yield TrayShow(tray_state(after.shown))
+            if (notice := recording_notice(state.shown.recording, recording)) is not None:
+                yield Beep()
+                yield TrayNotify(notice.title, notice.text, warning=True)
+            yield ShowIdle()
         case MenuRequested():
-            menu = MenuState(layout=state.layout, overlay_enabled=state.overlay.enabled, capturing=state.shown.capturing)
+            menu = MenuState(layout=state.layout, overlay_enabled=state.overlay.enabled, capturing=state.shown.recording.capturing)
             yield ShowMenu(menu, state.tray_spec)
         case MenuChosen(choice):
             yield from _chosen(choice)
@@ -422,6 +512,7 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
             yield LayoutShown(enabled=on)
             yield PressedKeys(after.overlay.pressed, reset=True)
             yield ShowOverlay(after.overlay)
+            yield UseLayout(on=on)
         case OverlayToggled():
             yield ShowOverlay(after.overlay)
             yield OverlayEnabled(enabled=after.overlay.enabled)
@@ -435,10 +526,10 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
 
 def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
     match fact:
-        case AssistantSaid(MicLevel(level=level)):
-            return replace(state, level=level)
-        case AssistantSaid(message):
-            return replace(state, shown=_said(state.shown, message))
+        case VoiceShown(shown):
+            return replace(state, shown=replace(state.shown, state=shown))
+        case RecordingChanged(recording):
+            return replace(state, shown=replace(state.shown, recording=recording))
         case SpecLoaded(spec):
             return replace(state, tray_spec=spec)
         case Controlled(action):
@@ -450,7 +541,7 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
             return replace(state, layout=layout, overlay=state.overlay.set_layout(on=layout is LayoutState.ON))
         case OverlayToggled():
             return replace(state, overlay=replace(state.overlay, enabled=not state.overlay.enabled))
-        case MenuRequested() | MenuChosen() | Problem():
+        case JobChanged() | Notified() | MenuRequested() | MenuChosen() | Problem():
             return state
         case _:
             assert_never(fact)
@@ -459,7 +550,7 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
 def transition(state: DesktopState, event: Event) -> tuple[DesktopState, Iterator[Effect]]:
     """The state after `event` and the effects it calls for, in order, produced lazily."""
     match event:
-        case Send() | RestoreTray() | Chord() | ToggleTaskbar() | Quit():
+        case ShowVoice() | ShowIdle() | Record() | ExpireCapture() | RestoreTray() | Chord() | ToggleTaskbar() | Quit():
             return state, iter((event,))
         case _:
             after = _remembered(state, event)
