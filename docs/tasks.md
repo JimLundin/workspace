@@ -40,8 +40,8 @@ Left:
   the notification observer uses), keeping a slow timer as a backstop.
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
   three meeting tests from the slow lists.
-- **An intermittent coordinator crash (`0xC0000409`) in the isolated selfcheck**
-  (2026-11-07): three of six full runs died about 96 s in, while
+- **An intermittent coordinator crash (`0xC0000409`)** in a full check
+  (2026-11-07, in the since-removed selfcheck runner): three of six full runs died about 96 s in, while
   `test_windows_browser` drove Edge; the rest passed or failed that test with
   "Navigation is still loading". It isn't tied to one commit. The isolated
   launcher now reports the status instead of overflowing `os._exit`.

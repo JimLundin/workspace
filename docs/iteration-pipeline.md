@@ -78,7 +78,7 @@ test over 3 s fails `--native` and `--full` by name unless `NATIVE_SLOW` lists
 it. Both lists have caps, so a new slow test means fixing another. `--native`
 adds the affected native modules and the slow tests. `--full` runs everything, natively, and types
 the whole tree: run it after broad native changes or before a merge.
-CI runs the full suite with `python -m scripts.selfcheck`.
+CI runs the full suite with `python -m scripts.check --full`, which skips the native tier off Windows.
 
 Any failure stops before a receipt. `--tests` runs exactly the named files and
 `tests/test_x.py::test_name` selectors, with no time budget.
@@ -102,7 +102,7 @@ Every check that reaches execution writes timing evidence to
 `%LOCALAPPDATA%\workspace\development\timings\check-*.json`, or to the path given
 with `--timings`. Each failure is listed with its node id and a short summary.
 Editing checks cache per-file policy observations under
-`%LOCALAPPDATA%\workspace\development\analysis`; `scripts.selfcheck` uses no cache.
+`%LOCALAPPDATA%\workspace\development\analysis`.
 
 Generated tests live in `tests/properties/` and need the `test` extra
 (`Dev.cmd setup` installs it, in the `dev` group).
