@@ -18,6 +18,7 @@ from contracts.capture import AudioSource
 from contracts.recording_state import RecordingState, RetryPolicy
 from tests.fake_endpoint import Received, Reply, fake_endpoint
 from tests.test_llm import settings
+from tests.waiting import until
 from winapi.pcm import RATE, LateAudio, Problem, Skipped, Stall
 
 SPEECH = array("h", [1400] * RATE).tobytes()
@@ -28,10 +29,7 @@ HANG = 60
 
 
 def wait_for(predicate: Callable[[], bool]) -> None:
-    deadline = time.monotonic() + HANG
-    while not predicate():
-        assert time.monotonic() < deadline, "The meeting worker did not reach the expected state."
-        time.sleep(0.01)
+    assert until(predicate, HANG), "The meeting worker did not reach the expected state."
 
 
 class GeneratedCapture:

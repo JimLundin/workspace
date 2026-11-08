@@ -1,22 +1,12 @@
 """The loopback link between the desktop and the assistant, over real sockets."""
 
 import threading
-import time
-from collections.abc import Callable
 from pathlib import Path
 
 from link.client import Client, Status
 from link.endpoint import Endpoint, publish
 from link.server import Server
-
-
-def until(condition: Callable[[], bool], seconds: float = 5.0) -> bool:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        if condition():
-            return True
-        time.sleep(0.01)
-    return False
+from tests.waiting import until
 
 
 class Peer:

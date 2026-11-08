@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 import unittest
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -21,6 +21,7 @@ from components import LAYOUT
 from desktop_ui.qt_runtime import prepare
 from protocol import MAGIC
 from tests.json_fixture import json_value
+from tests.waiting import until
 lazy from desktop_ui.qt_ui import application
 lazy from winapi import inputs, system, windows
 lazy from winapi._core import fn, kernel32, user32
@@ -47,16 +48,6 @@ SCANCODES = {
 }  # fmt: skip
 
 
-def wait_for(condition: Callable[[], bool], pump: Callable[[], None], seconds: float = 5) -> bool:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        pump()
-        if condition():
-            return True
-        time.sleep(0.02)
-    return False
-
-
 def layout_running() -> bool:
     lock = system.create_lock("Local\\miryoku")
     if lock is None:
@@ -75,9 +66,9 @@ def focus_fixture(handle: int) -> None:
 
 @contextmanager
 def layout() -> Generator[None]:
-    assert wait_for(lambda: not layout_running(), lambda: None), "a layout from before is still running"
+    assert until(lambda: not layout_running()), "a layout from before is still running"
     process = subprocess.Popen([sys.executable, "-m", "miryoku"], cwd=ROOT)
-    assert wait_for(lambda: windows.find(LAYOUT.window.title) is not None, lambda: None), "the layout didn't start"
+    assert until(lambda: windows.find(LAYOUT.window.title) is not None), "the layout didn't start"
     time.sleep(0.3)
     try:
         yield
@@ -118,17 +109,17 @@ def test_layout_types_colemak_dh_and_expands_snippets() -> None:
     with layout(), text_box() as (_root, entry):
         tap("2", "3", "4", "5")  # top row moved up: q w f p
         tap("q", "w", "e", "r")  # home row taps: a r s t
-        assert wait_for(lambda: entry.text() == "qwfparst", QtWidgets.QApplication.processEvents), entry.text()
+        assert until(lambda: entry.text() == "qwfparst", pump=QtWidgets.QApplication.processEvents), entry.text()
         tap(";", ";", "r", "l", "a")  # , , t h x: a snippet
         if UNDER_WINE:  # the trigger is erased; what's typed instead can't be checked here
-            assert wait_for(lambda: len(entry.text()) > len("qwfparst") and "," not in entry.text(), QtWidgets.QApplication.processEvents), (
+            assert until(lambda: len(entry.text()) > len("qwfparst") and "," not in entry.text(), pump=QtWidgets.QApplication.processEvents), (
                 entry.text()
             )
         else:
-            assert wait_for(lambda: entry.text() == "qwfparstThanks!", QtWidgets.QApplication.processEvents), entry.text()
+            assert until(lambda: entry.text() == "qwfparstThanks!", pump=QtWidgets.QApplication.processEvents), entry.text()
             assert windows.foreground() == int(_root.winId()), "Fixture lost focus; no text sent."
             inputs.type_text(" voice input", MAGIC)
-            assert wait_for(lambda: entry.text() == "qwfparstThanks! voice input", QtWidgets.QApplication.processEvents), entry.text()
+            assert until(lambda: entry.text() == "qwfparstThanks! voice input", pump=QtWidgets.QApplication.processEvents), entry.text()
 
 
 def input_response(body: bytes) -> int | str:
@@ -146,7 +137,7 @@ def test_mapped_typing_and_unicode_dictation_reach_a_real_console(tmp_path: Path
     console = subprocess.Popen([str(conhost), sys.executable, "-m", "tests.test_windows_e2e", "--console-fixture", str(result)], cwd=ROOT)
     handle: int | None = None
     try:
-        assert wait_for(lambda: windows.find("Workspace disposable console input") is not None, lambda: None)
+        assert until(lambda: windows.find("Workspace disposable console input") is not None)
         handle = windows.find("Workspace disposable console input")
         assert handle is not None
         with layout():
@@ -158,7 +149,7 @@ def test_mapped_typing_and_unicode_dictation_reach_a_real_console(tmp_path: Path
             assert windows.foreground() == handle, "Console fixture lost focus after dictation."
             tap("2", "3", "4", "5", "q", "w", "e", "r")
             inputs.type_text("\n", MAGIC)
-            assert wait_for(result.exists, lambda: None)
+            assert until(result.exists)
             assert json_value(result.read_text(encoding="utf-8")) == "qwfparst " + transcript + "qwfparst"
         console.wait(timeout=5)
     finally:

@@ -3,7 +3,6 @@
 import sys
 import time
 import unittest
-from collections.abc import Callable
 from pathlib import Path
 
 if sys.platform != "win32":
@@ -13,6 +12,7 @@ from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import application
 from desktop_ui.ui_spec import SpecError
 from desktop_ui.ui_spec_watch import SpecWatch
+from tests.waiting import until
 
 prepare()
 
@@ -35,17 +35,6 @@ def install(folder: Path, text: str) -> None:
             time.sleep(0.05)
 
 
-def until(condition: Callable[[], bool], seconds: float = 5.0) -> bool:
-    app = application()
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        app.processEvents()
-        if condition():
-            return True
-        time.sleep(0.02)
-    return False
-
-
 def test_installed_edits_apply_and_a_broken_one_keeps_the_last_good_spec(tmp_path: Path) -> None:
     # Defects: a replaced file is no longer watched, so the second install never
     # applies; or a spec that fails its checks is applied instead of reported.
@@ -62,13 +51,13 @@ def test_installed_edits_apply_and_a_broken_one_keeps_the_last_good_spec(tmp_pat
     watch = SpecWatch[str].start(tmp_path, load, load(), applied.append, problems.append)
     try:
         install(tmp_path, "HEIGHT = 36\n")
-        assert until(lambda: len(applied) == 1)
+        assert until(lambda: len(applied) == 1, pump=application().processEvents)
         assert applied[0] == "HEIGHT = 36\n"
         install(tmp_path, "HEIGHT = -6\n")
-        assert until(lambda: len(problems) == 1)
+        assert until(lambda: len(problems) == 1, pump=application().processEvents)
         assert "height" in problems[0] and len(applied) == 1
         install(tmp_path, "HEIGHT = 38\n")
-        assert until(lambda: len(applied) == 2)
+        assert until(lambda: len(applied) == 2, pump=application().processEvents)
         assert applied[1] == "HEIGHT = 38\n"
     finally:
         watch.close()

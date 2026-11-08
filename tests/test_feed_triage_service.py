@@ -1,7 +1,6 @@
 """Automatic coalescing and the actual local voice-agent bridge, with fictional sources."""
 
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -26,6 +25,7 @@ from tests.feed_source_fixture import captured, screening_reply
 from tests.json_fixture import json_object, json_rows, json_text
 from tests.test_feed_triage import output
 from tests.test_work_actions import claimed
+from tests.waiting import until
 from winapi.system_notices import NoticeKey
 lazy from assistant.feed_agent_tools import SPECS
 lazy from tests.test_agent import ToolRig, durable
@@ -92,10 +92,7 @@ def test_dismissal_is_durable_and_a_failed_save_keeps_the_item_visible(tmp_path:
 
 
 def wait_until(check: Callable[[], bool]) -> None:
-    until = time.monotonic() + 7
-    while not check():
-        assert time.monotonic() < until, "The unattended triage did not finish."
-        time.sleep(0.03)
+    assert until(check, 7), "The unattended triage did not finish."
 
 
 def test_only_reviewed_actionable_notifications_activate_work_with_retry(tmp_path: Path) -> None:
