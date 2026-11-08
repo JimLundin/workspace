@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import override
 from unittest import TestCase
 
 from pydantic import TypeAdapter
@@ -175,6 +176,7 @@ def test_failed_feed_save_cannot_start_reply_work_and_failed_queue_keeps_retryab
     item = decode(output(([source.identity], "action")), (source,))[0]
 
     class FailedStore(MemoryStore):
+        @override
         def write(self, state: StoredBoard) -> None:
             raise OSError("Storage unavailable")
 

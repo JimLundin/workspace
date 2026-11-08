@@ -91,6 +91,7 @@ typeshedPath = "typings/.workspace-typeshed"
 pythonVersion = "3.15"
 pythonPlatform = "Windows"
 typeCheckingMode = "strict"
+reportImplicitOverride = "error"
 exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
 
 [tool.ruff]

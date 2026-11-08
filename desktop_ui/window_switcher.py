@@ -1,7 +1,7 @@
 """A searchable window list, independent of the window manager and its workspaces."""
 
 from collections.abc import Callable, Sequence
-from typing import Final
+from typing import Final, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -36,9 +36,11 @@ class _Rows(QtWidgets.QStyledItemDelegate):
         self.theme: Tokens = theme
         self.rows: QtWidgets.QListWidget = parent
 
+    @override
     def sizeHint(self, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex | QtCore.QPersistentModelIndex) -> QtCore.QSize:
         return QtCore.QSize(option.rect.width(), _ROW)
 
+    @override
     def paint(
         self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex | QtCore.QPersistentModelIndex
     ) -> None:
@@ -163,6 +165,7 @@ class WindowSwitcher(QtWidgets.QDialog):
             self.close()
             self.focus_window(handle)
 
+    @override
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
         if event.type() == QtCore.QEvent.Type.KeyPress and isinstance(event, QtGui.QKeyEvent):
             key = event.key()
@@ -173,6 +176,7 @@ class WindowSwitcher(QtWidgets.QDialog):
                 return True
         return super().eventFilter(watched, event)
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         # A frameless translucent window has no system shadow; paint a soft one under the panel.
         painter = QtGui.QPainter(self)

@@ -7,6 +7,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import override
 
 from assistant.agent import Agent
 from assistant.llm import Settings
@@ -234,6 +235,7 @@ def test_a_tool_is_shown_running_before_it_returns_and_completes_the_same_row(tm
     panel = ObservedWindow.of(stop.set)
 
     class HeldClipboard(FakeMachine):
+        @override
         def get_clipboard(self) -> str:
             entered.set()
             assert release.wait(timeout=5)

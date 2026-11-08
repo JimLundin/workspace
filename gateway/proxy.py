@@ -12,7 +12,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Final, assert_never
+from typing import Final, assert_never, override
 from urllib.parse import urlsplit
 
 from pydantic import TypeAdapter
@@ -160,6 +160,7 @@ def _handler(relay: Callable[[BaseHTTPRequestHandler], None]) -> type[BaseHTTPRe
         def do_DELETE(self) -> None:
             relay(self)
 
+        @override
         def log_message(self, format: str, *args: object) -> None:
             """Requests are not logged: their paths and timing are the clients' to record."""
 

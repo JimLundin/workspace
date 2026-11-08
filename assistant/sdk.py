@@ -154,6 +154,7 @@ class Hooks(RunHooks["Agent"]):
         context.context.mark("startup_seconds")
         context.context.log.step("Waiting for the model...")
 
+    @override
     async def on_llm_end(self, context: RunContextWrapper[Agent], agent: agents.Agent[Agent], response: ModelResponse) -> None:
         self.awaiting_model = False
         context.context.mark("first_response_seconds")

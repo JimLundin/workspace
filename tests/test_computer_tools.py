@@ -4,6 +4,7 @@ import json
 import threading
 import time
 from pathlib import Path
+from typing import override
 
 from assistant.agent import Agent
 from assistant.llm import Settings, ToolCall
@@ -109,6 +110,7 @@ def test_disabled_context_does_not_capture_or_add_observations_to_the_request(tm
 
 def test_unavailable_screen_context_keeps_the_request_and_activity_usable(tmp_path: Path) -> None:
     class LockedDesktop(FakeMachine):
+        @override
         def screenshot(self, *, area: Rect | None = None, handle: int = 0, monitor: int = -1, longest: int = 1280) -> tuple[bytes, Shot]:
             raise OSError("The desktop is locked.")
 

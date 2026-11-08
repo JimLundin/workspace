@@ -8,7 +8,7 @@ questions and recent notices together as one-line rows.
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import assert_never
+from typing import assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -176,6 +176,7 @@ class InboxRow(KeyboardFocus):
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.clicked.connect(lambda: panel.choose(self.row))
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         if self.look is None:
             return

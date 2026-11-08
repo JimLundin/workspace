@@ -1,6 +1,7 @@
 """Qt owns connector paths; their factual reasons come from the work catalog."""
 
 from collections.abc import Callable
+from typing import override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -45,6 +46,7 @@ class ConnectionPath(QtWidgets.QGraphicsPathItem):
         midpoint = path.pointAtPercent(0.5)
         self.caption.setPos(midpoint.x() - self.caption.boundingRect().width() / 2, midpoint.y() - 20)
 
+    @override
     def contextMenuEvent(self, event: QtWidgets.QGraphicsSceneContextMenuEvent) -> None:
         match self.connection:
             case RelationConnection(relation=relation):

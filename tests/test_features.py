@@ -3,7 +3,7 @@
 import json
 import time
 from collections.abc import Callable, Mapping
-from typing import cast
+from typing import cast, override
 
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
@@ -177,6 +177,7 @@ def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> N
             super().__init__()
             self.refusing = True
 
+        @override
         def set_clipboard(self, text: str) -> None:
             if self.refusing:
                 raise OSError("Busy")
@@ -220,6 +221,7 @@ def test_space_release_does_not_stop_dictation_started_with_the_toggle() -> None
 
 def test_unexpected_input_error_recovers_and_identifies_the_failed_phase() -> None:
     class BrokenInput(FakeDesktop):
+        @override
         def type_text(self, text: str) -> None:
             raise RuntimeError("Sensitive transcript must not enter diagnostics")
 
@@ -283,6 +285,7 @@ def test_unexpected_microphone_stop_error_clears_capture_and_allows_another_reco
             super().__init__()
             self.broken = True
 
+        @override
         def stop_listening(self) -> bytes:
             if self.broken:
                 raise RuntimeError("Device crashed")

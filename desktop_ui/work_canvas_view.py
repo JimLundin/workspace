@@ -84,6 +84,7 @@ class CanvasText(QtWidgets.QGraphicsRectItem):
             self.qt.endLayout()
         self.lines, self.observed = lines, observed
 
+    @override
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
         painter.save()
         painter.setClipRect(self.rect())
@@ -121,6 +122,7 @@ class CanvasHeading(QtWidgets.QGraphicsRectItem):
             return self.value
         return QtGui.QFontMetricsF(face(self.role)).elidedText(self.value, Qt.TextElideMode.ElideRight, round(self.rect().width()))
 
+    @override
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
         painter.save()
         painter.setClipRect(self.rect())
@@ -255,6 +257,7 @@ class CanvasCard(CanvasBubble):
         if self.contents is not None:
             self.contents.resize(bounds.width() - 2 * PADDING)
 
+    @override
     def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionGraphicsItem, widget: QtWidgets.QWidget | None = None) -> None:
         self.paint_bubble(painter)
         paint_badges(painter, source_origins(self.content), QtCore.QPointF(PADDING, TOP), self.surface_color())
@@ -346,6 +349,7 @@ class CanvasViewport(QtWidgets.QGraphicsView):
         target = max(0.15, min(1.6, current * factor))
         self.scale(target / current, target / current)
 
+    @override
     def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
         delta = event.pixelDelta() if not event.pixelDelta().isNull() else event.angleDelta()
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:

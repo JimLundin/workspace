@@ -3,6 +3,7 @@ with `pytest`."""
 
 import unittest
 from dataclasses import replace
+from typing import override
 
 from miryoku.engine import (
     DEFAULT_CONFIGURATION,
@@ -258,6 +259,7 @@ def test_release_all_lets_go() -> None:
 def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() -> None:
     # Defect: one rejected release stops the cleanup before a held voice request ends.
     class RejectedRelease(FakeHost):
+        @override
         def send(self, key: Key | Mod, *, down: bool) -> None:
             super().send(key, down=down)
             if not down and key is Key.A:
@@ -278,6 +280,7 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
 
 def test_rejected_modifier_release_does_not_skip_remaining_modifiers() -> None:
     class RejectedModifier(FakeHost):
+        @override
         def send(self, key: Key | Mod, *, down: bool) -> None:
             super().send(key, down=down)
             if key is Mod.SHIFT:

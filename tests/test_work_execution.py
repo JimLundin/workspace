@@ -4,6 +4,7 @@ import json
 import threading
 import time
 from pathlib import Path
+from typing import override
 
 from assistant.agent import Agent
 from assistant.agent_execution import AgentExecution
@@ -46,6 +47,7 @@ def execution(settings: Settings, errors: list[str]) -> AgentExecution:
 
 
 class BrokenResultLog(FakeWindow):
+    @override
     def done(self, text: str, /) -> None:
         raise ValueError("Private mail content must stay out of operational diagnostics")
 

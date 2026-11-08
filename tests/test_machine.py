@@ -2,6 +2,7 @@
 
 import threading
 import unittest
+from typing import override
 
 from pydantic import TypeAdapter
 
@@ -131,6 +132,7 @@ def test_screenshot_sources_use_physical_bounds_and_scale_only_the_image() -> No
     work = Rect(-1700, 100, -900, 700)
 
     class CaptureDesktop(Desktop):
+        @override
         def capture(self, area: Rect, longest: int) -> tuple[bytes, Shot]:
             size = fit(area.size, longest)
             return b"fixture", Shot(area, size.width, size.height)

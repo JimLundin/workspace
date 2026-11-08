@@ -5,6 +5,7 @@ import io
 import sys
 from collections.abc import Iterable
 from pathlib import Path
+from typing import override
 
 from scripts.architecture import Report
 from scripts.check import (
@@ -146,6 +147,7 @@ def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(
     name = "tests/properties/test_order.py"
 
     class PropertyRuntime(SourceFixture):
+        @override
         def load(self, module: str) -> object:
             if module == "tests.properties.test_order":
                 return module_fixture

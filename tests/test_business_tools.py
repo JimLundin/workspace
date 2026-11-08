@@ -3,7 +3,7 @@
 import threading
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, cast, override
 
 from pydantic import TypeAdapter
 
@@ -94,6 +94,7 @@ class AppMachine(FakeMachine):
         self.receipts: frozendict[object, object] = frozendict(receipts)
         self.requests: list[tuple[object, Located]] = []
 
+    @override
     def web_app[Q: Located, R](self, operation: WebAppOperation[Q, R], query: Q, cancel: threading.Event) -> R:
         self.log.append("web_app " + query.target_id)
         self.requests.append((operation, query))

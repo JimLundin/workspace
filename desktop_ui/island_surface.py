@@ -225,6 +225,7 @@ class ControlButton(KeyboardFocus):
     def pressed_control(self) -> None:
         self.capsule.press(self.control.action)
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
@@ -319,17 +320,20 @@ class MenuCell(QtWidgets.QAbstractButton):
             case _:
                 pass
 
+    @override
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mousePressEvent(event)
         self.slide(event.position())
         event.accept()  # A miss on a cell stays in the menu, rather than reaching the capsule beneath it.
 
+    @override
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseMoveEvent(event)
         if event.buttons() & Qt.MouseButton.LeftButton:
             self.slide(event.position())
         event.accept()
 
+    @override
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
         match self.tile.cell.entry:
@@ -339,10 +343,12 @@ class MenuCell(QtWidgets.QAbstractButton):
                 pass
         event.accept()
 
+    @override
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
         self.capsule.window_.owner.select(self.tile.index)
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
@@ -648,16 +654,19 @@ class Capsule(KeyboardFocus):
                 case _:
                     pass
 
+    @override
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
         self.window_.owner.hover(self.key)
         self.update()
 
+    @override
     def leaveEvent(self, event: QtCore.QEvent) -> None:
         super().leaveEvent(event)
         self.window_.owner.hover(None)
         self.update()
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
@@ -999,6 +1008,7 @@ class BarWindow(QtWidgets.QWidget):
         progress = self.wave_progress
         return (before + (after - before) * progress for before, after in zip(self.wave_from, self.samples, strict=True))
 
+    @override
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         keys = {
             Qt.Key.Key_Up: island_menu.Key.UP,

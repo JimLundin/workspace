@@ -7,7 +7,7 @@ they're hidden.
 """
 
 from dataclasses import dataclass, field, replace
-from typing import Final, Protocol, assert_never
+from typing import Final, Protocol, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -173,6 +173,7 @@ class BadgeWindow(QtWidgets.QWidget):
         self.resize(badge_width(keycaps, QtGui.QFontMetricsF(letter_face())), HEIGHT)
         self.update()
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)

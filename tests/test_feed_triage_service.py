@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
+from typing import override
 
 from assistant.communications import Activity, Feed, TeamsActivity, Update, WindowsNotice
 from assistant.feed_contracts import ChooseSolution, DismissItem, Disposition, ReadFeed, RejectProposal, SaveRule, StoredBoard
@@ -77,6 +78,7 @@ def test_dismissal_is_durable_and_a_failed_save_keeps_the_item_visible(tmp_path:
         restarted.triage.close()
 
     class BrokenStore(MemoryStore):
+        @override
         def write(self, state: StoredBoard) -> None:
             raise OSError("Fictional storage failure")
 

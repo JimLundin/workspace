@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Callable, Sequence
+from typing import override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -95,10 +96,12 @@ class Window(QtWidgets.QWidget):
     def escaped(self) -> None:
         self.on_close()
 
+    @override
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         event.ignore()
         self.on_close()
 
+    @override
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
         self.geometry_changed.emit()
@@ -132,6 +135,7 @@ class Editor(QtWidgets.QPlainTextEdit):
         self.setTabChangesFocus(True)
         self.setMinimumHeight(60)
 
+    @override
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
         send = (

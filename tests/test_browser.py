@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import cast, override
 from unittest import SkipTest, TestCase
 
 from pydantic import TypeAdapter
@@ -162,6 +162,7 @@ def test_background_activity_resumes_a_frozen_page_before_running_work(tmp_path:
             )
             self.running = False
 
+        @override
         def send(self, message: str) -> None:
             super().send(message)
             command = decoded(message)
@@ -518,6 +519,7 @@ def test_browser_canceled_capture_closes_only_its_owned_browser(tmp_path: Path) 
             )
             self.stop = stop
 
+        @override
         def recv(self, timeout: float) -> str | bytes:
             if self.sent[-1]["method"] == "Page.captureScreenshot":
                 self.stop.set()

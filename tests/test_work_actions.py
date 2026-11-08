@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 from unittest import TestCase
 
 from assistant.agent import Agent
@@ -197,6 +198,7 @@ class StoppingStore(TaskStore):
         super().__init__(path)
         self.stop = stop
 
+    @override
     def begin_action(self, run: RunRef, action_id: str, specification: ActionSpec, *, at: float) -> Action | None:
         result = super().begin_action(run, action_id, specification, at=at)
         self.stop.set()

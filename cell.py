@@ -12,6 +12,7 @@ an owner that updates from several threads serializes those updates itself.
 """
 
 from collections.abc import Callable
+from typing import override
 
 
 class Cell[T]:
@@ -31,5 +32,6 @@ class Cell[T]:
         self._value = value = change(self._value)
         return value
 
+    @override
     def __repr__(self) -> str:
         return f"Cell({self._value!r})"

@@ -8,6 +8,7 @@ import wave
 from array import array
 from collections.abc import Callable
 from pathlib import Path
+from typing import override
 from unittest import TestCase
 
 from assistant.llm import Failure
@@ -538,6 +539,7 @@ def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_pa
     requests = 0
 
     class DelayedArchive(MeetingArchive):
+        @override
         def create(self, source: AudioSource, title: str = "Meeting") -> MeetingStore:
             if title == "Second":
                 creating.set()

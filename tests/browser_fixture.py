@@ -6,6 +6,7 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import override
 from urllib.parse import urlsplit
 
 PAGE = """<!doctype html><meta charset="utf-8"><title>Workspace browser fixture</title>
@@ -66,6 +67,7 @@ def fixture(page: str = PAGE, *, pages: Mapping[str, str | Attachment] | None = 
                 self.end_headers()
                 self.wfile.write(data)
 
+        @override
         def log_message(self, format: str, *args: object) -> None:
             pass
 

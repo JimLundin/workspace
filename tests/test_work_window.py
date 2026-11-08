@@ -4,6 +4,7 @@ import threading
 from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
+from typing import override
 
 from contracts.task import (
     Question,
@@ -89,6 +90,7 @@ class DeferredWorkView(RecordingWorkView):
         super().__init__()
         self.on_presented: Callable[[], None] | None = None
 
+    @override
     def show(self, *, focus: bool = True, on_presented: Callable[[], None] | None = None) -> None:
         super().show(focus=focus)
         self.on_presented = on_presented
@@ -201,6 +203,7 @@ def test_loading_event_delivery_cannot_create_a_second_view() -> None:
     creations: list[WorkView] = []
 
     class ReentrantOpening(RecordingOpening):
+        @override
         def show(self) -> None:
             super().show()
             work.show(focus=False)

@@ -3,7 +3,7 @@
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Final, assert_never
+from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -106,6 +106,7 @@ class KeymapCanvas(QtWidgets.QWidget):
             if name in self.boxes:
                 self.update(self.boxes[name].toAlignedRect())
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
@@ -167,15 +168,18 @@ class OverlayHandle(QtWidgets.QWidget):
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.adjustSize()
 
+    @override
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag.start(self.read_cursor())
             self.grabMouse()
 
+    @override
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         # The saved overlay position and native moves use physical pixels.
         self.drag.move(self.read_cursor())
 
+    @override
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         self.releaseMouse()
         self.drag.end()

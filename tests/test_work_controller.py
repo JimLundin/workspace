@@ -6,6 +6,7 @@ from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
+from typing import override
 
 import contracts.task
 from automation.controller import ControllerSnapshot, Fault, Idle, Stopping, WorkController
@@ -345,6 +346,7 @@ def test_wakeup_uses_supplied_time_and_an_until_wait_releases_other_work(tmp_pat
 
 
 class FailingFinishStore(TaskStore):
+    @override
     def finish(self, run: RunRef, outcome: contracts.task.Outcome, *, at: float) -> Task | None:
         raise OSError("The journal cannot commit the outcome.")
 

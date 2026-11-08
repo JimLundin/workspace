@@ -45,6 +45,7 @@ class CanvasFrame(Window):
     def escaped(self) -> None:
         self.navigate()
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
@@ -102,6 +103,7 @@ class GlassCapsule(QtWidgets.QFrame):
         control.setIconSize(QtCore.QSize(16, 16))
         return control
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         paint_glass(painter, self.glass(), self.surface)
@@ -213,6 +215,7 @@ class CanvasToolbar(GlassCapsule):
         control.clicked.connect(lambda: perform(tile.act))
         return control
 
+    @override
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         if event.button() is Qt.MouseButton.LeftButton and self.glass().contains(event.position()):
             self.window().windowHandle().startSystemMove()
@@ -229,6 +232,7 @@ class ScrollEdge(QtWidgets.QWidget):
         self.theme: Tokens = theme
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
+    @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         paint_scroll_edge(painter, QtCore.QRectF(self.rect()), self.theme)
@@ -240,6 +244,7 @@ class CanvasSurface(QtWidgets.QWidget):
 
     resized = QtCore.Signal()
 
+    @override
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
         self.resized.emit()

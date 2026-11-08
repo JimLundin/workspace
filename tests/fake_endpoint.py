@@ -6,6 +6,7 @@ from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import override
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +79,7 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
             self.end_headers()
             self.wfile.write(reply.body)
 
+        @override
         def log_message(self, format: str, *args: object) -> None:
             pass
 
