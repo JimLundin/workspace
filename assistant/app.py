@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Final, assert_never
 
 import components
+import diagnostics
 import usage
 from assistant.activity import ActivityTracker
 from assistant.control import (
@@ -161,11 +162,7 @@ WM_EVENTS: Final = system.WM_APP + 21
 
 
 def log(text: str) -> None:
-    """The assistant's own log: problems and crashes (there's no console under pythonw)."""
-    with contextlib.suppress(OSError):
-        LOG.parent.mkdir(parents=True, exist_ok=True)
-        with LOG.open("a", encoding="utf-8") as file:
-            file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
+    diagnostics.append(LOG, text)
 
 
 # ---- the request context ---------------------------------------------------------------

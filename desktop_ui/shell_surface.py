@@ -140,19 +140,19 @@ class ShellButton(KeyboardFocus):
 
     @override
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() is Qt.MouseButton.RightButton:
-            self.choose(Click.RIGHT)
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
+        self._choose_on(event, Qt.MouseButton.RightButton, Click.RIGHT, super().mouseReleaseEvent)
 
     @override
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() is Qt.MouseButton.LeftButton:
-            self.choose(Click.DOUBLE)
+        self._choose_on(event, Qt.MouseButton.LeftButton, Click.DOUBLE, super().mouseDoubleClickEvent)
+
+    def _choose_on(self, event: QtGui.QMouseEvent, button: Qt.MouseButton, click: Click, otherwise: Callable[[QtGui.QMouseEvent], None]) -> None:
+        """Choose `click` for `button`; Qt handles any other button."""
+        if event.button() is button:
+            self.choose(click)
             event.accept()
         else:
-            super().mouseDoubleClickEvent(event)
+            otherwise(event)
 
     def paint_glyph(self, painter: QtGui.QPainter, name: str, face: QtCore.QRectF) -> None:
         appearance = self.section.appearance

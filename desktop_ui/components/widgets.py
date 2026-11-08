@@ -165,15 +165,15 @@ def replace_text(widget: QtWidgets.QPlainTextEdit, value: str) -> None:
     widget.verticalScrollBar().setValue(scroll)
 
 
-def row(parent: QtWidgets.QWidget | None = None) -> QtWidgets.QHBoxLayout:
-    layout = QtWidgets.QHBoxLayout(parent) if parent is not None else QtWidgets.QHBoxLayout()
+def _spaced[L: QtWidgets.QBoxLayout](layout: L, spacing: int) -> L:
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(8)
+    layout.setSpacing(spacing)
     return layout
+
+
+def row(parent: QtWidgets.QWidget | None = None) -> QtWidgets.QHBoxLayout:
+    return _spaced(QtWidgets.QHBoxLayout(parent) if parent is not None else QtWidgets.QHBoxLayout(), 8)
 
 
 def column(parent: QtWidgets.QWidget | None = None) -> QtWidgets.QVBoxLayout:
-    layout = QtWidgets.QVBoxLayout(parent) if parent is not None else QtWidgets.QVBoxLayout()
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(10)
-    return layout
+    return _spaced(QtWidgets.QVBoxLayout(parent) if parent is not None else QtWidgets.QVBoxLayout(), 10)

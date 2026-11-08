@@ -106,23 +106,22 @@ class Observed:
         return source_revision(self.title, self.excerpt, self.url)
 
 
-def teams_source(identity: str, details: tuple[str, str, str], at: float) -> TeamsSource:
-    seen = Observed.of(details, "Teams")
-    return TeamsSource(source_id(SourceKind.TEAMS, identity), identity, seen.title, seen.excerpt, seen.url, seen.revision, at)
+_APPLICATIONS: Final = frozendict(
+    {TeamsSource: (SourceKind.TEAMS, "Teams"), OutlookSource: (SourceKind.OUTLOOK, "Outlook"), KanbanSource: (SourceKind.KANBAN, "Kanban")}
+)
+"""Each application's source kind and the title an untitled observation falls back to."""
 
 
-def outlook_source(identity: str, details: tuple[str, str, str], at: float) -> OutlookSource:
-    seen = Observed.of(details, "Outlook")
-    return OutlookSource(source_id(SourceKind.OUTLOOK, identity), identity, seen.title, seen.excerpt, seen.url, seen.revision, at)
-
-
-def kanban_source(identity: str, details: tuple[str, str, str], at: float) -> KanbanSource:
-    seen = Observed.of(details, "Kanban")
-    return KanbanSource(source_id(SourceKind.KANBAN, identity), identity, seen.title, seen.excerpt, seen.url, seen.revision, at)
+def application_source[S: ApplicationSource](source: type[S], identity: str, details: tuple[str, str, str], at: float) -> S:
+    kind, fallback = _APPLICATIONS[source]
+    seen = Observed.of(details, fallback)
+    return source(source_id(kind, identity), identity, seen.title, seen.excerpt, seen.url, seen.revision, at)
 
 
 def board_sources(board: Board, tab: Tab, at: float) -> tuple[KanbanSource, ...]:
-    return tuple(kanban_source(card.task_id, (card.title, f"Board column: {card.column}\n{card.text}", tab.url), at) for card in board.tasks)
+    return tuple(
+        application_source(KanbanSource, card.task_id, (card.title, f"Board column: {card.column}\n{card.text}", tab.url), at) for card in board.tasks
+    )
 
 
 def teams_sources(teams: TeamsPage, tab: Tab, at: float) -> tuple[TeamsSource, ...]:
@@ -131,7 +130,7 @@ def teams_sources(teams: TeamsPage, tab: Tab, at: float) -> tuple[TeamsSource, .
     if not teams.current or not teams.messages:
         return ()
     text = "\n\n".join(f"{message.sender}: {message.text}" for message in teams.messages[-20:])[-6000:]
-    conversation = teams_source(teams.current, (teams.title or "Teams conversation", text, tab.url), at)
+    conversation = application_source(TeamsSource, teams.current, (teams.title or "Teams conversation", text, tab.url), at)
     return (conversation, *message_sources(conversation, teams.messages[-20:]))
 
 
@@ -145,7 +144,8 @@ def outlook_sources(outlook: Mailbox, tab: Tab, at: float) -> tuple[OutlookSourc
     mailbox = f"https://{origin.hostname}/mail/"
     selected = outlook.selected
     sources = tuple(
-        outlook_source(
+        application_source(
+            OutlookSource,
             mail.conversation_id,
             (selected.subject, selected.text, tab.url)
             if selected is not None and selected.conversation_id == mail.conversation_id and selected.text
@@ -157,7 +157,7 @@ def outlook_sources(outlook: Mailbox, tab: Tab, at: float) -> tuple[OutlookSourc
     # A selected pane is independent of pagination/virtualized list rows. Its
     # actual body remains evidence even when its row is not on this page.
     if selected is not None and selected.text and selected.conversation_id not in {mail.conversation_id for mail in outlook.conversations}:
-        sources = (*sources, outlook_source(selected.conversation_id, (selected.subject, selected.text, tab.url), at))
+        sources = (*sources, application_source(OutlookSource, selected.conversation_id, (selected.subject, selected.text, tab.url), at))
     conversation = next((source for source in sources if selected is not None and source.identity == selected.conversation_id), None)
     return (*sources, *message_sources(conversation, selected.messages)) if conversation is not None and selected is not None else sources
 

@@ -13,13 +13,13 @@ import os
 import queue
 import subprocess
 import threading
-import time
 import traceback
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Final, assert_never
 
 import components
+import diagnostics
 import launch
 import usage
 from cell import Cell
@@ -110,11 +110,7 @@ WM_EVENTS: Final = system.WM_APP + 22
 
 
 def log(text: str) -> None:
-    """The desktop's own log: problems and crashes (there's no console under pythonw)."""
-    with contextlib.suppress(OSError):
-        LOG.parent.mkdir(parents=True, exist_ok=True)
-        with LOG.open("a", encoding="utf-8") as file:
-            file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
+    diagnostics.append(LOG, text)
 
 
 def indicator_area() -> Rect:

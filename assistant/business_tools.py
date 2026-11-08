@@ -83,46 +83,51 @@ def spec[T](name: str, description: str, shape: type[T]) -> ToolSpec:
 # identities, never task fields, conversation text or mail.
 
 
+def _confirmed(readback: str, kind: str, identity: str, *, confirmed: bool) -> Outcome:
+    """The page's readback of what an action changed, verified against the request."""
+    return ActionVerified(readback + " confirmed " + target(kind, identity)) if confirmed else _UNCONFIRMED
+
+
 def _task_edited(query: TaskEdit, result: TaskEdited) -> Outcome:
-    if (result.task_id, result.field, result.value) == (query.task_id, query.field, query.value):
-        return ActionVerified("Saved field readback confirmed " + target("kanban-task", result.task_id))
-    return _UNCONFIRMED
+    return _confirmed(
+        "Saved field readback",
+        "kanban-task",
+        result.task_id,
+        confirmed=(result.task_id, result.field, result.value) == (query.task_id, query.field, query.value),
+    )
 
 
 def _task_moved(query: TaskMove, result: TaskMoved) -> Outcome:
-    if (result.task_id, result.column) == (query.task_id, query.column):
-        return ActionVerified("Destination column confirmed " + target("kanban-task", result.task_id))
-    return _UNCONFIRMED
+    return _confirmed("Destination column", "kanban-task", result.task_id, confirmed=(result.task_id, result.column) == (query.task_id, query.column))
 
 
 def _comment_posted(query: TaskComment, result: CommentPosted) -> Outcome:
-    if (result.task_id, result.text) == (query.task_id, query.text):
-        return ActionVerified("Posted comment readback confirmed " + target("kanban-task", result.task_id))
-    return _UNCONFIRMED
+    return _confirmed(
+        "Posted comment readback", "kanban-task", result.task_id, confirmed=(result.task_id, result.text) == (query.task_id, query.text)
+    )
 
 
 def _chat_opened(query: ChatQuery, result: ChatOpened) -> Outcome:
-    if result.chat_id == query.chat_id:
-        return ActionVerified("Selected conversation confirmed " + target("teams-chat", result.chat_id))
-    return _UNCONFIRMED
+    return _confirmed("Selected conversation", "teams-chat", result.chat_id, confirmed=result.chat_id == query.chat_id)
 
 
 def _chat_drafted(query: ChatDraft, result: ChatDrafted) -> Outcome:
-    if (result.chat_id, result.text) == (query.chat_id, query.text):
-        return ActionVerified("Exact unsent editor draft confirmed " + target("teams-chat", result.chat_id))
-    return _UNCONFIRMED
+    return _confirmed(
+        "Exact unsent editor draft", "teams-chat", result.chat_id, confirmed=(result.chat_id, result.text) == (query.chat_id, query.text)
+    )
 
 
 def _mail_opened(query: MailQuery, result: MailOpened) -> Outcome:
-    if result.conversation_id == query.conversation_id:
-        return ActionVerified("Selected mail confirmed " + target("outlook-conversation", result.conversation_id))
-    return _UNCONFIRMED
+    return _confirmed("Selected mail", "outlook-conversation", result.conversation_id, confirmed=result.conversation_id == query.conversation_id)
 
 
 def _mail_drafted(query: MailDraft, result: MailDrafted) -> Outcome:
-    if (result.conversation_id, result.text) == (query.conversation_id, query.text):
-        return ActionVerified("Exact unsent reply editor confirmed " + target("outlook-conversation", result.conversation_id))
-    return _UNCONFIRMED
+    return _confirmed(
+        "Exact unsent reply editor",
+        "outlook-conversation",
+        result.conversation_id,
+        confirmed=(result.conversation_id, result.text) == (query.conversation_id, query.text),
+    )
 
 
 def _document_opened(query: MailDocument, result: DocumentOpened) -> Outcome:

@@ -24,7 +24,7 @@ from assistant.agent_tools import (
     typed_classification,
     typed_run,
 )
-from assistant.uia import Act, Inspect
+from assistant.uia import Act, Inspect, UiRequest
 from automation.actions import Change, Classification, Evidence, Observation, Operation, target
 from automation.activity import ContextSnapshot
 from automation.execution import ProofRule, Readback, Targets
@@ -431,13 +431,8 @@ class Desktop:
             snapshot = self.context()
             handle = snapshot.window.handle if snapshot is not None and snapshot.window is not None else 0
         inspection = Inspect(handle, request.query, request.limit, request.depth, request.offset)
-
-        def read() -> Output:
-            code, text = self.session.machine.inspect_ui(inspection, self.session.stop)
-            return Output(text, ok=code == 0)
-
         # The resolved work window is the inspection's evidence target.
-        return self.session.effect(Operation.of(args.tool, {**args.values, "handle": handle}), read)
+        return self.session.effect(Operation.of(args.tool, {**args.values, "handle": handle}), lambda: self._ui(inspection))
 
     def ui_action(self, args: Args, request: UiArguments) -> Output:
         action = request.action
@@ -449,12 +444,11 @@ class Desktop:
             case _:
                 value = ""
         act = Act(request.handle, request.id, action, value, request.horizontal, request.vertical)
+        return self.session.effect(args.operation, lambda: self._ui(act))
 
-        def execute() -> Output:
-            code, text = self.session.machine.inspect_ui(act, self.session.stop)
-            return Output(text, ok=code == 0)
-
-        return self.session.effect(args.operation, execute)
+    def _ui(self, request: UiRequest) -> Output:
+        code, text = self.session.machine.inspect_ui(request, self.session.stop)
+        return Output(text, ok=code == 0)
 
     def screenshot(self, args: Args, request: ScreenshotArguments) -> Output:
         handle, monitor = request.handle, request.monitor

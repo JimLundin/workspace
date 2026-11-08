@@ -10,7 +10,7 @@ from pydantic import TypeAdapter
 from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest
 from assistant.browser_values import BrowserError, BrowserStatus, PageList, PageRow
-from assistant.personal_work_sources import Observations, Tab, kanban_source, outlook_source, teams_source
+from assistant.personal_work_sources import Observations, Tab, application_source
 from assistant.web_apps import Located, WebAppOperation
 from contracts.json_value import Json
 from contracts.personal_work import (
@@ -47,11 +47,11 @@ def source(kind: SourceKind, identity: str = "one", at: float = 10) -> Source:
     title, excerpt = "Atlas migration", "Deploy Atlas after the supplier review."
     match kind:
         case SourceKind.TEAMS:
-            return teams_source(identity, (title, excerpt, "https://teams.cloud.microsoft/"), at)
+            return application_source(TeamsSource, identity, (title, excerpt, "https://teams.cloud.microsoft/"), at)
         case SourceKind.OUTLOOK:
-            return outlook_source(identity, (title, excerpt, "https://outlook.office.com/mail/"), at)
+            return application_source(OutlookSource, identity, (title, excerpt, "https://outlook.office.com/mail/"), at)
         case SourceKind.KANBAN:
-            return kanban_source(identity, (title, excerpt, "https://dev-team-kanban.fcg.palantirfoundry.com/"), at)
+            return application_source(KanbanSource, identity, (title, excerpt, "https://dev-team-kanban.fcg.palantirfoundry.com/"), at)
         case SourceKind.DOCUMENT:
             return reference(DocumentSource, kind, identity, "https://contoso.example.test/Atlas.docx", at)
         case SourceKind.WEB_PAGE:

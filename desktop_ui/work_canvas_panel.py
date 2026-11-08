@@ -1387,22 +1387,19 @@ class CanvasPanel:
             self.add_document(AddDocument(file.name[:240], LocalDocument(path), preview))
 
     def create_document_link(self) -> None:
-        url, accepted = QtWidgets.QInputDialog.getText(self.frame, "Add document link", "Document URL")
-        if accepted and url.strip():
-            title, accepted = QtWidgets.QInputDialog.getText(self.frame, "Document title", "Name on canvas")
-            if accepted and title.strip():
-                try:
-                    self.add_document(AddDocument(title.strip(), WebDocument(url.strip())))
-                except ValueError as error:
-                    self.work.problem(str(error))
+        self._link(("Add document link", "Document URL"), "Document title", AddDocument)
 
     def create_web_reference(self) -> None:
-        url, accepted = QtWidgets.QInputDialog.getText(self.frame, "Add web reference", "Page URL")
+        self._link(("Add web reference", "Page URL"), "Web reference title", AddWebPage)
+
+    def _link(self, asked: tuple[str, str], titled: str, add: Callable[[str, WebDocument], AddDocument | AddWebPage]) -> None:
+        """Ask for a URL, then the name it shows on the canvas, and add it."""
+        url, accepted = QtWidgets.QInputDialog.getText(self.frame, *asked)
         if accepted and url.strip():
-            title, accepted = QtWidgets.QInputDialog.getText(self.frame, "Web reference title", "Name on canvas")
+            title, accepted = QtWidgets.QInputDialog.getText(self.frame, titled, "Name on canvas")
             if accepted and title.strip():
                 try:
-                    self.add_document(AddWebPage(title.strip(), WebDocument(url.strip())))
+                    self.add_document(add(title.strip(), WebDocument(url.strip())))
                 except ValueError as error:
                     self.work.problem(str(error))
 

@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Protocol
 
+from assistant.lifecycle import joined
 from assistant.state_store import SavedState
 from cell import Cell
 from contracts.capture import AudioSource
@@ -218,8 +219,4 @@ class AutomaticMeetings:
     def close(self) -> None:
         self._quit.set()
         self._wake.set()
-        if self._started.is_set():
-            if not self._finished.wait(20):
-                raise OSError("The Teams meeting monitor did not release its browser connection.")
-        else:
-            self.observer.close()
+        joined(self._started, self._finished, self.observer.close, "The Teams meeting monitor did not release its browser connection.")

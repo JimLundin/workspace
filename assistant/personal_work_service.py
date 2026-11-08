@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Protocol
 
+from assistant.lifecycle import joined
 from assistant.meeting_store import MeetingStore
 from assistant.personal_work_sources import Observations
 from assistant.personal_work_store import PersonalStore
@@ -282,8 +283,4 @@ class PersonalWork:
     def close(self) -> None:
         self.closed.set()
         self.wake.set()
-        if self._started.is_set():
-            if not self._finished.wait(20):
-                raise OSError("Personal work did not stop cleanly.")
-        else:
-            self.sources.close()
+        joined(self._started, self._finished, self.sources.close, "Personal work did not stop cleanly.")

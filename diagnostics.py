@@ -1,7 +1,10 @@
-"""Bounded failure evidence without exception objects, content or source lines."""
+"""Bounded failure evidence without exception objects, content or source lines, and the programs' own logs."""
 
+import contextlib
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from types import TracebackType
 
 from usage import Detail
@@ -39,3 +42,11 @@ def failure_info(error: Exception) -> FailureInfo:
     locations = tuple(_location(trace) for trace in tuple(_traces(error.__traceback__))[-8:])
     accepted, expected = (error.accepted, error.expected) if isinstance(error, InputRejectedError) else (None, None)
     return FailureInfo(type(error).__name__, locations, accepted, expected)
+
+
+def append(log: Path, text: str) -> None:
+    """One timestamped line in a program's own log, its record of problems and crashes (there's no console under pythonw)."""
+    with contextlib.suppress(OSError):
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("a", encoding="utf-8") as file:
+            file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")

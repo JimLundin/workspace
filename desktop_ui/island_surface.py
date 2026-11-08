@@ -175,27 +175,12 @@ def font(*, strong: bool) -> QtGui.QFont:
     return value
 
 
-@lru_cache(maxsize=1)
-def caption_font() -> QtGui.QFont:
+@lru_cache(maxsize=4)
+def face(pixels: int, weight: QtGui.QFont.Weight) -> QtGui.QFont:
+    """The bar's Inter at a pixel size: captions 11 normal, headings 14 demibold, badges 10 bold."""
     value = QtGui.QFont(typeface.FAMILY)
-    value.setPixelSize(11)
-    value.setWeight(QtGui.QFont.Weight.Normal)
-    return value
-
-
-@lru_cache(maxsize=1)
-def heading_font() -> QtGui.QFont:
-    value = QtGui.QFont(typeface.FAMILY)
-    value.setPixelSize(14)
-    value.setWeight(QtGui.QFont.Weight.DemiBold)
-    return value
-
-
-@lru_cache(maxsize=2)
-def badge_font() -> QtGui.QFont:
-    value = QtGui.QFont(typeface.FAMILY)
-    value.setPixelSize(10)
-    value.setWeight(QtGui.QFont.Weight.Bold)
+    value.setPixelSize(pixels)
+    value.setWeight(weight)
     return value
 
 
@@ -380,7 +365,7 @@ class MenuCell(QtWidgets.QAbstractButton):
             case Item(icon=name) if cell.face is Face.TOOL:
                 self.paint_icon(painter, name, ink, QtCore.QPointF(bounds.width() / 2 - 8, 12))
                 painter.setPen(quiet)
-                painter.setFont(caption_font())
+                painter.setFont(face(11, QtGui.QFont.Weight.Normal))
                 painter.drawText(bounds.adjusted(2, 0, -2, -9), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, cell.caption)
             case Item(label=label, icon=name, key=key):
                 self.paint_icon(painter, name, quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
@@ -417,7 +402,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         painter.setPen(color(lettering.ink))
         text = QtCore.QRectF(38, 0, bounds.width() - 42, middle + 1)
         painter.drawText(text, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft, toggle.label)
-        painter.setFont(caption_font())
+        painter.setFont(face(11, QtGui.QFont.Weight.Normal))
         painter.setPen(color(lettering.quiet))
         painter.drawText(
             QtCore.QRectF(38, middle, bounds.width() - 42, middle), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, toggle.detail
@@ -459,9 +444,11 @@ class MenuCell(QtWidgets.QAbstractButton):
         painter.drawText(
             QtCore.QRectF(40, 0, bounds.width() - 80, middle + 1), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft, activity.label
         )
-        painter.setFont(caption_font())
+        painter.setFont(face(11, QtGui.QFont.Weight.Normal))
         painter.setPen(quiet)
-        detail = QtGui.QFontMetricsF(caption_font()).elidedText(activity.detail, Qt.TextElideMode.ElideRight, bounds.width() - 84)
+        detail = QtGui.QFontMetricsF(face(11, QtGui.QFont.Weight.Normal)).elidedText(
+            activity.detail, Qt.TextElideMode.ElideRight, bounds.width() - 84
+        )
         painter.drawText(QtCore.QRectF(40, middle, bounds.width() - 80, middle), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, detail)
         circle = self.stop_circle()
         painter.setPen(Qt.PenStyle.NoPen)
@@ -751,7 +738,7 @@ class Capsule(KeyboardFocus):
     def paint_heading(self, painter: QtGui.QPainter) -> None:
         top, grid = self.window_.sizes.bar.top, self.window_.sizes.menu
         heading = QtCore.QRectF(grid.pad + 10, top + grid.pad, grid.width - 2 * grid.pad - 20, grid.head)
-        painter.setFont(heading_font())
+        painter.setFont(face(14, QtGui.QFont.Weight.DemiBold))
         painter.setPen(color(self.look.lettering.ink))
         painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "Workspace")
 
@@ -774,7 +761,7 @@ class Capsule(KeyboardFocus):
                 self.paint_spinner(painter, spot, middle)
             case Badge(text=text):
                 anchor = previous.x + previous.width if previous is not None else spot.x
-                badge = badge_font()
+                badge = face(10, QtGui.QFont.Weight.Bold)
                 width = max(15.0, QtGui.QFontMetricsF(badge).horizontalAdvance(text) + 8)
                 rect = QtCore.QRectF(min(anchor - 7, self.content.width - width - 1), self.window_.sizes.bar.top + 1, width, 15)
                 painter.setPen(Qt.PenStyle.NoPen)
