@@ -12,6 +12,16 @@ tests against the source the same tier last passed.
 
 Left:
 
+- **Shrink the native tier** (user, 2026-11-08: native runs choke the whole
+  machine and cause more trouble than they help). 26 `test_windows_*`
+  modules, about 190 tests; the largest are `bindings` (41), `work_canvas`
+  (28), `island_bar` (22), `recording` (13), `audio` (12) and
+  `shell_sections` (12). For each test, keep it native only if it checks
+  something that needs Windows or Qt itself (a hook, a window, a device);
+  move a decision it checks into a pure function with a plain test, and drop
+  what a plain test already covers. Don't run the native tier per change
+  meanwhile; once per batch at most, for the modules a change can't be
+  checked without.
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
   three meeting tests from the slow lists.
 - **Skip the Windows runner for pure test modules.** A small check is about 9 s
