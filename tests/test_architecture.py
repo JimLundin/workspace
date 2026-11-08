@@ -340,7 +340,8 @@ def test_a_match_that_only_maps_enum_members_to_constants_must_be_a_table(tmp_pa
     # case joins members with `|`, a wildcard covers the rest, or it sits in a
     # method; or a `match` whose cases use the function's own values (a
     # parameter, `self`, a local or a nested function's parameter) is wrongly
-    # flagged although no table could hold them.
+    # flagged although no table could hold them. A match over a Literal's
+    # values translates them just the same.
     source = """from enum import Enum
 
 class Light(Enum):
@@ -380,10 +381,17 @@ def outer() -> None:
                 return scale
             case Light.GREEN:
                 return -scale
+
+def spoken(signal: Literal["walk", "wait"]) -> str:
+    match signal:
+        case "walk":
+            return "Walk now"
+        case "wait":
+            return "Wait"
 """
     write_tree(tmp_path, {"lights.py": source})
     found = [(finding.rule, finding.declaration, finding.expression) for finding in others(review(tmp_path))]
-    assert found == [("enum-translation", "label", "light"), ("enum-translation", "Lamp.colour", "light")]
+    assert found == [("enum-translation", "label", "light"), ("enum-translation", "Lamp.colour", "light"), ("enum-translation", "spoken", "signal")]
 
 
 def test_a_fixed_tuple_of_numbers_must_be_a_named_type(tmp_path: Path) -> None:

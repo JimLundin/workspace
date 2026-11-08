@@ -437,8 +437,9 @@ def _constant(value: ast.expr, bound: frozenset[str]) -> bool:
 
 
 def _members(pattern: ast.pattern) -> bool:
+    """A case that names only values: enum members or literals."""
     match pattern:
-        case ast.MatchValue(value=ast.Attribute()):
+        case ast.MatchValue(value=ast.Attribute() | ast.Constant()):
             return True
         case ast.MatchOr(patterns=patterns):
             return all(_members(item) for item in patterns)
@@ -498,7 +499,7 @@ def value_shapes(
             case ast.Match(subject=subject, cases=cases) if all(
                 _members(case.pattern) or (isinstance(case.pattern, ast.MatchAs) and case.pattern.pattern is None) for case in cases
             ) and _translates(cases, _bound(function)):
-                detail = "Translate enum members with a contracts.members.every_member table, or a frozendict for a partial one."
+                detail = "Translate enum members or Literal values with an every_member or every_literal table, or a frozendict for a partial one."
                 yield Finding("enum-translation", module, declaration, ast.unparse(subject), child.lineno, detail)
             case ast.Subscript(value=ast.Name(id="tuple"), slice=ast.Tuple(elts=[_, _, *_] as items)) if _numeric(items):
                 detail = "Name the values with a frozen domain type and its bounds, such as winapi.shapes.Point or Size."

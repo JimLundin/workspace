@@ -55,11 +55,13 @@ their tests. Legacy data and backwards compatibility are not requirements.
   stored union apart in JSON is fine. A record's `kind` field is only ever that
   tag (the review's `kind-field` rule); an attribute every value of which is
   valid gets a name for what it is (`role`, `approach`, `channel`).
-- Translate an enum to values with a `Final[frozendict[Enum, Value]]` or a value
-  on its members (see `desktop_ui.icons.COLOURS`), not a `match` that only
-  returns one constant per member. Build a total table with
-  `contracts.members.every_member`, which fails at import unless it names every
-  member; the architecture review enforces the rule.
+- Translate an enum or a `Literal` alias to values with a
+  `Final[frozendict[Enum, Value]]` or a value on its members (see
+  `desktop_ui.icons.COLOURS`), not a `match` that only returns one constant per
+  member or literal. Build a total table with `contracts.members.every_member`
+  or `every_literal`, which fail at import unless they name every value; the
+  architecture review enforces the rule. A `match` on classes stays a `match`:
+  it keeps Pyright's exhaustiveness check, which a type-keyed table loses.
 - When the enum's own module owns the values and each member has its own, make
   the values the members: `canvas_look.Role.TITLE = RoleType(14.0, 600, -0.084)`,
   read as `role.value`. Members that would share a value collapse into aliases,
