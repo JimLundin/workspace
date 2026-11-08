@@ -23,20 +23,13 @@ from pathlib import Path
 from typing import Final
 
 from components import CATALOGUE, STATE_VARIABLE, Component, Entry
+from winapi._core import CloseHandle, FindWindowW, GetWindowThreadProcessId, OpenProcess, PostMessageW, WaitForSingleObject
 
 ROOT: Final = Path(__file__).resolve().parent
 STATE: Final = Path(os.environ.get("LOCALAPPDATA") or ROOT) / "workspace" / "state"
 """Where the programs publish their endpoints and logs."""
 DETACHED: Final = 0x0000_0008 | 0x0800_0000  # DETACHED_PROCESS | CREATE_NO_WINDOW
 
-_user32 = ctypes.WinDLL("user32", use_last_error=True)
-_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_find = ctypes.WINFUNCTYPE(wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)(("FindWindowW", _user32))
-_post = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)(("PostMessageW", _user32))
-_window_process = ctypes.WINFUNCTYPE(wintypes.DWORD, wintypes.HWND, ctypes.POINTER(wintypes.DWORD))(("GetWindowThreadProcessId", _user32))
-_open = ctypes.WINFUNCTYPE(wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)(("OpenProcess", _kernel32))
-_close = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HANDLE)(("CloseHandle", _kernel32))
-_wait = ctypes.WINFUNCTYPE(wintypes.DWORD, wintypes.HANDLE, wintypes.DWORD)(("WaitForSingleObject", _kernel32))
 SYNCHRONIZE: Final = 0x0010_0000
 WAIT_TIMEOUT: Final = 0x0000_0102
 
@@ -48,7 +41,7 @@ def pythonw() -> Path:
 
 def window(entry: Entry) -> int:
     """The program's control window, 0 when it isn't running."""
-    return int(_find(entry.window.window_class, entry.window.title) or 0)
+    return int(FindWindowW(entry.window.window_class, entry.window.title) or 0)
 
 
 def started(entry: Entry) -> int | None:
@@ -57,13 +50,13 @@ def started(entry: Entry) -> int | None:
         pid = int((STATE / f"{entry.name}.pid").read_text(encoding="ascii"))
     except OSError, ValueError:
         return None
-    handle = _open(SYNCHRONIZE, False, pid)
+    handle = OpenProcess(SYNCHRONIZE, False, pid)
     if not handle:
         return None
     try:
-        return pid if _wait(handle, 0) == WAIT_TIMEOUT else None
+        return pid if WaitForSingleObject(handle, 0) == WAIT_TIMEOUT else None
     finally:
-        _close(handle)
+        CloseHandle(handle)
 
 
 def running(entry: Entry) -> bool:
@@ -85,13 +78,13 @@ def start(entry: Entry) -> None:
 def stop(entry: Entry) -> None:
     """Ask the program to quit (the layout lets go of held keys first), then end it after its grace period."""
     if handle := window(entry):
-        _post(handle, entry.quit_message, 0, 0)
+        PostMessageW(handle, entry.quit_message, 0, 0)
     deadline = time.monotonic() + entry.shutdown_s
     while running(entry) and time.monotonic() < deadline:
         time.sleep(0.1)
     if handle := window(entry):
         owner = wintypes.DWORD()
-        _window_process(handle, ctypes.byref(owner))
+        GetWindowThreadProcessId(handle, ctypes.byref(owner))
         terminate(owner.value)
     if (pid := started(entry)) is not None:
         terminate(pid)

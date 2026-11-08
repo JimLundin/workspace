@@ -96,6 +96,7 @@ def top_down(width: int, height: int) -> BITMAPINFOHEADER:
 
 
 # Functions more than one module calls, each declared once.
+FindWindowW = fn(user32, "FindWindowW", wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)
 AllowSetForegroundWindow = fn(user32, "AllowSetForegroundWindow", wintypes.BOOL, wintypes.DWORD)
 CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
 CoCreateInstance = fn(ole32, "CoCreateInstance", ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)

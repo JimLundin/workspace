@@ -14,6 +14,7 @@ from winapi._core import (
     CreateWindowExW,
     DeleteObject,
     DestroyWindow,
+    FindWindowW,
     GetAsyncKeyState,
     GetCurrentThreadId,
     GetForegroundWindow,
@@ -69,7 +70,6 @@ _GetDpiForWindow = fn(user32, "GetDpiForWindow", wintypes.UINT, wintypes.HWND)
 _BringWindowToTop = fn(user32, "BringWindowToTop", wintypes.BOOL, wintypes.HWND)
 _AttachThreadInput = fn(user32, "AttachThreadInput", wintypes.BOOL, wintypes.DWORD, wintypes.DWORD, wintypes.BOOL)
 _GetGUIThreadInfo = fn(user32, "GetGUIThreadInfo", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(GUITHREADINFO))
-_FindWindowW = fn(user32, "FindWindowW", wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)
 _QueryFullProcessImageNameW = fn(
     kernel32, "QueryFullProcessImageNameW", wintypes.BOOL, wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
 )
@@ -319,7 +319,7 @@ def allow_activation(hwnd: int, *, allowed: bool) -> None:
 
 def find(title: str) -> int | None:
     """A top-level window by its exact title, hidden ones included."""
-    hwnd: int | None = _FindWindowW(None, title)
+    hwnd: int | None = FindWindowW(None, title)
     return int(hwnd) if hwnd else None
 
 
