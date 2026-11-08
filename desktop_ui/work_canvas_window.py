@@ -57,7 +57,7 @@ class CanvasWindow:
         QtGui.QFontMetricsF(face(Role.BODY)).horizontalAdvance("Workspace")
         window.setWindowState(Qt.WindowState.WindowMaximized)
         # Window controls are the toolbar's Window section; the toolbar carries no duplicate Close.
-        panel = CanvasPanel(window, work, canvas, WindowControls(maximize, hide))
+        panel = CanvasPanel.build(window, work, canvas, WindowControls(maximize, hide))
         panel.position_chrome()
         layout = column(window)
         layout.setSpacing(0)

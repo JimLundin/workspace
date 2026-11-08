@@ -144,67 +144,329 @@ class WindowControls:
     close: Callable[[], None]
 
 
-class CanvasPanel:
-    def __init__(self, parent: CanvasFrame, work: WorkWindow, canvas: CanvasEdits, window: WindowControls) -> None:
-        self.window_controls: WindowControls = window
-        # One scheme for the canvas's lifetime, so every bubble, detail and menu agree.
-        self.theme: Tokens = parent.theme
-        self.style: str = content_style(parent.theme)
-        self.work: WorkWindow = work
-        self.edits: CanvasEdits = canvas
-        self.document: CanvasDocument = canvas.read()
-        self.view: PersonalView = PersonalView()
-        self.scope: CanvasScope = CanvasScope()
-        self.projection: CanvasScene = project(self.view.catalog, self.document, self.scope)
-        self.visible_cards: tuple[CanvasCard, ...] = ()
-        self.editors: tuple[tuple[str, QtWidgets.QDialog], ...] = ()
-        self.cards: tuple[CanvasCard, ...] = ()
-        self.details: tuple[tuple[str, CardDetail], ...] = ()
-        self.group_frames: tuple[CanvasGroup, ...] = ()
-        self.group_cache: tuple[CanvasGroup, ...] = ()
-        self.connection_paths: tuple[ConnectionPath, ...] = ()
-        self.rendered: tuple[PersonalView, CanvasDocument, CanvasScope] | None = None
-        self.selected: str | None = None
-        self.linking: WorkThread | None = None
-        self.draft: WorkDetail | None = None
-        self.draft_proxy: QtWidgets.QGraphicsProxyWidget | None = None
-        self.draft_known: frozenset[str] = frozenset()
-        self.positioned: bool = False
-        self.focus_timer: QtCore.QTimer | None = None
-        self.instruction_run: CanvasRun | None = None
-        self.frame: CanvasSurface = CanvasSurface(parent)
-        self.frame.setStyleSheet(self.style)
-        layout = column(self.frame)
-        self.layout: QtWidgets.QVBoxLayout = layout
-        layout.setContentsMargins(8, 8, 8, 8)
-        self.scene: QtWidgets.QGraphicsScene = QtWidgets.QGraphicsScene(self.frame)
-        self.scene.setSceneRect(-2000, -2000, 10000, 10000)
-        self.canvas: CanvasViewport = CanvasViewport(self.scene, self.theme)
-        self.interaction: CanvasInteraction = CanvasInteraction(self)
-        layout.addWidget(self.canvas)
-        self.create_context_controls()
-        self.create_toolbar()
-        self.create_status()
-        self.frame.resized.connect(self.position_chrome)
-        self.canvas.resized.connect(self.reflow)
-        for bar in (self.canvas.horizontalScrollBar(), self.canvas.verticalScrollBar()):
-            bar.valueChanged.connect(self.update_recenter)
-            bar.rangeChanged.connect(self.update_recenter)
-        self.update_voice_context()
+@dataclass(frozen=True, slots=True)
+class _Canvas:
+    document: CanvasDocument
+    projection: CanvasScene
+    last_spec: CanvasToolbarSpec
+    """The toolbar's last good spec; a broken edit keeps it."""
+    view: PersonalView = field(default_factory=PersonalView)
+    scope: CanvasScope = field(default_factory=CanvasScope)
+    visible_cards: tuple[CanvasCard, ...] = ()
+    editors: tuple[tuple[str, QtWidgets.QDialog], ...] = ()
+    cards: tuple[CanvasCard, ...] = ()
+    details: tuple[tuple[str, CardDetail], ...] = ()
+    group_frames: tuple[CanvasGroup, ...] = ()
+    group_cache: tuple[CanvasGroup, ...] = ()
+    connection_paths: tuple[ConnectionPath, ...] = ()
+    rendered: tuple[PersonalView, CanvasDocument, CanvasScope] | None = None
+    selected: str | None = None
+    linking: WorkThread | None = None
+    draft: WorkDetail | None = None
+    draft_proxy: QtWidgets.QGraphicsProxyWidget | None = None
+    draft_known: frozenset[str] = frozenset()
+    positioned: bool = False
+    focus_timer: QtCore.QTimer | None = None
+    instruction_run: CanvasRun | None = None
+    subject: Subject = None
+    """What the expanded toolbar is about; None while it's collapsed or about the canvas."""
+    expanded: bool = False
+    pinned: tuple[QtWidgets.QToolButton, ...] = ()
+    tiles: tuple[QtWidgets.QToolButton, ...] = ()
+    has_context: bool = False
 
-    def create_context_controls(self) -> None:
-        """Everything the canvas does is reached from its toolbar, built from `spec/canvas.py`."""
-        self.last_spec: CanvasToolbarSpec = ui_spec.canvas_toolbar(reload=False)
-        self.subject: Subject = None
-        """What the expanded toolbar is about; None while it's collapsed or about the canvas."""
-        self.expanded: bool = False
-        self.pinned: tuple[QtWidgets.QToolButton, ...] = ()
-        self.tiles: tuple[QtWidgets.QToolButton, ...] = ()
+
+@dataclass(frozen=True, slots=True)
+class _Toolbar:
+    """The island at the window's foot and the pills beside it."""
+
+    scroll_edge: ScrollEdge
+    toolbar: CanvasToolbar
+    voice_hint: VoiceLegend
+    clear_context: QtWidgets.QToolButton
+    search_button: QtWidgets.QToolButton
+    search: QtWidgets.QLineEdit
+    find_shortcut: QtGui.QShortcut
+    menu_button: QtWidgets.QToolButton
+    recenter: GlassCapsule
+    center_button: QtWidgets.QToolButton
+    questions: GlassCapsule
+    questions_button: QtWidgets.QToolButton
+    status: QtWidgets.QLabel
+
+
+def _toolbar(frame: CanvasSurface, theme: Tokens, act: Callable[[Callable[[CanvasPanel], None]], Callable[[], None]]) -> _Toolbar:
+    # The island bar's rule at the window's foot: one island at rest (speak, search, more);
+    # only temporary things sit beside it, Recenter once the view leaves the work and
+    # the tinted Questions pill while questions wait.
+    scroll_edge = ScrollEdge(frame, theme)
+    toolbar = CanvasToolbar(frame, theme)
+    heading = toolbar.content
+    voice_hint = VoiceLegend(AGENT_HOLD, toolbar.surface.look.lettering.ink)
+    heading.addWidget(voice_hint)
+    clear_context = toolbar.button("close", "Ask about the whole canvas", act(CanvasPanel.clear_selection))
+    clear_context.setIconSize(QtCore.QSize(12, 12))
+    clear_context.hide()
+    heading.addWidget(clear_context)
+    search_button = toolbar.button("search", "Find on canvas (Ctrl+F)", act(CanvasPanel.toggle_search))
+    search_button.setCheckable(True)
+    heading.addWidget(search_button)
+    search = QtWidgets.QLineEdit(toolbar)
+    search.setObjectName("canvasSearch")
+    search.setPlaceholderText("Find on canvas")
+    search.setAccessibleName("Find on canvas")
+    search.setFixedWidth(240)
+    search.hide()
+    search.returnPressed.connect(act(CanvasPanel.find))
+    heading.addWidget(search)
+    find_shortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, frame)
+    find_shortcut.activated.connect(act(CanvasPanel.show_search))
+    menu_button = toolbar.button("more", "Canvas actions", act(CanvasPanel.toggle_expanded))
+    menu_button.setCheckable(True)
+    heading.addWidget(menu_button)
+    recenter = GlassCapsule(frame, theme, Tint.NONE)
+    center_button = recenter.button("center", "Center this canvas", act(CanvasPanel.fit))
+    recenter.content.addWidget(center_button)
+    questions = GlassCapsule(frame, theme, Tint.ATTENTION)
+    questions_button = questions.button("chat", "Agent clarifications", act(CanvasPanel.show_questions))
+    questions_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    questions_button.setProperty("caption", True)
+    questions.content.addWidget(questions_button)
+    recenter.hide()
+    questions.hide()
+    status = label("", "muted")
+    status.setParent(frame)
+    return _Toolbar(
+        scroll_edge,
+        toolbar,
+        voice_hint,
+        clear_context,
+        search_button,
+        search,
+        find_shortcut,
+        menu_button,
+        recenter,
+        center_button,
+        questions,
+        questions_button,
+        status,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CanvasPanel:
+    """Everything the canvas does is reached from its toolbar, built from `spec/canvas.py`."""
+
+    window_controls: WindowControls
+    theme: Tokens
+    """One scheme for the canvas's lifetime, so every bubble, detail and menu agree."""
+    style: str
+    work: WorkWindow
+    edits: CanvasEdits
+    frame: CanvasSurface
+    layout: QtWidgets.QVBoxLayout
+    scene: QtWidgets.QGraphicsScene
+    canvas: CanvasViewport
+    interaction: CanvasInteraction
+    _toolbar: _Toolbar
+    _state: Cell[_Canvas]
+    """Qt's thread alone reads and replaces it."""
+
+    @classmethod
+    def build(cls, parent: CanvasFrame, work: WorkWindow, canvas: CanvasEdits, window: WindowControls) -> CanvasPanel:
+        theme = parent.theme
+        style = content_style(theme)
+        frame = CanvasSurface(parent)
+        frame.setStyleSheet(style)
+        layout = column(frame)
+        layout.setContentsMargins(8, 8, 8, 8)
+        scene = QtWidgets.QGraphicsScene(frame)
+        scene.setSceneRect(-2000, -2000, 10000, 10000)
+        viewport = CanvasViewport(scene, theme)
+        layout.addWidget(viewport)
+
+        # The controls and gestures act on the panel made just after them.
+        def act(method: Callable[[CanvasPanel], None]) -> Callable[[], None]:
+            return lambda: method(panel)
+
+        toolbar = _toolbar(frame, theme, act)
+        document = canvas.read()
+        state = _Canvas(document, project(PersonalView().catalog, document, CanvasScope()), ui_spec.canvas_toolbar(reload=False))
+        interaction = CanvasInteraction(lambda: panel)
+        panel = cls(window, theme, style, work, canvas, frame, layout, scene, viewport, interaction, toolbar, Cell(state))
+        frame.resized.connect(panel.position_chrome)
+        viewport.resized.connect(panel.reflow)
+        for bar in (viewport.horizontalScrollBar(), viewport.verticalScrollBar()):
+            bar.valueChanged.connect(act(CanvasPanel.update_recenter))
+            bar.rangeChanged.connect(act(CanvasPanel.update_recenter))
+        panel.update_voice_context()
+        return panel
+
+    @property
+    def scroll_edge(self) -> ScrollEdge:
+        return self._toolbar.scroll_edge
+
+    @property
+    def toolbar(self) -> CanvasToolbar:
+        return self._toolbar.toolbar
+
+    @property
+    def voice_hint(self) -> VoiceLegend:
+        return self._toolbar.voice_hint
+
+    @property
+    def clear_context(self) -> QtWidgets.QToolButton:
+        return self._toolbar.clear_context
+
+    @property
+    def search_button(self) -> QtWidgets.QToolButton:
+        return self._toolbar.search_button
+
+    @property
+    def search(self) -> QtWidgets.QLineEdit:
+        return self._toolbar.search
+
+    @property
+    def find_shortcut(self) -> QtGui.QShortcut:
+        return self._toolbar.find_shortcut
+
+    @property
+    def menu_button(self) -> QtWidgets.QToolButton:
+        return self._toolbar.menu_button
+
+    @property
+    def recenter(self) -> GlassCapsule:
+        return self._toolbar.recenter
+
+    @property
+    def center_button(self) -> QtWidgets.QToolButton:
+        return self._toolbar.center_button
+
+    @property
+    def questions(self) -> GlassCapsule:
+        return self._toolbar.questions
+
+    @property
+    def questions_button(self) -> QtWidgets.QToolButton:
+        return self._toolbar.questions_button
+
+    @property
+    def status(self) -> QtWidgets.QLabel:
+        return self._toolbar.status
+
+    @property
+    def toolbar_layout(self) -> QtWidgets.QHBoxLayout:
+        return self._toolbar.toolbar.content
+
+    @property
+    def cards(self) -> tuple[CanvasCard, ...]:
+        return self._state.get().cards
+
+    @property
+    def connection_paths(self) -> tuple[ConnectionPath, ...]:
+        return self._state.get().connection_paths
+
+    @property
+    def details(self) -> tuple[tuple[str, CardDetail], ...]:
+        return self._state.get().details
+
+    @property
+    def document(self) -> CanvasDocument:
+        return self._state.get().document
+
+    @property
+    def draft(self) -> WorkDetail | None:
+        return self._state.get().draft
+
+    @property
+    def draft_known(self) -> frozenset[str]:
+        return self._state.get().draft_known
+
+    @property
+    def draft_proxy(self) -> QtWidgets.QGraphicsProxyWidget | None:
+        return self._state.get().draft_proxy
+
+    @property
+    def editors(self) -> tuple[tuple[str, QtWidgets.QDialog], ...]:
+        return self._state.get().editors
+
+    @property
+    def expanded(self) -> bool:
+        return self._state.get().expanded
+
+    @property
+    def focus_timer(self) -> QtCore.QTimer | None:
+        return self._state.get().focus_timer
+
+    @property
+    def group_cache(self) -> tuple[CanvasGroup, ...]:
+        return self._state.get().group_cache
+
+    @property
+    def group_frames(self) -> tuple[CanvasGroup, ...]:
+        return self._state.get().group_frames
+
+    @property
+    def has_context(self) -> bool:
+        return self._state.get().has_context
+
+    @property
+    def instruction_run(self) -> CanvasRun | None:
+        return self._state.get().instruction_run
+
+    @property
+    def last_spec(self) -> CanvasToolbarSpec:
+        return self._state.get().last_spec
+
+    @property
+    def linking(self) -> WorkThread | None:
+        return self._state.get().linking
+
+    @property
+    def pinned(self) -> tuple[QtWidgets.QToolButton, ...]:
+        return self._state.get().pinned
+
+    @property
+    def positioned(self) -> bool:
+        return self._state.get().positioned
+
+    @property
+    def projection(self) -> CanvasScene:
+        return self._state.get().projection
+
+    @property
+    def rendered(self) -> tuple[PersonalView, CanvasDocument, CanvasScope] | None:
+        return self._state.get().rendered
+
+    @property
+    def scope(self) -> CanvasScope:
+        return self._state.get().scope
+
+    @property
+    def selected(self) -> str | None:
+        return self._state.get().selected
+
+    @property
+    def subject(self) -> Subject:
+        return self._state.get().subject
+
+    @property
+    def tiles(self) -> tuple[QtWidgets.QToolButton, ...]:
+        return self._state.get().tiles
+
+    @property
+    def view(self) -> PersonalView:
+        return self._state.get().view
+
+    @property
+    def visible_cards(self) -> tuple[CanvasCard, ...]:
+        return self._state.get().visible_cards
 
     def toolbar_spec(self) -> CanvasToolbarSpec:
         """The toolbar's spec as its module says now; a broken edit keeps the last good one."""
         try:
-            self.last_spec = ui_spec.canvas_toolbar()
+            new_last_spec = ui_spec.canvas_toolbar()
+            self._state.set(replace(self._state.get(), last_spec=new_last_spec))
         except ui_spec.SpecError as error:
             self.work.problem(f"The canvas toolbar kept its last good spec: {error}")
         return self.last_spec
@@ -241,14 +503,16 @@ class CanvasPanel:
             each.hide()
             each.deleteLater()
         place = self.toolbar_layout.indexOf(self.search_button)
-        self.pinned = tuple(self.toolbar.tile_button(tile, self.perform) for tile in row(spec, selected, self.related(selected), collapsed=collapsed))
+        new_pinned = tuple(self.toolbar.tile_button(tile, self.perform) for tile in row(spec, selected, self.related(selected), collapsed=collapsed))
+        self._state.set(replace(self._state.get(), pinned=new_pinned))
         for offset, each in enumerate(self.pinned):
             self.toolbar_layout.insertWidget(place + offset, each)
         subject = self.subject if self.subject is not None else selected
         groups = sections(spec, subject, self.related(subject), self.dismissed(), collapsed=collapsed) if self.expanded else ()
         # The expanded toolbar keeps the window's top margin and the status line above it.
         room = self.frame.height() - 14 - 120
-        self.tiles = self.toolbar.show_sections(groups, self.perform, room)
+        new_tiles = self.toolbar.show_sections(groups, self.perform, room)
+        self._state.set(replace(self._state.get(), tiles=new_tiles))
         self.menu_button.setChecked(self.expanded)
         self.position_chrome()
 
@@ -257,13 +521,13 @@ class CanvasPanel:
 
     def expand(self, subject: Subject) -> None:
         """Open the toolbar in place on `subject`'s actions, then the canvas's."""
-        self.subject, self.expanded = subject, True
+        self._state.set(replace(self._state.get(), subject=subject, expanded=True))
         self.refresh_toolbar()
         if self.tiles:
             self.tiles[0].setFocus()
 
     def collapse(self) -> None:
-        self.subject, self.expanded = None, False
+        self._state.set(replace(self._state.get(), subject=None, expanded=False))
         self.refresh_toolbar()
 
     def toggle_expanded(self) -> None:
@@ -336,64 +600,15 @@ class CanvasPanel:
             case _:
                 assert_never(action)
 
-    def create_toolbar(self) -> None:
-        # The island bar's rule at the window's foot: one island at rest (speak, search, more);
-        # only temporary things sit beside it, Recenter once the view leaves the work and
-        # the tinted Questions pill while questions wait.
-        self.scroll_edge: ScrollEdge = ScrollEdge(self.frame, self.theme)
-        self.toolbar: CanvasToolbar = CanvasToolbar(self.frame, self.theme)
-        heading = self.toolbar.content
-        self.toolbar_layout: QtWidgets.QHBoxLayout = heading
-        self.create_voice_controls()
-        self.search_button: QtWidgets.QToolButton = self.toolbar.button("search", "Find on canvas (Ctrl+F)", self.toggle_search)
-        self.search_button.setCheckable(True)
-        heading.addWidget(self.search_button)
-        self.search: QtWidgets.QLineEdit = QtWidgets.QLineEdit(self.toolbar)
-        self.search.setObjectName("canvasSearch")
-        self.search.setPlaceholderText("Find on canvas")
-        self.search.setAccessibleName("Find on canvas")
-        self.search.setFixedWidth(240)
-        self.search.hide()
-        self.search.returnPressed.connect(self.find)
-        heading.addWidget(self.search)
-        self.find_shortcut: QtGui.QShortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, self.frame)
-        self.find_shortcut.activated.connect(self.show_search)
-        self.menu_button: QtWidgets.QToolButton = self.toolbar.button("more", "Canvas actions", self.toggle_expanded)
-        self.menu_button.setCheckable(True)
-        heading.addWidget(self.menu_button)
-        self.recenter: GlassCapsule = GlassCapsule(self.frame, self.theme, Tint.NONE)
-        self.center_button: QtWidgets.QToolButton = self.recenter.button("center", "Center this canvas", self.fit)
-        self.recenter.content.addWidget(self.center_button)
-        self.questions: GlassCapsule = GlassCapsule(self.frame, self.theme, Tint.ATTENTION)
-        self.questions_button: QtWidgets.QToolButton = self.questions.button("chat", "Agent clarifications", self.show_questions)
-        self.questions_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.questions_button.setProperty("caption", True)
-        self.questions.content.addWidget(self.questions_button)
-        self.recenter.hide()
-        self.questions.hide()
-
-    def create_voice_controls(self) -> None:
-        self.voice_hint: VoiceLegend = VoiceLegend(AGENT_HOLD, self.toolbar.surface.look.lettering.ink)
-        self.toolbar_layout.addWidget(self.voice_hint)
-        self.clear_context: QtWidgets.QToolButton = self.toolbar.button("close", "Ask about the whole canvas", self.clear_selection)
-        self.clear_context.setIconSize(QtCore.QSize(12, 12))
-        self.clear_context.hide()
-        self.toolbar_layout.addWidget(self.clear_context)
-        self.has_context: bool = False
-
-    def create_status(self) -> None:
-        self.status: QtWidgets.QLabel = label("", "muted")
-        self.status.setParent(self.frame)
-
     def update_voice_context(self) -> None:
         current = topology(self.view.catalog, self.document).by_id.get(self.selected) if self.selected is not None else None
         context = container_title(current) if current is not None else "whole canvas"
         self.voice_hint.setToolTip("Ask agent · " + context + "\n" + AGENT_HOLD + " with Workspace's layout enabled; release to send.")
-        self.has_context = current is not None
+        self._state.set(replace(self._state.get(), has_context=current is not None))
         self.position_chrome()
 
     def clear_selection(self) -> None:
-        self.selected = None
+        self._state.set(replace(self._state.get(), selected=None))
         self.update_voice_context()
         for bubble in self.bubbles():
             bubble.setSelected(False)
@@ -414,15 +629,15 @@ class CanvasPanel:
         except (OSError, ValueError, sqlite3.Error) as error:
             self.work.problem("The local canvas could not be saved: " + str(error))
             return False
-        self.document = started.document
+        self._state.set(replace(self._state.get(), document=started.document))
         match started:
             case NotQueued(reason=reason):
                 # Retrying reuses this saved binding instead of adding another.
-                self.instruction_run = pending
+                self._state.set(replace(self._state.get(), instruction_run=pending))
                 self.status.setText("Could not queue the instruction: " + reason)
                 return False
             case Queued():
-                self.instruction_run = None
+                self._state.set(replace(self._state.get(), instruction_run=None))
                 self.status.setText("Instruction queued. The agent will build on this canvas.")
                 return True
 
@@ -496,12 +711,12 @@ class CanvasPanel:
         left, top = bounds.left(), bounds.top()
         self.canvas.setTransform(QtGui.QTransform().scale(0.9, 0.9))
         self.canvas.centerOn(left + self.canvas.viewport().width() / 1.8 - 42, top + self.canvas.viewport().height() / 1.8 - 110)
-        self.positioned = True
+        self._state.set(replace(self._state.get(), positioned=True))
 
     def run_refused(self, run: CanvasRun, reason: str) -> None:
         """The assistant saved this instruction but couldn't queue it: keep it for a retry."""
         if isinstance(run.intent, CanvasInstruction):
-            self.instruction_run = run
+            self._state.set(replace(self._state.get(), instruction_run=run))
             self.status.setText("Could not queue the instruction: " + reason)
 
     def meeting_page(self, transcript_path: str, page: MeetingConversation | None) -> None:
@@ -514,12 +729,13 @@ class CanvasPanel:
         """Render a document the canvas owner committed or observed."""
         if document == self.document:
             return
-        self.document = document
+        self._state.set(replace(self._state.get(), document=document))
         self.render(self.view)
 
     def commit(self, change: Change) -> bool:
         try:
-            self.document = self.edits.commit(UserEdit(self.scope, change))
+            new_document = self.edits.commit(UserEdit(self.scope, change))
+            self._state.set(replace(self._state.get(), document=new_document))
         except ValueError as error:
             self.work.problem(str(error))
             return False
@@ -534,7 +750,8 @@ class CanvasPanel:
         for removed in self.cards:
             if removed.content.id not in identities and removed.scene() is self.scene:
                 self.scene.removeItem(removed)
-        self.cards = tuple(card for card in self.cards if card.content.id in identities)
+        new_cards = tuple(card for card in self.cards if card.content.id in identities)
+        self._state.set(replace(self._state.get(), cards=new_cards))
         for item in content:
             card = self.card(item.id)
             if card is None:
@@ -544,7 +761,7 @@ class CanvasPanel:
                 position = next((position for position in self.document.placements if position.id == item.id), None)
                 if position is not None:
                     card.setPos(position.x, position.y)
-                self.cards = (*self.cards, card)
+                self._state.set(replace(self._state.get(), cards=(*self.cards, card)))
             elif card.content != item:
                 # Content updates preserve native identity, positions and drafts.
                 card.refresh(item)
@@ -553,7 +770,8 @@ class CanvasPanel:
             elif item.id not in visible and card.scene() is self.scene:
                 self.scene.removeItem(card)
             self.refresh_detail(item)
-        self.visible_cards = tuple(card for card in self.cards if card.content.id in visible)
+        new_visible_cards = tuple(card for card in self.cards if card.content.id in visible)
+        self._state.set(replace(self._state.get(), visible_cards=new_visible_cards))
 
     def render(self, view: PersonalView) -> None:
         self.status.setToolTip(view.status)
@@ -561,22 +779,26 @@ class CanvasPanel:
         if self.rendered == (view, self.document, self.scope):
             return
         self.interaction.cancel()
-        self.view = view
+        self._state.set(replace(self._state.get(), view=view))
         if self.expanded:
             self.refresh_toolbar()
         indexed = topology(view.catalog, self.document)
         retained = frozenset(indexed.by_id)
         if self.selected not in retained:
-            self.selected = None
+            self._state.set(replace(self._state.get(), selected=None))
         self.update_voice_context()
-        self.group_cache = tuple(group for group in self.group_cache if group.context.id in retained)
+        new_group_cache = tuple(group for group in self.group_cache if group.context.id in retained)
+        self._state.set(replace(self._state.get(), group_cache=new_group_cache))
         for identity, dialog in self.editors:
             if identity not in retained:
                 dialog.hide()
-        self.editors = tuple(pair for pair in self.editors if pair[0] in retained)
-        self.details = tuple(pair for pair in self.details if pair[0] in retained)
-        self.projection = project(view.catalog, self.document, self.scope)
-        self.scope = self.projection.scope
+        new_editors = tuple(pair for pair in self.editors if pair[0] in retained)
+        self._state.set(replace(self._state.get(), editors=new_editors))
+        new_details = tuple(pair for pair in self.details if pair[0] in retained)
+        self._state.set(replace(self._state.get(), details=new_details))
+        new_projection = project(view.catalog, self.document, self.scope)
+        self._state.set(replace(self._state.get(), projection=new_projection))
+        self._state.set(replace(self._state.get(), scope=self.projection.scope))
         visible = frozenset(item.id for item in scene_contents(self.projection))
         self.sync_cards(indexed.pieces, visible)
         groups = frozendict((group.id, group) for root in self.projection.groups for group in descendants(root))
@@ -606,7 +828,7 @@ class CanvasPanel:
             self.home()
         self.update_recenter()
         self.reconcile_draft()
-        self.rendered = (view, self.document, self.scope)
+        self._state.set(replace(self._state.get(), rendered=(view, self.document, self.scope)))
 
     def reconcile_draft(self) -> None:
         if self.draft is not None and self.draft.pending is not None:
@@ -641,14 +863,15 @@ class CanvasPanel:
         return next((detail for key, detail in self.details if key == identity), None)
 
     def select(self, identity: str) -> None:
-        self.selected = identity
+        self._state.set(replace(self._state.get(), selected=identity))
         self.update_voice_context()
         card = self.card(identity)
 
         if self.linking is not None and card is not None:
             match card.content:
                 case WorkSource() | MeetingSource() as source:
-                    work, self.linking = self.linking, None
+                    work = self.linking
+                    self._state.set(replace(self._state.get(), linking=None))
                     reason, accepted = QtWidgets.QInputDialog.getText(self.frame, "Connect source", "Why does this source belong to this work?")
                     if accepted and reason.strip():
                         links = (*work.links, Association(source.id, reason.strip()))
@@ -662,7 +885,7 @@ class CanvasPanel:
 
     def locate(self, identity: str) -> None:
         cancel(self.focus_timer)
-        self.focus_timer = None
+        self._state.set(replace(self._state.get(), focus_timer=None))
         bubble = next((bubble for bubble in self.bubbles() if bubble.identity == identity), None)
         if bubble is not None:
             self.select(identity)
@@ -672,7 +895,8 @@ class CanvasPanel:
 
     def queue_location(self, identity: str) -> None:
         cancel(self.focus_timer)
-        self.focus_timer = later(self.frame, 0, lambda: self.locate(identity))
+        new_focus_timer = later(self.frame, 0, lambda: self.locate(identity))
+        self._state.set(replace(self._state.get(), focus_timer=new_focus_timer))
 
     def inspect(self, identity: str) -> None:
         work = next((item for item in self.view.catalog.works if item.id == identity), None)
@@ -695,7 +919,7 @@ class CanvasPanel:
                     detail = UpdateDetail.build(content, self.open_at, self.style)
                 case CanvasQuestion() as content:
                     detail = QuestionDetail.build(content, self.style)
-            self.details = (*self.details, (identity, detail))
+            self._state.set(replace(self._state.get(), details=(*self.details, (identity, detail))))
         match detail:
             case SourceDetail():
                 contextual_work = next(
@@ -718,7 +942,7 @@ class CanvasPanel:
         dialog = next((window for identity, window in self.editors if identity == work.id), None)
         if detail is None:
             detail = WorkDetail.build(self.work, work, self.style, on_continue=lambda: self.study_work(work.id))
-            self.details = (*self.details, (work.id, detail))
+            self._state.set(replace(self._state.get(), details=(*self.details, (work.id, detail))))
             dialog = QtWidgets.QDialog(self.frame)
             dialog.setWindowTitle("Work context · " + work.definition.title)
             dialog.setStyleSheet(self.style + f"QDialog {{ background: {self.theme.window}; }}")
@@ -726,7 +950,7 @@ class CanvasPanel:
             layout = column(dialog)
             layout.setContentsMargins(20, 20, 20, 20)
             layout.addWidget(detail.frame)
-            self.editors = (*self.editors, (work.id, dialog))
+            self._state.set(replace(self._state.get(), editors=(*self.editors, (work.id, dialog))))
         if dialog is not None:
             dialog.show()
             dialog.raise_()
@@ -844,14 +1068,14 @@ class CanvasPanel:
             native = previous.get(frame.identity)
             if native is None:
                 native = CanvasGroup(group, bounds, self)
-                self.group_cache = (*self.group_cache, native)
+                self._state.set(replace(self._state.get(), group_cache=(*self.group_cache, native)))
             else:
                 native.refresh(group, bounds)
             if native.scene() is not self.scene:
                 self.scene.addItem(native)
             native.setZValue(depth[group.id] - len(groups) - 1)
             current = (*current, native)
-        self.group_frames = current
+        self._state.set(replace(self._state.get(), group_frames=current))
         self.draw_connections()
         self.canvas.setSceneRect(self.scene.itemsBoundingRect().adjusted(-1500, -1500, 1500, 1500))
 
@@ -869,7 +1093,7 @@ class CanvasPanel:
                 self.scene.addItem(edge)
             edge.highlight(self.selected)
             current = (*current, edge)
-        self.connection_paths = current
+        self._state.set(replace(self._state.get(), connection_paths=current))
         self.update_connection_geometry()
 
     def update_connection_geometry(self) -> None:
@@ -911,7 +1135,8 @@ class CanvasPanel:
         # A single scene owns all nested bubbles. Focusing reveals its ancestors
         # without replacing neighbors, saved pins or the scene's native objects.
         self.commit(Reveal(identity))
-        self.scope = CanvasScope()
+        new_scope = CanvasScope()
+        self._state.set(replace(self._state.get(), scope=new_scope))
         self.render(self.view)
 
     def open_context(self, identity: str) -> None:
@@ -927,8 +1152,9 @@ class CanvasPanel:
 
     def toggle_contents(self) -> None:
         mode = CanvasMode.CONTEXTS if self.scope.mode is CanvasMode.CONTENTS else CanvasMode.CONTENTS
-        self.scope = replace(self.scope, mode=mode)
-        self.positioned = False
+        new_scope = replace(self.scope, mode=mode)
+        self._state.set(replace(self._state.get(), scope=new_scope))
+        self._state.set(replace(self._state.get(), positioned=False))
         self.render(self.view)
         self.home()
 
@@ -1044,7 +1270,8 @@ class CanvasPanel:
         group = next((group for root in self.projection.groups for group in descendants(root) if group.id == identity), None)
         if group is not None:
             self.commit(SetExpansion(identity, expanded=not group.expanded))
-            self.scope = replace(self.scope, mode=CanvasMode.CONTENTS)
+            new_scope = replace(self.scope, mode=CanvasMode.CONTENTS)
+            self._state.set(replace(self._state.get(), scope=new_scope))
             self.render(self.view)
             revised = next((item for root in self.projection.groups for item in descendants(root) if item.id == identity), None)
             if not group.expanded and revised is not None and not revised.expanded:
@@ -1064,15 +1291,15 @@ class CanvasPanel:
             case Investigating.ALREADY:
                 self.status.setText("This work already has an investigation in progress.")
             case Queued(document=document):
-                self.document = document
+                self._state.set(replace(self._state.get(), document=document))
             case NotQueued(document=document, reason=reason):
-                self.document = document
+                self._state.set(replace(self._state.get(), document=document))
                 self.status.setText("Could not queue the investigation: " + reason)
 
     def start_connection(self) -> None:
         work = next((work for work in self.view.catalog.works if work.id == self.selected), None)
         if work is not None:
-            self.linking = None if self.linking is not None else work
+            self._state.set(replace(self._state.get(), linking=None if self.linking is not None else work))
             self.status.setText("Select a source bubble to connect." if self.linking is not None else "Connection cancelled.")
         else:
             self.status.setText("Select a work bubble before connecting a source.")
@@ -1082,7 +1309,7 @@ class CanvasPanel:
 
     def fit(self) -> None:
         cancel(self.focus_timer)
-        self.focus_timer = None
+        self._state.set(replace(self._state.get(), focus_timer=None))
         if self.visible_cards or self.group_frames:
             # The floating toolbar consumes visible space without resizing the
             # scene. Fit into the remaining viewport so it covers no bubbles.
@@ -1098,8 +1325,8 @@ class CanvasPanel:
         if self.draft_proxy is not None:
             self.canvas.centerOn(self.draft_proxy)
             return
-        self.draft_known = frozenset(item.id for item in self.view.catalog.works)
-        self.draft = WorkDetail.build(self.work, WorkDefinition("New work", "Describe the outcome you are working towards."), self.style)
+        known = frozenset(item.id for item in self.view.catalog.works)
+        draft = WorkDetail.build(self.work, WorkDefinition("New work", "Describe the outcome you are working towards."), self.style)
         # The draft is a solid card on the canvas, like the bubble it becomes.
         frame = QtWidgets.QFrame()
         frame.setObjectName("draft")
@@ -1112,21 +1339,22 @@ class CanvasPanel:
         layout = column(frame)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.addWidget(label("New work", "title"))
-        layout.addWidget(self.draft.frame)
+        layout.addWidget(draft.frame)
         layout.addWidget(button("Discard new work", self.cancel_create))
-        self.draft_proxy = self.scene.addWidget(frame)
-        self.draft_proxy.setZValue(20)
+        proxy = self.scene.addWidget(frame)
+        self._state.set(replace(self._state.get(), draft_known=known, draft=draft, draft_proxy=proxy))
+        proxy.setZValue(20)
         point = self.canvas.mapToScene(self.canvas.viewport().rect().center())
-        self.draft_proxy.setPos(point.x() - 200, point.y() - 260)
-        self.canvas.ensureVisible(self.draft_proxy)
-        self.draft.title.setFocus()
+        proxy.setPos(point.x() - 200, point.y() - 260)
+        self.canvas.ensureVisible(proxy)
+        draft.title.setFocus()
 
     def cancel_create(self) -> None:
         if self.draft_proxy is not None:
             self.scene.removeItem(self.draft_proxy)
             self.draft_proxy.deleteLater()
-            self.draft_proxy = None
-        self.draft = None
+            self._state.set(replace(self._state.get(), draft_proxy=None))
+        self._state.set(replace(self._state.get(), draft=None))
 
     def create_note(self) -> None:
         note = CanvasNote("note:" + uuid4().hex, "New note", context_id=self.selected)
@@ -1210,7 +1438,7 @@ class _Gesturing:
 
 @dataclass(frozen=True, slots=True)
 class CanvasInteraction:
-    owner: CanvasPanel
+    _owner: Callable[[], CanvasPanel]
     _state: Cell[_Gesturing] = field(default_factory=lambda: Cell(_Gesturing()), init=False, repr=False)
 
     def _advance(self, event: GestureInput) -> GestureResult:
@@ -1218,6 +1446,10 @@ class CanvasInteraction:
         result = transition(gesturing.gesture, event, gesturing.scene)
         self._state.set(replace(gesturing, gesture=result.state))
         return result
+
+    @property
+    def owner(self) -> CanvasPanel:
+        return self._owner()
 
     def press_bubble(self, identity: str, point: ScenePoint) -> None:
         match self._state.get().gesture:
