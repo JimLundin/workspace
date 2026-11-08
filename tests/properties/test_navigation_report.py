@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 from hypothesis import strategies
 
 from desktop_ui.navigation_log import Cause, Entry
-from desktop_ui.navigation_report import History, Move, suggested
 from desktop_ui.window_layout import LAYOUTS, App, Setup, first_places
+from scripts.navigation_analysis import History, Move, suggested
 from tests.properties.generation import cases, property_test
 
 APPS = ("windowsterminal.exe", "code.exe", "msedge.exe", "outlook", "teams", "notepad.exe", None)

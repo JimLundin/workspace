@@ -183,10 +183,10 @@ It reads the last 7 days by default, from `navigation.1.jsonl` and then
 `tests/navigation_report_fixture.jsonl`. Each line is validated against the
 [schema](#schema) through the log's own `TypeAdapter`. A line that isn't one
 entry, or whose time has no UTC offset, is counted as malformed and skipped.
-`desktop_ui/navigation_report.py` decides everything with pure functions;
+`scripts/navigation_analysis.py` decides everything with pure functions;
 `scripts/navigation_report.py` reads the files and prints.
 
-`EFFORT` and `DESKTOP_SWITCH` in `desktop_ui/navigation_report.py` hold the
+`EFFORT` and `DESKTOP_SWITCH` in `scripts/navigation_analysis.py` hold the
 cost of one entry:
 
 | Cause | Cost | On another desktop |

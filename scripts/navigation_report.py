@@ -13,8 +13,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from desktop_ui.navigation_log import NAVIGATION_LOG, rotated, setup_name
-from desktop_ui.navigation_report import CHORDED, Log, read, report, selected
 from desktop_ui.window_layout import Setup
+from scripts.navigation_analysis import CHORDED, Log, read, report, selected
 
 
 def lines(path: Path) -> tuple[str, ...]:

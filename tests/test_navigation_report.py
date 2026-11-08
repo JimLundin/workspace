@@ -4,7 +4,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from desktop_ui.navigation_log import ENTRY, Cause, Entry, SetupName
-from desktop_ui.navigation_report import (
+from desktop_ui.shell_items import PinnedApp
+from desktop_ui.window_layout import CODE, EDGE, FULL, LEFT_HALF, LEFT_TWO_THIRDS, RIGHT_HALF, RIGHT_THIRD, TERMINAL, App, Position, Role, Setup
+from scripts.navigation_analysis import (
     Exchange,
     History,
     Log,
@@ -19,8 +21,6 @@ from desktop_ui.navigation_report import (
     suggested,
     totals,
 )
-from desktop_ui.shell_items import PinnedApp
-from desktop_ui.window_layout import CODE, EDGE, FULL, LEFT_HALF, LEFT_TWO_THIRDS, RIGHT_HALF, RIGHT_THIRD, TERMINAL, App, Position, Role, Setup
 
 CLOCK = datetime(2026, 11, 4, 9, 30, tzinfo=timezone(timedelta(hours=1)))
 HOME: frozendict[App, Position] = frozendict(
