@@ -308,20 +308,6 @@ desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 [tool.workspace.architecture]
 
 [[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "miryoku.engine"
-declaration = "Engine"
-expression = "Engine"
-reason = "The isolated keyboard path uses bounded mutable buffers and direct updates; scripts/benchmark_keyboard.py measures their latency, allocation and GC."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "immutable-data"
-module = "miryoku.engine"
-declaration = "Modifiers"
-expression = "Modifiers"
-reason = "Modifier ownership counters are updated for every key event inside the measured keyboard path; copying them would add per-event allocation."
-
-[[tool.workspace.architecture.exceptions]]
 rule = "plain-record"
 module = "assistant.sdk"
 declaration = "MemorySession"

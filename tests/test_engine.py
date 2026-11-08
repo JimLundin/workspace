@@ -4,7 +4,7 @@ with `pytest`."""
 import unittest
 from dataclasses import replace
 
-from miryoku.engine import DEFAULT_CONFIGURATION, MAX_BUFFERED, Configuration, Engine, Indicator, Signal, Verdict
+from miryoku.engine import DEFAULT_CONFIGURATION, MAX_BUFFERED, Configuration, Engine, Indicator, Modifiers, Signal, Verdict
 from miryoku.layout import (
     ESCAPE,
     FUNCTION_KEYS,
@@ -233,9 +233,8 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
 
     host = RejectedRelease()
     engine = Engine()
-    engine.pressed[0:4] = [Key.A, Key.B, Mod.SHIFT, Tool.DICTATE]
-    engine.mods.counts[Mod.SHIFT] = 1
-    engine.locked = Layer.NAV
+    pressed = (Key.A, Key.B, Mod.SHIFT, Tool.DICTATE, *engine.pressed[4:])
+    engine.restore(replace(engine.state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), locked=Layer.NAV))
     with unittest.TestCase().assertRaises(OSError):
         engine.release_all(host)
     assert host.log == ["-a", "-b", "-SFT", "?dictate-"]
@@ -251,12 +250,11 @@ def test_rejected_modifier_release_does_not_skip_remaining_modifiers() -> None:
             if key is Mod.SHIFT:
                 raise OSError("Rejected modifier")
 
-    engine = Engine()
-    engine.mods.counts.update({Mod.SHIFT: 1, Mod.CTRL: 1})
+    mods = Modifiers(frozendict({Mod.SHIFT: 1, Mod.CTRL: 1}))
     host = RejectedModifier()
     with unittest.TestCase().assertRaises(OSError):
-        engine.mods.release_all(host)
-    assert host.log == ["-SFT", "-CTL"] and not engine.mods.counts
+        mods.release_all(host)
+    assert host.log == ["-SFT", "-CTL"]
 
 
 def test_unbound_keys_cannot_type_or_trigger_physical_shortcuts() -> None:
@@ -273,7 +271,7 @@ def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> None
     for function in FUNCTION_KEYS:
         assert t.key(function, down=True, now=0) == Verdict.PASS
         assert t.key(function, down=False, now=1) == Verdict.PASS
-    t.e.enabled = False
+    t.e.restore(replace(t.e.state, enabled=False))
     for code in (0x01, 0x0F, 0x1C, 0x0E, 0x2A, 0x36, 0x1D, 0x38, 0x4B, 0x5D):
         assert t.key(Scancode(code), down=True, now=2) == Verdict.PASS
         assert t.key(Scancode(code), down=False, now=3) == Verdict.PASS

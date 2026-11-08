@@ -349,11 +349,9 @@ class Keyboard:
 
     def input_failed(self, error: Exception, *, phase: str = "key") -> None:
         """Fail open, without logging or retaining traceback objects inside the hook."""
-        self.engine.enabled = False
+        self.engine.fail_open()
         if self.firmware is not None:
             self.firmware = FirmwareKeyboard(resume_layout=False)
-        self.engine.typed = ""
-        self.engine.escape_down_at = None
         self.pressed.clear()
         self.fault = failure_info(error)
         self.fault_phase = phase
@@ -368,7 +366,7 @@ class Keyboard:
                 self.recovery_errors += 1
             with contextlib.suppress(Exception):
                 self.host.release_owned()
-            self.engine.shown = QUIET
+            self.engine.quiet()
             with contextlib.suppress(Exception):
                 self.host.tell(Side.DESKTOP, WM_KEY_STATE, 0, 0)
                 self.host.layout_state(LayoutState.OFF)
@@ -477,7 +475,7 @@ class Keyboard:
         self.shortcuts = ()
         self.native_releases.clear()
         self.apps_held = False
-        self.engine.escape_down_at = None
+        self.engine.forget_escape()
         with contextlib.suppress(Exception):
             self.observe_chord()
             self.clear_pressed()
@@ -556,7 +554,7 @@ class Keyboard:
             self.picker_active = self.platform.title(foreground) == SWITCHER_TITLE
         pointer = self.platform.cursor_position()
         if foreground != self.foreground or pointer != self.pointer or key.flags & inputs.LLKHF_EXTENDED or key.extra == MAGIC:
-            self.engine.typed = ""
+            self.engine.forget_typed()
         self.foreground = foreground
         self.pointer = pointer
         if (self.native_releases or not self.engine.enabled) and not key.flags & inputs.LLKHF_INJECTED:
@@ -575,7 +573,7 @@ class Keyboard:
                 self.native_releases.add(key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0))
             return False
         if native_control(key.vk):
-            self.engine.typed = ""
+            self.engine.forget_typed()
             return False
         if key.flags & inputs.LLKHF_EXTENDED:
             # Extended keys share base scancodes with layout cells: never remap

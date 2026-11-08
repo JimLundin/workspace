@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from ctypes import wintypes
+from dataclasses import replace
 
 if sys.platform != "win32":
     raise unittest.SkipTest("Windows bindings")
@@ -278,9 +279,9 @@ def test_apps_k_holds_agent_voice_until_release_and_updates_its_highlight() -> N
 def test_native_modifier_released_after_enabling_does_not_stick_to_space() -> None:
     with observed_keyboard() as (keyboard, messages):
         control = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
-        keyboard.engine.enabled = False
+        keyboard.engine.restore(replace(keyboard.engine.state, enabled=False))
         assert not keyboard.swallow(control, down=True)
-        keyboard.engine.enabled = True
+        keyboard.engine.restore(replace(keyboard.engine.state, enabled=True))
         assert not keyboard.swallow(control, down=False)
         hold_apps(keyboard, at=15)
         keyboard.swallow(inputs.KeyEvent(0, DICTATE_KEY, 0, 20, 0), down=True)
@@ -396,7 +397,7 @@ def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> Non
     driver.send_error = OSError("Release failed")
     driver.delivery_error = OSError("Post failed")
     keyboard = Keyboard(driver)
-    keyboard.engine.pressed[0] = Key.A
+    keyboard.engine.restore(replace(keyboard.engine.state, pressed=(Key.A, *keyboard.engine.pressed[1:])))
     keyboard.host.owned.add(Key.A)
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
     assert not bool(keyboard.engine.enabled) and not keyboard.busy
@@ -414,7 +415,7 @@ def test_rejected_chord_releases_its_added_modifier_and_defers_diagnostics() -> 
     driver.key = inputs.KeyEvent(0x32, 0x03, 0, 10, 0)
     driver.reject_down = Key.LBRACKET
     keyboard = Keyboard(driver)
-    keyboard.engine.locked = Layer.SYM
+    keyboard.engine.restore(replace(keyboard.engine.state, locked=Layer.SYM))
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
     assert not bool(keyboard.engine.enabled) and not keyboard.host.owned
     assert (Mod.SHIFT, False) in driver.output
@@ -735,7 +736,7 @@ def test_overlay_refuses_mouse_activation_but_still_delivers_other_messages() ->
 def test_layout_output_preserves_snippets_but_assistant_input_resets_them() -> None:
     keyboard = Keyboard(KeyboardFixture())
     keyboard.foreground = 1
-    keyboard.engine.typed = ",,t"
+    keyboard.engine.restore(replace(keyboard.engine.state, typed=",,t"))
     assert not keyboard.swallow(inputs.KeyEvent(0x54, 0, 0, 0, LAYOUT_MAGIC), down=True)
     assert keyboard.engine.typed == ",,t"
     assert not keyboard.swallow(inputs.KeyEvent(0x48, 0, 0, 0, MAGIC), down=True)
@@ -745,7 +746,7 @@ def test_layout_output_preserves_snippets_but_assistant_input_resets_them() -> N
 def test_native_arrow_reaches_apps_and_clears_snippets() -> None:
     keyboard = Keyboard(KeyboardFixture())
     keyboard.foreground = 1
-    keyboard.engine.typed = ",,t"
+    keyboard.engine.restore(replace(keyboard.engine.state, typed=",,t"))
     assert not keyboard.swallow(inputs.KeyEvent(0x25, 0x4B, inputs.LLKHF_EXTENDED, 0, 0), down=True)
     assert keyboard.engine.typed == ""
 
@@ -777,7 +778,7 @@ def test_extended_keys_never_fall_into_layout_bindings_and_function_controls_rem
         assert messages == []
         for down in (True, False):
             assert not keyboard.swallow(inputs.KeyEvent(0xA3, 0x1D, inputs.LLKHF_EXTENDED, 0, 0), down=down)
-        keyboard.engine.enabled = False
+        keyboard.engine.restore(replace(keyboard.engine.state, enabled=False))
         for vk, scancode in ((0x0D, 0x1C), (0x11, 0x1D), (0x12, 0x38), (0x2E, 0x53)):
             for down in (True, False):
                 assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, inputs.LLKHF_EXTENDED, 0, 0), down=down)
@@ -786,9 +787,9 @@ def test_extended_keys_never_fall_into_layout_bindings_and_function_controls_rem
 def test_modifiers_pressed_while_disabled_can_release_after_enabling_the_layout() -> None:
     with observed_keyboard() as (keyboard, messages):
         for vk, scancode, flags in ((0xA2, 0x1D, 0), (0xA3, 0x1D, inputs.LLKHF_EXTENDED)):
-            keyboard.engine.enabled = False
+            keyboard.engine.restore(replace(keyboard.engine.state, enabled=False))
             assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 0, 0), down=True)
-            keyboard.engine.enabled = True
+            keyboard.engine.restore(replace(keyboard.engine.state, enabled=True))
             assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 1, 0), down=False)
             assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 2, 0), down=True)
             assert not keyboard.swallow(inputs.KeyEvent(vk, scancode, flags, 3, 0), down=False)
@@ -797,7 +798,7 @@ def test_modifiers_pressed_while_disabled_can_release_after_enabling_the_layout(
 
 def test_native_function_key_clears_a_partial_snippet_without_remapping() -> None:
     with observed_keyboard() as (keyboard, messages):
-        keyboard.engine.typed = ",,t"
+        keyboard.engine.restore(replace(keyboard.engine.state, typed=",,t"))
         assert not keyboard.swallow(inputs.KeyEvent(0x70, 0x3B, 0, 0, 0), down=True)
         assert keyboard.engine.typed == ""
         assert messages == []
@@ -820,7 +821,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
     driver = KeyboardFixture()
     driver.send_error = OSError("input was refused")
     keyboard = Keyboard(driver)
-    keyboard.engine.pressed[0] = Key.Q  # An output held before opening the tray.
+    keyboard.engine.restore(replace(keyboard.engine.state, pressed=(Key.Q, *keyboard.engine.pressed[1:])))  # An output held before opening the tray.
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     assert not bool(keyboard.engine.enabled)
     assert not keyboard.busy
@@ -829,7 +830,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
 def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> None:
     driver = KeyboardFixture()
     keyboard = Keyboard(driver)
-    keyboard.engine.shown = Indicator(Layer.SYM, locked=True, caps_word=True, chord=False)
+    keyboard.engine.restore(replace(keyboard.engine.state, shown=Indicator(Layer.SYM, locked=True, caps_word=True, chord=False)))
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     layers = [decode_indicator(wparam) for message, wparam, _ in driver.messages if message == WM_INDICATOR]
     assert layers == [(Layer.SYM.value, True, True)]
