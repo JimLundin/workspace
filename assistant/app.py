@@ -24,6 +24,7 @@ import components
 import usage
 from assistant.activity import ActivityTracker
 from assistant.control import (
+    AgentActivity,
     AgentDone,
     AgentStarted,
     AttendAutomatic,
@@ -76,7 +77,6 @@ from assistant.control import (
     tray_state,
 )
 from automation.activity import Observation, Policy
-from cell import Cell
 from config import APPS
 from usage import DIRECTORY, Detail
 lazy import contracts.desktop_link
@@ -289,11 +289,6 @@ class DesktopControls:
     """What the desktop's commands ask of the application, reported to the control thread."""
 
     report: Callable[[Event], None]
-    state: Cell[ControlState]
-
-    @property
-    def session(self) -> AgentWindow | None:
-        return self.state.get().session
 
     def use_tool(self, tool: Tool) -> None:
         self.report(HandleKey(tool, down=True))
@@ -409,7 +404,6 @@ class AssistantApp:
     """
 
     inbox: Inbox
-    state: Cell[ControlState]
     settings: Settings
     desktop: DesktopPort
     startup_effects: control_policy.StartupEffects
@@ -445,7 +439,6 @@ class AssistantApp:
     ) -> AssistantApp:
         report = inbox.report
         timings = Timings("startup")
-        state = Cell(ControlState())
         view_thread = ViewThread.start()
         automatic_attention = AutomaticAttention(lambda status: report(AutomaticShown(status)), lambda: report(AutomaticUnavailable()))
         mic_event = system.create_event()
@@ -465,7 +458,7 @@ class AssistantApp:
         saved_context = ContextStore(tasks.path)
         automation = Worker.leasing(tasks, WORK.root)
         policy = Policy(enabled=os.environ.get("WORKSPACE_AGENT_CONTEXT", "recent").lower() != "off")
-        activity = ActivityTracker.of(foreground_context, lambda: state.get().agent_active, policy=policy)
+        activity = ActivityTracker.of(foreground_context, policy=policy)
         canvas = WorkCanvas(
             WORK.root / "canvas.sqlite3",
             lambda run: report(ContinueRun(run)),
@@ -512,7 +505,7 @@ class AssistantApp:
             TeamsWeb.at(BROWSER_PROFILE), windows_store(DIRECTORY / "communications.bin", COMMUNICATIONS_STATE), feed.communications
         )
         work_owners = WorkOwners(triage.command, personal.handle, canvas.command)
-        commands = DesktopCommands(canvas, desktop, DesktopControls(report, state))
+        commands = DesktopCommands(canvas, desktop, DesktopControls(report))
         timings.mark("communications and desktop owners")
         meetings = Meetings.open(
             usable,
@@ -559,7 +552,6 @@ class AssistantApp:
             report(Notified("Workspace", f"The AI tools need {', '.join(missing.names)}; the layout works without them."))
         return cls(
             inbox,
-            state,
             usable,
             desktop,
             NativeStartup() if startup_effects is None else startup_effects,
@@ -591,18 +583,19 @@ class AssistantApp:
         handle = self.inbox.window.handle
         timer = control_policy.initialize_controls(handle, self.startup.start, self.startup_effects)
         self.timings.mark("workers and readiness")
-        self.handle(Started(timer, self.agent.snapshot(), self.personal.snapshot()))
+        # The control loop owns the state: each event folds it, and nothing else holds it.
+        state = self.handle(ControlState(), Started(timer, self.agent.snapshot(), self.personal.snapshot()))
         if self.settings.api_key:
             threading.Thread(target=self.agent.prepare, name="agent session warmup", daemon=True).start()
         for message in system.messages_for(handle):
-            for event in self._events(message):
-                self.handle(event)
+            for event in self._events(message, state.capture_timer):
+                state = self.handle(state, event)
 
-    def _events(self, message: system.Message) -> Iterator[Event]:
+    def _events(self, message: system.Message, capture_timer: int | None) -> Iterator[Event]:
         """What a message posted to the control window reports."""
         if message.message == WM_EVENTS:
             yield from self.inbox.drained()
-        elif message.message == system.WM_TIMER and message.wparam == self.state.get().capture_timer:
+        elif message.message == system.WM_TIMER and message.wparam == capture_timer:
             yield ExpireCapture(time.monotonic())
         elif message.message == WM_REQUEST:
             if (request := decode(message.wparam, APPS)) is not None:
@@ -612,17 +605,17 @@ class AssistantApp:
         elif message.message == system.WM_CLOSE:
             yield Quit()
 
-    def handle(self, event: Event) -> None:
-        """Control thread: fold `event` into the state, then perform its effects in order."""
-        state, effects = transition(self.state.get(), event)
-        self.state.set(state)
+    def handle(self, state: ControlState, event: Event) -> ControlState:
+        """Control thread: fold `event` into `state`, perform its effects in order, and return the new state."""
+        state, effects = transition(state, event)
         for effect in effects:
             try:
-                self.perform(effect)
+                self.perform(effect, state)
             except Exception:
                 log(traceback.format_exc())
+        return state
 
-    def perform(self, effect: Effect) -> None:
+    def perform(self, effect: Effect, state: ControlState) -> None:
         match effect:
             case Send() | Log() | Show() | ShowIdle() | IdleKeys() | ShowAttention():
                 self._present(effect)
@@ -635,9 +628,11 @@ class AssistantApp:
             case HandleKey() | UseLayout() | ExpireCapture():
                 self._key(effect)
             case HandleFrame(frame):
-                self._command(frame)
+                self._command(frame, state.session)
             case Quit():
-                self.quit()
+                self.quit(state.capture_timer)
+            case AgentActivity(active):
+                self.activity.agent_working(active=active)
             case _:
                 assert_never(effect)
 
@@ -765,7 +760,7 @@ class AssistantApp:
                     path = Path(transcript) if action == "open" and transcript else self.meetings.root
                     os.startfile(path if path.exists() else self.meetings.root)
         except (OSError, ValueError) as error:
-            self.handle(Problem(str(error)))
+            self.inbox.report(Problem(str(error)))
 
     def _work_command(self, command: WorkViewCommand) -> None:
         match command:
@@ -796,18 +791,18 @@ class AssistantApp:
             case _:
                 self.agent.command(command)
 
-    def _command(self, frame: bytes) -> None:
+    def _command(self, frame: bytes, session: AgentWindow | None) -> None:
         try:
-            self.commands.handle(from_desktop(frame))
+            self.commands.handle(from_desktop(frame), session)
         except contracts.desktop_link.WireError as error:
             log(f"Refused a frame from the desktop: {error}")
         except (OSError, ValueError, sqlite3.Error) as error:
-            self.handle(Problem(str(error)))
+            self.inbox.report(Problem(str(error)))
 
-    def quit(self) -> None:
+    def quit(self, capture_timer: int | None) -> None:
         timings = Timings("shutdown")
-        if (timer := self.state.get().capture_timer) is not None:
-            system.kill_window_timer(self.inbox.window.handle, timer)
+        if capture_timer is not None:
+            system.kill_window_timer(self.inbox.window.handle, capture_timer)
         self.assistant.stop_capture(discard=True, reason="shutdown")
         timings.mark("stop capture")
         # Park running work while the owners its calls reach still exist.

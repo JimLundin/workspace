@@ -338,7 +338,16 @@ class UseLayout:
     on: bool
 
 
-type Effect = Instruction | Send | Log | ShowIdle | IdleKeys | ObserveWork | ObserveCatalog | ShowAttention | PrepareSession | UseLayout
+@dataclass(frozen=True, slots=True)
+class AgentActivity:
+    """Work context samples record whether the agent is working."""
+
+    active: bool
+
+
+type Effect = (
+    Instruction | Send | Log | ShowIdle | IdleKeys | ObserveWork | ObserveCatalog | ShowAttention | PrepareSession | UseLayout | AgentActivity
+)
 """Something only the application's parts can do."""
 
 # ---- the state the control thread keeps ----------------------------------------------
@@ -356,7 +365,6 @@ class ControlState:
     """The agent session, once the work frontend has opened it."""
     work: WorkSnapshot = field(default_factory=WorkSnapshot)
     personal: PersonalView = field(default_factory=PersonalView)
-    agent_active: bool = False
     """Agent work has started and not yet finished; the activity tracker reads it."""
     capture_timer: int | None = None
     """The control window's timer that bounds a voice capture, once the controls run."""
@@ -398,8 +406,10 @@ def _reacted(state: ControlState, fact: Fact) -> Iterator[Effect]:
             yield ObserveCatalog(view.catalog)
             yield Send(WorkChanged(replace(state.work, personal=view)))
         case AgentStarted():
+            yield AgentActivity(active=True)
             yield Show(State.AGENT)
         case AgentDone():
+            yield AgentActivity(active=False)
             yield IdleKeys()
         case CanvasPublished(publication):
             if state.session is not None:
@@ -443,10 +453,6 @@ def _remembered(state: ControlState, fact: Fact) -> ControlState:
             return replace(state, work=snapshot)
         case PersonalObserved(view):
             return replace(state, personal=view)
-        case AgentStarted():
-            return replace(state, agent_active=True)
-        case AgentDone():
-            return replace(state, agent_active=False)
         case CanvasPublished(publication):
             return replace(state, publication=publication)
         case RecordingUpdated(recording):

@@ -114,7 +114,7 @@ class LocalAssistant:
     # ---- the desktop's port ------------------------------------------------------------
 
     def send(self, command: ToAssistant) -> bool:
-        self.commands.handle(from_desktop(to_assistant(command)))
+        self.commands.handle(from_desktop(to_assistant(command)), self.session)
         return True
 
     # ---- `DesktopCommands.Controls` ----------------------------------------------------

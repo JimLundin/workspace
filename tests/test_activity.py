@@ -11,7 +11,7 @@ from winapi.shapes import Window
 
 
 def tracker(*, max_age: float = 1800, capacity: int = 128) -> ActivityTracker:
-    return ActivityTracker.of(lambda: "unavailable", lambda: False, policy=Policy(max_age=max_age, capacity=capacity))
+    return ActivityTracker.of(lambda: "unavailable", policy=Policy(max_age=max_age, capacity=capacity))
 
 
 def test_activity_tracks_app_and_document_changes_without_duplicate_poll_entries() -> None:
@@ -70,9 +70,9 @@ def test_disabled_context_never_reads_the_desktop_and_shutdown_clears_history() 
         reads.append("desktop")
         return "unavailable"
 
-    disabled = ActivityTracker.of(read, lambda: False, policy=Policy(enabled=False))
+    disabled = ActivityTracker.of(read, policy=Policy(enabled=False))
     disabled.start()
-    assert disabled.thread is None
+    assert disabled.thread.ident is None
     assert disabled.snapshot().state == "disabled"
     assert not reads
     history = tracker()
@@ -113,7 +113,7 @@ def test_a_desktop_read_finishing_after_shutdown_cannot_restore_context() -> Non
         assert release.wait(timeout=2)
         return Window(1, "Budget.xlsx", "excel.exe", minimized=False)
 
-    history = ActivityTracker.of(read, lambda: False)
+    history = ActivityTracker.of(read)
     results: list[ContextSnapshot] = []
     worker = threading.Thread(target=lambda: results.append(history.snapshot()))
     worker.start()

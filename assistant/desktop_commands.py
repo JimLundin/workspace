@@ -45,11 +45,6 @@ from winapi.system_notices import Observed
 class Controls(Protocol):
     """The assistant's owners a desktop command reaches, besides the canvas."""
 
-    @property
-    def session(self) -> AgentWindow | None:
-        """The agent session, once the work frontend has asked for it."""
-        ...
-
     def use_tool(self, tool: Tool) -> None: ...
     def recording_action(self, action: RecordingAction) -> None: ...
     def work_command(self, command: WorkViewCommand) -> None: ...
@@ -68,8 +63,11 @@ class DesktopCommands:
     desktop: DesktopPort
     controls: Controls
 
-    def handle(self, message: ToAssistant) -> None:
-        """Carry out one command; an owner's OSError, ValueError or sqlite3.Error is the caller's to report."""
+    def handle(self, message: ToAssistant, session: AgentWindow | None) -> None:
+        """Carry out one command, with the agent session as it is now (None until work first asks for it).
+
+        An owner's OSError, ValueError or sqlite3.Error is the caller's to report.
+        """
         controls = self.controls
         match message:
             case UseTool(tool=tool):
@@ -94,11 +92,11 @@ class DesktopCommands:
             case ContinueWork(work_id=work_id):
                 self.continue_work(work_id)
             case AnswerCanvas(request=request, answer=answer):
-                if not self.canvas.answer(request, answer, self.deliver_answer):
+                if not self.canvas.answer(request, answer, lambda request, answer: self.deliver_answer(request, answer, session)):
                     self.desktop.send(ReplyFailed())
             case SelectAttention(request=request):
-                if controls.session is not None:
-                    controls.session.select_attention(request)
+                if session is not None:
+                    session.select_attention(request)
             case CanvasNoticed(title=title, target=target):
                 controls.notify_canvas(title, target)
             case SpeakToAgent(text=text):
@@ -121,9 +119,8 @@ class DesktopCommands:
             case Queued():
                 pass
 
-    def deliver_answer(self, request: CanvasRequest, answer: TextAnswer) -> bool:
+    def deliver_answer(self, request: CanvasRequest, answer: TextAnswer, session: AgentWindow | None) -> bool:
         """A canvas question's answer goes to the conversation that asked it, or to its task."""
-        session = self.controls.session
         match delivery(request, answer, session.snapshot().identity if session is not None else None):
             case ToSession(session_id=identity, request_id=key):
                 return session is not None and session.respond(key, answer, expected_session=identity)
