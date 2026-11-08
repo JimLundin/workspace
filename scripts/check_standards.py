@@ -4,7 +4,7 @@ CI's standards job runs these tools against the native Windows dependencies.
 The editing quality review runs only Ruff's signature rules, so without this
 step type and lint errors anywhere else in the tree still produced receipts.
 Pyright is the only type checker; scripts/typecheck.py prepares its typeshed.
-The protected selfcheck and CI keep their own unchanged invocations.
+CI runs the same standards in its own job.
 """
 
 import subprocess

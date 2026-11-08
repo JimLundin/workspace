@@ -1,1 +1,1 @@
-"""Generated development checks; installed selfcheck keeps its flat test suite."""
+"""Generated property checks, run with the rest of the suite."""

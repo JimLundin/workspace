@@ -2,8 +2,8 @@
 
 ASTs belong to these adapters and are never mutated after parsing or given to
 application code. Bounded parser retention avoids three copies of the same work.
-Only validated immutable observations are persisted; full selfcheck does not use
-the disk cache. Cache loss/corruption falls back to ordinary analysis.
+Only validated immutable observations are persisted. Cache loss or corruption
+falls back to ordinary analysis.
 """
 
 import ast

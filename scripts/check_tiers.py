@@ -21,7 +21,7 @@ to 1.3 s on the first run after a commit, so the budget sits above that and
 SLOW below it.
 """
 
-CHECK_PROCESS: Final = "runs real check subprocesses (selfcheck or scripts.check) on a temporary tree; the defect is in that process boundary"
+CHECK_PROCESS: Final = "runs real check subprocesses on a temporary tree; the defect is in that process boundary"
 
 SLOW: Final[frozendict[str, str]] = frozendict(
     {
@@ -40,17 +40,12 @@ SLOW: Final[frozendict[str, str]] = frozendict(
         "tests/test_self_review.py::test_history_tool_pages_day_and_recent_then_drills_into_diagnostics": (
             "several SDK turns against the fake endpoint, one per history page"
         ),
-        "tests/test_selfcheck.py::test_a_change_runs_only_the_tests_that_import_it": CHECK_PROCESS,
-        "tests/test_selfcheck.py::test_fast_checks_defer_native_tests_but_the_default_install_gate_runs_them": CHECK_PROCESS,
-        "tests/test_selfcheck.py::test_fast_checks_still_compile_native_tests_and_import_production_modules": CHECK_PROCESS,
-        "tests/test_selfcheck.py::test_worker_modules_report_their_passes_and_failures": CHECK_PROCESS,
         "tests/test_source_analysis.py::test_cached_quality_cannot_accept_changed_boolean_signature_or_import_ownership": (
             "real Ruff scans, before and after an edit"
         ),
         "tests/test_work_submissions.py::test_unrelated_failures_cannot_evict_a_watched_identity_collision": (
             "300 submissions, enough to pass the 256-problem limit"
         ),
-        "tests/test_selfcheck.py::test_parallel_native_lanes_report_each_lanes_passes_failures_and_crashes": CHECK_PROCESS,
     }
 )
 """Portable tests allowed over the editing budget, each with why it can't be faster.

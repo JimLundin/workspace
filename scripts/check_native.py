@@ -20,7 +20,7 @@ from pydantic import TypeAdapter, ValidationError
 from scripts.check_results import Results, Selection
 from scripts.development_paths import TEMP
 lazy from scripts.check import DIRECT, combined_results, execute, worker_result
-lazy from scripts.selfcheck import NATIVE_LANES
+lazy from scripts.selection import NATIVE_LANES
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

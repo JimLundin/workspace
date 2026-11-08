@@ -61,5 +61,5 @@ def raised(node: str, error: BaseException, output: str = "") -> Failure:
 
 
 def reported(node: str, report: str) -> Failure:
-    """Adapt a free-text problem, such as selfcheck's, under the step that found it."""
+    """Adapt a free-text problem, such as an import failure, under the step that found it."""
     return Failure(node, report.partition("\n")[0], report)

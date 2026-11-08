@@ -1,4 +1,4 @@
-"""Source-bound editing checks. The keeper's protected full gate is unchanged.
+"""Source-bound checks: the tests a change selects while editing, or every test with --full, as CI runs it.
 
 python -m scripts.check [--full | --native] [--standards] [--tests tests/test_x.py ...]
                        [--receipt /tmp/workspace-check.json]
@@ -21,7 +21,7 @@ from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Protocol, runtime_checkable
+from typing import Final, Literal, Protocol, runtime_checkable
 lazy from concurrent.futures import Future, ProcessPoolExecutor
 
 from pydantic import TypeAdapter, ValidationError
@@ -32,11 +32,13 @@ from scripts.check_results import Failure, Results, Selection, raised, reported
 from scripts.deploy_files import CheckedArchitecture, CheckReceipt, json_record, read, sha, source_map, write, write_receipt
 from scripts.development_paths import PROFILE
 from scripts.source_analysis import Cache, module_name
-lazy from scripts import check_standards, check_tiers, quality, selfcheck
+lazy from scripts import check_standards, check_tiers, quality, selection
 lazy from scripts.check_native import execute_lanes
 lazy from scripts.native_desktop import current_name
 
 ROOT = Path(__file__).resolve().parent.parent
+NATIVE_AVAILABLE: Final = os.name == "nt" or (ROOT / ".venv" / "Scripts" / "python.exe").is_file()
+"""Whether native tests can run: on Windows, or from WSL through the checkout's Windows interpreter. Off it, --full skips them."""
 DIRECT = "direct Python imports"
 TEST_NAMES = TypeAdapter[list[str]](list[str])
 WINDOWS_IMPORTS = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
@@ -112,7 +114,7 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
     # The keeper's install check selects with the same function, so it reruns only
     # what this check would. Following production imports transitively selected most
     # of the suite for any core edit; the full suite runs with --full and in CI.
-    affected = selfcheck.affected_tests(root, changed, tests)
+    affected = selection.affected_tests(root, changed, tests)
     if affected is None:
         return Selection(all_tests, changed, "application asset has implicit dependencies")
     return Selection(tuple(name for name in all_tests if name in affected), changed, DIRECT)
@@ -195,7 +197,7 @@ class NativeSourceRuntime:
             importlib.import_module("tests")
 
     def import_all(self, root: Path) -> Iterable[str]:
-        return selfcheck.import_all(root)
+        return selection.import_all(root)
 
     def load(self, module: str) -> object:
         return importlib.import_module(module)
@@ -223,9 +225,9 @@ def execution_plan(tests: tuple[str, ...]) -> ExecutionPlan:
     candidates = tuple(selector for selector in tests if not selector.startswith("tests/test_windows_"))
     if len(modules(candidates)) < POOL_MINIMUM:
         return ExecutionPlan((), tests)
-    pooled = {selector for selector in candidates if selector.partition("::")[0] not in selfcheck.AFTER_WORKERS}
+    pooled = {selector for selector in candidates if selector.partition("::")[0] not in selection.AFTER_WORKERS}
     # Known heavy modules lead the queue so they do not finish last.
-    heavy = tuple(selector for name in selfcheck.PORTABLE for selector in tests if selector.partition("::")[0] == name and selector in pooled)
+    heavy = tuple(selector for name in selection.PORTABLE for selector in tests if selector.partition("::")[0] == name and selector in pooled)
     portable = (*heavy, *(selector for selector in tests if selector in pooled and selector not in heavy))
     return ExecutionPlan(portable, tuple(name for name in tests if name not in pooled))
 
@@ -247,7 +249,7 @@ NATIVE_SOURCE_RUNTIME = NativeSourceRuntime()
 
 
 def step_failures(node: str, step: Callable[[Path], Iterable[str]], root: Path) -> Iterator[Failure]:
-    """selfcheck's source step's free-text problems, as failures of node."""
+    """The import step's free-text problems, as failures of node."""
     return (reported(node, problem) for problem in step(root))
 
 
@@ -390,7 +392,7 @@ def scratch_directory() -> Generator[Path]:
 
 
 def execute_tests(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
-    # Same small test-function protocol as selfcheck, sequential within its owner.
+    # A small test-function protocol, sequential within its owner.
     # Each module import and test reports its own immutable Results; this combines them.
     return combined_results(tuple(_test_results(tests, load)))
 
@@ -430,7 +432,7 @@ def _test_result(name: str, module: str, label: str, test: Test) -> Results:
     try:
         parameters = inspect.signature(test).parameters
         if set(parameters) - {"tmp_path"}:
-            raise TypeError("Only tmp_path fixtures are supported, as in selfcheck.")
+            raise TypeError("Only tmp_path fixtures are supported.")
         with contextlib.redirect_stderr(output), scratch_directory() as scratch:
             test(**({"tmp_path": scratch} if parameters else {}))
         passed, skipped, failures = 1, 0, ()
@@ -496,13 +498,14 @@ def arguments(parser: argparse.ArgumentParser) -> Options:
             "baseline": (Path() | None) as chosen,
             "timings": (Path() | None) as timings,
         }:
-            baseline = chosen if chosen is not None else checked(native=native or full)
+            native = native or (full and NATIVE_AVAILABLE)
+            baseline = chosen if chosen is not None else checked(native=native)
             if requested is None:
-                return Options(full=full, native=native or full, standards=standards, tests=(), receipt=receipt, baseline=baseline, timings=timings)
+                return Options(full=full, native=native, standards=standards, tests=(), receipt=receipt, baseline=baseline, timings=timings)
             try:
                 return Options(
                     full=full,
-                    native=native or full,
+                    native=native,
                     standards=standards,
                     tests=tuple(TEST_NAMES.validate_python(requested, strict=True)),
                     receipt=receipt,
@@ -657,7 +660,9 @@ def editing_budget(args: Options, selection: Selection, results: Results) -> tup
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--full", action="store_true")
-    parser.add_argument("--native", action="store_true", help="also run affected native modules and slow tests; --full implies it")
+    parser.add_argument(
+        "--native", action="store_true", help="also run affected native modules and slow tests; --full implies it where native tests can run"
+    )
     parser.add_argument("--standards", action="store_true", help="also apply the whole-tree Ruff and pyright standards; Dev.cmd check does")
     parser.add_argument("--tests", nargs="+", help="explicit test modules for an in-progress iteration")
     parser.add_argument("--receipt", type=Path)

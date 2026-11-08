@@ -38,7 +38,7 @@ def check_scripts(entries: Iterable[str]) -> frozenset[str]:
 
 def top_level_roots(text: str) -> frozenset[str]:
     """Top-level modules a file imports at module level, lazily or not: a lazy import
-    loads on first use, which a check reaches (`scripts.check` uses `selfcheck` so)."""
+    loads on first use, which a check reaches (`scripts.check` uses `selection` so)."""
     return frozenset(
         root
         for node in ast.parse(text).body

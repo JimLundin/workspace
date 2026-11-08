@@ -21,7 +21,7 @@ def source_tree(root: Path, text: str) -> None:
 
 def development_lint() -> None:
     if importlib.util.find_spec("ruff") is None:
-        raise unittest.SkipTest("Ruff is a development tool; the installed selfcheck does not require it.")
+        raise unittest.SkipTest("Ruff is a development tool; Workspace itself does not require it.")
 
 
 def test_import_ownership_rejects_aliases_and_forwarding() -> None:

@@ -146,7 +146,7 @@ A passing check records the source it passed (`%LOCALAPPDATA%\workspace\developm
 and the next check selects the tests affected since; the first check runs everything.
 Change scripts under `scripts/` with `--native` before restarting, since the
 editing tier skips the slow check-process tests. CI runs the full suite
-(`python -m scripts.selfcheck`).
+(`python -m scripts.check --full`; off Windows it skips the native tier).
 
 # Committing and running
 
