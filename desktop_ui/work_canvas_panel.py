@@ -87,7 +87,6 @@ from desktop_ui.canvas_toolbar import (
     CanvasTool,
     CanvasToolbarSpec,
     Dismissed,
-    Kind,
     OnBubble,
     OnCanvas,
     OnRelationship,
@@ -95,6 +94,7 @@ from desktop_ui.canvas_toolbar import (
     RelationAction,
     Relationship,
     Restore,
+    Role,
     Subject,
     row,
     sections,
@@ -480,11 +480,11 @@ class CanvasPanel:
             case None:
                 return None
             case WorkThread():
-                return Bubble(current.id, container_title(current), Kind.WORK)
+                return Bubble(current.id, container_title(current), Role.WORK)
             case CanvasCollection():
-                return Bubble(current.id, container_title(current), Kind.GROUP)
+                return Bubble(current.id, container_title(current), Role.GROUP)
             case _:
-                return Bubble(current.id, container_title(current), Kind.OTHER)
+                return Bubble(current.id, container_title(current), Role.OTHER)
 
     def related(self, subject: Subject) -> tuple[Relationship, ...]:
         """The selected bubble's relationships, by their place among the canvas's."""

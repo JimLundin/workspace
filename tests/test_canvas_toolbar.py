@@ -10,7 +10,6 @@ from desktop_ui.canvas_toolbar import (
     CanvasSection,
     CanvasTool,
     Dismissed,
-    Kind,
     OnBubble,
     OnCanvas,
     OnRelationship,
@@ -19,6 +18,7 @@ from desktop_ui.canvas_toolbar import (
     RelationSection,
     Relationship,
     Restore,
+    Role,
     row,
     sections,
     toolbar_problems,
@@ -26,8 +26,8 @@ from desktop_ui.canvas_toolbar import (
 from desktop_ui.spec.canvas import CANVAS
 
 SPEC = CANVAS
-WORK = Bubble("work-1", "Budget review", Kind.WORK)
-GROUP = Bubble("group-1", "Q3", Kind.GROUP)
+WORK = Bubble("work-1", "Budget review", Role.WORK)
+GROUP = Bubble("group-1", "Q3", Role.GROUP)
 
 
 def acts(subject: Bubble | Relationship | None, relationships: tuple[Relationship, ...] = (), dismissed: tuple[Dismissed, ...] = ()) -> list[object]:

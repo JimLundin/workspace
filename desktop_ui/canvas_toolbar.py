@@ -174,7 +174,9 @@ def toolbar_problems(spec: CanvasToolbarSpec) -> tuple[str, ...]:
 # ---- what the toolbar shows ------------------------------------------------------------
 
 
-class Kind(StrEnum):
+class Role(StrEnum):
+    """What a selected bubble is, for the actions that apply to it."""
+
     WORK = auto()
     GROUP = auto()
     OTHER = auto()
@@ -186,7 +188,7 @@ class Bubble:
 
     identity: str
     title: str
-    kind: Kind
+    role: Role
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,9 +265,9 @@ def canvas_tile(item: CanvasItem, *, collapsed: bool) -> Tile:
 def applies(action: BubbleAction, bubble: Bubble, *, related: bool) -> bool:
     match action:
         case BubbleAction.CONTINUE | BubbleAction.EDIT_WORK | BubbleAction.DISMISS | BubbleAction.NOT_MINE:
-            return bubble.kind is Kind.WORK
+            return bubble.role is Role.WORK
         case BubbleAction.RENAME_GROUP:
-            return bubble.kind is Kind.GROUP
+            return bubble.role is Role.GROUP
         case BubbleAction.RELATIONSHIPS:
             return related
         case BubbleAction.FOCUS | BubbleAction.CONTENTS | BubbleAction.CONNECT | BubbleAction.PUT_INSIDE | BubbleAction.MOVE_TO_CANVAS:
