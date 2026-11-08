@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import tomllib
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import reduce
@@ -74,7 +75,7 @@ class Finding:
 
 @dataclass(frozen=True, slots=True)
 class ExceptionSpec:
-    rule: Literal["explicit-attributes", "immutable-data", "mutable-field", "mutable-parameter", "plain-record"]
+    rule: Literal["explicit-attributes", "immutable-data", "mutable-field", "mutable-parameter", "plain-record", "unused-definition"]
     module: Text
     declaration: Text
     expression: Text
@@ -107,17 +108,30 @@ class Candidate:
 
 
 @dataclass(frozen=True, slots=True)
+class Definition:
+    """A named definition, unused until a reference outside its own body names it."""
+
+    finding: Finding
+    own: int
+    """How often the definition names itself, as a recursive function or a class's own annotations do."""
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     declarations: tuple[Finding, ...]
     dynamic_imports: tuple[Finding, ...]
     records: tuple[Candidate, ...]
     assigned: frozenset[str]
     """Attribute names the module assigns through a receiver other than `self`."""
+    definitions: tuple[Definition, ...]
+    referenced: frozendict[str, int]
+    """How often the module names each name."""
 
 
 CONFIGURATION = TypeAdapter[Configuration](Configuration)
 OBSERVATION = TypeAdapter[Observation](Observation)
 DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
+REFERENCES = TypeAdapter[frozenset[str]](frozenset[str])
 FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 
 
@@ -700,10 +714,98 @@ def observation(source: Source, cache: Cache | None) -> Observation:
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and call_name(node.func, aliases) in DYNAMIC_IMPORTS and not _static_import(node)
     )
-    result = Observation((*_declarations(tree, module), *value_shapes(tree, module)), dynamic, tuple(records(tree, module)), assigned(tree))
+    result = Observation(
+        (*_declarations(tree, module), *value_shapes(tree, module)),
+        dynamic,
+        tuple(records(tree, module)),
+        assigned(tree),
+        tuple(definitions(tree.body, module)),
+        references(tree),
+    )
     if cache is not None:
         cache.write(key, result, OBSERVATION)
     return result
+
+
+UNUSED: Final = "Delete it: no production code refers to it."
+TESTS_ONLY: Final = "Only tests refer to it. Delete it with the tests that serve it, or move a test tool into tests/."
+TEXT_REFERENCES: Final = (".cmd", ".ps1", ".js")
+"""Tracked text that can name a Python definition: launch scripts and page scripts."""
+_ANNOTATION: Final = re.compile(r"[\w.\[\]]+(?:(?:, | \| )[\w.\[\]]+)*")
+"""A string that could be a forward reference or a dotted name, as opposed to prose."""
+
+
+def _overrides(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """A method whose caller is the base class it overrides, such as Qt or the SDK."""
+    return any(
+        isinstance(decorator, ast.Name | ast.Attribute) and ast.unparse(decorator).endswith("override") for decorator in function.decorator_list
+    )
+
+
+def _defined(module: str, owner: str, name: str, node: ast.stmt) -> Iterator[Definition]:
+    if not (name.startswith("__") and name.endswith("__")):
+        own = sum(1 for reference in _referenced(node) if reference == name)
+        yield Definition(Finding("unused-definition", module, ".".join(part for part in (owner, name) if part), name, node.lineno, UNUSED), own)
+
+
+def definitions(body: Iterable[ast.stmt], module: str, owner: str = "") -> Iterator[Definition]:
+    """Named definitions in a module and its classes: functions, classes, and module-level values and type aliases."""
+    for node in body:
+        match node:
+            case ast.ClassDef(name=name, body=inner):
+                yield from _defined(module, owner, name, node)
+                yield from definitions(inner, module, ".".join(part for part in (owner, name) if part))
+            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) if not _overrides(node):
+                yield from _defined(module, owner, name, node)
+            case ast.TypeAlias(name=ast.Name(id=name)) if not owner:
+                yield from _defined(module, owner, name, node)
+            case ast.Assign() | ast.AnnAssign() if not owner:
+                for target in _targets(node):
+                    if isinstance(target, ast.Name):
+                        yield from _defined(module, owner, target.id, node)
+            case ast.If(body=inner, orelse=other) | ast.Try(body=inner, orelse=other):
+                yield from definitions((*inner, *other), module, owner)
+            case _:
+                pass
+
+
+def references(tree: ast.AST) -> frozendict[str, int]:
+    """How often a module names each name: loads, attributes, imports, keywords, match attributes and annotation strings."""
+    return frozendict(Counter(_referenced(tree)))
+
+
+def _referenced(tree: ast.AST) -> Iterator[str]:
+    for node in ast.walk(tree):
+        match node:
+            case ast.Name(id=name, ctx=ast.Load() | ast.Del()) | ast.Attribute(attr=name, ctx=ast.Load()) | ast.keyword(arg=str() as name):
+                yield name
+            case ast.alias(name=name):
+                yield from name.split(".")
+            case ast.MatchClass(kwd_attrs=names):
+                yield from names
+            case ast.Constant(value=str() as text) if _ANNOTATION.fullmatch(text):
+                yield from re.findall(r"\w+", text)
+            case _:
+                pass
+
+
+def cached_references(source: Source, cache: Cache | None) -> frozenset[str]:
+    key = cache.key("references", source) if cache is not None else ""
+    if cache is not None and (saved := cache.read(key, REFERENCES)) is not None:
+        return saved
+    result = frozenset(references(parse(source)))
+    if cache is not None:
+        cache.write(key, result, REFERENCES)
+    return result
+
+
+def unused_definitions(observations: Iterable[Observation], production: Mapping[str, int], tests: frozenset[str]) -> Iterator[Finding]:
+    """Definitions production never names outside their own bodies; those only tests name say so."""
+    for observed in observations:
+        for definition in observed.definitions:
+            finding = definition.finding
+            if production.get(finding.expression, 0) <= definition.own:
+                yield replace(finding, detail=TESTS_ONLY) if finding.expression in tests else finding
 
 
 FORBIDDEN_TEST_TOOLS = frozenset({"unittest.mock", "mock", "pytest_mock", "mockito", "pytest.MonkeyPatch"})
@@ -766,7 +868,8 @@ def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Fi
 
 
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
-    sources = python_sources(root, names)
+    listed = tuple(_walked(root) if names is None else names)
+    sources = python_sources(root, listed)
     configuration = _configuration(root)
     exceptions = configuration.exceptions
     all_source = tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources)
@@ -774,6 +877,12 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     observations = {module_name(source.name): observation(source, cache) for source in loaded}
     imported_by = {module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded}
     graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
+    texts = (name for name in listed if name.endswith(TEXT_REFERENCES) and not name.startswith("tests/") and (root / name).is_file())
+    production = sum(
+        (Counter(observed.referenced) for observed in observations.values()),
+        Counter(word for name in texts for word in re.findall(r"[A-Za-z_]\w*", (root / name).read_text(encoding="utf-8"))),
+    )
+    tested = frozenset[str]().union(*(cached_references(source, cache) for source in all_source if source.name.startswith("tests/")))
     # Keyboard routes stop at the first application module they reach.
     keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "miryoku")), _keyboard)
     # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
@@ -793,6 +902,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         ),
         *contract_isolation(imported_by),
         *process_isolation(imported_by),
+        *unused_definitions(observations.values(), production, tested),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = (

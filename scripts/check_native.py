@@ -22,14 +22,6 @@ from scripts.development_paths import TEMP
 lazy from scripts.check import DIRECT, combined_results, execute, worker_result
 lazy from scripts.selfcheck import NATIVE_LANES
 
-RUNNER = """import sys
-from pathlib import Path
-lazy from scripts.check_native import run_native
-if __name__ == "__main__":
-    sys.path.insert(0, sys.argv[1])
-    run_native(Path(sys.argv[1]), Path(sys.argv[2]))
-"""
-
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NativeConfiguration:
@@ -83,13 +75,12 @@ def windows_path(path: Path) -> str:
 def execute_native(root: Path, selection: Selection) -> Results:
     scratch = Path(tempfile.mkdtemp(prefix="workspace-native-check-", dir=TEMP))
     try:
-        runner, configuration, output = scratch / "run.py", scratch / "configuration.json", scratch / "result.json"
-        runner.write_text(RUNNER, encoding="utf-8")
+        configuration, output = scratch / "configuration.json", scratch / "result.json"
         configuration.write_bytes(NATIVE_CONFIGURATION.dump_json(NativeConfiguration(selection=selection, output=windows_path(output))))
         interpreter = sys.executable if os.name == "nt" else str(root / ".venv" / "Scripts" / "python.exe")
-        result = subprocess.run(
-            [interpreter, windows_path(runner), windows_path(root), windows_path(configuration)], cwd=scratch, check=False, timeout=600
-        )
+        # Run from root, so the runner imports the selected source tree.
+        command = [interpreter, "-m", "scripts.check_native", windows_path(root), windows_path(configuration)]
+        result = subprocess.run(command, cwd=root, check=False, timeout=600)
         if not output.exists():
             raise RuntimeError("The Windows test process did not write its result; no receipt can be produced.")
         try:
@@ -101,3 +92,7 @@ def execute_native(root: Path, selection: Selection) -> Results:
         return record
     finally:
         shutil.rmtree(scratch)
+
+
+if __name__ == "__main__":
+    run_native(Path(sys.argv[1]), Path(sys.argv[2]))

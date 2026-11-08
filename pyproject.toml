@@ -309,20 +309,6 @@ desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 [tool.workspace.architecture]
 
 [[tool.workspace.architecture.exceptions]]
-rule = "plain-record"
-module = "assistant.sdk"
-declaration = "MemorySession"
-expression = "MemorySession"
-reason = "The Agents SDK's Session protocol declares session_id and session_settings writable, so a frozen record does not satisfy it."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "mutable-parameter"
-module = "assistant.sdk"
-declaration = "MemorySession.add_items.items"
-expression = "list[TResponseInputItem]"
-reason = "The Agents SDK's Session protocol dictates the signature; MemorySession implements it structurally and only reads the items."
-
-[[tool.workspace.architecture.exceptions]]
 rule = "mutable-parameter"
 module = "assistant.sdk"
 declaration = "after_tools.results"
@@ -342,3 +328,59 @@ module = "scripts.benchmark_keyboard"
 declaration = "round_latencies.observe_gc"
 expression = "Callable[[str, dict[str, int]], None]"
 reason = "The callback is appended to gc.callbacks, whose element type dictates its signature."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "assistant.communications_browser"
+declaration = "TeamsWeb.adopt"
+expression = "adopt"
+reason = "An agent-core test seam: the Teams tests start a collector on a tab they opened. It goes with the agent core's replacement."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "assistant.communications_service"
+declaration = "Communications.poll_next"
+expression = "poll_next"
+reason = "An agent-core test seam: a test chooses the next followed conversation to poll. It goes with the agent core's replacement."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "assistant.feed_triage_service"
+declaration = "Triage.set_board"
+expression = "set_board"
+reason = "An agent-core test seam: feed tests start from a given board. It goes with the agent core's replacement."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "assistant.feed_triage_service"
+declaration = "Triage.set_candidates"
+expression = "set_candidates"
+reason = "An agent-core test seam: a feed test starts from given candidates. It goes with the agent core's replacement."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "assistant.work_bridge_contracts"
+declaration = "BRIDGE_COMMAND"
+expression = "BRIDGE_COMMAND"
+reason = "An agent-core test seam: bridge tests encode commands as the desktop does. It goes with the agent core's replacement."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "scripts.watch"
+declaration = "Events.dispatch"
+expression = "dispatch"
+reason = "Watchdog calls dispatch on any handler; subclassing its handler would import watchdog eagerly instead of lazily."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "winapi.inputs"
+declaration = "send_scancodes"
+expression = "send_scancodes"
+reason = "A native test tool: the end-to-end test presses physical keys through winapi's private SendInput binding."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "unused-definition"
+module = "winapi.system"
+declaration = "run_message_loop"
+expression = "run_message_loop"
+reason = "A native test tool: the pointer target pumps its window's messages through winapi's private message bindings."

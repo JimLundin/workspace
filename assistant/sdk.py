@@ -27,6 +27,7 @@ from agents import (
     set_tracing_disabled,
 )
 from agents.items import ModelResponse, TResponseInputItem
+from agents.memory.session import SessionABC
 from agents.memory.session_settings import SessionSettings
 from agents.run_config import CallModelData, ModelInputData, ToolExecutionConfig
 from agents.tool import FunctionToolResult
@@ -100,7 +101,7 @@ class StoppedError(Exception):
     pass
 
 
-class MemorySession:
+class MemorySession(SessionABC):
     """The SDK's session interface backed by one durable conversation, retained until exit."""
 
     __slots__ = ("checkpoint", "items", "session_id")
@@ -117,9 +118,11 @@ class MemorySession:
         self.items = items
         self.checkpoint, self.session_id = checkpoint, session_id
 
+    @override
     async def get_items(self, limit: int | None = None) -> list[TResponseInputItem]:
         return _RESPONSE_ITEMS.validate_python(self.items.read(limit))
 
+    @override
     async def add_items(self, items: list[TResponseInputItem]) -> None:
         incoming = _JSON_ITEMS.validate_python(copy.deepcopy(items))
         # Discard old image bytes in retained context too, not just in the HTTP request.
@@ -127,9 +130,11 @@ class MemorySession:
         self.items.replace(retained)
         self.checkpoint(retained)
 
+    @override
     async def pop_item(self) -> TResponseInputItem | None:
         return _RESPONSE_ITEM.validate_python(self.items.pop()) if self.items else None
 
+    @override
     async def clear_session(self) -> None:
         self.items.clear()
 
