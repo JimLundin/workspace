@@ -189,7 +189,7 @@ def test_assistant_outage_keeps_remapping_and_reconnects_without_replaying_short
     # recovery, or retaining the old HWND after a fresh assistant starts.
     driver = KeyboardFixture()
     keyboard = Keyboard(driver)
-    keyboard.host.found = frozendict({Side.ASSISTANT: 2})
+    keyboard.host.remember_windows(frozendict({Side.ASSISTANT: 2}))
     driver.handles[Side.ASSISTANT] = None
     hold_apps(keyboard, at=5)
     assert hook_key(keyboard, driver, DICTATE_KEY, down=True, at=10) == 1
@@ -231,7 +231,7 @@ def test_each_message_reaches_the_side_that_owns_it() -> None:
     assert [wparam for message, wparam, _ in desktop if message == WM_REQUEST] == [Tool.OPEN_INBOX.value, Tool.DESKTOP_2.value, encode(APPS[0], APPS)]
     assert [wparam for message, wparam, _ in assistant if message == WM_REQUEST] == [Tool.DICTATE.value]
     driver.handles[Side.DESKTOP] = None
-    keyboard.host.found = frozendict()
+    keyboard.host.remember_windows(frozendict())
     keyboard.host.request(Tool.DICTATE, down=True)
     assert driver.to(Side.ASSISTANT)[-1] == (WM_REQUEST, Tool.DICTATE.value, 1) and not driver.sounds
 
@@ -398,7 +398,7 @@ def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> Non
     driver.delivery_error = OSError("Post failed")
     keyboard = Keyboard(driver)
     keyboard.engine.restore(replace(keyboard.engine.state, pressed=(Key.A, *keyboard.engine.pressed[1:])))
-    keyboard.host.owned.add(Key.A)
+    keyboard.host.own(Key.A)
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
     assert not bool(keyboard.engine.enabled) and not keyboard.busy
     assert keyboard.fault is not None and keyboard.fault.kind == "RuntimeError"
@@ -443,7 +443,7 @@ def test_recovery_retries_are_bounded_and_enabling_waits_for_accepted_releases()
     driver = KeyboardFixture()
     driver.send_error = OSError("Rejected")
     keyboard = Keyboard(driver)
-    keyboard.host.owned.add(Key.A)
+    keyboard.host.own(Key.A)
     keyboard.input_failed(OSError("Input rejected"))
     for _ in range(10):
         keyboard.maintenance()

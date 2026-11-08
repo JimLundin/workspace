@@ -10,11 +10,12 @@ import contextlib
 import gc
 import traceback
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
 import usage
+from cell import Cell
 from components import ASSISTANT, DESKTOP, LAYOUT, Window, ready
 from config import APPS
 from diagnostics import FailureInfo, failure_info
@@ -117,32 +118,51 @@ class NativeKeyboardSystem:
     post_quit = staticmethod(system.post_quit)
 
 
+@dataclass(frozen=True, slots=True)
+class _Hosted:
+    found: frozendict[Side, int] = frozendict()
+    """Each side's window, once found."""
+    counts: frozendict[str, int] = frozendict()
+    """Feature uses since the last flush."""
+    owned: frozenset[Key | Mod] = frozenset()
+    """Attempted Workspace output, retained until Windows accepts its key-up."""
+    chord: bool = False
+    """The layout's home row chord, last published like the firmware keyboard's."""
+
+
+@dataclass(frozen=True, slots=True)
 class WinHost:
-    """What the engine needs, done with Windows calls."""
+    """What the engine needs, done with Windows calls. Only the hook thread uses it."""
 
-    __slots__ = ("chord", "counts", "found", "owned", "platform")
+    platform: KeyboardSystem = field(default_factory=NativeKeyboardSystem)
+    _state: Cell[_Hosted] = field(default_factory=lambda: Cell(_Hosted()), init=False, repr=False)
 
-    def __init__(self, platform: KeyboardSystem | None = None) -> None:
-        self.platform: KeyboardSystem = platform if platform is not None else NativeKeyboardSystem()
-        self.found: frozendict[Side, int] = frozendict()
-        """Each side's window, once found; replaced, never edited."""
-        self.counts: dict[str, int] = {}
-        self.owned: set[Key | Mod] = set()
-        """Attempted Workspace output, retained until Windows accepts its key-up."""
-        """Feature uses since the last flush."""
-        self.chord = False
-        """The layout's home row chord, last published like the firmware keyboard's."""
+    @property
+    def found(self) -> frozendict[Side, int]:
+        return self._state.get().found
+
+    @property
+    def owned(self) -> frozenset[Key | Mod]:
+        return self._state.get().owned
+
+    def remember_windows(self, found: frozendict[Side, int]) -> None:
+        """Start from known windows, as after the sides were found before."""
+        self._state.set(replace(self._state.get(), found=found))
+
+    def own(self, key: Key | Mod) -> None:
+        """Treat `key` as Workspace output whose key-up Windows has not yet accepted."""
+        self._state.set(replace(self._state.get(), owned=self._state.get().owned | {key}))
 
     def send(self, key: Key | Mod, *, down: bool) -> None:
         if down:
-            self.owned.add(key)
+            self.own(key)
         self.platform.send_key(key, down=down)
         if not down:
-            self.owned.discard(key)
+            self._state.set(replace(self._state.get(), owned=self._state.get().owned - {key}))
 
     def release_owned(self) -> None:
         """Retry only our outputs, including a chord interrupted before engine ownership."""
-        for key in tuple(self.owned):
+        for key in tuple(self._state.get().owned):
             with contextlib.suppress(Exception):
                 self.send(key, down=False)
 
@@ -173,13 +193,14 @@ class WinHost:
         self.platform.type_text(text)
 
     def used(self, feature: str) -> None:
-        self.counts[feature] = self.counts.get(feature, 0) + 1
+        counts = self._state.get().counts
+        self._state.set(replace(self._state.get(), counts=counts | {feature: counts.get(feature, 0) + 1}))
 
     def indicate(self, indicator: Indicator) -> None:
         layer: int = indicator.layer.value if indicator.layer else 0
         self.tell(Side.DESKTOP, WM_INDICATOR, encode_indicator(layer, locked=indicator.locked, caps_word=indicator.caps_word), 0)
-        if indicator.chord != self.chord:
-            self.chord = indicator.chord
+        if indicator.chord != self._state.get().chord:
+            self._state.set(replace(self._state.get(), chord=indicator.chord))
             self.tell(Side.DESKTOP, WM_CHORD, int(indicator.chord), 0)
 
     def tell(self, side: Side, message: int, wparam: int, lparam: int) -> bool:
@@ -190,10 +211,10 @@ class WinHost:
                 handle = self.platform.find_window(WINDOWS[side])
                 if handle is None:
                     return False
-                self.found = self.found | {side: handle}
+                self.remember_windows(self.found | {side: handle})
             if self.platform.post_message(handle, message, wparam, lparam):
                 return True
-            self.found = frozendict({key: value for key, value in self.found.items() if key is not side})
+            self.remember_windows(frozendict({key: value for key, value in self.found.items() if key is not side}))
         return False
 
     def layout_state(self, state: LayoutState) -> None:
@@ -202,7 +223,8 @@ class WinHost:
             self.tell(side, WM_LAYOUT_STATE, state.value, 0)
 
     def flush_usage(self) -> None:
-        counts, self.counts = self.counts, {}
+        counts = self._state.get().counts
+        self._state.set(replace(self._state.get(), counts=frozendict()))
         with contextlib.suppress(OSError):  # the log is a convenience: never let it stop the keyboard
             self.platform.record_counts(counts)
 
