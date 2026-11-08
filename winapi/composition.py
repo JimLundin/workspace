@@ -55,7 +55,7 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import (
 
 from cell import Cell
 from winapi import windows
-from winapi._core import NativeFunction
+from winapi._core import NativeFunction, com_method
 from winapi.shapes import Pane, Rect
 
 
@@ -154,16 +154,6 @@ class Float3(ctypes.Structure):
 _PUT_OFFSET, _PUT_OPACITY, _PUT_SIZE = 21, 23, 36
 
 
-def _slot(this: ctypes.c_void_p, index: int, value: type[ctypes.Structure | ctypes.c_float]) -> NativeFunction[int]:
-    """The method at `index` in a COM object's vtable: the object's first pointer is its table."""
-    table = ctypes.c_void_p.from_address(this.value or 0).value
-    address = ctypes.c_void_p.from_address((table or 0) + index * ctypes.sizeof(ctypes.c_void_p)).value
-    if not this.value or not table or not address:
-        raise OSError("The composition visual has no method table.")
-    prototype = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, value)
-    return prototype(address)
-
-
 @dataclass(frozen=True, slots=True)
 class VisualWriter:
     """A visual's three per-frame property writes, straight through its COM slots.
@@ -181,7 +171,12 @@ class VisualWriter:
     @classmethod
     def of(cls, visual: IVisual) -> VisualWriter:
         this = ctypes.c_void_p(visual.value)
-        return cls(this, _slot(this, _PUT_OFFSET, Float3), _slot(this, _PUT_OPACITY, ctypes.c_float), _slot(this, _PUT_SIZE, Float2))
+        return cls(
+            this,
+            com_method("The composition visual", this, _PUT_OFFSET, Float3),
+            com_method("The composition visual", this, _PUT_OPACITY, ctypes.c_float),
+            com_method("The composition visual", this, _PUT_SIZE, Float2),
+        )
 
     def place(self, x: float, y: float) -> None:
         _check(self.offset(self.this, Float3(x, y, 0)))

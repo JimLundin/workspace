@@ -14,7 +14,7 @@ from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
 from cell import Cell
-from winapi._core import CoCreateInstance, fn, kernel32, ole32
+from winapi._core import CoCreateInstance, com_method, fn, guid_buffer, kernel32, ole32
 from winapi.audio import WAVEFORMATEX
 from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, Problem, Stall, dropout
 
@@ -36,14 +36,10 @@ _STALL: Final = 1.0
 """Seconds between deliveries (normally 0.1) that count as a stalled capture loop."""
 
 
-def _guid(value: str) -> ctypes.Array[ctypes.c_char]:
-    return ctypes.create_string_buffer(uuid.UUID(value).bytes_le, 16)
-
-
-_ENUMERATOR = _guid("BCDE0395-E52F-467C-8E3D-C4579291692E")
-_IID_ENUMERATOR = _guid("A95664D2-9614-4F35-A746-DE8DB63617E6")
-_IID_CLIENT = _guid("1CB9AD4C-DBFA-4C32-B178-C2F568A703B2")
-_IID_CAPTURE = _guid("C8ADBD64-E71E-48A0-A4DE-185C395CD317")
+_ENUMERATOR = guid_buffer("BCDE0395-E52F-467C-8E3D-C4579291692E")
+_IID_ENUMERATOR = guid_buffer("A95664D2-9614-4F35-A746-DE8DB63617E6")
+_IID_CLIENT = guid_buffer("1CB9AD4C-DBFA-4C32-B178-C2F568A703B2")
+_IID_CAPTURE = guid_buffer("C8ADBD64-E71E-48A0-A4DE-185C395CD317")
 
 
 def _check(result: int, action: str) -> None:
@@ -90,17 +86,9 @@ class NativeWasapi:
         _CoTaskMemFree(pointer)
 
     def method(self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType) -> NativeCall:
-        if pointer.value is None:
-            raise OSError("The audio interface pointer is null.")
-        table = ctypes.c_void_p.from_address(pointer.value).value
-        if table is None:
-            raise OSError("The audio interface has no method table.")
-        address = ctypes.c_void_p.from_address(table + index * ctypes.sizeof(ctypes.c_void_p)).value
-        if address is None:
-            raise OSError("The audio interface method is null.")
-        # ctypes' declared c_long restype supplies an integer HRESULT. Keep
-        # that native callable directly: packet draining creates no extra wrapper.
-        return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(address)
+        # The declared c_long restype supplies an integer HRESULT. Keep that
+        # native callable directly: packet draining creates no extra wrapper.
+        return com_method("The audio interface", pointer, index, *arguments)
 
     def clock(self) -> float:
         return _clock()

@@ -1,6 +1,7 @@
 """The DLLs, and how a function prototype is declared. Internal to `winapi`."""
 
 import ctypes
+import uuid
 from ctypes import wintypes
 from typing import Protocol, overload
 
@@ -183,3 +184,20 @@ def rect(r: wintypes.RECT) -> Rect:
 
 def last_error() -> OSError:
     return ctypes.WinError(ctypes.get_last_error())
+
+
+type GuidBuffer = ctypes.Array[ctypes.c_char]
+
+
+def guid_buffer(value: str) -> GuidBuffer:
+    """A COM class or interface identifier, as the 16 bytes COM reads."""
+    return ctypes.create_string_buffer(uuid.UUID(value).bytes_le, 16)
+
+
+def com_method(owner: str, pointer: ctypes.c_void_p, index: int, *arguments: type[object]) -> NativeFunction[int]:
+    """The method at `index` in a COM object's table, returning its HRESULT: the object's first pointer is its table."""
+    table = ctypes.c_void_p.from_address(pointer.value).value if pointer.value else None
+    address = ctypes.c_void_p.from_address(table + index * ctypes.sizeof(ctypes.c_void_p)).value if table else None
+    if address is None:
+        raise OSError(f"{owner} has no method table.")
+    return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(address)
