@@ -7,7 +7,7 @@ overlapping left to right as they sit on screen. A desktop shows the apps its
 layout puts there, running or not (a web app's symbol fills while it runs), and
 any other app placed there. A click on an icon goes to that app, cycling its
 windows or starting it, and so to its desktop; a right click lists its windows.
-Canvas is desktop 1's icon. The current desktop is marked, an empty desktop
+The current desktop is marked, an empty desktop
 shows its number only while it is current, and holding the Apps key shows each
 desktop's letter. One fixed capsule on
 the right holds a keyboard icon while the keyboard types plainly (the layout
@@ -28,48 +28,27 @@ desktops.
 
 ## What the bar shows
 
-1. **The island is your point of attention.** Only a *moment* takes it over:
-   dictation (live from you), a question (waiting on you) or a notice (news for
-   you). Dictation wins over a question, and both win over a notice. A notice
-   is the agent's finished reply, or a canvas finding or question it announces.
-   Each is announced once. It waits while a higher moment or an open menu,
-   request or bell list holds the island, then shows for 6 s
-   (`island_moment.SHOWN`). It stays while the pointer is over it and collapses
-   1.5 s after the pointer leaves. A notice that waited more than 30 s goes
-   straight to the bell. Unread notices add to the bell's count.
-2. **Activities run concurrently, each with one look.** Agent work is a
-   spinner with its current phase. Transcription is three pulsing dots. A
-   meeting recording is a red dot with its timer. During a moment they detach
-   beside it as compact capsules. Under the pointer, agent work shows up to
-   three earlier steps.
-3. **Agent work keeps Stop visible.** Other stoppable activities show Stop
-   under the pointer.
-4. **Each fact has one owner.** Dictation and transcription come from the voice
-   controller (`Desktop.busy`). The agent's phase and news come from its
-   session (`island_agent`), the recording from meetings, and the inbox from
-   pending questions and unread notices.
-   Windows notifications never become notices.
+1. **The island is your point of attention.** Only dictation, live from you,
+   takes it over, as the live microphone trace. Pressing it stops dictation.
+2. **Activities run concurrently, each with one look.** Transcription is three
+   pulsing dots. A meeting recording is a red dot with its timer. While you
+   dictate they detach beside the island as compact capsules.
+3. **Stoppable activities show Stop under the pointer.**
+4. **Each fact has one owner.** Dictation and transcription come from the
+   assistant's voice controller, the recording from meetings. Windows
+   notifications never show in the bar.
 
 | Situation | Island | Beside it |
 | --- | --- | --- |
 | Rest | Empty | Fixed controls only |
-| Agent working | Spinner, phase and Stop | |
-| A notice | Title and up to two lines, 340 px wide | Activities, detached |
+| Transcribing or recording | The activity | |
 | Dictating | The live microphone trace | Activities, detached |
-| A question waits | "Needs you", tinted orange | Activities, detached |
-| Items wait in the inbox | | A bell with a count |
-| The bell list is open | Questions and the five latest notices | |
-
-Pressing "Needs you" expands the island to show the question. Answer it by
-holding **X + K**. The bell and **Hold X + M** open the inbox list. Pressing a
-notice opens the canvas at its item. Notices never take keyboard focus.
 
 ## The controls menu
 
 Pressing the clock or battery opens the menu in place. It holds a card per
-running activity, toggles (Auto-record Teams, keyboard overlay, Windows
-taskbar, window placement, dark when away), the Canvas tile, **Record a
-meeting**, a volume slider, small tools (switch windows, copy transcript, key
+running activity, toggles (keyboard overlay, Windows taskbar, window
+placement, dark when away), **Record a meeting**, a volume slider, small tools (switch windows, copy transcript, key
 map), the system tray icons, and links to Windows notification settings and the
 tray menu. `desktop_ui/spec/controls.py` is the source of truth: its rows, their order, each cell's span, label and symbol. It reloads live like the other specs. Arrows move between
 cells, Enter chooses, and Escape closes.
@@ -85,8 +64,7 @@ when their files change (`ui_spec_watch`) and re-lays itself out, without a
 restart. A spec that doesn't import or check is reported and the bar keeps its
 last good one.
 
-`island_moment`, `island_agent`, `island_model`, `island_menu`,
-`island_layout`, `island_motion` and `plain_text` in `desktop_ui/` are pure
-decisions. `DesktopBar` owns observations and timers, `island_surface` owns the
-Qt window and its native glass, `shell_surface` draws the pager, and `request_panel` draws the expanded
-request and inbox.
+`island_model`, `island_menu`, `island_layout`, `island_motion` and
+`bar_events` in `desktop_ui/` are pure decisions. `DesktopBar` owns
+observations and timers, `island_surface` owns the Qt window and its native
+glass, and `shell_surface` draws the pager.

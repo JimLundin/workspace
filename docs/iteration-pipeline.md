@@ -9,11 +9,11 @@ itself runs from this checkout and `.venv`. Dependencies are declared in
 them there and run `uv lock`.
 
 ```powershell
-.\Dev.cmd check --tests tests/test_feed_triage.py
+.\Dev.cmd check --tests tests/test_meetings.py
 .\Dev.cmd deploy
-.\Dev.cmd lint assistant/feed_triage.py
-.\Dev.cmd format assistant/feed_triage.py
-.\Dev.cmd typecheck assistant/feed_triage.py
+.\Dev.cmd lint assistant/meetings.py
+.\Dev.cmd format assistant/meetings.py
+.\Dev.cmd typecheck assistant/meetings.py
 ```
 
 ## Edit loop
@@ -35,8 +35,7 @@ For feedback on save (`Dev.cmd setup` installs the watcher):
 
 `watch` reruns the editing tier's affected tests in fresh processes after each
 debounced save. `--native` adds the affected native modules and slow tests. `preview` restarts the real toolbar with sample data and inert
-actions after each save; it starts no launcher, microphone, keyboard observer or
-live communications. `watch --preview` runs the same preview beside the tests.
+actions after each save; it starts no launcher, microphone or keyboard observer. `watch --preview` runs the same preview beside the tests.
 
 ## Code volume
 
@@ -45,13 +44,18 @@ live communications. `watch --preview` runs the same preview beside the tests.
 reformatting leaves the number alone and only removing code lowers it. Product
 code is everything outside `tests/`, `scripts/` and `typings/`. Quote the
 before/after product and test totals when a change cuts code.
+`docs/volume.md` is the committed report: the pre-commit hook in `.githooks/`
+(which `Dev.cmd setup` sets as `core.hooksPath`) rewrites it from what each
+commit stages, and CI fails when it is stale.
 
 ## What `Dev.cmd check` does
 
 1. It runs the architecture review (`scripts/architecture.py`), which parses
    source without importing it. The review enforces keyboard isolation,
    headless and UI-private owners, frozen and slotted data records, enum translations as
-   tables rather than `match`, named types instead of fixed numeric tuples, no local container filled in a loop, the reflection rules with their
+   tables rather than `match`, named types instead of fixed numeric tuples, no local container filled in a loop,
+   no JavaScript in Python strings, no unused definitions, no two functions of
+   the same structure, each Win32 function declared once, the reflection rules with their
    exact exceptions in `pyproject.toml`, and the ban on patch and mock
    frameworks in every source file.
 2. It runs the interface review (`scripts/quality.py`): Ruff's FBT001, FBT002 and
@@ -87,9 +91,9 @@ Execution order: one Windows runner on a private desktop takes the import
 review and the portable modules (three worker processes once ten or more modules
 are selected). A narrow check imports the SDK packages its tests reach as its own
 phase first. After the runner exits, and in `--full` after whole-tree pyright
-finishes, native modules run in four parallel runners, each on its own private desktop:
-Edge, runtime launches, UIA and development tooling, and the rest together
-(`NATIVE_LANES` in `scripts/check_native.py`). Native fixtures have real
+finishes, native modules run in parallel runners, each on its own private
+desktop: one per lane in `NATIVE_LANES` (`scripts/selection.py`), and the rest
+together. Native fixtures have real
 deadlines; overlapping them with the pool or pyright made them fail.
 
 Typical cost on the four-core development laptop, warm policy cache:

@@ -1,9 +1,9 @@
 # Project scope
 
-Workspace owns the Windows keyboard, dictation, assistant, floating desktop bar,
-automation and the native Qt work canvas. [GLOSSARY.md](GLOSSARY.md) defines
+Workspace owns the Windows keyboard layout, dictation, meeting recording, the
+floating desktop bar and window placement. [GLOSSARY.md](GLOSSARY.md) defines
 its terms.
-Keep its Python/Qt runtime. The embedded browser is out of scope; it will move to a separate project.
+Keep its Python/Qt runtime.
 Use `workspace` for installation and data paths, environment variables, window
 identifiers and new artifacts.
 
@@ -31,7 +31,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Tests have a time budget: 1.5 s in the editing check, 3 s for native tests.
   Before listing a slow test in `scripts/check_tiers.py` (with its reason, under
   the cap), remove the cause: real waits, sleeps and retry backoff have seams, and
-  an expensive launch (Edge, a fixture window, a fresh interpreter) can be shared
+  an expensive launch (a fixture window, a fresh interpreter) can be shared
   with the neighbouring test that starts the same thing.
 
 # Design
@@ -39,7 +39,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Keep the keyboard process isolated: `miryoku/` and everything it imports use
   only the standard library, `winapi` and the stdlib-only top-level modules
   (`cell`, `config`, `protocol`, `usage`, `components`, `diagnostics`), never
-  `assistant`, `desktop_ui`, `automation` or third-party packages. Measure key-event latency, allocation
+  `assistant`, `desktop_ui` or third-party packages. Measure key-event latency, allocation
   and GC with `scripts/benchmark_keyboard.py` before and after changing the
   hook, the engine or their shared dependencies.
 - Validate external data where it enters a typed interface. Use a Pydantic
@@ -63,9 +63,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
   architecture review enforces the rule. A `match` on classes stays a `match`:
   it keeps Pyright's exhaustiveness check, which a type-keyed table loses.
 - When the enum's own module owns the values and each member has its own, make
-  the values the members: `canvas_look.Role.TITLE = RoleType(14.0, 600, -0.084)`,
-  read as `role.value`. Members that would share a value collapse into aliases,
-  so keep a table for those and for values another layer owns (UI labels for a
+  the values the members, read as `member.value`. Members that would share a
+  value collapse into aliases, so keep a table for those and for values another layer owns (UI labels for a
   `winapi` enum).
 - Don't reach into a sequence by position (`row[0]`, `pair[1]`, `items[-1]`):
   that value deserves a name. Unpack it, read a named field, or model the record
@@ -77,7 +76,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Give domain types the operators their arithmetic needs, so domain code reads
   natively: `point - origin` is a `winapi.shapes.Offset`, `point + offset` a
   `Point`, and `point in rect` replaces a `contains` call. Keep each coordinate
-  space its own types (screen pixels, canvas scene, bar layout) and cross spaces
+  space its own types (screen pixels, bar layout) and cross spaces
   with a named method, never an operator.
 - Prefer immutable values; mutate only inside the owner that needs it. Build
   collections with comprehensions, generator expressions, generator functions and
@@ -114,24 +113,25 @@ their tests. Legacy data and backwards compatibility are not requirements.
   `link.server.Server._retained`). Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
 - Use direct typed attributes, not `getattr`/`hasattr`.
-- Write browser scripts as real `.js` files beside the module that runs them, not
-  JavaScript in Python strings; pass values as arguments, not by interpolation.
+- Write JavaScript as a real `.js` file beside the module that runs it, not in
+  a Python string; pass values as arguments, not by interpolation.
 - Use absolute imports from the owning module, at module level. Use `lazy import`
   to defer loading. No re-exports or cosmetic aliases.
 - Boolean parameters are keyword-only. Functions take at most five inputs; Ruff
   blocks more. Where a wider signature is genuinely needed, add
   `# noqa: PLR0913 - <reason>` on the `def` line. Never suppress a whole file.
-- The desktop (`desktop_ui`, `desktop`) and the assistant (`assistant`, `automation`)
+- The desktop (`desktop_ui`, `desktop`) and the assistant (`assistant`)
   never import each other, even indirectly; they share only `contracts`, and talk
   over `link` (`contracts.desktop_link`). The architecture review enforces it.
 - Before writing general-purpose code, check for a small focused dependency and
   prefer it when its footprint and integration cost are reasonable.
 - Use the type system's newer tools where they model the data better: PEP 695
-  type parameters and `type` aliases, and type-parameter defaults (PEP 696,
-  `class Read[Q: Located, R = str]`) for a generic usually specialized one way,
-  instead of repeating the common arguments or adding a parallel alias.
+  type parameters and `type` aliases, and type-parameter defaults (PEP 696) for
+  a generic usually specialized one way, instead of repeating the common
+  arguments or adding a parallel alias.
 - Pyright (strict) is the only type checker. The
-  [module map](docs/functional-design.md) says which module owns what.
+  [module map](docs/functional-design.md) lists the processes and which module
+  owns what.
 
 # Checking
 
@@ -147,6 +147,10 @@ and the next check selects the tests affected since; the first check runs everyt
 Change scripts under `scripts/` with `--native` before restarting, since the
 editing tier skips the slow check-process tests. CI runs the full suite
 (`python -m scripts.check --full`; off Windows it skips the native tier).
+Besides the rules named above, the architecture review rejects JavaScript in
+Python strings (`inline-script`), a definition no production code uses
+(`unused-definition`), two functions of the same structure (`duplicate-code`)
+and a Win32 function declared in more than one module (`native-redeclaration`).
 
 # Committing and running
 

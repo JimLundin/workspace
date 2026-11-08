@@ -10,14 +10,14 @@ virtual desktops, which Workspace creates and never removes.
 is the monitor with a built-in output technology. External screens are matched
 by physical size. Any other set of monitors counts as the laptop alone.
 
-Desktop 1 is always the canvas, alone. An app can have several places; its
+No setup declares an app on desktop 1. An app can have several places; its
 windows fill them in order and any beyond the last share that place.
 
 | Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 | Desktop 5 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Laptop only | None | Canvas | Outlook, Teams | Terminal, Terminal | Terminal, VS Code | Edge |
-| Home | 3840×2160 (MAIN) | MAIN: Canvas | MAIN: Terminal ⅔, VS Code ⅓. Laptop: Teams | MAIN: Edge, Outlook | | |
-| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | ABOVE: Canvas | SIDE: Teams, Outlook. ABOVE: Terminal, VS Code. Laptop: Edge | | | |
+| Laptop only | None | | Outlook, Teams | Terminal, Terminal | Terminal, VS Code | Edge |
+| Home | 3840×2160 (MAIN) | | MAIN: Terminal ⅔, VS Code ⅓. Laptop: Teams | MAIN: Edge, Outlook | | |
+| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | | SIDE: Teams, Outlook. ABOVE: Terminal, VS Code. Laptop: Edge | | | |
 
 `LAYOUTS` declares these places. Every undeclared app gets its own desktop
 after the declared ones, filling the laptop, and keeps it while other apps come
@@ -33,8 +33,8 @@ and go.
   There is no minimize key.
 - Several windows of one app share its region equally.
 - Each poll moves windows that are out of place and leaves the rest alone. When
-  the window in front is moved to another desktop (one just opened, such as the
-  canvas or a new Teams window), Workspace switches there with it. A
+  the window in front is moved to another desktop (one just opened, such as a
+  new Teams window), Workspace switches there with it. A
   dragged window snaps back when the button is released. A maximized or minimized
   window is restored and placed.
 - **⌃⌥⇧ X** pauses or resumes placement, and **⌃⌥⇧ D** places every window now.

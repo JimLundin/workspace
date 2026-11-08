@@ -1,73 +1,37 @@
 # Open tasks
 
-What's left after splitting the desktop from the assistant (November 2026).
 Each task is meant to fit in one short session and ship as its own commits.
 Delete a task when it's done.
 
 ## 1. Make checking fast
 
-The keeper is gone (2026-11-07): Workspace runs from the checkout through
-`launch.py`, and `Dev.cmd deploy` only restarts the programs. A check selects
-tests against the source the same tier last passed.
+Workspace runs from the checkout through `launch.py`, and `Dev.cmd deploy`
+only restarts the programs. A check selects tests against the source the same
+tier last passed.
 
 Left:
 
-- **Shrink the native tier** (user, 2026-11-08: native runs choke the whole
-  machine and cause more trouble than they help). 26 `test_windows_*`
-  modules, about 190 tests; the largest are `bindings` (41), `work_canvas`
-  (28), `island_bar` (22), `recording` (13), `audio` (12) and
-  `shell_sections` (12). For each test, keep it native only if it checks
-  something that needs Windows or Qt itself (a hook, a window, a device);
-  move a decision it checks into a pure function with a plain test, and drop
-  what a plain test already covers. Don't run the native tier per change
-  meanwhile; once per batch at most, for the modules a change can't be
-  checked without.
-  Down from about 190 native tests to about 71 (2026-11-08). Machine-heavy
-  tests (real Edge, the nested native check and watch, PowerShell/UIA,
-  whole-process run-alone) skip unless `WORKSPACE_HEAVY=1` (`tests/heavy.py`).
-  Left (pure decisions to extract, then a plain test each): the remaining
-  three frame tests in `test_windows_island_bar` (the frame decision is now
-  `bar_events.next_frame`), the pager's canvas-icon routing and stack
-  faces, `bar_events._pressed` per action, canvas `escape` order, wheel
-  pan/zoom clamping, attention redirect expansion, dismissal tiles, the
-  overlay's drag in physical pixels, `window_switcher.matching`, and the
-  machine import-hygiene test through `test_architecture`'s reachability.
-- **Stop polling the work journal and the task controller.** The assistant
-  burns about half a core and the desktop a quarter (2026-11-08): the work
-  frontend reads the journal every 0.25 s (`WorkAgent._observe`, about 47 ms a
-  read) and the controller claims work every 0.1 s (`automation.controller`).
-  Wake them on a write instead (the store's own commits, or a change stamp as
-  the notification observer uses), keeping a slow timer as a backstop.
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
-  three meeting tests from the slow lists.
-- **An intermittent coordinator crash (`0xC0000409`)** in a full check
-  (2026-11-07, in the since-removed selfcheck runner): three of six full runs died about 96 s in, while
-  `test_windows_browser` drove Edge; the rest passed or failed that test with
-  "Navigation is still loading". It isn't tied to one commit. The isolated
-  launcher now reports the status instead of overflowing `os._exit`.
-- **The three largest native tests** (UIA 30 s, managed Edge 26 s, attached
-  Edge 19 s) are opt-in behind `WORKSPACE_HEAVY=1` now; shorten them when next
-  touched (the managed Edge test repeats snapshot paging and cancellation
-  that `test_browser` covers).
-- **The full native tier dies** (2026-11-07): `Dev.cmd check --native` with no
-  native receipt (all 143 modules) fails after about 2.5 min with "The Windows
-  test process did not write its result". It fails the same way at `166cd28`,
-  so it predates the mutable-parameter work; small native selections pass.
+  meeting tests from the slow lists.
+- **The full native tier died** (2026-11-07): `Dev.cmd check --native` with no
+  native receipt failed after about 2.5 min with "The Windows test process did
+  not write its result", while small native selections passed. Recheck it now
+  that the native tier is small.
 - **A narrow check blames a cold openai import on one test.** `assistant.llm`
   imports openai lazily, so the check's SDK preload (`sdk_packages`, eager
   imports only) skips it, and the first `test_features` test that transcribes
   pays about 2–4 s (`test_a_second_talk_key_while_listening_is_ignored` fails
   the editing budget whenever `assistant/features.py` changes).
-- **Move ruff and pyright to the dev group.** They sit in the runtime
-  dependencies only because the agent's own checks needed them.
+- **Move ruff and pyright to the dev group.** They still sit in the runtime
+  dependencies, though nothing at runtime uses them.
 
 ## 2. Check that each side survives the other's restart, live
 
-Verified on 2026-11-06 (then through the keeper's `Restart`; now `launch.py restart`): restarting the
-assistant left the desktop's process running and its link reconnected to the
-new assistant, and restarting the desktop left the assistant running and the
-new desktop connected. Still to watch by eye: the bar showing "reconnecting"
-then replaying the canvas, and an agent task continuing through a desktop
+Verified on 2026-11-06: restarting the assistant left the desktop's process
+running and its link reconnected to the new assistant, and restarting the
+desktop left the assistant running and the new desktop connected. Still to
+watch by eye (`launch.py restart`): the bar replaying the assistant's state
+after a reconnect, and a meeting recording continuing through a desktop
 restart.
 
 ## 3. Code policy pass: enforce the modelling decisions
@@ -119,7 +83,7 @@ tests aren't covered. Left:
    - a thread that runs the owner's own method isn't kept: it sets the
      owner's `finished` event on exit, and `close` waits on that.
    3. **Owners that rebind their own attributes**: done for `link`,
-      `winapi`, `automation`, `contracts`, `scripts`, `gateway`, `assistant`
+      `winapi`, `contracts`, `scripts`, `gateway`, `assistant`
       and every plain `desktop_ui` owner. Composition roots fold reported
       events: parts `report(event)`, a pure `transition(state, event) ->
       (state, effects)` decides, one `perform` carries effects out (user,
@@ -133,81 +97,62 @@ tests aren't covered. Left:
       the next value (`EngineState`, `Modifiers`, `WindowsKeyTap`); closures
       replace late-bound Cells; threads aren't kept (started/finished
       events); flags are events, one-shot results are Futures, counters are
-      `itertools.count`. 81 `Cell[` uses remain (2026-11-08). Left:
-      - shared service state read by other threads (`Communications`,
-        `Triage`, `PersonalWork`, `Meetings`, `WorkAgent`, link server and
-        client): one Cell each; move their loop-private fields (poll times,
-        cursors) into the run loops;
+      `itertools.count`. 41 `Cell[` uses remain (2026-11-08). Left:
+      - shared service state read by other threads (`Meetings`, link server
+        and client): one Cell each; move their loop-private fields (poll
+        times, cursors) into the run loops;
       - Qt and Win32 owners (`desktop_ui`, `winapi`): covered only by native
-        tests, so do them with the native-tier task above, not blind;
-      - dictated by a dependency: `agent_history.History` (the SDK session),
-        `contracts.publication`, the desktop `Inbox` handler and the bar's
+        tests, so do them with care, not blind;
+      - dictated by a dependency: the desktop `Inbox` handler and the bar's
         `deliver` (bindings at the window-procedure boundary);
       - `scripts.check.Phases` and the other script owners: with the next
         check-script change, since that needs the native tier.
       Patterns that held up:
       - one record per owner works only where every writer holds the owner's
         lock (audit with a scan for unlocked `Cell` writes); state another
-        thread writes under a different lock gets its own `Cell`
-        (`Communications._pending_drafts`);
+        thread writes under a different lock gets its own `Cell`;
       - read state through properties (`self.window`), not
         `self._state.get().window`, so pyright can narrow optionals;
       - an owner whose parts call back into it (a view publication, a window
         procedure, a server handler) gets them in a classmethod that binds them
         through a `Cell` holding the owner once it exists (`Gateway.listen`,
-        `AgentWindow.open`, `TrayHost.start`);
+        `TrayHost.start`);
       - a test fixture that subclassed an owner becomes a rig holding a real
-        owner (`Recording`, `TriageFixture`); a test that assigned an owner's
-        state uses an explicit seam (`Triage.set_board`) or a test-side `Cell`.
+        owner (`Recording`); a test that assigned an owner's state uses an
+        explicit seam or a test-side `Cell`.
       - The audio mixer's 160 000-sample ring stays one buffer written in
         place: copying it per 10 ms packet would cost about 64 MB/s.
-   5. **Classes with an external base** (22 Qt widgets rebind): set attributes
-      only in `__init__` and keep changing state in a `Cell`.
+   5. **Classes with an external base** (Qt widgets that rebind): set
+      attributes only in `__init__` and keep changing state in a `Cell`.
    6. **The rule**: every class with no base (or only `Generic`) is a frozen,
       slotted dataclass, and no class rebinds an attribute outside `__init__`.
       `Cell` is its one exception besides what a dependency dictates. Also
-      reject `object.__setattr__`. Six test fixtures still match the
+      reject `object.__setattr__`. Some test fixtures still match the
       `plain-record` rule, which doesn't cover tests.
 7. **Operators on domain types** (user, 2026-11-07): screen `Point`/`Offset`/`Rect`
-   and canvas `ScenePoint`/`Box` have theirs. Still hand-written: the bar
-   layout's `Box` scaled to a screen `Rect` (`island_surface`, `island_layout`),
-   `Spot` spans shifted by `x + shift`, and the canvas drag's clamp of
-   `Placement` coordinates.
-8. **Enums over their values** (user, 2026-11-07, a pattern being tried):
-   `canvas_look.Role` is the pilot. The navigation log's `Cause` literal (six
-   causes, of which `navigation.Source` is three) would be better as one enum.
-   Review each `every_member` table: keep it where members share a value or
-   another layer owns the values.
+   have theirs. Still hand-written: the bar layout's `Box` scaled to a screen
+   `Rect` (`island_surface`, `island_layout`) and `Spot` spans shifted by
+   `x + shift`.
+8. **Enums over their values** (user, 2026-11-07, a pattern being tried): the
+   navigation log's `Cause` literal (six causes, of which `navigation.Source`
+   is three) would be better as one enum. Review each `every_member` table:
+   keep it where members share a value or another layer owns the values.
 9. **Every test names its defect**: checkable after all, as a `# Defect:`
-   comment at the top of the body. 638 of 1,128 tests lack one; backfilling
-   means judging each, and deleting a test that guards no plausible defect.
-10. **Index access** (user, 2026-11-07): 262 constant-index reads (`row[0]`,
-    `lines[-1]`) in 74 production files, mostly SQLite rows in
-    `assistant.meeting_store` (41) and `automation.store` (35), which want typed
-    row adapters. Dependency results (`sys.argv[1]`, `split(...)[0]`,
-    `parents[1]`) have better spellings: argparse, `str.partition`, `.parent`.
-    Constant slices (200) are mostly length bounds and stay allowed.
-11. **Type-parameter defaults** (user, 2026-11-07): review the generic classes
-    and aliases (`business_tools.Read`/`Interaction`/`Collection`/`Effect`,
-    `browser_tools.Parser`, `state_store.SavedState`, `web_apps.WebAppOperation`)
-    for a natural default, from how their uses specialize them.
-12. **Lazy results** (user, 2026-11-07): 129 functions return a collection that
-    only materializes a generator (107 `tuple`, 13 `frozendict`, 6 `frozenset`,
-    3 `dict`), most in `desktop_ui.window_layout`, `automation.store`,
-    `scripts.check`, `desktop_ui.island_menu` and `winapi.tray_host`. Each needs
-    its callers checked: keep it where the value is stored, cached or reused.
+   comment at the top of the body. Many tests lack one; backfilling means
+   judging each, and deleting a test that guards no plausible defect.
+10. **Index access** (user, 2026-11-07): constant-index reads (`row[0]`,
+    `lines[-1]`) in production code, mostly SQLite rows in
+    `assistant.meeting_store`, which want typed row adapters. Dependency
+    results (`sys.argv[1]`, `split(...)[0]`, `parents[1]`) have better
+    spellings: argparse, `str.partition`, `.parent`. Constant slices are
+    mostly length bounds and stay allowed.
+11. **Lazy results** (user, 2026-11-07): functions that return a collection
+    that only materializes a generator, most in `desktop_ui.window_layout`,
+    `scripts.check`, `desktop_ui.island_menu` and `winapi.tray_host`. Each
+    needs its callers checked: keep it where the value is stored, cached or
+    reused.
 
-## 4. Move inline JavaScript into real `.js` files
-
-User, 2026-11-07: write actual JavaScript, not JavaScript in Python strings.
-About 145 lines of it sit in production Python on 2026-11-07, mostly
-`assistant.web_apps` (103) and `assistant.communications_browser` (24), with
-a few in `browser_dom`, `meeting_browser` and `browser`. Each script becomes a
-`.js` file beside its module, loaded once and parameterized through its
-arguments (CDP `callFunctionOn` or a JSON-encoded argument) instead of
-f-string interpolation; then the review can reject JavaScript in string literals.
-
-## 5. Find what degrades the Charybdis
+## 4. Find what degrades the Charybdis
 
 Since about 2026-11-06 the Charybdis Nano 3x5 (Splinky RP2040 halves, QMK with
 VIA, firmware rev 2.00) degrades after a while: the second half flickers, the
