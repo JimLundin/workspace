@@ -9,6 +9,7 @@ import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from typing import Final
 
 from cell import Cell
 from winapi import desktop_shell, windows
@@ -145,10 +146,22 @@ class Notify:
     lparam: int
 
 
+@dataclass(frozen=True, slots=True)
+class Messages:
+    """The mouse messages a click sends a tray icon, then the select or context message a version 3 icon also gets."""
+
+    mouse: tuple[int, ...]
+    selected: tuple[int, ...]
+
+
+_MESSAGES: Final = frozendict(
+    {Click.LEFT: Messages((0x201, 0x202), (0x400,)), Click.RIGHT: Messages((0x204, 0x205), (0x7B,)), Click.DOUBLE: Messages((0x203,), ())}
+)
+
+
 def callbacks(entry: Entry, click: Click, point: Point) -> tuple[Notify, ...]:
-    events = {Click.LEFT: (0x201, 0x202), Click.RIGHT: (0x204, 0x205), Click.DOUBLE: (0x203,)}[click]
-    if entry.version >= 3:
-        events = (*events, 0x400 if click is Click.LEFT else 0x7B) if click is not Click.DOUBLE else events
+    messages = _MESSAGES[click]
+    events = (*messages.mouse, *messages.selected) if entry.version >= 3 else messages.mouse
     if entry.version >= 4:
         coordinates = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)
         return tuple(Notify(coordinates, event | ((entry.identity & 0xFFFF) << 16)) for event in events)

@@ -16,6 +16,7 @@ from typing import Final, assert_never
 from pydantic import ValidationError
 
 import protocol
+from contracts.members import every_literal
 from desktop_ui.navigation import identity, launcher
 from desktop_ui.navigation_log import ENTRY, Cause, Entry, app_name, setup_name
 from desktop_ui.shell_items import PinnedApp
@@ -41,7 +42,7 @@ from desktop_ui.window_layout import (
 )
 from miryoku.firmware import CHORDS
 
-EFFORT: Final[frozendict[Cause, int]] = frozendict({"key": 1, "pager": 4, "toolbar": 4, "alt_tab": 3, "mouse": 4, "other": 0})
+EFFORT: Final[frozendict[Cause, int]] = every_literal(Cause, {"key": 1, "pager": 4, "toolbar": 4, "alt_tab": 3, "mouse": 4, "other": 0})
 """What one navigation costs by its cause; `other` is a program taking focus, not the user's effort."""
 DESKTOP_SWITCH: Final = 1
 """Added to an effortful navigation that lands on another desktop."""
