@@ -62,7 +62,7 @@ CLICK_S: Final = 0.5
 SWITCHER_STALE_S: Final = 60.0
 """A switcher open this long without closing missed its close event."""
 
-type Kind = Literal[
+type NavigationName = Literal[
     "app_key",
     "cycle_app",
     "show_window",
@@ -83,7 +83,7 @@ class Entry:
 
     time: datetime
     setup: SetupName | None
-    kind: Kind
+    navigation: NavigationName
     cause: Cause
     from_app: str | None
     to_app: str | None
@@ -192,7 +192,7 @@ def app_name(app: App | None) -> str | None:
             assert_never(app)
 
 
-def kind(navigation: Navigation) -> Kind:
+def navigation_name(navigation: Navigation) -> NavigationName:
     """Spelled out rather than derived from class names, so renaming a variant can't change the log."""
     match navigation:
         case AppKey():
@@ -326,7 +326,7 @@ def navigated(tracker: Tracker, decided: tuple[Effect, Navigated], moment: Momen
     entry = Entry(
         moment.time,
         setup_name(moment.setup),
-        kind(record.navigation),
+        navigation_name(record.navigation),
         cause(record.navigation.source),
         app_name(record.from_app),
         app_name(record.to_app),

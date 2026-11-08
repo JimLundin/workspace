@@ -59,11 +59,11 @@ def test_each_cause_costs_its_effort_plus_a_desktop_switch_and_a_chord_that_move
         entry("key", ("code.exe", "msedge.exe"), (0, 1)),
         entry("alt_tab", ("code.exe", "teams"), (0, 0)),
         entry("mouse", ("code.exe", "outlook"), (0, 1)),
-        replace(entry("other", ("code.exe", "notepad.exe"), (0, 2)), kind="zoom"),
-        replace(entry("toolbar", ("code.exe", "excel.exe"), (0, 0)), kind="cycle_app"),
-        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), kind="spatial_focus"),
-        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), kind="zoom"),
-        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), kind="cycle_app"),
+        replace(entry("other", ("code.exe", "notepad.exe"), (0, 2)), navigation="zoom"),
+        replace(entry("toolbar", ("code.exe", "excel.exe"), (0, 0)), navigation="cycle_app"),
+        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), navigation="spatial_focus"),
+        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), navigation="zoom"),
+        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), navigation="cycle_app"),
     )
     total = totals(logged)
     assert (total.cost, total.switches, total.wasted, total.navigations) == (1 + 2 + 3 + 5 + 0 + 4 + 1 + 1 + 1, 3, 1, 9)
@@ -81,7 +81,7 @@ def test_round_trips_combine_both_directions_and_skip_moves_within_one_app() -> 
         entry("mouse", ("msedge.exe", "windowsterminal.exe"), (1, 0)),
         entry("key", ("windowsterminal.exe", "msedge.exe"), (0, 1)),
         entry("key", ("windowsterminal.exe", "code.exe"), (0, 0)),
-        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), kind="cycle_app"),
+        replace(entry("key", ("code.exe", "code.exe"), (0, 0)), navigation="cycle_app"),
         entry("mouse", ("code.exe", None), (0, 0)),
     )
     assert pairs(logged) == (

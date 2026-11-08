@@ -66,7 +66,7 @@ def run(tracker: Tracker, *steps: tuple[float, Arrival]) -> tuple[Tracker, tuple
 
 
 def summary(entries: tuple[Entry, ...]) -> tuple[tuple[str, str, str | None, str | None, int | None], ...]:
-    return tuple((entry.kind, entry.cause, entry.from_app, entry.to_app, entry.dwell_ms) for entry in entries)
+    return tuple((entry.navigation, entry.cause, entry.from_app, entry.to_app, entry.dwell_ms) for entry in entries)
 
 
 def test_workspace_navigation_and_its_foreground_echo_are_one_entry() -> None:
@@ -171,7 +171,7 @@ def test_an_entry_is_one_line_of_app_identities_never_titles(tmp_path: Path) -> 
 
     line = path.read_text(encoding="utf-8")
     assert line == (
-        '{"time":"2026-11-04T09:30:01.500000+01:00","setup":"home","kind":"external","cause":"mouse",'
+        '{"time":"2026-11-04T09:30:01.500000+01:00","setup":"home","navigation":"external","cause":"mouse",'
         '"from_app":"windowsterminal.exe","to_app":"msedge.exe","from_desktop":0,"to_desktop":1,'
         '"other_desktop":true,"launched":false,"dwell_ms":1500}\n'
     )

@@ -109,7 +109,10 @@ def cost(entry: Entry) -> int:
 def wasted(entry: Entry) -> bool:
     """A chord that moved nothing; a zoom or a cycle between one app's windows keeps the same app on purpose."""
     return (
-        entry.cause == "key" and entry.kind not in {"zoom", "cycle_app"} and entry.from_app == entry.to_app and entry.from_desktop == entry.to_desktop
+        entry.cause == "key"
+        and entry.navigation not in {"zoom", "cycle_app"}
+        and entry.from_app == entry.to_app
+        and entry.from_desktop == entry.to_desktop
     )
 
 

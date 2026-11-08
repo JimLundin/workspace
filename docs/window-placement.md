@@ -111,7 +111,7 @@ titles, window content or typed text.
   entry, including one that moved nothing, such as spatial focus with no
   neighbour or a zoom. Its `to_*` fields are the dispatcher's target.
 - **An external change.** Any other change of the foreground window writes one
-  entry with `kind` `external`. Changes to Workspace's own windows, such as the
+  entry with `navigation` `external`. Changes to Workspace's own windows, such as the
   bar or the window switcher, aren't observed, so leaving the switcher counts
   from the window before it.
 
@@ -144,7 +144,7 @@ clock. `null` means the value isn't known.
 | --- | --- | --- |
 | `time` | string | When Workspace decided the navigation or handled the change: ISO 8601 local time with microseconds and UTC offset, such as `2026-11-04T09:30:01.500000+01:00`. |
 | `setup` | `"laptop_only"`, `"home"`, `"work"` or `null` | The monitor setup at the last poll. `null` before the first poll that found a monitor. |
-| `kind` | string | The navigation: `app_key`, `cycle_app`, `show_window`, `switcher_pick`, `spatial_focus`, `step_desktop`, `jump_desktop`, `pager_click`, `bar_scroll` or `zoom` for a Workspace navigation; `external` for any other change. |
+| `navigation` | string | The navigation: `app_key`, `cycle_app`, `show_window`, `switcher_pick`, `spatial_focus`, `step_desktop`, `jump_desktop`, `pager_click`, `bar_scroll` or `zoom` for a Workspace navigation; `external` for any other change. |
 | `cause` | string | For a Workspace navigation, its input: `key` (a chord, an app key or the window switcher), `pager`, `scroll` or `toolbar`. For `external`: `alt_tab`, `mouse` or `other`. |
 | `from_app` | string or `null` | The app in front before: a program's lowercase executable file name, such as `code.exe`, or a pinned web app, `outlook` or `teams`. A window outside the taskbar, such as a dialog or a shell surface, is named by its program. `null` when unknown. |
 | `to_app` | string or `null` | The app navigated to, named the same way. For a launch, the launched app. |
