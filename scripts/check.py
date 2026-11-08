@@ -29,7 +29,7 @@ from pydantic import TypeAdapter, ValidationError
 from cell import Cell
 from scripts.architecture import Report, dependencies, python_sources, review
 from scripts.check_results import Failure, Results, Selection, raised, reported
-from scripts.deploy_files import CheckedArchitecture, CheckReceipt, file_at, json_record, read, sha, source_map, write, write_receipt
+from scripts.deploy_files import CheckedArchitecture, CheckReceipt, json_record, read, sha, source_map, write, write_receipt
 from scripts.development_paths import PROFILE
 from scripts.source_analysis import Cache, module_name
 lazy from scripts import check_standards, check_tiers, quality, selfcheck
@@ -66,7 +66,7 @@ def source_paths(root: Path = ROOT) -> tuple[str, ...]:
 
 
 def source_files(root: Path = ROOT) -> dict[str, str]:
-    return {name: sha(path) for name in source_paths(root) if (path := file_at(root, name)).is_file()}
+    return {name: sha(path) for name in source_paths(root) if (path := root / name).is_file()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +87,7 @@ def source_stamp(path: Path) -> SourceStamp | None:
 
 def source_stamps(root: Path = ROOT) -> frozendict[str, SourceStamp]:
     """Each present source file's stamp."""
-    return frozendict((name, stamp) for name in source_paths(root) if (stamp := source_stamp(file_at(root, name))) is not None)
+    return frozendict((name, stamp) for name in source_paths(root) if (stamp := source_stamp(root / name)) is not None)
 
 
 def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], *, full: bool = False, native: bool = False) -> Selection:
@@ -105,7 +105,7 @@ def select(root: Path, current: Mapping[str, str], previous: Mapping[str, str], 
     # Minimal source fixtures need no project/cache configuration.
     cache = Cache.bound(root) if (root / "pyproject.toml").is_file() else None
     tests = {
-        name: dependencies(name, file_at(root, name).read_text(encoding="utf-8"), cache=cache)
+        name: dependencies(name, (root / name).read_text(encoding="utf-8"), cache=cache)
         for name in current
         if name.startswith("tests/") and name.endswith(".py") and (root / name).is_file()
     }
