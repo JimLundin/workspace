@@ -22,9 +22,10 @@ from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
 
+from contracts.members import every_member
 from contracts.recording_state import RecordingState
 from contracts.status import Job
-from desktop_ui.ambient import Ambient, SystemStatus
+from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
 from desktop_ui.components import meaning
 from desktop_ui.island_moment import Notice
 from desktop_ui.keymap import INBOX_HOLD
@@ -262,8 +263,8 @@ def island_problems(spec: IslandSpec) -> tuple[str, ...]:
     )
 
 
-ACTIVITY_KEYS: Final[frozendict[Activity, Key]] = frozendict(
-    {Activity.AGENT: Key.AGENT, Activity.JOB: Key.JOB, Activity.RECORDING: Key.RECORDING, Activity.INBOX: Key.INBOX}
+ACTIVITY_KEYS: Final = every_member(
+    Activity, {Activity.AGENT: Key.AGENT, Activity.JOB: Key.JOB, Activity.RECORDING: Key.RECORDING, Activity.INBOX: Key.INBOX}
 )
 
 
@@ -318,9 +319,9 @@ def reading(each: Reading, observed: Observed) -> Slot:
         case Reading.KEYBOARD:
             return (Glyph("keyboard"),) if observed.plain_keyboard else ()
         case Reading.SPEAKER:
-            return (Glyph(system.speaker_icon),)
+            return (Glyph(SPEAKERS[system.speakers].icon),)
         case Reading.WIFI:
-            return (Glyph(system.wifi_icon),)
+            return (Glyph(WIFI[system.wifi].icon),)
         case Reading.CLOCK:
             return (Text(ambient.clock, reserve="00:00"),)
         case Reading.POWER:

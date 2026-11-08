@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from contracts.recording_state import RecordingState
-from desktop_ui.ambient import Ambient, SystemStatus
+from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
 from desktop_ui.components.meaning import Tint, Tone
 from desktop_ui.island_model import (
     Action,
@@ -105,10 +105,10 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                     activity = (each for each in island(observed, SPEC, expanded=expanded) if each.zone is not Zone.RIGHT)
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
             status = view(baseline, Key.STATUS)
-            assert status.slots[-2] == (Glyph(baseline.system.speaker_icon), Glyph(baseline.system.wifi_icon))
+            assert status.slots[-2] == (Glyph(SPEAKERS[baseline.system.speakers].icon), Glyph(WIFI[baseline.system.wifi].icon))
             assert status.action is Action.OPEN_MENU
-            assert baseline.system.speaker_description in status.label
-            assert baseline.system.wifi_description in status.label
+            assert SPEAKERS[baseline.system.speakers].description in status.label
+            assert WIFI[baseline.system.wifi].description in status.label
 
 
 def test_charger_and_low_battery_lead_the_machine_readings_at_the_right() -> None:

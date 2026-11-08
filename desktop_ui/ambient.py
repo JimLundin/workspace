@@ -6,21 +6,30 @@ from typing import Final, assert_never
 from contracts.members import every_member
 from winapi.machine_status import Battery, Power, PowerUnavailable, Speakers, Wifi
 
-SPEAKER_ICONS: Final = every_member(Speakers, {Speakers.AUDIBLE: "speaker-on", Speakers.MUTED: "speaker-muted", Speakers.UNKNOWN: "speaker-unknown"})
-SPEAKER_DESCRIPTIONS: Final = every_member(
+
+@dataclass(frozen=True, slots=True)
+class Reading:
+    """An observed state's toolbar icon and the words that describe it."""
+
+    icon: str
+    description: str
+
+
+SPEAKERS: Final = every_member(
     Speakers,
-    {Speakers.AUDIBLE: "Speakers unmuted", Speakers.MUTED: "Speakers muted", Speakers.UNKNOWN: "Speaker status unavailable"},
+    {
+        Speakers.AUDIBLE: Reading("speaker-on", "Speakers unmuted"),
+        Speakers.MUTED: Reading("speaker-muted", "Speakers muted"),
+        Speakers.UNKNOWN: Reading("speaker-unknown", "Speaker status unavailable"),
+    },
 )
-WIFI_ICONS: Final = every_member(
-    Wifi, {Wifi.CONNECTED: "wifi", Wifi.DISCONNECTED: "wifi-off", Wifi.NO_ADAPTER: "wifi-absent", Wifi.UNKNOWN: "wifi-unknown"}
-)
-WIFI_DESCRIPTIONS: Final = every_member(
+WIFI: Final = every_member(
     Wifi,
     {
-        Wifi.CONNECTED: "Wi-Fi connected",
-        Wifi.DISCONNECTED: "Wi-Fi disconnected",
-        Wifi.NO_ADAPTER: "No Wi-Fi adapter",
-        Wifi.UNKNOWN: "Wi-Fi status unavailable",
+        Wifi.CONNECTED: Reading("wifi", "Wi-Fi connected"),
+        Wifi.DISCONNECTED: Reading("wifi-off", "Wi-Fi disconnected"),
+        Wifi.NO_ADAPTER: Reading("wifi-absent", "No Wi-Fi adapter"),
+        Wifi.UNKNOWN: Reading("wifi-unknown", "Wi-Fi status unavailable"),
     },
 )
 
@@ -34,24 +43,8 @@ class SystemStatus:
     memory: int | None = None  # Physical memory in use, in percent.
 
     @property
-    def speaker_icon(self) -> str:
-        return SPEAKER_ICONS[self.speakers]
-
-    @property
-    def speaker_description(self) -> str:
-        return SPEAKER_DESCRIPTIONS[self.speakers]
-
-    @property
-    def wifi_icon(self) -> str:
-        return WIFI_ICONS[self.wifi]
-
-    @property
-    def wifi_description(self) -> str:
-        return WIFI_DESCRIPTIONS[self.wifi]
-
-    @property
     def description(self) -> str:
-        return self.speaker_description + ". " + self.wifi_description
+        return SPEAKERS[self.speakers].description + ". " + WIFI[self.wifi].description
 
     @property
     def resource_description(self) -> str:
