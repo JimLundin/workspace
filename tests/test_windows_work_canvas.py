@@ -100,7 +100,7 @@ class NativeCanvas:
         self.store = WorkCanvas(store.path, queue_nothing, self.show_publication, autonomous=False)
         self.commands: list[WorkViewCommand] = []
         self.view: CanvasWindow
-        self.work = WorkWindow(self.command, post=self.jobs.append, create_view=self.build)
+        self.work = WorkWindow.open(self.command, post=self.jobs.append, create_view=self.build)
         self.work.show(focus=False)
         self.pump()
         assert not self.work.state.status, self.work.state.status
@@ -416,7 +416,7 @@ def test_first_canvas_open_shows_a_wait_cursor_until_its_first_paint(tmp_path: P
         views.append(view)
         return view
 
-    work = WorkWindow(lambda _: None, post=jobs.append, create_view=create, create_loading=opening)
+    work = WorkWindow.open(lambda _: None, post=jobs.append, create_view=create, create_loading=opening)
     try:
         work.publish(WorkSnapshot(personal=PersonalView(data)))
         work.show(focus=False)

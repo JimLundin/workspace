@@ -56,7 +56,7 @@ class WorkUi:
         self.created = 0
         self.commands: list[WorkViewCommand] = []
         self.problems: list[str] = []
-        self.work = WorkWindow(self.commands.append, post=self.jobs.append, create_view=self.create, on_problem=self.problems.append)
+        self.work = WorkWindow.open(self.commands.append, post=self.jobs.append, create_view=self.create, on_problem=self.problems.append)
 
     def create(self, _work: WorkWindow) -> WorkView:
         self.created += 1
@@ -105,7 +105,7 @@ def test_loading_remains_until_the_view_presents_its_first_frame() -> None:
     jobs: deque[Callable[[], None]] = deque()
     view = DeferredWorkView()
     loading = RecordingOpening()
-    work = WorkWindow(lambda _: None, post=jobs.append, create_view=lambda _: view, create_loading=lambda: loading)
+    work = WorkWindow.open(lambda _: None, post=jobs.append, create_view=lambda _: view, create_loading=lambda: loading)
     try:
         work.show(focus=False)
         while jobs:
@@ -128,7 +128,7 @@ def test_closing_before_first_paint_releases_pending_loading() -> None:
     jobs: deque[Callable[[], None]] = deque()
     view = DeferredWorkView()
     loading = RecordingOpening()
-    work = WorkWindow(lambda _: None, post=jobs.append, create_view=lambda _: view, create_loading=lambda: loading)
+    work = WorkWindow.open(lambda _: None, post=jobs.append, create_view=lambda _: view, create_loading=lambda: loading)
     work.show(focus=False)
     while jobs:
         jobs.popleft()()
@@ -166,7 +166,7 @@ def test_first_open_loading_precedes_creation_and_rendering_and_cleans_up_on_ret
             raise RuntimeError("Fixture native view unavailable")
         return view
 
-    work = WorkWindow(lambda _: None, post=jobs.append, create_view=create, on_problem=errors.append, create_loading=opening)
+    work = WorkWindow.open(lambda _: None, post=jobs.append, create_view=create, on_problem=errors.append, create_loading=opening)
     work.show(focus=False)
     while jobs:
         jobs.popleft()()
@@ -184,7 +184,7 @@ def test_first_open_loading_precedes_creation_and_rendering_and_cleans_up_on_ret
     while jobs:
         jobs.popleft()()
 
-    hidden = WorkWindow(lambda _: None, post=jobs.append, create_view=lambda _: RecordingWorkView(), create_loading=opening)
+    hidden = WorkWindow.open(lambda _: None, post=jobs.append, create_view=lambda _: RecordingWorkView(), create_loading=opening)
     hidden.prepare()
     while jobs:
         jobs.popleft()()
@@ -213,7 +213,7 @@ def test_loading_event_delivery_cannot_create_a_second_view() -> None:
         creations.append(result)
         return result
 
-    work = WorkWindow(lambda _: None, post=jobs.append, create_view=create, create_loading=lambda: loading)
+    work = WorkWindow.open(lambda _: None, post=jobs.append, create_view=create, create_loading=lambda: loading)
     work.show(focus=False)
     while jobs:
         jobs.popleft()()
@@ -267,7 +267,7 @@ def test_command_failure_reports_a_problem_without_discarding_current_tasks() ->
     def reject(_command: WorkViewCommand) -> None:
         raise RuntimeError("Work process unavailable")
 
-    work = WorkWindow(reject, post=lambda _: None, create_view=lambda _: RecordingWorkView(), on_problem=errors.append)
+    work = WorkWindow.open(reject, post=lambda _: None, create_view=lambda _: RecordingWorkView(), on_problem=errors.append)
     snapshot = WorkSnapshot(tasks=(work_task(),))
     work.publish(snapshot)
     assert not work.send(Submit("Read the workbook"))

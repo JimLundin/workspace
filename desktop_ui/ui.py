@@ -486,7 +486,7 @@ class Ui:
         with self._work_lock:
             if (work := self._work.get()) is None:
                 root = self._root
-                work = WorkWindow(
+                work = WorkWindow.open(
                     self._work_command,
                     post=lambda job: self.post(lambda _: job()),
                     create_view=self._create_work,
