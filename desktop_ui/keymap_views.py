@@ -26,14 +26,25 @@ lazy from miryoku.layout import Layer, Scancode
 prepare()
 
 
-_HUES: Final = {
-    Role.MOD: ("#64d2ff", "#0071a4"),
-    Role.LAYER: ("#7ab0f2", "#2f6fc4"),
-    Role.TOOL: ("#ffb340", "#b25000"),
-    Role.APP: ("#30d158", "#248a3d"),
-    Role.SPECIAL: ("#da8fff", "#8944ab"),
-}
-"""Each binding's hue, legible as text on the dark and the light scheme."""
+@dataclass(frozen=True, slots=True)
+class Bindings:
+    """How a scheme tints a bound key: its fill's opacity, and each binding's hue, legible as text on the scheme."""
+
+    tint: float
+    hues: frozendict[Role, str]
+
+
+_BINDINGS: Final = every_member(
+    Scheme,
+    {
+        Scheme.DARK: Bindings(
+            0.16, frozendict({Role.MOD: "#64d2ff", Role.LAYER: "#7ab0f2", Role.TOOL: "#ffb340", Role.APP: "#30d158", Role.SPECIAL: "#da8fff"})
+        ),
+        Scheme.LIGHT: Bindings(
+            0.12, frozendict({Role.MOD: "#0071a4", Role.LAYER: "#2f6fc4", Role.TOOL: "#b25000", Role.APP: "#248a3d", Role.SPECIAL: "#8944ab"})
+        ),
+    },
+)
 
 
 def _keycap(role: Role, theme: Tokens) -> tuple[str, str]:
@@ -46,24 +57,15 @@ def _keycap(role: Role, theme: Tokens) -> tuple[str, str]:
         case Role.BLANK:
             return theme.fill.argb, theme.ink3.argb
         case Role.MOD | Role.LAYER | Role.TOOL | Role.APP | Role.SPECIAL:
-            dark, light = _HUES[role]
-            match theme.scheme:
-                case Scheme.DARK:
-                    return Shade(dark, 0.16).argb, dark
-                case Scheme.LIGHT:
-                    return Shade(light, 0.12).argb, light
-                case _:
-                    assert_never(theme.scheme)
+            bindings = _BINDINGS[theme.scheme]
+            hue = bindings.hues[role]
+            return Shade(hue, bindings.tint).argb, hue
         case _:
             assert_never(role)
 
 
 PRESSED: Final = every_member(Scheme, {Scheme.DARK: ("#f5f5f7", "#161618"), Scheme.LIGHT: ("#1d1d1f", "#ffffff")})
 """A pressed key lights up in the scheme's ink, unlike any binding's tint."""
-
-
-def _pressed(theme: Tokens) -> tuple[str, str]:
-    return PRESSED[theme.scheme]
 
 
 _LAYERS: Final[tuple[tuple[str, Layer | None], ...]] = (("Base", None), *((layer.name.title(), layer) for layer in Layer))
@@ -97,7 +99,7 @@ class KeymapCanvas(QtWidgets.QWidget):
         self.update()
 
     def colors(self, name: str) -> tuple[str, str]:
-        return _pressed(self.theme) if name in self.highlighted else _keycap(self.caps[name].role, self.theme)
+        return PRESSED[self.theme.scheme] if name in self.highlighted else _keycap(self.caps[name].role, self.theme)
 
     def press(self, names: frozenset[str]) -> None:
         changed = names ^ self.highlighted

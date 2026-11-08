@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final
 
-from contracts.hotkeys import Route, route
+from contracts.hotkeys import ROUTES, Route
+from contracts.members import every_member
 from miryoku.firmware import CHORDS
 from miryoku.layout import (
     BASE,
@@ -112,14 +113,14 @@ class Cap:
     role: Role
 
 
-_KEY_NAMES: Final = {
+_KEY_NAMES: Final = frozendict({
     Key.SPACE: "Space", Key.ENTER: "Enter", Key.BACKSPACE: "Bksp", Key.DELETE: "Del", Key.TAB: "Tab", Key.ESC: "Esc",
     Key.CAPS_LOCK: "Caps", Key.INSERT: "Ins", Key.HOME: "Home", Key.END: "End", Key.PAGE_UP: "PgUp", Key.PAGE_DOWN: "PgDn",
     Key.LEFT: "←", Key.RIGHT: "→", Key.UP: "↑", Key.DOWN: "↓",
-}  # fmt: skip
-_CHORD_NAMES: Final = {UNDO: "Undo", REDO: "Redo", COPY: "Copy", PASTE: "Paste", CUT: "Cut"}
-_MOD_NAMES: Final = {Mod.GUI: "Win", Mod.ALT: "Alt", Mod.CTRL: "Ctrl", Mod.SHIFT: "Shift"}
-TOOL_NAMES: Final = {
+})  # fmt: skip
+_CHORD_NAMES: Final = frozendict({UNDO: "Undo", REDO: "Redo", COPY: "Copy", PASTE: "Paste", CUT: "Cut"})
+_MOD_NAMES: Final = every_member(Mod, {Mod.GUI: "Win", Mod.ALT: "Alt", Mod.CTRL: "Ctrl", Mod.SHIFT: "Shift"})
+TOOL_NAMES: Final = every_member(Tool, {
     Tool.DICTATE: "Talk",
     Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
     Tool.ZOOM: "Zoom",
@@ -130,9 +131,7 @@ TOOL_NAMES: Final = {
     Tool.DICTATE_TOGGLE: "Dictate toggle",
     Tool.OPEN_INBOX: "Inbox",
     Tool.WINDOW_SWITCHER: "Windows",
-}  # fmt: skip
-if set(TOOL_NAMES) != set(Tool):
-    raise ImportError("every tool needs a name on the key map")
+})  # fmt: skip
 
 
 def _output(key: Key, label: str | None = None) -> str:
@@ -169,7 +168,7 @@ def describe(a: Action) -> tuple[str, Role]:
 
 def _hold(a: Action) -> str:
     match a:
-        case Tool() if route(a) is Route.HOLD:
+        case Tool() if ROUTES[a] is Route.HOLD:
             return "hold"
         case TapHold(hold=Mod() as modifier):
             return _MOD_NAMES[modifier]
