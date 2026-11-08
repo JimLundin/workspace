@@ -34,11 +34,13 @@ from automation.actions import Resources
 from automation.execution import WorkExecution
 from contracts.json_value import Json
 from contracts.personal_work import (
+    CATALOG,
     PERSONAL_RESPONSE,
     WORK_PLAN,
     AddDocument,
     AddWebPage,
     Association,
+    Catalog,
     CorrelationInput,
     DismissWork,
     DocumentAdded,
@@ -49,7 +51,9 @@ from contracts.personal_work import (
     SaveWork,
     SourceKind,
     SourcePage,
+    TeamsSource,
     UnlinkWork,
+    WebPageSource,
     WorkDefinition,
     WorkPage,
     WorkPlan,
@@ -99,7 +103,7 @@ def test_researched_web_reference_retains_original_url_and_captured_evidence(tmp
     saved = store.handle(SaveWork(WorkDefinition("Atlas", "Choose architecture")), 10)
     assert isinstance(saved, WorkSaved)
     page = store.handle(AddWebPage("Architecture guidance", WebDocument(from_url), "Verified guidance: compare schema versions.", saved.work.id), 11)
-    assert isinstance(page, DocumentAdded) and page.source.kind is SourceKind.WEB_PAGE
+    assert isinstance(page, DocumentAdded) and isinstance(page.source, WebPageSource)
     observed = PersonalStore(store.path).read()
     assert observed.sources[0].url == from_url and observed.sources[0].excerpt == "Verified guidance: compare schema versions."
     assert observed.works[0].id == saved.work.id and observed.works[0].links[0].source_id == page.source.id
@@ -359,7 +363,7 @@ def test_browser_collection_routes_exact_tabs_paginates_and_uses_messages_not_ti
     observations = reader.read(20, threading.Event())
     assert observations.coverage == ("kanban", "outlook", "teams") and not observations.problems
     assert len(observations.sources) == 6
-    teams = tuple(item for item in observations.sources if item.kind is SourceKind.TEAMS)
+    teams = tuple(item for item in observations.sources if isinstance(item, TeamsSource))
     assert len(teams) == 2
     conversation = next(item for item in teams if item.parent_id is None)
     piece = next(item for item in teams if item.parent_id is not None)
@@ -499,7 +503,7 @@ def test_agent_tools_use_the_desktop_owner_and_record_confirmed_edits(tmp_path: 
         )
         captured = PERSONAL_RESPONSE.validate_json(page.text)
         assert page.ok and isinstance(captured, DocumentAdded)
-        assert captured.source.kind is SourceKind.WEB_PAGE and captured.source.url == "https://contoso.example.test/guidance"
+        assert isinstance(captured.source, WebPageSource) and captured.source.url == "https://contoso.example.test/guidance"
         assert captured.source.excerpt == "Verified evidence: compare schema versions."
         assert any(link.source_id == captured.source.id for link in store.read().works[0].links)
         assert isinstance(tasks.actions(claim.task.id)[-1].outcome, ActionVerified)
@@ -614,3 +618,15 @@ def test_invalid_catalog_calls_name_their_arguments_and_start_nothing(tmp_path: 
     result = rig.call("work_items_restore")
     assert not result.ok and result.text.startswith("Error: work_items_restore arguments are invalid: work_id"), result.text
     assert not work.store.actions(work.claim.task.id)
+
+
+def test_each_stored_source_reads_back_as_its_own_application() -> None:
+    # Defect: a saved catalog validates a source into another application's
+    # type, or accepts a URL from another application under a valid identity.
+    kinds = (SourceKind.TEAMS, SourceKind.OUTLOOK, SourceKind.KANBAN, SourceKind.DOCUMENT, SourceKind.WEB_PAGE)
+    stored = Catalog(sources=tuple(source(kind) for kind in kinds))
+    restored = CATALOG.validate_json(CATALOG.dump_json(stored))
+    assert restored == stored
+    assert tuple(type(item) for item in restored.sources) == tuple(type(item) for item in stored.sources)
+    with TestCase().assertRaisesRegex(ValueError, "business application"):
+        replace(source(SourceKind.KANBAN), url=source(SourceKind.TEAMS).url)

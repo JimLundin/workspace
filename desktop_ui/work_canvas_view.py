@@ -14,7 +14,7 @@ lazy from PySide6.QtCore import Qt
 
 from contracts.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from contracts.feed_origin import App, Origin
-from contracts.personal_work import SourceKind, WorkSource, WorkThread
+from contracts.personal_work import DocumentSource, KanbanSource, OutlookSource, TeamsSource, WebPageSource, WorkThread
 from contracts.work_canvas_context import ContextGroup, descendants
 from contracts.work_canvas_model import CanvasContent, caption, summary, title
 from desktop_ui.components.appearance import Shade, Tokens
@@ -368,15 +368,15 @@ class CanvasViewport(QtWidgets.QGraphicsView):
 
 def source_app(content: CanvasContent) -> App:
     match content:
-        case WorkSource(kind=SourceKind.TEAMS):
+        case TeamsSource():
             return App.TEAMS
-        case WorkSource(kind=SourceKind.OUTLOOK):
+        case OutlookSource():
             return App.OUTLOOK
-        case WorkSource(kind=SourceKind.DOCUMENT):
+        case DocumentSource():
             return App.DOCUMENT
-        case WorkSource(kind=SourceKind.WEB_PAGE):
+        case WebPageSource():
             return App.WEB_PAGE
-        case WorkSource(kind=SourceKind.KANBAN):
+        case KanbanSource():
             return App.KANBAN
         case CanvasUpdate(origins=origins) | CanvasQuestion(origins=origins) | CanvasAction(origins=origins) if origins:
             return origins[0].app

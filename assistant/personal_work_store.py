@@ -25,22 +25,19 @@ from contracts.personal_work import (
     RestoreWork,
     SaveWork,
     Source,
-    SourceKind,
     SourceOrigin,
     UnlinkWork,
+    WebPageSource,
     WorkPlan,
     WorkSaved,
-    WorkSource,
     find_work,
     observe_sources,
     page,
     reconcile_plan,
+    reference_source,
     save_work,
-    source_id,
-    source_revision,
     unlink_work,
 )
-from contracts.work_documents import document_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,26 +111,15 @@ class PersonalStore:
                 case ListWork() | ListSources():
                     return page(state, request)
                 case AddDocument() | AddWebPage():
-                    location = request.reference.url
-                    kind = SourceKind.WEB_PAGE if isinstance(request, AddWebPage) else SourceKind.DOCUMENT
-                    source = WorkSource(
-                        source_id(kind, document_identity(location)),
-                        kind,
-                        document_identity(location),
-                        request.title,
-                        request.excerpt,
-                        location,
-                        source_revision(request.title, request.excerpt, location),
-                        at,
-                        origin=origin,
-                    )
+                    source = reference_source(request, at, origin)
                     state = observe_sources(state, (source,))
                     if request.work_id is not None:
                         work = find_work(state, request.work_id)
                         links = (
                             *tuple(link for link in work.links if link.source_id != source.id),
                             Association(
-                                source.id, "Web reference added to this work." if kind is SourceKind.WEB_PAGE else "Document added to this work."
+                                source.id,
+                                "Web reference added to this work." if isinstance(source, WebPageSource) else "Document added to this work.",
                             ),
                         )
                         state, work = save_work(state, SaveWork(work.definition, links, work.id, work.revision), at)

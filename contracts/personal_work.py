@@ -11,13 +11,13 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import reduce
 from itertools import chain, groupby
-from typing import Annotated, Literal, assert_never
+from typing import Annotated, Final, Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, StringConstraints, TypeAdapter
 
 from contracts.meetings import Meeting, MeetingConversation
-from contracts.work_documents import DocumentReference, WebDocument, checked_url
+from contracts.work_documents import DocumentReference, WebDocument, checked_url, document_identity
 
 type Identity = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 type Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
@@ -47,10 +47,27 @@ class SourceOrigin(StrEnum):
     AGENT = "agent"
 
 
+_TEAMS_HOSTS: Final = frozenset({"teams.cloud.microsoft", "teams.microsoft.com"})
+_OUTLOOK_HOSTS: Final = frozenset({"outlook.office.com", "outlook.office365.com", "outlook.cloud.microsoft"})
+_KANBAN_HOSTS: Final = frozenset({"dev-team-kanban.fcg.palantirfoundry.com"})
+
+
+def _check_identity(identity: str, *, kind: SourceKind, source: str, parent_id: str | None) -> None:
+    if identity != source_id(kind, source, parent_id=parent_id) or identity == parent_id:
+        raise ValueError("The source identity does not match its application identity or parent.")
+
+
+def _check_application(url: str, hosts: frozenset[str]) -> None:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or parsed.hostname not in hosts or parsed.username or parsed.password or parsed.port not in (None, 443):
+        raise ValueError("The source must point to its observed business application.")
+
+
 @dataclass(frozen=True, slots=True)
-class WorkSource:
+class TeamsSource:
+    """A Teams conversation observed in the browser, or one message in it (`parent_id`)."""
+
     id: Identity
-    kind: SourceKind
     identity: Identity
     title: Title
     excerpt: Detail
@@ -58,33 +75,112 @@ class WorkSource:
     revision: Identity
     observed_at: Timestamp
     parent_id: Identity | None = None
-    origin: SourceOrigin = SourceOrigin.OBSERVED
+    kind: Literal[SourceKind.TEAMS] = SourceKind.TEAMS
 
     def __post_init__(self) -> None:
-        if self.id != source_id(self.kind, self.identity, parent_id=self.parent_id) or self.id == self.parent_id:
-            raise ValueError("The source identity does not match its application identity or parent.")
-        if self.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE):
-            checked_url(self.url)
-            if self.kind is SourceKind.WEB_PAGE and urlsplit(self.url).scheme != "https":
-                raise ValueError("Web pages require an HTTPS reference.")
-            return
-        hosts: tuple[str, ...]
-        match self.kind:
-            case SourceKind.TEAMS:
-                hosts = ("teams.cloud.microsoft", "teams.microsoft.com")
-            case SourceKind.OUTLOOK:
-                hosts = ("outlook.office.com", "outlook.office365.com", "outlook.cloud.microsoft")
-            case SourceKind.KANBAN:
-                hosts = ("dev-team-kanban.fcg.palantirfoundry.com",)
-            case SourceKind.MEETING:
-                raise ValueError("Recorded meetings require a native MeetingSource.")
-            case _ as unreachable:
-                assert_never(unreachable)
-        parsed = urlsplit(self.url)
-        if parsed.scheme != "https" or parsed.hostname not in hosts or parsed.username or parsed.password or parsed.port not in (None, 443):
-            raise ValueError("The source must point to its observed business application.")
-        if self.id != source_id(self.kind, self.identity, parent_id=self.parent_id):
-            raise ValueError("The source identity does not match its application identity.")
+        _check_identity(self.id, kind=self.kind, source=self.identity, parent_id=self.parent_id)
+        _check_application(self.url, _TEAMS_HOSTS)
+
+    @property
+    def origin(self) -> SourceOrigin:
+        return SourceOrigin.OBSERVED
+
+
+@dataclass(frozen=True, slots=True)
+class OutlookSource:
+    """An Outlook conversation observed in the browser, or one email in it (`parent_id`)."""
+
+    id: Identity
+    identity: Identity
+    title: Title
+    excerpt: Detail
+    url: Annotated[str, Field(max_length=4000)]
+    revision: Identity
+    observed_at: Timestamp
+    parent_id: Identity | None = None
+    kind: Literal[SourceKind.OUTLOOK] = SourceKind.OUTLOOK
+
+    def __post_init__(self) -> None:
+        _check_identity(self.id, kind=self.kind, source=self.identity, parent_id=self.parent_id)
+        _check_application(self.url, _OUTLOOK_HOSTS)
+
+    @property
+    def origin(self) -> SourceOrigin:
+        return SourceOrigin.OBSERVED
+
+
+@dataclass(frozen=True, slots=True)
+class KanbanSource:
+    """A Kanban ticket observed on a rendered board."""
+
+    id: Identity
+    identity: Identity
+    title: Title
+    excerpt: Detail
+    url: Annotated[str, Field(max_length=4000)]
+    revision: Identity
+    observed_at: Timestamp
+    kind: Literal[SourceKind.KANBAN] = SourceKind.KANBAN
+
+    def __post_init__(self) -> None:
+        _check_identity(self.id, kind=self.kind, source=self.identity, parent_id=None)
+        _check_application(self.url, _KANBAN_HOSTS)
+
+    @property
+    def parent_id(self) -> None:
+        return None
+
+    @property
+    def origin(self) -> SourceOrigin:
+        return SourceOrigin.OBSERVED
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentSource:
+    """A document the user or the agent added by its location."""
+
+    id: Identity
+    identity: Identity
+    title: Title
+    excerpt: Detail
+    url: Annotated[str, Field(max_length=4000)]
+    revision: Identity
+    observed_at: Timestamp
+    origin: SourceOrigin
+    kind: Literal[SourceKind.DOCUMENT] = SourceKind.DOCUMENT
+
+    def __post_init__(self) -> None:
+        _check_identity(self.id, kind=self.kind, source=self.identity, parent_id=None)
+        checked_url(self.url)
+
+    @property
+    def parent_id(self) -> None:
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class WebPageSource:
+    """A web page the user or the agent added as a reference."""
+
+    id: Identity
+    identity: Identity
+    title: Title
+    excerpt: Detail
+    url: Annotated[str, Field(max_length=4000)]
+    revision: Identity
+    observed_at: Timestamp
+    origin: SourceOrigin
+    kind: Literal[SourceKind.WEB_PAGE] = SourceKind.WEB_PAGE
+
+    def __post_init__(self) -> None:
+        _check_identity(self.id, kind=self.kind, source=self.identity, parent_id=None)
+        checked_url(self.url)
+        if urlsplit(self.url).scheme != "https":
+            raise ValueError("Web pages require an HTTPS reference.")
+
+    @property
+    def parent_id(self) -> None:
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,7 +222,11 @@ class MeetingSource:
         return SourceOrigin.OBSERVED
 
 
-type Source = WorkSource | MeetingSource
+type ApplicationSource = TeamsSource | OutlookSource | KanbanSource
+"""Evidence observed in a signed-in business application; opening it asks the agent."""
+type ReferenceSource = DocumentSource | WebPageSource
+"""A location added as a reference; it opens directly."""
+type Source = ApplicationSource | ReferenceSource | MeetingSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,7 +406,7 @@ class WorkRefused:
 
 @dataclass(frozen=True, slots=True)
 class DocumentAdded:
-    source: WorkSource
+    source: ReferenceSource
     kind: Literal["document_added"] = "document_added"
 
 
@@ -361,6 +461,23 @@ def source_id(kind: SourceKind, identity: str, *, parent_id: str | None = None) 
 
 def source_revision(title: str, excerpt: str, url: str) -> str:
     return hashlib.sha256(_SOURCE_CONTENT.dump_json((title, excerpt, url))).hexdigest()
+
+
+def reference_id(request: AddDocument | AddWebPage) -> str:
+    """The source identity an added document or web page registers under."""
+    kind = SourceKind.WEB_PAGE if isinstance(request, AddWebPage) else SourceKind.DOCUMENT
+    return source_id(kind, document_identity(request.reference.url))
+
+
+def reference_source(request: AddDocument | AddWebPage, at: float, origin: SourceOrigin) -> ReferenceSource:
+    location = request.reference.url
+    parts = (reference_id(request), document_identity(location), request.title, request.excerpt, location)
+    revision = source_revision(request.title, request.excerpt, location)
+    match request:
+        case AddDocument():
+            return DocumentSource(*parts, revision, at, origin)
+        case AddWebPage():
+            return WebPageSource(*parts, revision, at, origin)
 
 
 def find_work(catalog: Catalog, identity: str) -> WorkThread:
@@ -461,7 +578,7 @@ def observe_sources(catalog: Catalog, sources: tuple[Source, ...]) -> Catalog:
     }
     referenced = frozenset(
         link.source_id for work in (*catalog.works, *(item.work for item in catalog.dismissed)) for link in work.links
-    ) | frozenset(source.id for source in current.values() if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE, SourceKind.MEETING))
+    ) | frozenset(source.id for source in current.values() if isinstance(source, DocumentSource | WebPageSource | MeetingSource))
     # A conversation reference retains its observed pieces; a specific message
     # retains its containing conversation. Missing browser rows prove no deletion.
     referenced = source_context(tuple(current.values()), referenced)

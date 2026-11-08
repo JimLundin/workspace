@@ -131,13 +131,17 @@ lazy from contracts.personal_work import (
     AddDocument,
     AddWebPage,
     DismissWork,
+    DocumentSource,
+    KanbanSource,
     MeetingSource,
     OpenWorkSource,
+    OutlookSource,
     RefreshPersonalWork,
     RestoreWork,
     SaveWork,
-    SourceKind,
+    TeamsSource,
     UnlinkWork,
+    WebPageSource,
 )
 lazy from contracts.recording_state import RecordingAction
 lazy from contracts.status import State
@@ -778,16 +782,16 @@ class AssistantApp:
                 source = next((source for source in self.personal.snapshot().catalog.sources if source.id == source_id), None)
                 if source is None:
                     raise ValueError("This source is no longer available. Refresh My work.")
-                if isinstance(source, MeetingSource):
-                    report = self.inbox.report
-                    self.jobs.put(
-                        control_policy.meeting_file_job(Path(source.meeting.transcript_path), os.startfile, lambda message: report(Problem(message)))
-                    )
-                    return
-                if source.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE):
-                    self.desktop.send(OpenReference(source.url))
-                    return
-                self.agent.start(source_request(source))
+                match source:
+                    case MeetingSource(meeting=meeting):
+                        report = self.inbox.report
+                        self.jobs.put(
+                            control_policy.meeting_file_job(Path(meeting.transcript_path), os.startfile, lambda message: report(Problem(message)))
+                        )
+                    case DocumentSource(url=url) | WebPageSource(url=url):
+                        self.desktop.send(OpenReference(url))
+                    case TeamsSource() | OutlookSource() | KanbanSource():
+                        self.agent.start(source_request(source))
             case _:
                 self.agent.command(command)
 

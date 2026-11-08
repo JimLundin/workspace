@@ -14,14 +14,17 @@ from contracts.meetings import MeetingConversation
 from contracts.personal_work import (
     Catalog,
     DismissWork,
+    DocumentSource,
+    KanbanSource,
     MeetingSource,
     OpenWorkSource,
+    OutlookSource,
     SaveWork,
     Source,
-    SourceKind,
+    TeamsSource,
     UnlinkWork,
+    WebPageSource,
     WorkDefinition,
-    WorkSource,
     WorkState,
     WorkThread,
 )
@@ -295,14 +298,12 @@ class SourceDetail:
                 self.open.setText("Open transcript")
                 if reading.conversation is None or reading.conversation.meeting.revision != meeting.revision:
                     self.read_conversation(0)
-            case WorkSource():
-                self.open.setText("Open original" if content.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE) else "Open in Edge")
-                replace_text(
-                    self.text,
-                    f"Observed {when(content.observed_at)}\n\n{content.url}\n\n{content.excerpt}"
-                    if content.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE)
-                    else f"Observed {when(content.observed_at)}\n\n{content.excerpt}",
-                )
+            case DocumentSource() | WebPageSource():
+                self.open.setText("Open original")
+                replace_text(self.text, f"Observed {when(content.observed_at)}\n\n{content.url}\n\n{content.excerpt}")
+            case TeamsSource() | OutlookSource() | KanbanSource():
+                self.open.setText("Open in Edge")
+                replace_text(self.text, f"Observed {when(content.observed_at)}\n\n{content.excerpt}")
         previous: object = self.connections.currentData()
         self.connections.clear()
         for item in catalog.works:
@@ -351,14 +352,14 @@ class SourceDetail:
             self.work.send(UnlinkWork(work.id, self.current.id, work.revision))
 
     def open_source(self) -> None:
-        current = self.current
-        if isinstance(current, MeetingSource):
-            self.work.send(OpenWorkSource(current.id))
-        elif current.kind is SourceKind.DOCUMENT:
-            if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(current.url)):
-                self.work.problem("Windows could not open this document.")
-        else:
-            self.work.send(OpenWorkSource(current.parent_id or current.id))
+        match self.current:
+            case MeetingSource(id=identity):
+                self.work.send(OpenWorkSource(identity))
+            case DocumentSource(url=url):
+                if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(url)):
+                    self.work.problem("Windows could not open this document.")
+            case current:
+                self.work.send(OpenWorkSource(current.parent_id or current.id))
 
     def read_conversation(self, offset: int) -> None:
         match self.current:
@@ -366,7 +367,7 @@ class SourceDetail:
                 # The assistant owns the meeting's journal; its page arrives in `show_page`.
                 if not self.work.send(ReadMeeting(meeting.transcript_path, offset)):
                     self.show_page(meeting.transcript_path, None)
-            case WorkSource():
+            case _:
                 pass
 
     def show_page(self, transcript_path: str, page: MeetingConversation | None) -> None:

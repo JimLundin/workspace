@@ -22,16 +22,19 @@ from contracts.personal_work import (
     AddWebPage,
     Association,
     DismissWork,
+    DocumentSource,
+    KanbanSource,
     MeetingSource,
+    OutlookSource,
     PersonalView,
     RefreshPersonalWork,
     RestoreWork,
     SaveWork,
-    SourceKind,
+    TeamsSource,
+    WebPageSource,
     WorkDefinition,
-    WorkSource,
     WorkThread,
-    source_id,
+    reference_id,
 )
 from contracts.task import Control
 from contracts.work_canvas_commands import PutRelation, RemoveRelation
@@ -75,7 +78,7 @@ from contracts.work_canvas_model import (
     view_state,
 )
 from contracts.work_commands import ControlTask
-from contracts.work_documents import LocalDocument, WebDocument, document_identity
+from contracts.work_documents import LocalDocument, WebDocument
 from desktop_ui import ui_spec
 from desktop_ui.canvas_toolbar import (
     Act,
@@ -843,7 +846,9 @@ class CanvasPanel:
     def refresh_detail(self, item: CanvasContent) -> None:
         detail = self.detail(item.id)
         match detail, item:
-            case SourceDetail() as source, (WorkSource() | MeetingSource()) as current:
+            case SourceDetail() as source, (
+                TeamsSource() | OutlookSource() | KanbanSource() | DocumentSource() | WebPageSource() | MeetingSource()
+            ) as current:
                 source.refresh(current, self.view.catalog, self.document)
             case UpdateDetail() as editor, (CanvasUpdate() | CanvasAction()) as current:
                 editor.refresh(current)
@@ -869,7 +874,7 @@ class CanvasPanel:
 
         if self.linking is not None and card is not None:
             match card.content:
-                case WorkSource() | MeetingSource() as source:
+                case TeamsSource() | OutlookSource() | KanbanSource() | DocumentSource() | WebPageSource() | MeetingSource() as source:
                     work = self.linking
                     self._state.set(replace(self._state.get(), linking=None))
                     reason, accepted = QtWidgets.QInputDialog.getText(self.frame, "Connect source", "Why does this source belong to this work?")
@@ -910,7 +915,7 @@ class CanvasPanel:
         detail = self.detail(identity)
         if detail is None:
             match card.content:
-                case WorkSource() | MeetingSource() as content:
+                case TeamsSource() | OutlookSource() | KanbanSource() | DocumentSource() | WebPageSource() | MeetingSource() as content:
                     detail = SourceDetail.build(self.work, content, self.style, on_context=self.open_context)
                     detail.refresh(content, self.view.catalog, self.document)
                 case CanvasNote() as content:
@@ -1416,13 +1421,7 @@ class CanvasPanel:
             None,
         )
         if self.work.send(replace(command, work_id=work_id)) and self.selected is not None and self.selected != work_id:
-            match command:
-                case AddWebPage():
-                    kind = SourceKind.WEB_PAGE
-                case AddDocument():
-                    kind = SourceKind.DOCUMENT
-            identity = source_id(kind, document_identity(command.reference.url))
-            self.commit(PutInside(identity, self.selected, frozenset()))
+            self.commit(PutInside(reference_id(command), self.selected, frozenset()))
 
 
 # Qt owns pointer capture and previews; immutable decisions own the gestures.

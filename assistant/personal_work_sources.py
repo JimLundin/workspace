@@ -8,7 +8,7 @@ saved evidence. CDP targets belong to this observation and are never persisted.
 import threading
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
-from typing import Final, Protocol, assert_never
+from typing import Final, Literal, Protocol, assert_never
 from urllib.parse import urlsplit
 
 from pydantic import TypeAdapter
@@ -30,7 +30,7 @@ from assistant.web_apps import (
     WebAppOperation,
 )
 from cell import Cell
-from contracts.personal_work import SourceKind, WorkSource, source_id, source_revision
+from contracts.personal_work import ApplicationSource, KanbanSource, OutlookSource, SourceKind, TeamsSource, source_id, source_revision
 
 
 class BrowserPort(Protocol):
@@ -59,7 +59,7 @@ class Tab:
 
 @dataclass(frozen=True, slots=True)
 class Observations:
-    sources: tuple[WorkSource, ...]
+    sources: tuple[ApplicationSource, ...]
     coverage: tuple[str, ...]
     problems: tuple[str, ...] = ()
 
@@ -68,7 +68,11 @@ _STATUS = TypeAdapter(BrowserStatus)
 ACCESS_RETRY_SECONDS: Final = 60.0
 
 
-def kind_for(url: str) -> SourceKind | None:
+type Application = Literal[SourceKind.TEAMS, SourceKind.OUTLOOK, SourceKind.KANBAN]
+"""The applications whose signed-in pages the reader observes."""
+
+
+def kind_for(url: str) -> Application | None:
     parsed = urlsplit(url)
     if parsed.scheme != "https":
         return None
@@ -83,28 +87,51 @@ def kind_for(url: str) -> SourceKind | None:
             return None
 
 
-def observed_source(kind: SourceKind, identity: str, details: tuple[str, str, str], at: float) -> WorkSource:
-    # A source's routing identity, observed content and timestamp are distinct
-    # parts of one observation. Content changes determine its revision; time does not.
-    title, excerpt, url = details
-    title, excerpt = title.strip()[:240] or kind.value.capitalize(), excerpt[:6000]
-    return WorkSource(source_id(kind, identity), kind, identity, title, excerpt, url, source_revision(title, excerpt, url), at)
+@dataclass(frozen=True, slots=True)
+class Observed:
+    """One observation's content, apart from its routing identity and time.
+    Content changes determine a source's revision; time does not."""
+
+    title: str
+    excerpt: str
+    url: str
+
+    @classmethod
+    def of(cls, details: tuple[str, str, str], fallback: str) -> Observed:
+        title, excerpt, url = details
+        return cls(title.strip()[:240] or fallback, excerpt[:6000], url)
+
+    @property
+    def revision(self) -> str:
+        return source_revision(self.title, self.excerpt, self.url)
 
 
-def board_sources(board: Board, tab: Tab, at: float) -> tuple[WorkSource, ...]:
-    return tuple(
-        observed_source(SourceKind.KANBAN, card.task_id, (card.title, f"Board column: {card.column}\n{card.text}", tab.url), at)
-        for card in board.tasks
-    )
+def teams_source(identity: str, details: tuple[str, str, str], at: float) -> TeamsSource:
+    seen = Observed.of(details, "Teams")
+    return TeamsSource(source_id(SourceKind.TEAMS, identity), identity, seen.title, seen.excerpt, seen.url, seen.revision, at)
 
 
-def teams_sources(teams: TeamsPage, tab: Tab, at: float) -> tuple[WorkSource, ...]:
+def outlook_source(identity: str, details: tuple[str, str, str], at: float) -> OutlookSource:
+    seen = Observed.of(details, "Outlook")
+    return OutlookSource(source_id(SourceKind.OUTLOOK, identity), identity, seen.title, seen.excerpt, seen.url, seen.revision, at)
+
+
+def kanban_source(identity: str, details: tuple[str, str, str], at: float) -> KanbanSource:
+    seen = Observed.of(details, "Kanban")
+    return KanbanSource(source_id(SourceKind.KANBAN, identity), identity, seen.title, seen.excerpt, seen.url, seen.revision, at)
+
+
+def board_sources(board: Board, tab: Tab, at: float) -> tuple[KanbanSource, ...]:
+    return tuple(kanban_source(card.task_id, (card.title, f"Board column: {card.column}\n{card.text}", tab.url), at) for card in board.tasks)
+
+
+def teams_sources(teams: TeamsPage, tab: Tab, at: float) -> tuple[TeamsSource, ...]:
     # Title-only sidebar entries are locators, not evidence of an obligation.
     # The selected conversation's actual rendered messages can connect work.
     if not teams.current or not teams.messages:
         return ()
     text = "\n\n".join(f"{message.sender}: {message.text}" for message in teams.messages[-20:])[-6000:]
-    conversation = observed_source(SourceKind.TEAMS, teams.current, (teams.title or "Teams conversation", text, tab.url), at)
+    conversation = teams_source(teams.current, (teams.title or "Teams conversation", text, tab.url), at)
     return (conversation, *message_sources(conversation, teams.messages[-20:]))
 
 
@@ -113,13 +140,12 @@ def mail_title(preview: str) -> str:
     return " · ".join(line for line in lines[:4] if line not in ("External", "Inbox"))[:240] or "Outlook conversation"
 
 
-def outlook_sources(outlook: Mailbox, tab: Tab, at: float) -> tuple[WorkSource, ...]:
+def outlook_sources(outlook: Mailbox, tab: Tab, at: float) -> tuple[OutlookSource, ...]:
     origin = urlsplit(tab.url)
     mailbox = f"https://{origin.hostname}/mail/"
     selected = outlook.selected
     sources = tuple(
-        observed_source(
-            SourceKind.OUTLOOK,
+        outlook_source(
             mail.conversation_id,
             (selected.subject, selected.text, tab.url)
             if selected is not None and selected.conversation_id == mail.conversation_id and selected.text
@@ -131,26 +157,27 @@ def outlook_sources(outlook: Mailbox, tab: Tab, at: float) -> tuple[WorkSource, 
     # A selected pane is independent of pagination/virtualized list rows. Its
     # actual body remains evidence even when its row is not on this page.
     if selected is not None and selected.text and selected.conversation_id not in {mail.conversation_id for mail in outlook.conversations}:
-        sources = (*sources, observed_source(SourceKind.OUTLOOK, selected.conversation_id, (selected.subject, selected.text, tab.url), at))
+        sources = (*sources, outlook_source(selected.conversation_id, (selected.subject, selected.text, tab.url), at))
     conversation = next((source for source in sources if selected is not None and source.identity == selected.conversation_id), None)
     return (*sources, *message_sources(conversation, selected.messages)) if conversation is not None and selected is not None else sources
 
 
-def message_sources(conversation: WorkSource, messages: Iterable[Piece]) -> tuple[WorkSource, ...]:
-    return tuple(
-        replace(
-            observed_source(
-                conversation.kind,
-                message.identity,
-                (message.sender or conversation.title, message.text, conversation.url),
-                conversation.observed_at,
-            ),
+def message_sources[C: (TeamsSource, OutlookSource)](conversation: C, messages: Iterable[Piece]) -> tuple[C, ...]:
+    """Each message is its own source, a part of its conversation."""
+
+    def piece(message: Piece) -> C:
+        seen = Observed.of((message.sender or conversation.title, message.text, conversation.url), conversation.title)
+        return replace(
+            conversation,
             id=source_id(conversation.kind, message.identity, parent_id=conversation.id),
+            identity=message.identity,
+            title=seen.title,
+            excerpt=seen.excerpt,
+            revision=seen.revision,
             parent_id=conversation.id,
         )
-        for message in messages
-        if message.identity and message.text
-    )
+
+    return tuple(piece(message) for message in messages if message.identity and message.text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +229,7 @@ class BrowserSources:
             self._state.set(_Access(connected=False, failed=failed, retry_at=at + ACCESS_RETRY_SECONDS))
             return Observations((), (), (failed,))
         self._state.update(lambda state: replace(state, failed=None))
-        sources: tuple[WorkSource, ...] = ()
+        sources: tuple[ApplicationSource, ...] = ()
         coverage: tuple[str, ...] = ()
         problems: tuple[str, ...] = ()
         for tab in tabs:
@@ -234,8 +261,6 @@ class BrowserSources:
                             if result_mail.next_offset is None:
                                 break
                             offset = result_mail.next_offset
-                    case SourceKind.DOCUMENT | SourceKind.WEB_PAGE | SourceKind.MEETING:
-                        continue
                     case _ as unreachable:
                         assert_never(unreachable)
                 coverage = (*coverage, kind.value)

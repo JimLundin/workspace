@@ -3,42 +3,72 @@
 import threading
 from collections.abc import Mapping
 from dataclasses import replace
+from typing import Literal, overload
 
 from pydantic import TypeAdapter
 
 from assistant.browser import BrowserResult
 from assistant.browser_requests import BrowserRequest
 from assistant.browser_values import BrowserError, BrowserStatus, PageList, PageRow
-from assistant.personal_work_sources import Observations, Tab, observed_source
+from assistant.personal_work_sources import Observations, Tab, kanban_source, outlook_source, teams_source
 from assistant.web_apps import Located, WebAppOperation
 from contracts.json_value import Json
-from contracts.personal_work import SourceKind, WorkSource
+from contracts.personal_work import (
+    ApplicationSource,
+    DocumentSource,
+    KanbanSource,
+    OutlookSource,
+    Source,
+    SourceKind,
+    SourceOrigin,
+    TeamsSource,
+    WebPageSource,
+    source_id,
+    source_revision,
+)
 
 WIRE = TypeAdapter(dict[str, Json])
 STATUS = TypeAdapter(BrowserStatus)
 
 
-def source(kind: SourceKind, identity: str = "one", at: float = 10) -> WorkSource:
+@overload
+def source(kind: Literal[SourceKind.TEAMS], identity: str = "one", at: float = 10) -> TeamsSource: ...
+@overload
+def source(kind: Literal[SourceKind.OUTLOOK], identity: str = "one", at: float = 10) -> OutlookSource: ...
+@overload
+def source(kind: Literal[SourceKind.KANBAN], identity: str = "one", at: float = 10) -> KanbanSource: ...
+@overload
+def source(kind: Literal[SourceKind.DOCUMENT], identity: str = "one", at: float = 10) -> DocumentSource: ...
+@overload
+def source(kind: Literal[SourceKind.WEB_PAGE], identity: str = "one", at: float = 10) -> WebPageSource: ...
+@overload
+def source(kind: SourceKind, identity: str = "one", at: float = 10) -> Source: ...
+def source(kind: SourceKind, identity: str = "one", at: float = 10) -> Source:
+    title, excerpt = "Atlas migration", "Deploy Atlas after the supplier review."
     match kind:
         case SourceKind.TEAMS:
-            url = "https://teams.cloud.microsoft/"
+            return teams_source(identity, (title, excerpt, "https://teams.cloud.microsoft/"), at)
         case SourceKind.OUTLOOK:
-            url = "https://outlook.office.com/mail/"
-        case SourceKind.DOCUMENT:
-            url = "https://contoso.example.test/Atlas.docx"
-        case SourceKind.WEB_PAGE:
-            url = "https://contoso.example.test/research"
+            return outlook_source(identity, (title, excerpt, "https://outlook.office.com/mail/"), at)
         case SourceKind.KANBAN:
-            url = "https://dev-team-kanban.fcg.palantirfoundry.com/"
+            return kanban_source(identity, (title, excerpt, "https://dev-team-kanban.fcg.palantirfoundry.com/"), at)
+        case SourceKind.DOCUMENT:
+            return reference(DocumentSource, kind, identity, "https://contoso.example.test/Atlas.docx", at)
+        case SourceKind.WEB_PAGE:
+            return reference(WebPageSource, kind, identity, "https://contoso.example.test/research", at)
         case SourceKind.MEETING:
             raise ValueError("Use a native meeting fixture.")
-    return observed_source(kind, identity, ("Atlas migration", "Deploy Atlas after the supplier review.", url), at)
+
+
+def reference[R: (DocumentSource, WebPageSource)](make: type[R], kind: SourceKind, identity: str, url: str, at: float) -> R:
+    title, excerpt = "Atlas migration", "Deploy Atlas after the supplier review."
+    return make(source_id(kind, identity), identity, title, excerpt, url, source_revision(title, excerpt, url), at, SourceOrigin.USER)
 
 
 class CapturedSources:
     """Own fixture observation and lifecycle counters behind the source port."""
 
-    def __init__(self, sources: tuple[WorkSource, ...] = ()) -> None:
+    def __init__(self, sources: tuple[ApplicationSource, ...] = ()) -> None:
         self.sources = sources
         self.refreshed = 0
         self.closed = 0

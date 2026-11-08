@@ -10,7 +10,17 @@ from unittest import TestCase
 
 from assistant.work_canvas import WorkCanvas, run_prompt
 from contracts.canvas_activity import Attention, CanvasInstruction, CanvasIntake, CanvasQuestion, CanvasResearch, CanvasRun, CanvasUpdate, TaskRequest
-from contracts.personal_work import Association, Catalog, DismissedWork, SourceKind, WorkDefinition, WorkSource, WorkThread, source_id
+from contracts.personal_work import (
+    Association,
+    Catalog,
+    DismissedWork,
+    DocumentSource,
+    OutlookSource,
+    SourceKind,
+    WorkDefinition,
+    WorkThread,
+    source_id,
+)
 from contracts.work_canvas_context import CanvasMode, CanvasScene, CanvasScope, context_path, project, scene_contents, visible_groups
 from contracts.work_canvas_contracts import CanvasPublication
 from contracts.work_canvas_model import (
@@ -170,7 +180,7 @@ def test_dismissal_preserves_shared_conversation_context_and_routes_to_active_wo
     # after the original work is dismissed, or redirects follow the dismissed work.
     data = catalog()
     conversation = data.sources[0]
-    assert isinstance(conversation, WorkSource)
+    assert isinstance(conversation, OutlookSource)
     message = replace(
         conversation, id=source_id(SourceKind.OUTLOOK, "message", parent_id=conversation.id), identity="message", parent_id=conversation.id
     )
@@ -397,7 +407,7 @@ def test_bubbles_can_contain_documents_messages_and_further_bubbles() -> None:
     # drops work references, or allows a cycle through ordinary bubbles.
     data, canvas = nested_bubbles()
     conversation = data.sources[0]
-    document = next(item for item in data.sources if item.kind is SourceKind.DOCUMENT)
+    document = next(item for item in data.sources if isinstance(item, DocumentSource))
     first = next(item for item in data.sources if item.parent_id == conversation.id)
     assert context_path("note:annotation", data, canvas) == ("work:one", conversation.id, first.id, document.id, "note:annotation")
     overview = project(data, canvas, CanvasScope())

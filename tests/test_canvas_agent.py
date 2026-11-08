@@ -5,7 +5,7 @@ from unittest import TestCase
 
 from assistant.work_canvas import pending, retained
 from contracts.canvas_activity import CanvasIntake, CanvasResearch, CanvasRun, CanvasUpdate
-from contracts.personal_work import Association, Catalog, SourceKind, SourceOrigin, WorkSource, WorkState, source_id
+from contracts.personal_work import Association, Catalog, OutlookSource, SourceKind, SourceOrigin, TeamsSource, WorkState, source_id
 from contracts.task import Completed, Question, Waiting
 from contracts.work_canvas_commands import (
     CANVAS_RESPONSE,
@@ -120,7 +120,7 @@ def test_investigations_deduplicate_research_and_wait_for_the_same_question() ->
     )
     assert not pending(own_update, document, completed)
     mail = data.sources[0]
-    assert isinstance(mail, WorkSource)
+    assert isinstance(mail, TeamsSource | OutlookSource)
     changed_mail = replace(mail, revision="changed-mail")
     changed = replace(data, sources=(changed_mail, data.sources[1]))
     waiting = tuple(replace(task, state=Waiting(Question("choose-version", "Which version?", "Two observed candidates"))) for task in completed)
@@ -140,7 +140,7 @@ def test_child_message_changes_trigger_research_and_capacity_stays_bounded() -> 
     original = pending(data, CanvasDocument(), ())
     completed = tuple(replace(work_task(identity=run.task_id), state=Completed("Done", ())) for run in original)
     root = data.sources[0]
-    assert isinstance(root, WorkSource)
+    assert isinstance(root, TeamsSource | OutlookSource)
     child = replace(root, id=source_id(root.kind, "child", parent_id=root.id), identity="child", parent_id=root.id, revision="child-v1")
     updated = replace(data, sources=(*data.sources, child))
     assert len(pending(updated, CanvasDocument(runs=original), completed)) == 1

@@ -16,7 +16,20 @@ from contracts.canvas_activity import (
     merge_activity,
 )
 from contracts.meeting_presentation import time_range
-from contracts.personal_work import Catalog, Detail, Identity, MeetingSource, Source, SourceKind, Title, WorkSource, source_context
+from contracts.personal_work import (
+    Catalog,
+    Detail,
+    DocumentSource,
+    Identity,
+    KanbanSource,
+    MeetingSource,
+    OutlookSource,
+    Source,
+    TeamsSource,
+    Title,
+    WebPageSource,
+    source_context,
+)
 
 type Coordinate = Annotated[float, Field(ge=-100000, le=100000, allow_inf_nan=False)]
 
@@ -220,8 +233,16 @@ def caption(content: CanvasContent) -> str:
     match content:
         case MeetingSource(meeting=meeting):
             return "Meeting · " + time_range(meeting)
-        case WorkSource(kind=kind, parent_id=parent):
-            return source_caption(kind, parent)
+        case TeamsSource(parent_id=parent):
+            return "Teams conversation" if parent is None else "Teams message"
+        case OutlookSource(parent_id=parent):
+            return "Outlook conversation" if parent is None else "Outlook email"
+        case KanbanSource():
+            return "Kanban ticket"
+        case DocumentSource():
+            return "Document"
+        case WebPageSource():
+            return "Web reference"
         case CanvasNote():
             return "Note"
         case CanvasUpdate():
@@ -234,28 +255,14 @@ def caption(content: CanvasContent) -> str:
             assert_never(unreachable)
 
 
-def source_caption(kind: SourceKind, parent: str | None) -> str:
-    match kind:
-        case SourceKind.TEAMS:
-            return "Teams conversation" if parent is None else "Teams message"
-        case SourceKind.OUTLOOK:
-            return "Outlook conversation" if parent is None else "Outlook email"
-        case SourceKind.KANBAN:
-            return "Kanban ticket"
-        case SourceKind.DOCUMENT:
-            return "Document"
-        case SourceKind.WEB_PAGE:
-            return "Web reference"
-        case SourceKind.MEETING:
-            return "Meeting"
-        case _ as unreachable:
-            assert_never(unreachable)
-
-
 def title(content: CanvasContent) -> str:
     match content:
         case (
-            WorkSource(title=value)
+            TeamsSource(title=value)
+            | OutlookSource(title=value)
+            | KanbanSource(title=value)
+            | DocumentSource(title=value)
+            | WebPageSource(title=value)
             | MeetingSource(title=value)
             | CanvasNote(title=value)
             | CanvasUpdate(title=value)
@@ -268,7 +275,11 @@ def title(content: CanvasContent) -> str:
 def summary(content: CanvasContent) -> str:
     match content:
         case (
-            WorkSource(excerpt=value)
+            TeamsSource(excerpt=value)
+            | OutlookSource(excerpt=value)
+            | KanbanSource(excerpt=value)
+            | DocumentSource(excerpt=value)
+            | WebPageSource(excerpt=value)
             | MeetingSource(excerpt=value)
             | CanvasNote(text=value)
             | CanvasUpdate(text=value)

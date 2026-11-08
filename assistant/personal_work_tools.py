@@ -17,6 +17,7 @@ from contracts.personal_work import (
     PERSONAL_RESPONSE,
     AddDocument,
     AddWebPage,
+    ApplicationSource,
     DismissWork,
     DocumentAdded,
     ListSources,
@@ -28,7 +29,6 @@ from contracts.personal_work import (
     UnlinkWork,
     WorkRefused,
     WorkSaved,
-    WorkSource,
 )
 from contracts.task import ActionNotApplied, ActionUncertain, ActionVerified
 
@@ -122,7 +122,7 @@ SPECS: Final = (
 )
 
 
-def source_request(source: WorkSource) -> str:
+def source_request(source: ApplicationSource) -> str:
     """Open the observed original source without authorizing an external edit."""
     return (
         f"Open in {source.kind.value.capitalize()}: {source.title}\n"

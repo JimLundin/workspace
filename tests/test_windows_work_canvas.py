@@ -30,6 +30,7 @@ from contracts.personal_work import (
     Association,
     Catalog,
     DismissWork,
+    DocumentSource,
     OpenWorkSource,
     PersonalView,
     RefreshPersonalWork,
@@ -244,7 +245,7 @@ def test_unopened_nested_bubbles_are_created_when_found_or_redirected(tmp_path: 
         native.pump()
         card = canvas.card(first.id)
         assert card is not None and card in canvas.visible_cards
-        doc = next(item for item in data.sources if item.kind is SourceKind.DOCUMENT)
+        doc = next(item for item in data.sources if isinstance(item, DocumentSource))
         canvas.open_at(doc.id)
         native.pump()
         card = canvas.card(doc.id)
@@ -819,7 +820,7 @@ def test_nested_document_and_conversation_controls_keep_routes_and_drafts(tmp_pa
         first_card.contents.open_canvas.click()
         native.pump()
         assert not canvas.scope.path and canvas.selected == first.id
-        doc = next(item for item in data.sources if item.kind is SourceKind.DOCUMENT)
+        doc = next(item for item in data.sources if isinstance(item, DocumentSource))
         doc_card = canvas.card(doc.id)
         assert doc_card is not None and doc_card.app is App.DOCUMENT and doc_card.heading.text() == "Document"
         assert doc_card.contents is not None
