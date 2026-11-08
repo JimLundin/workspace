@@ -144,8 +144,5 @@ class LocalAssistant:
     def resume(self, task_id: str) -> None:
         pass
 
-    def notify(self, title: str, text: str) -> None:
-        pass
-
     def problem(self, message: str) -> None:
         self.problems = (*self.problems, message)

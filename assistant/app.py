@@ -311,9 +311,6 @@ class DesktopControls:
     def resume(self, task_id: str) -> None:
         self.report(Resume(task_id))
 
-    def notify(self, title: str, text: str) -> None:
-        self.report(Notified(title, text))
-
     def problem(self, message: str) -> None:
         self.report(Problem(message))
 
