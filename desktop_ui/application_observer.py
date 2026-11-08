@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import assert_never
 
 import protocol
-from cell import Cell
 from contracts.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, owner, zoom_after
 from desktop_ui.navigation_log import NAVIGATION_LOG, START, Arrival, Entry, Moment, Tracker, append, arrived, navigated, noticed, seen, settled
@@ -99,100 +98,96 @@ class Observed:
     state: Desktops | None
 
 
-@dataclass(frozen=True, slots=True)
-class _Connected:
-    connection: VirtualDesktops | None = None
+type Connection = VirtualDesktops | None
+"""The worker's connection to the shell's virtual desktops; None until it connects, and again after it fails."""
 
 
-@dataclass(frozen=True, slots=True)
-class Desktop:
-    """The worker's connection to the shell's virtual desktops, reconnected after it fails."""
+def connected(connection: Connection) -> Connection:
+    if connection is None:
+        with suppress(OSError):  # Another Windows build, or Explorer restarting: try again next poll.
+            return VirtualDesktops.connect()
+    return connection
 
-    _state: Cell[_Connected] = field(default_factory=lambda: Cell(_Connected()), init=False, repr=False)
 
-    def connected(self) -> VirtualDesktops | None:
-        if self._state.get().connection is None:
-            with suppress(OSError):  # Another Windows build, or Explorer restarting: try again next poll.
-                new_connection = VirtualDesktops.connect()
-                self._state.set(replace(self._state.get(), connection=new_connection))
-        return self._state.get().connection
+def disconnected(connection: Connection) -> None:
+    if connection is not None:
+        connection.close()
 
-    def disconnect(self) -> None:
-        if (connection := self._state.get().connection) is not None:
-            connection.close()
-            self._state.set(_Connected())
 
-    def observe(self) -> Observed:
-        """Other desktops' windows are cloaked; the shell's own cloaked hosts are on no desktop and stay out."""
-        connection = self.connected()
-        try:
-            state = connection.observe() if connection is not None else None
-        except OSError:
-            self.disconnect()
-            connection, state = None, None
-        ids = state.ids if state is not None else ()
-        found = tuple(
-            (window, ids.index(place_id) if connection is not None and (place_id := connection.window_desktop(window.handle)) in ids else None)
-            for window in windows.windows(include_cloaked=True)
-        )
-        shown = tuple(
-            (window, index)
-            for window, index in found
-            if not windows.cloaked(window.handle) or (state is not None and index is not None and ids[index] != state.current)
-        )
-        return Observed(
-            tuple(window for window, _ in shown), frozendict((window.handle, index) for window, index in shown if index is not None), state
-        )
+def observe(connection: Connection) -> tuple[Connection, Observed]:
+    """Other desktops' windows are cloaked; the shell's own cloaked hosts are on no desktop and stay out."""
+    connection = connected(connection)
+    try:
+        state = connection.observe() if connection is not None else None
+    except OSError:
+        connection = disconnected(connection)
+        state = None
+    ids = state.ids if state is not None else ()
+    found = tuple(
+        (window, ids.index(place_id) if connection is not None and (place_id := connection.window_desktop(window.handle)) in ids else None)
+        for window in windows.windows(include_cloaked=True)
+    )
+    shown = tuple(
+        (window, index)
+        for window, index in found
+        if not windows.cloaked(window.handle) or (state is not None and index is not None and ids[index] != state.current)
+    )
+    return connection, Observed(
+        tuple(window for window, _ in shown), frozendict((window.handle, index) for window, index in shown if index is not None), state
+    )
 
-    def arrange(self, observed: Observed, placement: Placement, slots: frozenset[int], *, follow: int) -> None:
-        """Converge every placed window on its desktop and rectangle, creating only missing desktops.
 
-        The window in front, `follow`, takes the user along when it moves to another desktop:
-        a window just opened or brought forward on the wrong desktop is the one being worked in.
-        """
-        connection, state = self._state.get().connection, observed.state
-        if connection is None or state is None:
-            return
-        try:
-            ids = state.ids
-            while len(ids) < 1 + max((target.desktop for target in placement.values()), default=-1):
-                ids = (*ids, connection.create())
-        except OSError:
-            self.disconnect()
-            return
-        followed: int | None = None
-        for handle, target in placement.items():
-            with suppress(OSError):  # A window that closed or refuses a move is tried again next poll.
-                if observed.desktops.get(handle) != target.desktop:
-                    connection.move(handle, ids[target.desktop])
-                    if handle == follow:
-                        followed = target.desktop
-                resize(handle, target, slot=handle in slots)
-        if followed is not None and ids[followed] != state.current:
-            with suppress(OSError):
-                connection.switch(ids[followed])
-                focus(follow)
+def arrange(connection: Connection, observed: Observed, placement: Placement, slots: frozenset[int], *, follow: int) -> Connection:
+    """Converge every placed window on its desktop and rectangle, creating only missing desktops.
 
-    def show(self, handle: int) -> None:
-        """Bring a window forward, first switching to its desktop when it's on another one."""
-        if (connection := self._state.get().connection) is not None:
-            with suppress(OSError):
-                current, place_id = connection.observe().current, connection.window_desktop(handle)
-                if place_id is not None and place_id != current:
-                    connection.switch(place_id)
-        focus(handle)
+    The window in front, `follow`, takes the user along when it moves to another desktop:
+    a window just opened or brought forward on the wrong desktop is the one being worked in.
+    """
+    state = observed.state
+    if connection is None or state is None:
+        return connection
+    try:
+        ids = state.ids
+        while len(ids) < 1 + max((target.desktop for target in placement.values()), default=-1):
+            ids = (*ids, connection.create())
+    except OSError:
+        return disconnected(connection)
+    followed: int | None = None
+    for handle, target in placement.items():
+        with suppress(OSError):  # A window that closed or refuses a move is tried again next poll.
+            if observed.desktops.get(handle) != target.desktop:
+                connection.move(handle, ids[target.desktop])
+                if handle == follow:
+                    followed = target.desktop
+            resize(handle, target, slot=handle in slots)
+    if followed is not None and ids[followed] != state.current:
+        with suppress(OSError):
+            connection.switch(ids[followed])
+            focus(follow)
+    return connection
 
-    def switch(self, index: int) -> bool:
-        if (connection := self._state.get().connection) is None:
-            return False
-        try:
-            ids = connection.ids()
-            if index < len(ids):
-                connection.switch(ids[index])
-                return True
-        except OSError:
-            self.disconnect()
-        return False
+
+def show(connection: Connection, handle: int) -> None:
+    """Bring a window forward, first switching to its desktop when it's on another one."""
+    if connection is not None:
+        with suppress(OSError):
+            current, place_id = connection.observe().current, connection.window_desktop(handle)
+            if place_id is not None and place_id != current:
+                connection.switch(place_id)
+    focus(handle)
+
+
+def switch(connection: Connection, index: int) -> tuple[Connection, bool]:
+    if connection is None:
+        return None, False
+    try:
+        ids = connection.ids()
+        if index < len(ids):
+            connection.switch(ids[index])
+            return connection, True
+    except OSError:
+        return disconnected(connection), False
+    return connection, False
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,45 +258,45 @@ class _Watched:
     tracker: Tracker = START
     arrival: Foreground | None = None
     """A foreground change waiting for the next poll to identify its window."""
+    connection: Connection = None
 
 
 @dataclass(frozen=True, slots=True)
 class Worker:
-    """The observer thread's state: the last placement, zoom, pause, recent windows, pending web-app launches and focus history.
+    """The observer thread's work: each step takes what it has watched so far and returns what it watches now.
 
-    Only the observer thread reads or replaces it, so it needs no lock.
+    The thread's loop holds that record (`_Watched`); nothing else sees it.
     """
 
     observer: ApplicationObserver
-    desktop: Desktop = field(default_factory=Desktop)
-    _state: Cell[_Watched] = field(default_factory=lambda: Cell(_Watched()), init=False, repr=False)
 
     def run(self) -> None:
         # The hooks' own thread waits for their messages; it only queues each event for this worker.
         events = WinEvents.start(self.observer.requests.put)
+        watched = _Watched()
         try:
             while not self.observer.stop.is_set():
-                self.poll()
-                self.follow()
+                watched = self.follow(self.poll(watched))
                 with suppress(queue.Empty):
                     while (order := self.observer.requests.get(timeout=1)) is not None:
-                        if not self.carry(order):
+                        watched, more = self.carry(watched, order)
+                        if not more:
                             break
         finally:
             events.close()
-            release(self._state.get().framed)
-            self.desktop.disconnect()
+            release(watched.framed)
+            disconnected(watched.connection)
 
-    def moment(self, at: float) -> Moment:
-        return Moment(at, datetime.now().astimezone(), self._state.get().setup)
+    @staticmethod
+    def moment(at: float, setup: Setup | None) -> Moment:
+        return Moment(at, datetime.now().astimezone(), setup)
 
     def write(self, entries: Iterable[Entry]) -> None:
         with suppress(OSError):  # A full or locked disk loses entries, never navigation.
             append(entries, self.observer.log)
 
-    def follow(self) -> None:
+    def follow(self, watched: _Watched) -> _Watched:
         """Resolve a foreground change against the poll that just ran, and let pending expectations expire."""
-        watched = self._state.get()
         world, tracker = watched.world, watched.tracker
         if world is not None:
             tracker = seen(tracker, world)
@@ -310,15 +305,14 @@ class Worker:
             if app is None and (exe := windows.exe(event.window)):
                 app = Program(exe)  # A dialog or shell surface outside the taskbar: its program, never its title.
             here = Arrival(event.window, app, world.current if world is not None else None, held=event.held)
-            tracker, entries = arrived(tracker, here, self.moment(event.at))
+            tracker, entries = arrived(tracker, here, self.moment(event.at, watched.setup))
         else:
-            tracker, entries = settled(tracker, self.moment(time.monotonic()))
-        self._state.set(replace(watched, tracker=tracker, arrival=None))
+            tracker, entries = settled(tracker, self.moment(time.monotonic(), watched.setup))
         self.write(entries)
+        return replace(watched, tracker=tracker, arrival=None)
 
-    def poll(self) -> None:
-        watched = self._state.get()
-        observed = self.desktop.observe()
+    def poll(self, watched: _Watched) -> _Watched:
+        connection, observed = observe(watched.connection)
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
         own = os.getpid()
@@ -342,7 +336,7 @@ class Worker:
             placement = place(where, (*views, *groups(grouped, eligible)), placement)
             if not watched.paused and not windows.dragging():  # A window being dragged snaps back once it's let go.
                 kept = frozendict((handle, target) for handle, target in placement.items() if handle != zoomed)
-                self.desktop.arrange(observed, kept, current, follow=foreground)
+                connection = arrange(connection, observed, kept, current, follow=foreground)
         for window in slots:
             if not window.minimized:
                 frame(window.handle)
@@ -360,9 +354,10 @@ class Worker:
             recent,
             zoomed,
         )
-        self._state.set(
+        return self.publish(
             replace(
                 watched,
+                connection=connection,
                 launches=outstanding(watched.launches, grouped),
                 zoomed=zoomed,
                 setup=where.setup if where is not None else None,
@@ -371,18 +366,18 @@ class Worker:
                 framed=current,
                 recent=recent,
                 world=world,
-            )
+            ),
+            grouped,
+            state,
         )
-        self.publish(grouped, state)
 
-    def placed(self, desktops: int) -> tuple[tuple[App, ...], ...]:
-        watched = self._state.get()
+    @staticmethod
+    def placed(watched: _Watched, desktops: int) -> tuple[tuple[App, ...], ...]:
         if (world := watched.world) is None:
             return tuple(() for _ in range(desktops))
         return tuple(reading_order(watched.where, world.windows, watched.placement, index) for index in range(desktops))
 
-    def publish(self, grouped: Shelf, state: Desktops | None) -> None:
-        watched = self._state.get()
+    def publish(self, watched: _Watched, grouped: Shelf, state: Desktops | None) -> _Watched:
         stop = self.observer.stop
         running = tuple(
             replace(app, image=window_pixels(app.windows[0].handle))
@@ -392,87 +387,85 @@ class Worker:
         )
         desktops, current = (len(state.ids), state.ids.index(state.current)) if state is not None else (0, 0)
         snapshot = Arrangement(
-            replace(grouped, running=running), desktops, current, self.placed(desktops), paused=watched.paused, world=watched.world
+            replace(grouped, running=running), desktops, current, self.placed(watched, desktops), paused=watched.paused, world=watched.world
         )
         if snapshot != watched.previous:
             with suppress(queue.Empty):
                 self.observer.results.get_nowait()
             self.observer.results.put_nowait(snapshot)
-        self._state.set(replace(watched, previous=snapshot))
+        return replace(watched, previous=snapshot)
 
-    def carry(self, order: Order | WinEvent) -> bool:
+    def carry(self, watched: _Watched, order: Order | WinEvent) -> tuple[_Watched, bool]:
         """Carry out one order; False when the next poll should run first."""
         match order:
             case Foreground():
-                self._state.set(replace(self._state.get(), arrival=order))
-                return False
+                return replace(watched, arrival=order), False
             case CaptureStart() | SwitchStart() | SwitchEnd():
-                self._state.update(lambda watched: replace(watched, tracker=noticed(watched.tracker, order)))
-                return True
+                return replace(watched, tracker=noticed(watched.tracker, order)), True
             case Placing.TOGGLE_PAUSE:
-                self._state.update(lambda watched: replace(watched, paused=not watched.paused))
-                return False
+                return replace(watched, paused=not watched.paused), False
             case Placing.NOW:
-                self._state.set(replace(self._state.get(), paused=False, zoomed=None))
-                return False
+                return replace(watched, paused=False, zoomed=None), False
             case _:
-                if (world := self._state.get().world) is None:
-                    return False
+                if (world := watched.world) is None:
+                    return watched, False
                 fresh = replace(world, foreground=windows.foreground())
                 chosen, record = decide(order, fresh)
-                tracker, entries = navigated(self._state.get().tracker, (chosen, record), self.moment(time.monotonic()))
-                self._state.set(replace(self._state.get(), tracker=tracker))
-                self.effect(chosen)
+                tracker, entries = navigated(watched.tracker, (chosen, record), self.moment(time.monotonic(), watched.setup))
+                watched = self.effect(replace(watched, tracker=tracker), chosen)
                 self.write(entries)
-                self._state.update(lambda watched: replace(watched, world=replace(fresh, current=record.to_desktop)))
-                return True
+                return replace(watched, world=replace(fresh, current=record.to_desktop)), True
 
-    def effect(self, chosen: Effect) -> None:
+    def effect(self, watched: _Watched, chosen: Effect) -> _Watched:
         match chosen:
             case Focus(window=window):
-                self.desktop.show(window)
+                show(watched.connection, window)
+                return watched
             case Switch(desktop=index, then=then):
-                if self.desktop.switch(index) and then is not None:
+                connection, switched = switch(watched.connection, index)
+                if switched and then is not None:
                     focus(then)
+                return replace(watched, connection=connection)
             case Launch(app=app):
-                self.start(app)
+                return self.start(watched, app)
             case ZoomIn(window=window):
-                watched = self._state.update(lambda watched: replace(watched, zoomed=window))
                 if (target := watched.placement.get(window)) is not None:
                     resize(window, Target(target.desktop, screen.monitor_of(window).work), slot=window in watched.framed)
+                return replace(watched, zoomed=window)
             case ZoomOut(window=window):
-                watched = self._state.update(lambda watched: replace(watched, zoomed=None))
                 if (target := watched.placement.get(window)) is not None:
                     resize(window, target, slot=window in watched.framed)
+                return replace(watched, zoomed=None)
             case None:
-                pass
+                return watched
             case _:
                 assert_never(chosen)
 
-    def start(self, app: protocol.Installed | PinnedApp) -> None:
+    def start(self, watched: _Watched, app: protocol.Installed | PinnedApp) -> _Watched:
         match app:
             case protocol.Installed(command=command):
                 try:
                     os.startfile(command)  # as the Run dialog would: program names, paths, URLs
                 except OSError:
                     subprocess.Popen(["cmd", "/c", "start", "", command], creationflags=_CREATE_NO_WINDOW)
+                return watched
             case PinnedApp():
-                self.open_web_app(app)
+                return self.open_web_app(watched, app)
             case _:
                 assert_never(app)
 
-    def open_web_app(self, app: PinnedApp) -> None:
+    def open_web_app(self, watched: _Watched, app: PinnedApp) -> _Watched:
         """Edge opens the slot's app window in the user's own profile; a repeated launch waits for it."""
-        pending = launch(self._state.get().launches, app, time.monotonic())
+        pending = launch(watched.launches, app, time.monotonic())
         if pending is None:
-            return
+            return watched
         edge = edge_path()
         if edge is None:
             self.observer.problem(f"Microsoft Edge is needed to open {WEB_APPS[app].label}.")
-            return
+            return watched
         try:
             os.startfile(edge, arguments=f"--app={WEB_APPS[app].url}")
         except OSError as error:
             self.observer.problem(f"Could not open {WEB_APPS[app].label}: {error}")
-            return
-        self._state.set(replace(self._state.get(), launches=pending))
+            return watched
+        return replace(watched, launches=pending)
