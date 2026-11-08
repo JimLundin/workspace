@@ -24,6 +24,7 @@ from assistant.meeting_browser import OBSERVE, PAGE_CALL
 from contracts.json_value import Json
 from desktop_ui.qt_runtime import prepare
 from tests.browser_fixture import fixture
+from tests.heavy import heavy
 from tests.native_browser_fixture import borrowed, disposable, hosted, request
 from tests.native_business_apps import verify_business_apps
 from tests.native_communications_browser import NativeTrace, verify_communications
@@ -157,6 +158,7 @@ def verify_meeting_detection(browser: Browser) -> None:
 
 
 def test_managed_browser_dom_teams_persistence_and_cancellation(tmp_path: Path) -> None:
+    heavy("launches a managed Edge")
     profile = tmp_path / "managed-profile"
     trace = NativeTrace(profile)
     with disposable(Browser.at(profile, opener=trace)) as browser:
@@ -292,6 +294,7 @@ def verify_hidden_dom(personal: Browser, attached: Browser, url: str) -> None:
 
 
 def test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser(tmp_path: Path) -> None:
+    heavy("attaches to a personal Edge")
     with disposable(Browser.at(tmp_path / "fixture-personal")) as personal, fixture() as url:
         with hosted(personal) as attached:
             verify_attached_dom(personal, attached, url)

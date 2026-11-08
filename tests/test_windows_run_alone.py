@@ -19,6 +19,7 @@ if sys.platform != "win32":
 
 from assistant import app
 from desktop_ui import desktop_app
+from tests.heavy import heavy
 from winapi.processes import ProcessJob
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -95,6 +96,7 @@ def test_the_assistant_runs_reports_ready_and_quits_with_no_desktop(tmp_path: Pa
     # Defect: the assistant needs the desktop to start (it waits for, imports or
     # builds UI), never reports ready to the keeper, or hangs on the keeper's close
     # while no desktop ever connected.
+    heavy("starts the real assistant process")
     output = run_alone(
         tmp_path,
         """\
@@ -123,6 +125,7 @@ def test_the_desktop_runs_reports_ready_and_quits_with_no_assistant(tmp_path: Pa
     # Defect: the desktop needs the assistant to start (it blocks on the link or
     # builds assistant owners), never reports ready to the keeper, or leaves Qt
     # running after the keeper's close.
+    heavy("starts the real desktop process")
     output = run_alone(
         tmp_path,
         """\

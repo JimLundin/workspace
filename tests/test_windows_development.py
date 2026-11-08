@@ -26,6 +26,7 @@ from desktop_ui.qt_runtime import prepare
 from scripts.preview import Files, Preview
 from tests.check_fixture import copy_check_scripts
 from tests.git_fixture import initialized
+from tests.heavy import heavy
 
 prepare()
 
@@ -72,6 +73,7 @@ def write_watch_source(root: Path, output: Path) -> None:
 def test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits(tmp_path: Path) -> None:
     # Detect stale imported values in a reused test process, missed save events,
     # or a failed check advancing the session baseline instead of retrying it.
+    heavy("repeated real checks under a file watcher")
     if importlib.util.find_spec("watchdog") is None or importlib.util.find_spec("ruff") is None:
         raise unittest.SkipTest("Watchdog/Ruff are development-only dependencies.")
     root, output = tmp_path / "source", tmp_path / "observed.json"
@@ -127,6 +129,7 @@ def test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits(tmp
 def test_native_check_reviews_source_once_across_desktop_handoff(tmp_path: Path) -> None:
     # A desktop relaunch must not repeat the coordinator's complete policy scan.
     # The single reviewed snapshot must still bind the successful native result.
+    heavy("a nested full native check")
     if importlib.util.find_spec("ruff") is None or shutil.which("git") is None:
         raise unittest.SkipTest("The editing coordinator needs development-only Ruff and Git.")
     root, output = tmp_path / "source", tmp_path / "observed.json"

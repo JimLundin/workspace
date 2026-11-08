@@ -25,6 +25,7 @@ from assistant import commands, uia
 from assistant.machine import WinMachine
 from assistant.uia import Act, Inspect, UiRequest
 from contracts.json_value import Json
+from tests.heavy import heavy
 from tests.test_machine import Browser, Desktop
 
 
@@ -127,6 +128,7 @@ def batch(folder: Path, requests: list[UiRequest]) -> list[tuple[bool, str]]:
 
 
 def test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status(tmp_path: Path) -> None:
+    heavy("several PowerShell launches")
     value = 'Åäö "quotes" $literal `value`'
     script = f"$value = '{value}'\n" + "# padding\n" * 5000 + "[Console]::WriteLine($value); [Console]::WriteLine((Get-Location).Path)"
     code, output = commands.powershell(script, cwd=str(tmp_path))
@@ -143,6 +145,7 @@ def test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status(tmp_path
 
 
 def test_uia_controls_are_inspected_and_operated_across_separate_processes(tmp_path: Path) -> None:
+    heavy("a WPF window driven over UI Automation")
     with fixture(tmp_path) as handle:
         page = inspect(handle)
         rows = controls(page)

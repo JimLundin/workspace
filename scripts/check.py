@@ -531,6 +531,13 @@ def choose(args: Options, current: Mapping[str, str], parser: argparse.ArgumentP
     selection = select(ROOT, current, previous, full=args.full, native=args.native)
     if not args.native:
         selection = check_tiers.editing(selection, ROOT)
+    elif not args.full and (portable := checked(native=False)).is_file() and portable != args.baseline:
+        # The native baseline picks the affected native modules; the source checks
+        # (types, imports) need only what changed since the portable tier last
+        # passed, which a native pass also records, so they never redo its work.
+        since = source_map(read(portable))
+        changed = tuple(sorted(name for name in current.keys() | since.keys() if current.get(name) != since.get(name)))
+        selection = Selection(selection.tests, changed, selection.reason)
     if args.tests and args.full:
         parser.error("--full and --tests select different profiles")
     if args.tests:
