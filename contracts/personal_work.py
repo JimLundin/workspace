@@ -458,8 +458,18 @@ def reference_source(request: AddDocument | AddWebPage, at: float, origin: Sourc
             return WebPageSource(*parts, revision, at, origin)
 
 
+def work_id(definition: WorkDefinition, links: tuple[Association, ...]) -> str:
+    """A new work's identity: its goal, ignoring case, and the sources it connects."""
+    key = _WORK_KEY.dump_json((definition.goal.casefold(), tuple(sorted(link.source_id for link in links))))
+    return "work:" + hashlib.sha256(key).hexdigest()[:24]
+
+
+def _work(catalog: Catalog, identity: str) -> WorkThread | None:
+    return next((work for work in catalog.works if work.id == identity), None)
+
+
 def find_work(catalog: Catalog, identity: str) -> WorkThread:
-    work = next((work for work in catalog.works if work.id == identity), None)
+    work = _work(catalog, identity)
     if work is None:
         raise ValueError("That piece of work no longer exists. Refresh My work.")
     return work
@@ -477,12 +487,7 @@ def save_work(catalog: Catalog, command: SaveWork, at: float) -> tuple[Catalog, 
     if command.work_id is None:
         if command.expected_revision is not None:
             raise ValueError("New work cannot have an expected revision.")
-        identity = (
-            "work:"
-            + hashlib.sha256(_WORK_KEY.dump_json((command.definition.goal.casefold(), tuple(sorted(link.source_id for link in links))))).hexdigest()[
-                :24
-            ]
-        )
+        identity = work_id(command.definition, links)
         if any(work.id == identity for work in catalog.works):
             raise ValueError("This work already exists. Read its identity before updating it.")
         if any(item.work.id == identity for item in catalog.dismissed):
@@ -604,12 +609,7 @@ def _planned(catalog: Catalog, plan: WorkPlan) -> Iterator[_Planned]:
         if _dismissed(catalog, item, links):
             continue
         original = find_work(catalog, item.work_id) if item.work_id is not None else None
-        identity = (
-            original.id
-            if original is not None
-            else "work:"
-            + hashlib.sha256(_WORK_KEY.dump_json((item.definition.goal.casefold(), tuple(sorted(link.source_id for link in links))))).hexdigest()[:24]
-        )
+        identity = original.id if original is not None else work_id(item.definition, links)
         if identity in seen:
             raise ValueError("The model updated the same work twice.")
         seen = seen | {identity}
@@ -619,7 +619,7 @@ def _planned(catalog: Catalog, plan: WorkPlan) -> Iterator[_Planned]:
 def _planned_work(catalog: Catalog, planned: _Planned, at: float) -> WorkThread | None:
     """The changed or new work a planned item makes, or None when it changes nothing."""
     item, identity, links = planned.item, planned.identity, planned.links
-    original = planned.original if planned.original is not None else next((work for work in catalog.works if work.id == identity), None)
+    original = planned.original if planned.original is not None else _work(catalog, identity)
     if original is None:
         return WorkThread(identity, 0, item.definition, links, at, at) if links else None
     # A partial model review can add associations, never erase existing
