@@ -1,12 +1,13 @@
 """In-place native card details and revision-bound drafts, owned by Qt."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from contracts.canvas_activity import Attention, CanvasAction, CanvasQuestion, CanvasUpdate
 from contracts.meeting_presentation import meeting_text
 from contracts.meetings import MeetingConversation
@@ -55,65 +56,102 @@ def detail_frame(height: int, style: str) -> QtWidgets.QWidget:
     return frame
 
 
+@dataclass(frozen=True, slots=True)
+class _Editing:
+    current: WorkThread | WorkDefinition
+    original: WorkThread | None = None
+    """The saved work an edit started from; None for a new work."""
+    pending: SaveWork | None = None
+    """The save sent and not yet seen published."""
+
+
+@dataclass(frozen=True, slots=True)
 class WorkDetail:
+    work: WorkWindow
+    frame: QtWidgets.QWidget
+    info: QtWidgets.QWidget
+    text: Editor
+    edit_button: QtWidgets.QToolButton
+    done: QtWidgets.QToolButton
+    editor: QtWidgets.QWidget
+    title: QtWidgets.QLineEdit
+    goal: Editor
+    summary: Editor
+    next_step: Editor
+    project: QtWidgets.QLineEdit
+    state: QtWidgets.QComboBox
+    _editing: Cell[_Editing]
+
     # Four inputs: the command owner, the content, the canvas style that must
     # precede text layout, and the optional continuation only a saved work offers.
-    def __init__(self, work: WorkWindow, content: WorkThread | WorkDefinition, style: str, *, on_continue: Callable[[], None] | None = None) -> None:
-        self.work: WorkWindow = work
-        self.current: WorkThread | WorkDefinition = content
-        self.original: WorkThread | None = None
-        self.pending: SaveWork | None = None
-        self.frame: QtWidgets.QWidget = detail_frame(475, style)
-        layout = column(self.frame)
-        self.info: QtWidgets.QWidget = QtWidgets.QWidget()
-        info = column(self.info)
-        self.text: Editor = Editor(readonly=True)
-        info.addWidget(self.text)
+    @classmethod
+    def build(
+        cls, work: WorkWindow, content: WorkThread | WorkDefinition, style: str, *, on_continue: Callable[[], None] | None = None
+    ) -> WorkDetail:
+        frame = detail_frame(475, style)
+        layout = column(frame)
+        info = QtWidgets.QWidget()
+        info_layout = column(info)
+        text = Editor(readonly=True)
+        info_layout.addWidget(text)
         actions = row()
-        self.edit_button: QtWidgets.QToolButton = button("Edit work", self.edit)
-        self.done: QtWidgets.QToolButton = button("Mark done", self.change_state)
-        actions.addWidget(self.edit_button)
-        actions.addWidget(self.done)
-        actions.addWidget(button("Dismiss work", self.dismiss))
+
+        # Each control acts on the detail made just after it.
+        def act(method: Callable[[WorkDetail], None]) -> Callable[[], None]:
+            return lambda: method(detail)
+
+        edit_button = button("Edit work", act(WorkDetail.edit))
+        done = button("Mark done", act(WorkDetail.change_state))
+        actions.addWidget(edit_button)
+        actions.addWidget(done)
+        actions.addWidget(button("Dismiss work", act(WorkDetail.dismiss)))
         if on_continue is not None:
             actions.addWidget(button("Continue with agent", on_continue))
-        info.addLayout(actions)
-        layout.addWidget(self.info)
-        self.editor: QtWidgets.QWidget = QtWidgets.QWidget()
-        form = QtWidgets.QFormLayout(self.editor)
-        self.title: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
-        self.goal: Editor = Editor()
-        self.summary: Editor = Editor()
-        self.next_step: Editor = Editor()
-        self.project: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
-        self.state: QtWidgets.QComboBox = QtWidgets.QComboBox()
-        self.state.addItems([state.value.capitalize() for state in WorkState])
+        info_layout.addLayout(actions)
+        layout.addWidget(info)
+        editor = QtWidgets.QWidget()
+        form = QtWidgets.QFormLayout(editor)
+        title = QtWidgets.QLineEdit()
+        goal, summary, next_step = Editor(), Editor(), Editor()
+        project = QtWidgets.QLineEdit()
+        state = QtWidgets.QComboBox()
+        state.addItems([value.value.capitalize() for value in WorkState])
         for caption, widget in (
-            ("Title", self.title),
-            ("Goal", self.goal),
-            ("Situation", self.summary),
-            ("Next step", self.next_step),
-            ("Project", self.project),
-            ("State", self.state),
+            ("Title", title),
+            ("Goal", goal),
+            ("Situation", summary),
+            ("Next step", next_step),
+            ("Project", project),
+            ("State", state),
         ):
             widget.setAccessibleName("Work " + caption.lower())
             form.addRow(caption, widget)
-        for editor in (self.goal, self.summary, self.next_step):
-            editor.setFixedHeight(80)
+        for field_editor in (goal, summary, next_step):
+            field_editor.setFixedHeight(80)
         edit_actions = row()
-        edit_actions.addWidget(button("Save work", self.save, name="primary"))
-        edit_actions.addWidget(button("Cancel edit", self.cancel))
+        edit_actions.addWidget(button("Save work", act(WorkDetail.save), name="primary"))
+        edit_actions.addWidget(button("Cancel edit", act(WorkDetail.cancel)))
         form.addRow(edit_actions)
-        layout.addWidget(self.editor)
-        self.editor.hide()
+        layout.addWidget(editor)
+        editor.hide()
+        detail = cls(work, frame, info, text, edit_button, done, editor, title, goal, summary, next_step, project, state, Cell(_Editing(content)))
         match content:
             case WorkThread():
-                self.refresh(content)
+                detail.refresh(content)
             case WorkDefinition():
-                self.edit()
+                detail.edit()
+        return detail
+
+    @property
+    def current(self) -> WorkThread | WorkDefinition:
+        return self._editing.get().current
+
+    @property
+    def pending(self) -> SaveWork | None:
+        return self._editing.get().pending
 
     def refresh(self, content: WorkThread) -> None:
-        self.current = content
+        editing = self._editing.update(lambda editing: replace(editing, current=content))
         definition = content.definition
         replace_text(
             self.text,
@@ -122,20 +160,21 @@ class WorkDetail:
         )
         self.done.setText("Reopen" if definition.state is WorkState.DONE else "Mark done")
         # Background publications refresh information, never replace edit fields.
+        pending, original = editing.pending, editing.original
         if (
-            self.pending is not None
-            and definition == self.pending.definition
-            and content.links == self.pending.links
-            and (self.original is None or content.revision > self.original.revision)
+            pending is not None
+            and definition == pending.definition
+            and content.links == pending.links
+            and (original is None or content.revision > original.revision)
         ):
             self.cancel()
 
     def edit(self) -> None:
         match self.current:
             case WorkThread(definition=definition) as original:
-                self.original = original
+                self._editing.update(lambda editing: replace(editing, original=original))
             case WorkDefinition() as definition:
-                self.original = None
+                self._editing.update(lambda editing: replace(editing, original=None))
         self.title.setText(definition.title)
         self.goal.setPlainText(definition.goal)
         self.summary.setPlainText(definition.summary)
@@ -148,8 +187,7 @@ class WorkDetail:
     def cancel(self) -> None:
         self.editor.hide()
         self.info.show()
-        self.original = None
-        self.pending = None
+        self._editing.update(lambda editing: replace(editing, original=None, pending=None))
 
     def save(self) -> None:
         definition = WorkDefinition(
@@ -160,10 +198,10 @@ class WorkDetail:
             tuple(WorkState)[self.state.currentIndex()],
             self.project.text(),
         )
-        original = self.original
+        original = self._editing.get().original
         command = SaveWork(definition, original.links if original else (), original.id if original else None, original.revision if original else None)
         if self.work.send(command):
-            self.pending = command
+            self._editing.update(lambda editing: replace(editing, pending=command))
 
     def change_state(self) -> None:
         match self.current:
@@ -181,51 +219,81 @@ class WorkDetail:
                 pass
 
 
+@dataclass(frozen=True, slots=True)
+class _Reading:
+    current: Source
+    conversation: MeetingConversation | None = None
+    """Qt owns this bounded reading cursor. No audio or full transcript is copied into the catalog."""
+    catalog: Catalog = field(default_factory=Catalog)
+    ancestry: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
 class SourceDetail:
+    work: WorkWindow
+    frame: QtWidgets.QWidget
+    text: Editor
+    more: QtWidgets.QToolButton
+    connections: QtWidgets.QComboBox
+    reason: Editor
+    open: QtWidgets.QToolButton
+    unlink: QtWidgets.QToolButton
+    _reading: Cell[_Reading]
+
     # Four inputs, as WorkDetail: the canvas style must precede the source text's layout.
-    def __init__(self, work: WorkWindow, content: Source, style: str, *, on_context: Callable[[str], None] | None = None) -> None:
-        self.work: WorkWindow = work
-        self.current: Source = content
-        # Qt owns this bounded reading cursor. No audio or full transcript is copied into the catalog.
-        self.conversation: MeetingConversation | None = None
-        self.catalog: Catalog = Catalog()
-        self.ancestry: frozenset[str] = frozenset()
-        self.frame: QtWidgets.QWidget = detail_frame(475, style)
-        layout = column(self.frame)
-        self.text: Editor = Editor(readonly=True)
-        self.text.setAccessibleName("Observed source content")
-        layout.addWidget(self.text, 3)
-        self.more: QtWidgets.QToolButton = button("Read more conversation", self.read_more)
-        self.more.setVisible(False)
-        layout.addWidget(self.more)
+    @classmethod
+    def build(cls, work: WorkWindow, content: Source, style: str, *, on_context: Callable[[str], None] | None = None) -> SourceDetail:
+        frame = detail_frame(475, style)
+        layout = column(frame)
+        text = Editor(readonly=True)
+        text.setAccessibleName("Observed source content")
+        layout.addWidget(text, 3)
+
+        # Each control acts on the detail made just after it.
+        def act(method: Callable[[SourceDetail], None]) -> Callable[[], None]:
+            return lambda: method(detail)
+
+        more = button("Read more conversation", act(SourceDetail.read_more))
+        more.setVisible(False)
+        layout.addWidget(more)
         layout.addWidget(label("Connected work", "muted"))
-        self.connections: QtWidgets.QComboBox = QtWidgets.QComboBox()
-        self.connections.setAccessibleName("Work connected to this source")
-        layout.addWidget(self.connections)
-        self.reason: Editor = Editor(readonly=True)
-        self.reason.setAccessibleName("Why this source is connected")
-        layout.addWidget(self.reason, 1)
+        connections = QtWidgets.QComboBox()
+        connections.setAccessibleName("Work connected to this source")
+        layout.addWidget(connections)
+        reason = Editor(readonly=True)
+        reason.setAccessibleName("Why this source is connected")
+        layout.addWidget(reason, 1)
         actions = row()
-        self.open: QtWidgets.QToolButton = button("Open in Edge", self.open_source)
-        self.unlink: QtWidgets.QToolButton = button("Remove connection", self.remove)
-        actions.addWidget(self.open)
-        actions.addWidget(self.unlink)
+        opener = button("Open in Edge", act(SourceDetail.open_source))
+        unlink = button("Remove connection", act(SourceDetail.remove))
+        actions.addWidget(opener)
+        actions.addWidget(unlink)
         if on_context is not None:
-            layout.addWidget(button("Show work on canvas", lambda: self.open_context(on_context)))
+            layout.addWidget(button("Show work on canvas", lambda: detail.open_context(on_context)))
         layout.addLayout(actions)
-        self.connections.currentIndexChanged.connect(self.render_reason)
+
+        def reasoned(_index: int) -> None:
+            detail.render_reason()
+
+        connections.currentIndexChanged.connect(reasoned)
         # Resolve the source editor's inherited font and final wrapping width
         # before loading full mail text, rather than wrapping again on embedding.
-        self.frame.ensurePolished()
+        frame.ensurePolished()
         layout.activate()
+        detail = cls(work, frame, text, more, connections, reason, opener, unlink, Cell(_Reading(content)))
+        return detail
+
+    @property
+    def current(self) -> Source:
+        return self._reading.get().current
 
     def refresh(self, content: Source, catalog: Catalog, document: CanvasDocument) -> None:
-        self.current, self.catalog = content, catalog
-        self.ancestry = frozenset(context_path(content.id, catalog, document)) | {content.id}
+        ancestry = frozenset(context_path(content.id, catalog, document)) | {content.id}
+        reading = self._reading.update(lambda reading: replace(reading, current=content, catalog=catalog, ancestry=ancestry))
         match content:
             case MeetingSource(meeting=meeting):
                 self.open.setText("Open transcript")
-                if self.conversation is None or self.conversation.meeting.revision != meeting.revision:
+                if reading.conversation is None or reading.conversation.meeting.revision != meeting.revision:
                     self.read_conversation(0)
             case WorkSource():
                 self.open.setText("Open original" if content.kind in (SourceKind.DOCUMENT, SourceKind.WEB_PAGE) else "Open in Edge")
@@ -238,7 +306,7 @@ class SourceDetail:
         previous: object = self.connections.currentData()
         self.connections.clear()
         for item in catalog.works:
-            if item.id in self.ancestry or any(link.source_id in self.ancestry for link in item.links):
+            if item.id in ancestry or any(link.source_id in ancestry for link in item.links):
                 self.connections.addItem(item.definition.title, item.id)
         for index in range(self.connections.count()):
             candidate: object = self.connections.itemData(index)
@@ -258,7 +326,7 @@ class SourceDetail:
         observed: object = self.connections.currentData()
         match observed:
             case str() as identity:
-                return next((item for item in self.catalog.works if item.id == identity), None)
+                return next((item for item in self._reading.get().catalog.works if item.id == identity), None)
             case _:
                 return None
 
@@ -268,11 +336,14 @@ class SourceDetail:
             callback(selected.id)
 
     def render_reason(self) -> None:
+        reading = self._reading.get()
         work = self.selected()
-        association = next((link for link in work.links if link.source_id in self.ancestry), None) if work else None
-        reason = ("Through the containing bubble: " if association.source_id != self.current.id else "") + association.reason if association else None
+        association = next((link for link in work.links if link.source_id in reading.ancestry), None) if work else None
+        reason = (
+            ("Through the containing bubble: " if association.source_id != reading.current.id else "") + association.reason if association else None
+        )
         replace_text(self.reason, reason if reason else "Collected inside this work context." if work else "No work is connected yet.")
-        self.unlink.setEnabled(association is not None and association.source_id == self.current.id)
+        self.unlink.setEnabled(association is not None and association.source_id == reading.current.id)
 
     def remove(self) -> None:
         work = self.selected()
@@ -280,13 +351,14 @@ class SourceDetail:
             self.work.send(UnlinkWork(work.id, self.current.id, work.revision))
 
     def open_source(self) -> None:
-        if isinstance(self.current, MeetingSource):
-            self.work.send(OpenWorkSource(self.current.id))
-        elif self.current.kind is SourceKind.DOCUMENT:
-            if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(self.current.url)):
+        current = self.current
+        if isinstance(current, MeetingSource):
+            self.work.send(OpenWorkSource(current.id))
+        elif current.kind is SourceKind.DOCUMENT:
+            if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(current.url)):
                 self.work.problem("Windows could not open this document.")
         else:
-            self.work.send(OpenWorkSource(self.current.parent_id or self.current.id))
+            self.work.send(OpenWorkSource(current.parent_id or current.id))
 
     def read_conversation(self, offset: int) -> None:
         match self.current:
@@ -305,15 +377,16 @@ class SourceDetail:
                     replace_text(self.text, "This meeting's conversation could not be read. Check access to its saved folder and try again.")
                     self.more.setVisible(False)
                     return
-                self.conversation = page
+                self._reading.update(lambda reading: replace(reading, conversation=page))
                 replace_text(self.text, meeting_text(page))
                 self.more.setVisible(page.next_offset is not None)
             case _:
                 pass
 
     def read_more(self) -> None:
-        if self.conversation is not None and self.conversation.next_offset is not None:
-            self.read_conversation(self.conversation.next_offset)
+        conversation = self._reading.get().conversation
+        if conversation is not None and conversation.next_offset is not None:
+            self.read_conversation(conversation.next_offset)
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,29 +416,49 @@ class NoteDetail:
         self.save(replace(self.current, title=self.title.text(), text=self.text.toPlainText()))
 
 
+@dataclass(frozen=True, slots=True)
 class UpdateDetail:
-    def __init__(self, content: CanvasUpdate | CanvasAction, locate: Callable[[str], None], style: str) -> None:
-        self.current: CanvasUpdate | CanvasAction = content
-        self.locate: Callable[[str], None] = locate
-        self.frame: QtWidgets.QWidget = detail_frame(300, style)
-        layout = column(self.frame)
-        self.text: Editor = Editor(readonly=True)
-        self.text.setAccessibleName("Agent findings")
-        layout.addWidget(self.text)
-        self.open: QtWidgets.QToolButton = button("Open work thread", self.open_work)
-        layout.addWidget(self.open)
-        self.refresh(content)
+    locate: Callable[[str], None]
+    frame: QtWidgets.QWidget
+    text: Editor
+    open: QtWidgets.QToolButton
+    _current: Cell[CanvasUpdate | CanvasAction]
+
+    @classmethod
+    def build(cls, content: CanvasUpdate | CanvasAction, locate: Callable[[str], None], style: str) -> UpdateDetail:
+        frame = detail_frame(300, style)
+        layout = column(frame)
+        text = Editor(readonly=True)
+        text.setAccessibleName("Agent findings")
+        layout.addWidget(text)
+
+        # Each control acts on the detail made just after it.
+        def act(method: Callable[[UpdateDetail], None]) -> Callable[[], None]:
+            return lambda: method(detail)
+
+        opener = button("Open work thread", act(UpdateDetail.open_work))
+        layout.addWidget(opener)
+        detail = cls(locate, frame, text, opener, Cell(content))
+        detail.refresh(content)
+        return detail
 
     def refresh(self, content: CanvasUpdate | CanvasAction) -> None:
-        self.current = content
+        self._current.set(content)
         replace_text(self.text, content.text)
         self.open.setVisible(bool(content.work_ids))
 
     def open_work(self) -> None:
-        if self.current.work_ids:
-            self.locate(self.current.work_ids[0])
+        if work_ids := self._current.get().work_ids:
+            self.locate(work_ids[0])
 
 
+@dataclass(frozen=True, slots=True)
+class _Asked:
+    current: CanvasQuestion
+    last_reply: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class QuestionDetail:
     """Qt owns content-sized reading and the last visible spoken reply.
 
@@ -373,41 +466,49 @@ class QuestionDetail:
     last reply stays visible if the task transport rejects it after submission.
     """
 
-    def __init__(self, content: CanvasQuestion, style: str) -> None:
-        self.current: CanvasQuestion = content
-        self.last_reply: str | None = None
-        self.frame: QtWidgets.QWidget = detail_frame(1, style)
-        layout = column(self.frame)
+    frame: QtWidgets.QWidget
+    question: QtWidgets.QLabel
+    response: QtWidgets.QLabel
+    status: QtWidgets.QLabel
+    _asked: Cell[_Asked]
+
+    @classmethod
+    def build(cls, content: CanvasQuestion, style: str) -> QuestionDetail:
+        frame = detail_frame(1, style)
+        layout = column(frame)
         layout.setSpacing(12)
-        self.question: QtWidgets.QLabel = label(content.text)
-        self.question.setWordWrap(True)
-        self.question.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.question.setAccessibleName("Agent clarification")
-        layout.addWidget(self.question)
-        self.response: QtWidgets.QLabel = label("")
-        self.response.setWordWrap(True)
-        self.response.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.response.setAccessibleName("Your spoken reply")
-        layout.addWidget(self.response)
-        self.status: QtWidgets.QLabel = label("", "muted")
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        self.frame.ensurePolished()
-        self.refresh(content)
+        question = label(content.text)
+        question.setWordWrap(True)
+        question.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        question.setAccessibleName("Agent clarification")
+        layout.addWidget(question)
+        response = label("")
+        response.setWordWrap(True)
+        response.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        response.setAccessibleName("Your spoken reply")
+        layout.addWidget(response)
+        status = label("", "muted")
+        status.setWordWrap(True)
+        layout.addWidget(status)
+        frame.ensurePolished()
+        detail = cls(frame, question, response, status, Cell(_Asked(content)))
+        detail.refresh(content)
+        return detail
 
     def refresh(self, content: CanvasQuestion) -> None:
-        self.current = content
         self.question.setText(content.text)
         match content.reply:
             case Attention.WAITING:
+                last_reply = self._asked.update(lambda asked: replace(asked, current=content)).last_reply
                 self.status.setText(AGENT_HOLD + " to reply · release to send")
-                self.response.setText("Previous reply\n" + self.last_reply if self.last_reply is not None else "")
+                self.response.setText("Previous reply\n" + last_reply if last_reply is not None else "")
             case TextAnswer(text=text):
-                self.last_reply = text
+                self._asked.set(_Asked(content, text))
                 self.response.setText("You replied\n" + text)
                 self.status.setText("Context sent to the agent.")
             case Attention.CLOSED:
-                self.response.setText("You replied\n" + self.last_reply if self.last_reply is not None else "")
+                last_reply = self._asked.update(lambda asked: replace(asked, current=content)).last_reply
+                self.response.setText("You replied\n" + last_reply if last_reply is not None else "")
                 self.status.setText("The agent is no longer waiting for this clarification.")
         self.response.setVisible(bool(self.response.text()))
         for text_label in (self.question, self.response, self.status):

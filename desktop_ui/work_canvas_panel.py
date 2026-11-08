@@ -684,14 +684,14 @@ class CanvasPanel:
         if detail is None:
             match card.content:
                 case WorkSource() | MeetingSource() as content:
-                    detail = SourceDetail(self.work, content, self.style, on_context=self.open_context)
+                    detail = SourceDetail.build(self.work, content, self.style, on_context=self.open_context)
                     detail.refresh(content, self.view.catalog, self.document)
                 case CanvasNote() as content:
                     detail = NoteDetail.build(content, self.save_note, self.style)
                 case CanvasUpdate() | CanvasAction() as content:
-                    detail = UpdateDetail(content, self.open_at, self.style)
+                    detail = UpdateDetail.build(content, self.open_at, self.style)
                 case CanvasQuestion() as content:
-                    detail = QuestionDetail(content, self.style)
+                    detail = QuestionDetail.build(content, self.style)
             self.details = (*self.details, (identity, detail))
         match detail:
             case SourceDetail():
@@ -714,7 +714,7 @@ class CanvasPanel:
         detail = self.detail(work.id)
         dialog = next((window for identity, window in self.editors if identity == work.id), None)
         if detail is None:
-            detail = WorkDetail(self.work, work, self.style, on_continue=lambda: self.study_work(work.id))
+            detail = WorkDetail.build(self.work, work, self.style, on_continue=lambda: self.study_work(work.id))
             self.details = (*self.details, (work.id, detail))
             dialog = QtWidgets.QDialog(self.frame)
             dialog.setWindowTitle("Work context · " + work.definition.title)
@@ -1096,7 +1096,7 @@ class CanvasPanel:
             self.canvas.centerOn(self.draft_proxy)
             return
         self.draft_known = frozenset(item.id for item in self.view.catalog.works)
-        self.draft = WorkDetail(self.work, WorkDefinition("New work", "Describe the outcome you are working towards."), self.style)
+        self.draft = WorkDetail.build(self.work, WorkDefinition("New work", "Describe the outcome you are working towards."), self.style)
         # The draft is a solid card on the canvas, like the bubble it becomes.
         frame = QtWidgets.QFrame()
         frame.setObjectName("draft")
