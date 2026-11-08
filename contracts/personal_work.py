@@ -64,8 +64,8 @@ def _check_application(url: str, hosts: frozenset[str]) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class TeamsSource:
-    """A Teams conversation observed in the browser, or one message in it (`parent_id`)."""
+class LocatedSource:
+    """What every source found at an address carries: its identities, what it showed and where, and when it was observed."""
 
     id: Identity
     identity: Identity
@@ -74,6 +74,12 @@ class TeamsSource:
     url: Annotated[str, Field(max_length=4000)]
     revision: Identity
     observed_at: Timestamp
+
+
+@dataclass(frozen=True, slots=True)
+class TeamsSource(LocatedSource):
+    """A Teams conversation observed in the browser, or one message in it (`parent_id`)."""
+
     parent_id: Identity | None = None
     kind: Literal[SourceKind.TEAMS] = SourceKind.TEAMS
 
@@ -87,16 +93,9 @@ class TeamsSource:
 
 
 @dataclass(frozen=True, slots=True)
-class OutlookSource:
+class OutlookSource(LocatedSource):
     """An Outlook conversation observed in the browser, or one email in it (`parent_id`)."""
 
-    id: Identity
-    identity: Identity
-    title: Title
-    excerpt: Detail
-    url: Annotated[str, Field(max_length=4000)]
-    revision: Identity
-    observed_at: Timestamp
     parent_id: Identity | None = None
     kind: Literal[SourceKind.OUTLOOK] = SourceKind.OUTLOOK
 
@@ -110,16 +109,9 @@ class OutlookSource:
 
 
 @dataclass(frozen=True, slots=True)
-class KanbanSource:
+class KanbanSource(LocatedSource):
     """A Kanban ticket observed on a rendered board."""
 
-    id: Identity
-    identity: Identity
-    title: Title
-    excerpt: Detail
-    url: Annotated[str, Field(max_length=4000)]
-    revision: Identity
-    observed_at: Timestamp
     kind: Literal[SourceKind.KANBAN] = SourceKind.KANBAN
 
     def __post_init__(self) -> None:
@@ -136,16 +128,9 @@ class KanbanSource:
 
 
 @dataclass(frozen=True, slots=True)
-class DocumentSource:
+class DocumentSource(LocatedSource):
     """A document the user or the agent added by its location."""
 
-    id: Identity
-    identity: Identity
-    title: Title
-    excerpt: Detail
-    url: Annotated[str, Field(max_length=4000)]
-    revision: Identity
-    observed_at: Timestamp
     origin: SourceOrigin
     kind: Literal[SourceKind.DOCUMENT] = SourceKind.DOCUMENT
 
@@ -159,16 +144,9 @@ class DocumentSource:
 
 
 @dataclass(frozen=True, slots=True)
-class WebPageSource:
+class WebPageSource(LocatedSource):
     """A web page the user or the agent added as a reference."""
 
-    id: Identity
-    identity: Identity
-    title: Title
-    excerpt: Detail
-    url: Annotated[str, Field(max_length=4000)]
-    revision: Identity
-    observed_at: Timestamp
     origin: SourceOrigin
     kind: Literal[SourceKind.WEB_PAGE] = SourceKind.WEB_PAGE
 
