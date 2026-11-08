@@ -790,15 +790,14 @@ def apps_held(t: Harness) -> None:
 def test_apps_layer_voice_holds_last_until_their_key_is_released() -> None:
     # Defects: a hold ends with its first repeat, or letting go of the thumb
     # first cuts the dictation short.
-    for physical, tool in (("l", "dictate"), ("k", "agent_voice")):  # Colemak H and K
-        t = Harness()
-        apps_held(t)
-        t.d(physical)
-        t.d(physical)  # auto-repeat
-        t.u("x")
-        assert t.take() == f"?{tool}+"
-        t.u(physical)
-        assert t.take() == f"?{tool}-"
+    t = Harness()
+    apps_held(t)
+    t.d("l")  # Colemak H
+    t.d("l")  # auto-repeat
+    t.u("x")
+    assert t.take() == "?dictate+"
+    t.u("l")
+    assert t.take() == "?dictate-"
 
 
 def test_switching_off_and_quitting_release_a_held_voice_request() -> None:

@@ -225,7 +225,6 @@ class Meetings:
     transcribe_audio: Transcriber
     retry_policy: RetryPolicy
     on_update: Callable[[RecordingState], None] | None
-    on_meeting: Callable[[MeetingStore], None] | None
     log: Callable[[str], None]
     _recovery: tuple[Path, ...]
     """Journals found at startup, scheduled once the worker runs."""
@@ -249,7 +248,6 @@ class Meetings:
         on_update: Callable[[RecordingState], None] | None = None,
         transcribe_audio: Transcriber | None = None,
         retry_policy: RetryPolicy | None = None,
-        on_meeting: Callable[[MeetingStore], None] | None = None,
         log: Callable[[str], None] | None = None,
     ) -> Meetings:
         """The recorder over `archive`, with its unfinished journals found for recovery."""
@@ -265,7 +263,6 @@ class Meetings:
             transcribe_audio if transcribe_audio is not None else configured_transcriber,
             retry_policy if retry_policy is not None else RetryPolicy(),
             on_update,
-            on_meeting,
             log if log is not None else _unlogged,
             tuple(archive.journals()),
         )
@@ -362,10 +359,6 @@ class Meetings:
                 state, update = self.shown, self.on_update
             update(state)
 
-    def _observe_meeting(self, store: MeetingStore) -> None:
-        if self.on_meeting is not None:
-            self.on_meeting(store)
-
     def _schedule(self, store: MeetingStore) -> None:
         with self._lock:
             if store.folder not in self._state.get().scheduled and not self._state.get().closing:
@@ -397,7 +390,6 @@ class Meetings:
         problem = ""
         try:
             store = self.archive.create(source, title)
-            self._observe_meeting(store)
             with self._lock:
                 self._show(replace(self.shown, identity=store.folder.name, path=str(store.transcript)))
             self._publish(store)
@@ -430,7 +422,6 @@ class Meetings:
             if store is not None:
                 try:
                     store.finish_capture(problem)
-                    self._observe_meeting(store)
                     self._publish(store)
                 except OSError, ValueError, sqlite3.Error:
                     # In particular, never claim that a disk-full write succeeded.
@@ -454,7 +445,6 @@ class Meetings:
                     store.interrupt_capture(
                         "Recording was interrupted when Workspace closed. Saved audio has been recovered; capture was not restarted."
                     )
-                self._observe_meeting(store)
                 if not state.complete or not store.transcript.is_file():
                     self._schedule(store)
             except OSError, ValueError, sqlite3.Error:
@@ -512,7 +502,6 @@ class Meetings:
             if batch is None:
                 if state.finished:
                     store.export()
-                    self._observe_meeting(store)
                     self._publish(store, detail=state.problem)
                     return
                 self._wake.wait(0.5)
@@ -541,7 +530,6 @@ class Meetings:
                 continue
             failures = 0
             store.complete(batch, result)
-            self._observe_meeting(store)
             try:
                 store.export()
             except PermissionError:

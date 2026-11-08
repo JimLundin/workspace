@@ -9,7 +9,7 @@ ENV = {"OPENAI_BASE_URL": "https://ai.example/v1/", "OPENAI_API_KEY": "k"}
 
 
 def settings(url: str, vocabulary: str = "") -> Settings:
-    return Settings(url, "secret", "gpt-4o-transcribe", vocabulary, fast_model="chat-model")
+    return Settings(url, "secret", "gpt-4o-transcribe", vocabulary)
 
 
 # ---- settings --------------------------------------------------------------------------
@@ -20,35 +20,11 @@ def test_settings_need_the_endpoint_and_key() -> None:
     assert settings_from({"OPENAI_BASE_URL": "https://ai.example/v1"}) == Missing(("OPENAI_API_KEY",))
 
 
-def test_settings_defaults() -> None:
-    # Defect: the fast or agent model defaults to the wrong provider model.
-    result = settings_from(ENV)
-    assert result == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "", "gpt-6-luna", "gpt-6-astra", "low")
-
-
-def test_settings_overrides() -> None:
-    # Defect: a configured model, effort or transcription setting is ignored.
-    env = {
-        **ENV,
-        "WORKSPACE_TRANSCRIBE_MODEL": "whisper-1",
-        "WORKSPACE_FAST_MODEL": "quick",
-        "WORKSPACE_AGENT_MODEL": "deep",
-        "WORKSPACE_AGENT_REASONING_EFFORT": "high",
-        "WORKSPACE_VOCABULARY": "Miryoku, Colemak",
-    }
-    assert settings_from(env) == Settings("https://ai.example/v1", "k", "whisper-1", "Miryoku, Colemak", "quick", "deep", "high")
-
-
-def test_empty_model_overrides_are_rejected_at_configuration_entry() -> None:
-    # Defect: an empty model ID reaches a provider request instead of being
-    # rejected where Workspace reads its external configuration.
-    for name in ("WORKSPACE_FAST_MODEL", "WORKSPACE_AGENT_MODEL"):
-        try:
-            settings_from({**ENV, name: "  "})
-        except ValueError as error:
-            assert str(error) == "Model IDs must not be empty."
-        else:
-            raise AssertionError(f"The empty {name} override was accepted.")
+def test_settings_defaults_and_overrides() -> None:
+    # Defect: the transcription model defaults wrongly, or a configured setting is ignored.
+    assert settings_from(ENV) == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "")
+    env = {**ENV, "WORKSPACE_TRANSCRIBE_MODEL": "whisper-1", "WORKSPACE_VOCABULARY": "Miryoku, Colemak"}
+    assert settings_from(env) == Settings("https://ai.example/v1", "k", "whisper-1", "Miryoku, Colemak")
 
 
 # ---- transcription ---------------------------------------------------------------------

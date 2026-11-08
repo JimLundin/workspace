@@ -270,14 +270,7 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     first = execute_tests(generated, root, runtime.load)
     if broad:
         with phases.timed("phase:import all production modules"):
-            # This phase already requires the SDK. Resolve its dependency graph
-            # before Qt installs its per-module source-inspection callback.
-            # Narrow/Qt-only checks never pay this preload; generic source
-            # fixtures without the SDK keep their existing import inventory.
-            failures = (
-                *import_changed(("assistant/sdk.py",), root, runtime.load),
-                *step_failures("import all production modules", runtime.import_all, root),
-            )
+            failures = tuple(step_failures("import all production modules", runtime.import_all, root))
     if not failures:
         with phases.timed("phase:import changed source"):
             failures = tuple(import_changed(selection.changed, root, runtime.load))
@@ -294,7 +287,7 @@ def execute(selection: Selection, root: Path, runtime: SourceRuntime = NATIVE_SO
     return combined_results((first, following), phases.recorded)
 
 
-SDK_PACKAGES = ("agents", "openai")
+SDK_PACKAGES = ("openai",)
 
 
 def eager_imports(text: str) -> frozenset[str]:
@@ -316,8 +309,8 @@ def eager_imports(text: str) -> frozenset[str]:
 def sdk_packages(tests: tuple[str, ...], root: Path) -> tuple[str, ...]:
     """The SDK packages the selected tests load as they import, directly or through Workspace modules.
 
-    Only eager imports count: a module that reaches the SDK lazily (as `assistant.agent`
-    does) loads it only when a test runs an agent, so most tests never pay its
+    Only eager imports count: a module that reaches the SDK lazily (as `assistant.llm`
+    does) loads it only when a test transcribes, so most tests never pay its
     seconds-long import."""
     reached = frozenset(
         name.partition(".")[0]
@@ -344,12 +337,6 @@ def _eager_closure(modules: frozenset[str], root: Path) -> Iterator[frozenset[st
         modules = frozenset[str]().union(*found) - seen
 
 
-def prepare_worker(root: Path) -> None:
-    # The SDK is not preloaded: it loads when a test first runs an agent (a few
-    # seconds), and loading it before or after Qt took the same time warm.
-    os.environ.pop("WORKSPACE_E2E", None)
-
-
 def execute_overlapped(tests: tuple[str, ...], root: Path, load: Callable[[str], object] = importlib.import_module) -> Results:
     plan = execution_plan(tests)
     if not plan.portable:
@@ -360,7 +347,7 @@ def execute_overlapped(tests: tuple[str, ...], root: Path, load: Callable[[str],
     # submitted to it. Each worker module keeps the ordinary executor, fixtures,
     # assertions and failure protocol.
     with phases.timed("phase:portable worker dispatch"):
-        pool = ProcessPoolExecutor(max_workers=WORKERS, initializer=prepare_worker, initargs=(root,))
+        pool = ProcessPoolExecutor(max_workers=WORKERS)
     try:
         with phases.timed("phase:portable worker submission"):
             pending = tuple((name, pool.submit(execute_tests, (name,), root)) for name in plan.portable)
@@ -423,7 +410,7 @@ def _test_results(tests: tuple[str, ...], load: Callable[[str], object]) -> Iter
 
 
 def _test_result(name: str, module: str, label: str, test: Test) -> Results:
-    sdk_loaded = "agents" in sys.modules
+    sdk_loaded = "openai" in sys.modules
     started = time.perf_counter()
     # Expected diagnostics from passing tests, such as SDK warnings for a
     # deliberately broken stream, would bury real failures in the console.
@@ -440,9 +427,9 @@ def _test_result(name: str, module: str, label: str, test: Test) -> Results:
         passed, skipped, failures = 0, 1, ()
     except Exception as error:
         passed, skipped, failures = 0, 0, (raised(f"{name}::{label}", error, output.getvalue()),)
-    # The first test to run an agent loads the SDK (seconds, cold); that load is
+    # The first test to transcribe loads the SDK (seconds, cold); that load is
     # a phase of this run, not the test's cost, so the budget never blames it.
-    first_load = not sdk_loaded and "agents" in sys.modules
+    first_load = not sdk_loaded and "openai" in sys.modules
     elapsed = time.perf_counter() - started
     return Results(passed, skipped, failures, ((elapsed, f"phase:first SDK load in {module}.{label}" if first_load else module + "." + label),))
 

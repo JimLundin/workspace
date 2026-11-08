@@ -52,8 +52,8 @@ def arrive(shown: Shown, *, animate: bool) -> Moving:
 def outline(part: Part) -> object:
     """A part as far as cross-fading cares: a reading that changes its text updates in place."""
     match part:
-        case Text(tone=tone, strong=strong):
-            return (Text, tone, strong)
+        case Text(tone=tone):
+            return (Text, tone)
         case _:
             return part
 

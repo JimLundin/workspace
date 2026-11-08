@@ -2,15 +2,15 @@
 
 from desktop_ui.desktop_pager import NO_HINTS, Hints, PagerDesktop, pager
 from desktop_ui.shell_items import PinnedApp
-from desktop_ui.window_layout import CODE, TERMINAL, WorkspaceView
+from desktop_ui.window_layout import CODE, TERMINAL
 
 
 def test_pager_names_and_carries_each_desktops_apps_in_order_and_marks_the_current_one() -> None:
     # Defects: a desktop's icons lose the on-screen order they were given, or an
     # empty desktop gets another desktop's apps.
-    view = pager(((WorkspaceView.CANVAS,), (TERMINAL, CODE, PinnedApp.TEAMS), (), (PinnedApp.OUTLOOK,)), 2, chord=False)
+    view = pager(((PinnedApp.TEAMS,), (TERMINAL, CODE, PinnedApp.TEAMS), (), (PinnedApp.OUTLOOK,)), 2, chord=False)
     assert view.desktops == (
-        PagerDesktop("1", "Desktop 1 · Canvas", current=False, apps=(WorkspaceView.CANVAS,)),
+        PagerDesktop("1", "Desktop 1 · Teams", current=False, apps=(PinnedApp.TEAMS,)),
         PagerDesktop("2", "Desktop 2 · windowsterminal, code, Teams", current=False, apps=(TERMINAL, CODE, PinnedApp.TEAMS)),
         PagerDesktop("3", "Desktop 3 (current) · No placed apps", current=True),
         PagerDesktop("4", "Desktop 4 · Outlook", current=False, apps=(PinnedApp.OUTLOOK,)),

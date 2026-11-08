@@ -23,7 +23,7 @@ _WINDOWS_ONLY = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi
 _ON_WINDOWS: bool = sys.platform == "win32"
 
 
-_DOCUMENTS = ("docs/", ".github/", ".vscode/", "typings/", ".git")
+_DOCUMENTS = ("docs/", ".github/", ".githooks/", ".vscode/", "typings/", ".git")
 """Changes no test reads: documentation, repository and editor configuration, type stubs."""
 
 
@@ -36,9 +36,7 @@ ASSET_READERS: Final = frozendict(
         "Dev.cmd": ("scripts/check.py", "launch.py"),
         "scripts/dev.ps1": ("scripts/check.py", "launch.py"),
         "StartWorkspace.cmd": ("launch.py",),
-        "assistant/uia.ps1": ("assistant/uia.py",),
         "desktop_ui/fonts/": ("desktop_ui/components/typeface.py", "desktop_ui/components/text.py"),
-        "tests/uia_fixture.ps1": ("tests/test_windows_computer.py",),
         # A sample log for `scripts.navigation_report --log`; no test reads it.
         "tests/navigation_report_fixture.jsonl": (),
     }
@@ -130,38 +128,21 @@ def _readers(name: str) -> tuple[str, ...] | None:
 # new/native tests sequential until their effects have been reviewed.
 # Heavier modules lead the queue.
 PORTABLE = (
-    "tests/test_agent.py",
     "tests/test_architecture.py",
     "tests/test_quality.py",
-    "tests/test_work_store.py",
-    "tests/test_work_actions.py",
     "tests/test_meetings.py",
-    "tests/test_selfcheck.py",
-    "tests/test_computer_tools.py",
-    "tests/test_work_execution.py",
-    "tests/test_feed_triage_service.py",
-    "tests/test_commands.py",
-    "tests/test_project_context.py",
     "tests/test_llm.py",
-    "tests/test_background_agent.py",
     "tests/test_source_analysis.py",
-    "tests/test_work_agent.py",
     "tests/test_features.py",
-    "tests/test_work_submissions.py",
 )
 
 
 # Strict elapsed deadlines suffer under competing SDK/source work. These and all
 # native modules run after the workers exit, keeping their fixture costs stable.
-AFTER_WORKERS = frozenset({"tests/test_agent_streaming.py"})
+AFTER_WORKERS: Final[frozenset[str]] = frozenset()
 
 
-NATIVE_LANES: Final = (
-    # Each launches real Edge processes on disposable profiles.
-    ("tests/test_windows_browser.py",),
-    ("tests/test_windows_test_desktop.py",),
-    ("tests/test_windows_computer.py", "tests/test_windows_development.py"),
-)
+NATIVE_LANES: Final[tuple[tuple[str, ...], ...]] = ()
 """Slow native modules that wait on child processes and share no machine-wide state.
 
 Each lane, and then the remaining native modules together, runs in its own process

@@ -1,9 +1,8 @@
 """Window placement and screenshot coordinates: plain arithmetic on rectangles."""
 
-from dataclasses import dataclass
 from typing import Literal
 
-from winapi.shapes import Rect, Size
+from winapi.shapes import Rect
 
 
 def half(work: Rect, side: Literal["left", "right"], outer: Rect, visible: Rect) -> Rect:
@@ -24,18 +23,3 @@ def framed(target: Rect, outer: Rect, visible: Rect) -> Rect:
         target.right + (outer.right - visible.right),
         target.bottom + (outer.bottom - visible.bottom),
     )
-
-
-def fit(size: Size, longest: int) -> Size:
-    """A size no wider or taller than `longest`, same shape; never enlarged."""
-    scale = min(1.0, longest / max(size.width, size.height))
-    return Size(max(1, round(size.width * scale)), max(1, round(size.height * scale)))
-
-
-@dataclass(frozen=True, slots=True)
-class Shot:
-    """A screenshot: the screen area it shows, and the size it was scaled to."""
-
-    area: Rect
-    width: int
-    height: int

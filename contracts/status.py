@@ -12,12 +12,8 @@ class State(Enum):
     """The layout is switched off or not running; tools still work from the tray."""
     LISTENING = auto()
     RECORDING = auto()
-    """A meeting is being recorded, including while the agent does other work."""
+    """A meeting is being recorded."""
     WORKING = auto()
-    AGENT = auto()
-    """The agent is working on a task."""
-    NEEDS_INPUT = auto()
-    """A question is waiting in the agent panel."""
 
 
 class Job(Enum):

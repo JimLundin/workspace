@@ -110,16 +110,13 @@ class SourceFixture:
         return ("A dependency does not import",)
 
     def load(self, module: str) -> object:
-        if module == "assistant.sdk":
-            self.order.append("sdk")
-            return None
         assert module == __name__
         return self
 
     def test_requested(self) -> None:
         self.order.append("generated")
         print("expected warning from a passing case", file=sys.stderr)
-        assert "sdk" not in self.order and "imports" not in self.order
+        assert "imports" not in self.order
 
     def test_rejected(self) -> None:
         print("diagnostic before the rejection", file=sys.stderr)
@@ -155,7 +152,7 @@ def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(
 
     def generated() -> None:
         runtime.order.append("generated")
-        assert "sdk" not in runtime.order and "imports" not in runtime.order
+        assert "imports" not in runtime.order
 
     generated.__module__ = "tests.properties.test_order"
 
@@ -163,16 +160,11 @@ def test_generated_checks_precede_broad_dependency_imports_and_keep_import_gate(
         test_order = staticmethod(generated)
 
     module_fixture = PropertyModule()
-    for sdk_present in (False, True):
-        runtime = PropertyRuntime()
-        if sdk_present:
-            sdk = tmp_path / "assistant" / "sdk.py"
-            sdk.parent.mkdir()
-            sdk.write_text("# SDK boundary")
-        result = execute(Selection((name,), (), "full source checks"), tmp_path, runtime)
-        assert runtime.order == (["generated", "sdk", "imports"] if sdk_present else ["generated", "imports"])
-        problem = Failure("import all production modules", "A dependency does not import", "A dependency does not import")
-        assert (result.passed, result.skipped, result.failures) == (1, 0, (problem,))
+    runtime = PropertyRuntime()
+    result = execute(Selection((name,), (), "full source checks"), tmp_path, runtime)
+    assert runtime.order == ["generated", "imports"]
+    problem = Failure("import all production modules", "A dependency does not import", "A dependency does not import")
+    assert (result.passed, result.skipped, result.failures) == (1, 0, (problem,))
     runtime = PropertyRuntime()
     result = execute(Selection((name,), (), "explicit iteration scope"), tmp_path, runtime)
     assert runtime.order == ["generated"] and (result.passed, result.skipped, result.failures) == (1, 0, ())
@@ -201,18 +193,18 @@ def test_failed_checks_keep_cost_evidence_naming_each_failure_without_a_receipt(
 
 
 def test_broad_workers_keep_desktop_ownership_exact_selection_and_failures() -> None:
-    # Defects: a native or strict-deadline module runs in a worker, a selector
-    # loses its function, or a few modules (however many selectors name them) wait for workers to start.
+    # Defects: a native module runs in a worker, a known heavy module doesn't lead
+    # the queue, a selector loses its function, or a few modules (however many
+    # selectors name them) wait for workers to start.
     unreviewed = tuple(f"tests/test_unreviewed_{index}.py" for index in range(POOL_MINIMUM - 2))
     selectors: tuple[str, ...] = (
         *unreviewed,
-        "tests/test_windows_browser.py",
-        "tests/test_agent_streaming.py",
-        "tests/test_work_store.py",
-        "tests/test_agent.py::test_declined",
+        "tests/test_windows_ambient.py",
+        "tests/test_features.py",
+        "tests/test_meetings.py::test_declined",
     )
     plan = execution_plan(selectors)
-    assert plan == ExecutionPlan(("tests/test_agent.py::test_declined", "tests/test_work_store.py", *unreviewed), selectors[-4:-2])
+    assert plan == ExecutionPlan(("tests/test_meetings.py::test_declined", "tests/test_features.py", *unreviewed), ("tests/test_windows_ambient.py",))
     assert execution_plan(selectors[2:]) == ExecutionPlan((), selectors[2:])
     # One module's functions, as the editing tier names a module with slow tests, start no pool.
     functions = tuple(f"tests/test_agent.py::test_{index}" for index in range(POOL_MINIMUM))

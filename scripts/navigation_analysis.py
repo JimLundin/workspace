@@ -37,7 +37,6 @@ from desktop_ui.window_layout import (
     Region,
     Role,
     Setup,
-    WorkspaceView,
     first_places,
 )
 from miryoku.firmware import CHORDS
@@ -360,8 +359,6 @@ def source(app: App) -> str:
             return f"PinnedApp.{app.name}"
         case Program(exe=exe):
             return PROGRAM_NAMES.get(app, f'Program("{exe}")')
-        case WorkspaceView():
-            return f"WorkspaceView.{app.name}"
         case _:
             assert_never(app)
 

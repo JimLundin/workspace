@@ -33,8 +33,6 @@ from protocol import (
     encode,
 )
 from tests.keyboard_fixture import (
-    AGENT_KEY,
-    AGENT_LETTER,
     ALT,
     APPS_KEY,
     APPS_THUMB,
@@ -111,12 +109,12 @@ def test_each_message_reaches_the_side_that_owns_it() -> None:
     keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 1, 0), down=True)
     keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 2, 0), down=False)
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
-    for request in (Tool.DICTATE, Tool.OPEN_INBOX, Tool.DESKTOP_2, APPS[0]):
+    for request in (Tool.DICTATE, Tool.ZOOM, Tool.DESKTOP_2, APPS[0]):
         keyboard.host.request(request, down=True)
     desktop, assistant = driver.to(Side.DESKTOP), driver.to(Side.ASSISTANT)
     assert {message for message, _, _ in desktop} == {WM_KEY_STATE, WM_LAYOUT_STATE, WM_INDICATOR, WM_CHORD, WM_REQUEST}
     assert {message for message, _, _ in assistant} == {WM_LAYOUT_STATE, WM_REQUEST}
-    assert [wparam for message, wparam, _ in desktop if message == WM_REQUEST] == [Tool.OPEN_INBOX.value, Tool.DESKTOP_2.value, encode(APPS[0], APPS)]
+    assert [wparam for message, wparam, _ in desktop if message == WM_REQUEST] == [Tool.ZOOM.value, Tool.DESKTOP_2.value, encode(APPS[0], APPS)]
     assert [wparam for message, wparam, _ in assistant if message == WM_REQUEST] == [Tool.DICTATE.value]
     driver.handles[Side.DESKTOP] = None
     keyboard.host.remember_windows(frozendict())
@@ -143,23 +141,23 @@ def test_blocked_keys_light_up_but_unpictured_keys_do_not() -> None:
         assert not any(message == WM_REQUEST for message, _, _ in messages)
 
 
-def test_apps_k_holds_agent_voice_until_release_and_updates_its_highlight() -> None:
-    # Defect: K emits the toggle request or repeats instead of sending one
+def test_apps_l_holds_dictation_until_release_and_updates_its_highlight() -> None:
+    # Defect: L emits the toggle request or repeats instead of sending one
     # hold/release pair through the assistant's existing push-to-talk handler.
     with observed_keyboard() as (keyboard, messages):
         hold_apps(keyboard, at=0)
         messages.clear()
-        key = inputs.KeyEvent(0, AGENT_KEY, 0, 10, 0)
+        key = inputs.KeyEvent(0, DICTATE_KEY, 0, 10, 0)
         assert keyboard.swallow(key, down=True)
-        assert messages == [(WM_KEY_STATE, AGENT_KEY, 1), (WM_REQUEST, Tool.AGENT_VOICE.value, 1)]
-        assert keyboard.pressed == {APPS_THUMB, AGENT_KEY}
+        assert messages == [(WM_KEY_STATE, DICTATE_KEY, 1), (WM_REQUEST, Tool.DICTATE.value, 1)]
+        assert keyboard.pressed == {APPS_THUMB, DICTATE_KEY}
         keyboard.swallow(key, down=True)
-        keyboard.swallow(inputs.KeyEvent(0, AGENT_KEY, 0, 300, 0), down=False)
+        keyboard.swallow(inputs.KeyEvent(0, DICTATE_KEY, 0, 300, 0), down=False)
         assert messages == [
-            (WM_KEY_STATE, AGENT_KEY, 1),
-            (WM_REQUEST, Tool.AGENT_VOICE.value, 1),
-            (WM_KEY_STATE, AGENT_KEY, 0),
-            (WM_REQUEST, Tool.AGENT_VOICE.value, 0),
+            (WM_KEY_STATE, DICTATE_KEY, 1),
+            (WM_REQUEST, Tool.DICTATE.value, 1),
+            (WM_KEY_STATE, DICTATE_KEY, 0),
+            (WM_REQUEST, Tool.DICTATE.value, 0),
         ]
         assert keyboard.pressed == {APPS_THUMB}
 
@@ -392,32 +390,30 @@ def test_firmware_keyboard_bypasses_remapping_and_restores_the_previous_mode() -
 
 def test_firmware_apps_thumb_voice_holds_pair_each_press_with_its_release() -> None:
     """Detect Right Alt reaching applications, repeat starts, leaked keys, or a hold cut short by releasing the thumb."""
-    for voice_key, tool in ((DICTATE_LETTER, Tool.DICTATE), (AGENT_LETTER, Tool.AGENT_VOICE)):
-        keyboard, driver = firmware_keyboard()
-        assert keyboard.swallow(APPS_KEY, down=True)
-        assert keyboard.swallow(APPS_KEY, down=True)  # its auto-repeat
-        assert keyboard.swallow(voice_key, down=True)
-        assert keyboard.swallow(voice_key, down=True)
-        assert requests_of(driver) == [(tool.value, 1)]
-        assert keyboard.swallow(APPS_KEY, down=False)
-        assert requests_of(driver) == [(tool.value, 1)]
-        assert keyboard.swallow(voice_key, down=False)
-        assert requests_of(driver) == [(tool.value, 1), (tool.value, 0)]
-        assert [message for message in driver.messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
-        assert not keyboard.shortcuts and not keyboard.native_releases
-        assert not driver.output and not keyboard.engine_state.enabled
+    keyboard, driver = firmware_keyboard()
+    assert keyboard.swallow(APPS_KEY, down=True)
+    assert keyboard.swallow(APPS_KEY, down=True)  # its auto-repeat
+    assert keyboard.swallow(DICTATE_LETTER, down=True)
+    assert keyboard.swallow(DICTATE_LETTER, down=True)
+    assert requests_of(driver) == [(Tool.DICTATE.value, 1)]
+    assert keyboard.swallow(APPS_KEY, down=False)
+    assert requests_of(driver) == [(Tool.DICTATE.value, 1)]
+    assert keyboard.swallow(DICTATE_LETTER, down=False)
+    assert requests_of(driver) == [(Tool.DICTATE.value, 1), (Tool.DICTATE.value, 0)]
+    assert [message for message in driver.messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
+    assert not keyboard.shortcuts and not keyboard.native_releases
+    assert not driver.output and not keyboard.engine_state.enabled
 
 
 def test_firmware_keys_without_the_apps_thumb_or_already_held_stay_native() -> None:
     """Detect taking keys without the thumb, the retired modifier chords, or starting voice halfway through native repeat."""
-    for voice_key in (DICTATE_LETTER, AGENT_LETTER):
-        for modifiers in ((), (CTRL, SHIFT), (CTRL, ALT, SHIFT)):
-            keyboard, driver = firmware_keyboard()
-            for key in modifiers:
-                assert not keyboard.swallow(key, down=True)
-            assert not keyboard.swallow(voice_key, down=True)
-            assert not keyboard.swallow(voice_key, down=False)
-            assert not requests_of(driver)
+    for modifiers in ((), (CTRL, SHIFT), (CTRL, ALT, SHIFT)):
+        keyboard, driver = firmware_keyboard()
+        for key in modifiers:
+            assert not keyboard.swallow(key, down=True)
+        assert not keyboard.swallow(DICTATE_LETTER, down=True)
+        assert not keyboard.swallow(DICTATE_LETTER, down=False)
+        assert not requests_of(driver)
     keyboard, driver = firmware_keyboard()
     assert not keyboard.swallow(DICTATE_LETTER, down=True)
     assert keyboard.swallow(APPS_KEY, down=True)
@@ -429,15 +425,15 @@ def test_firmware_keys_without_the_apps_thumb_or_already_held_stay_native() -> N
 def test_firmware_voice_finishes_on_unplug_and_swallows_the_late_voice_key_release() -> None:
     """Detect capture remaining open, the Apps thumb staying held, or a phantom remapped key."""
     keyboard, driver = firmware_keyboard()
-    for key in (APPS_KEY, AGENT_LETTER):
+    for key in (APPS_KEY, DICTATE_LETTER):
         keyboard.swallow(key, down=True)
     driver.devices = ()
     keyboard.update_devices()
     assert_host_remapping_restored(keyboard)
-    assert requests_of(driver) == [(Tool.AGENT_VOICE.value, 1), (Tool.AGENT_VOICE.value, 0)]
+    assert requests_of(driver) == [(Tool.DICTATE.value, 1), (Tool.DICTATE.value, 0)]
     assert not keyboard.apps_held
-    assert keyboard.swallow(AGENT_LETTER, down=True)
-    assert keyboard.swallow(AGENT_LETTER, down=False)
+    assert keyboard.swallow(DICTATE_LETTER, down=True)
+    assert keyboard.swallow(DICTATE_LETTER, down=False)
     assert not keyboard.shortcuts and not keyboard.native_releases
 
 
@@ -519,23 +515,6 @@ def test_escape_toggle_clears_highlights_with_other_keys_still_held() -> None:
         assert not bool(keyboard.engine_state.enabled)
         assert not keyboard.pressed
         assert messages[-1] == (WM_KEY_STATE, 0, 0)
-
-
-def test_apps_enter_thumb_opens_inbox_once_per_press_through_keyboard_and_assistant() -> None:
-    # Detect a wrong physical binding, repeated activation, release dispatch or wrong UI action.
-    with observed_keyboard() as (keyboard, messages):
-        hold_apps(keyboard, at=10)
-        assert keyboard.engine_state.layer() is Layer.APPS
-        key = inputs.KeyEvent(0, 0x32, 0, 250, 0)  # the right Enter thumb
-        keyboard.swallow(key, down=True)
-        keyboard.swallow(key, down=True)
-        keyboard.swallow(inputs.KeyEvent(0, 0x32, 0, 280, 0), down=False)
-        keyboard.swallow(inputs.KeyEvent(0, APPS_THUMB, 0, 300, 0), down=False)
-        requests = tuple((tool, down) for message, tool, down in messages if message == WM_REQUEST)
-        assert requests == ((Tool.OPEN_INBOX.value, 1), (Tool.OPEN_INBOX.value, 0))
-        assert not keyboard.pressed and keyboard.engine_state.layer() is None
-        actions = tuple(control_event(WindowInput(WM_REQUEST, tool, down), APPS) for tool, down in requests)
-        assert actions == (FeatureRequest(Tool.OPEN_INBOX, down=True), FeatureRequest(Tool.OPEN_INBOX, down=False))
 
 
 def test_layout_output_preserves_snippets_but_assistant_input_resets_them() -> None:

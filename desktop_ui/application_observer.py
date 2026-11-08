@@ -25,16 +25,13 @@ from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch,
 from desktop_ui.navigation_log import NAVIGATION_LOG, START, Arrival, Entry, Moment, Tracker, append, arrived, navigated, noticed, seen, settled
 from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
 from desktop_ui.window_layout import (
-    CANVAS_TITLE,
     NOWHERE,
     App,
-    Group,
     Placement,
     Program,
     Screens,
     Setup,
     Target,
-    WorkspaceView,
     groups,
     managed,
     place,
@@ -316,10 +313,7 @@ class Worker:
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
         own = os.getpid()
-        # The canvas is Workspace's own window: placed as an app, but never a running app on the shelf.
-        canvas = next((w.handle for w in observed.windows if w.title == CANVAS_TITLE and windows.process_id(w.handle) == own), None)
-        views = (Group(WorkspaceView.CANVAS, (canvas,)),) if canvas is not None else ()
-        grouped = shelf(tuple(w for w in observed.windows if w.handle != canvas), app_ids, watched.previous.shelf)
+        grouped = shelf(observed.windows, app_ids, watched.previous.shelf)
         slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
         current = frozenset(window.handle for window in slots)
         foreground = windows.foreground()
@@ -333,7 +327,7 @@ class Worker:
                 for window in observed.windows
                 if managed(window, resizable=windows.resizable(window.handle), own=windows.process_id(window.handle) == own)
             )
-            placement = place(where, (*views, *groups(grouped, eligible)), placement)
+            placement = place(where, groups(grouped, eligible), placement)
             if not watched.paused and not windows.dragging():  # A window being dragged snaps back once it's let go.
                 kept = frozendict((handle, target) for handle, target in placement.items() if handle != zoomed)
                 connection = arrange(connection, observed, kept, current, follow=foreground)
@@ -348,7 +342,7 @@ class Worker:
             len(state.ids) if state is not None else 1,
             state.ids.index(state.current) if state is not None else 0,
             foreground,
-            frozendict((group.app, group.windows) for group in (*views, *groups(grouped, live))),
+            frozendict((group.app, group.windows) for group in groups(grouped, live)),
             observed.desktops,
             placement,
             recent,

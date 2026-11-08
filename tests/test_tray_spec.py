@@ -28,5 +28,5 @@ def test_the_tray_words_its_items_from_the_spec() -> None:
     renamed = replace(
         TRAY, items=tuple(replace(item, label="Usage") if isinstance(item, TrayAction) and item.action is Menu.USAGE else item for item in TRAY.items)
     )
-    state = MenuState(layout=LayoutState.ON, overlay_enabled=False, agent_running=False, capturing=False)
+    state = MenuState(layout=LayoutState.ON, overlay_enabled=False, capturing=False)
     assert any(item.text == "Usage" for item in menu_items(state, renamed))

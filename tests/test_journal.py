@@ -3,7 +3,7 @@
 from pathlib import Path
 from unittest import TestCase
 
-from automation import journal
+from assistant import journal
 
 _CREATE = ("CREATE TABLE notes (id INTEGER PRIMARY KEY, text TEXT NOT NULL)",)
 

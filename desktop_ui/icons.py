@@ -15,8 +15,6 @@ COLOURS: Final[frozendict[State, Rgb]] = every_member(
         State.LISTENING: Rgb(220, 50, 50),
         State.RECORDING: Rgb(230, 64, 85),
         State.WORKING: Rgb(235, 160, 30),
-        State.AGENT: Rgb(60, 120, 230),
-        State.NEEDS_INPUT: Rgb(230, 185, 75),
     },
 )
 """The tray dot's colour for each thing the assistant can be doing."""

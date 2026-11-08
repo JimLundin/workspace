@@ -1,4 +1,4 @@
-"""Your settings: the apps the chords reach, text snippets and agent limits.
+"""Your settings: the apps the chords reach and text snippets.
 Edit freely; it's checked when Workspace starts.
 (Secrets and the AI endpoint are environment variables instead; see the README.)
 """
@@ -44,10 +44,6 @@ SNIPPETS: Final[dict[str, str | Callable[[], str]]] = {
     ",,mvh": "Med vänliga hälsningar",
     ",,br": "Best regards",
 }
-
-# ---- Agent -----------------------------------------------------------------------------
-AGENT_MAX_STEPS: Final = 80
-"""The agent stops after this many actions, finished or not."""
 
 # ---- Screens ---------------------------------------------------------------------------
 # With Dark when away on, the home 4K screen goes dark after this many minutes without

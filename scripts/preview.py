@@ -5,32 +5,25 @@ import inspect
 import json
 import os
 import tempfile
-import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final
 
 from pydantic import TypeAdapter, ValidationError
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui.bar_events import AgentShown, DictationShown, JobShown, RecordingShown
+from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.qt_runtime import prepare
 lazy from contracts.recording_state import RecordingState
 lazy from contracts.status import Job
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
-lazy from desktop_ui.island_model import Agent
-lazy from desktop_ui.island_moment import Notice
 lazy from desktop_ui.qt_ui import application
 lazy from winapi import screen
 
 prepare()
 
-SCENARIOS = ("Idle", "Agent working", "Recording", "Needs input", "Transcribing", "Dictating", "Everything at once", "Agent reply")
-
-
-WORKING: Final = Agent("Comparing both sheets", waiting=False, steps=("Read file", "Checking the plans", "PowerShell"))
+SCENARIOS = ("Idle", "Recording", "Transcribing", "Dictating", "Everything at once")
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,15 +95,12 @@ class Preview:
         timer.timeout.connect(preview.tick)
         try:
             actions = BarActions(
-                lambda: preview.action("Work"),
-                lambda: preview.action("Stop"),
                 lambda action: preview.action("Recording: " + action),
                 lambda: preview.action("Keyboard"),
                 lambda: preview.action("Overlay"),
                 lambda: preview.action("Menu"),
                 preview.action,
-                inbox=lambda: preview.action("Inbox"),
-                open_item=lambda identity: preview.action("Open canvas at " + identity),
+                lambda tool: preview.action("Tool: " + tool.name.lower()),
             )
             # The real menu's native-only actions stay inside the sample adapter too.
             sampled = replace(
@@ -148,18 +138,11 @@ class Preview:
         if previewing.closed:
             return
         self.files.state.write_bytes(CHOICE.dump_json(Choice(index)))
-        recording = RecordingState(phase="recording", seconds=125) if index in (2, 6) else RecordingState()
+        recording = RecordingState(phase="recording", seconds=125) if index in (1, 4) else RecordingState()
         if (bar := previewing.bar) is not None:
             bar.handle(RecordingShown(recording))
-            asking = Agent("Which sheet should the reply cover?", waiting=True)
-            bar.handle(AgentShown(WORKING if index in (1, 6) else asking if index == 3 else None))
-            bar.handle(JobShown(Job.TRANSCRIBING if index in (4, 6) else None))
-            bar.handle(DictationShown(index in (5, 6)))
-            if index == 7:
-                # A fresh identity announces the sample again each time it is chosen.
-                at = time.time()
-                text = "Revenue is up 4% against the approved figures; travel is 12% over the Q3 forecast."
-                bar.notices_changed((Notice(f"reply:preview:{at}", "Compare the budget sheets", text, None, at),))
+            bar.handle(JobShown(Job.TRANSCRIBING if index in (2, 4) else None))
+            bar.handle(DictationShown(index in (3, 4)))
         self.status.setText("Sample state: " + SCENARIOS[index])
 
     def tick(self) -> None:

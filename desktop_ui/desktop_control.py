@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from typing import assert_never
 
-from contracts.desktop_link import MicLevel, Notify, Record, RecordingChanged, SessionChanged, ToAssistant, ToDesktop, UseTool, VoiceChanged
+from contracts.desktop_link import MicLevel, Notify, Record, RecordingChanged, ToAssistant, ToDesktop, UseTool, VoiceChanged
 from contracts.status import State
 from desktop_ui.desktop_controls import ChosenTool, ControlAction, FeatureRequest, Menu, MenuState, PhysicalKey, TraySpec
 from desktop_ui.keymap import indicator_text
@@ -32,7 +32,6 @@ class Shown:
 
     state: State = State.LAYOUT_OFF
     capturing: bool = False
-    agent_running: bool = False
     connected: bool = False
 
 
@@ -199,11 +198,6 @@ class RecordUse:
 
 
 @dataclass(frozen=True, slots=True)
-class OpenInbox:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class SwitchWindows:
     pass
 
@@ -261,11 +255,6 @@ class ShowKeymap:
 
 
 @dataclass(frozen=True, slots=True)
-class ShowCanvas:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class OpenUsage:
     pass
 
@@ -286,7 +275,6 @@ type Effect = (
     | ShowMenu
     | Navigate
     | RecordUse
-    | OpenInbox
     | SwitchWindows
     | ShowOverlay
     | OverlayEnabled
@@ -297,7 +285,6 @@ type Effect = (
     | ToggleLayout
     | Launch
     | ShowKeymap
-    | ShowCanvas
     | OpenUsage
     | OpenLogs
 )
@@ -309,8 +296,6 @@ def tray_state(shown: Shown) -> State:
 
 def _said(shown: Shown, message: ToDesktop) -> Shown:
     match message:
-        case SessionChanged(session=session):
-            return replace(shown, agent_running=session.busy)
         case VoiceChanged(state=state):
             return replace(shown, state=state)
         case RecordingChanged(recording=recording):
@@ -324,19 +309,17 @@ def _connected(state: DesktopState, status: Status) -> DesktopState:
         case Status.CONNECTED:
             return replace(state, shown=replace(state.shown, connected=True))
         case Status.DISCONNECTED:
-            return replace(state, shown=replace(state.shown, connected=False, agent_running=False), level=None)
+            return replace(state, shown=replace(state.shown, connected=False), level=None)
         case _:
             assert_never(status)
 
 
 def _requested(request: Request) -> Iterator[Effect]:
-    """A request the desktop owns: an app key, a window key, the inbox or the switcher."""
+    """A request the desktop owns: an app key, a window key or the switcher."""
     match request:
         case App():
             yield Navigate(AppKey(request, Source.KEY))
             yield RecordUse(f"app:{request.name}")
-        case Tool.OPEN_INBOX:
-            yield OpenInbox()
         case Tool.WINDOW_SWITCHER:
             yield SwitchWindows()
         case Tool():
@@ -410,14 +393,8 @@ def _chosen(choice: int) -> Iterator[Effect]:
             yield Fold(OverlayToggled())
         case Menu.KEYMAP:
             yield ShowKeymap()
-        case Menu.AGENT:
-            yield Send(UseTool(Tool.AGENT_TYPED))
-        case Menu.WORK:
-            yield ShowCanvas()
         case Menu.TASKBAR:
             yield ToggleTaskbar()
-        case Menu.STOP_AGENT:
-            yield Send(UseTool(Tool.STOP))
         case Menu.MEETING:
             yield Send(UseTool(Tool.MEETING_TOGGLE))
         case Menu.TRANSCRIPTS:
@@ -446,9 +423,7 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
         case Connection():
             yield TrayShow(tray_state(after.shown))
         case MenuRequested():
-            menu = MenuState(
-                layout=state.layout, overlay_enabled=state.overlay.enabled, agent_running=state.shown.agent_running, capturing=state.shown.capturing
-            )
+            menu = MenuState(layout=state.layout, overlay_enabled=state.overlay.enabled, capturing=state.shown.capturing)
             yield ShowMenu(menu, state.tray_spec)
         case MenuChosen(choice):
             yield from _chosen(choice)

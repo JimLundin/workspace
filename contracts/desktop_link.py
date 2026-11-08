@@ -1,9 +1,8 @@
 """The messages between the desktop and the assistant: what each tells and asks the other.
 
-The desktop owns Qt, the bar, the canvas views, the tray and window placement; the
-assistant owns the agent, its work, the canvas document, meetings and the
-microphone. Each runs without the other, and these messages are all that pass
-between them, over `link`.
+The desktop owns Qt, the bar, the tray and window placement; the assistant owns
+dictation, meetings and the microphone. Each runs without the other, and these
+messages are all that pass between them, over `link`.
 
 Each message is its own frozen dataclass and each direction is a union of them;
 the type is the discriminator. Messages to the desktop are states (each replaces
@@ -20,46 +19,18 @@ from typing import Final, assert_never
 
 from pydantic import TypeAdapter, ValidationError
 
-from contracts.agent_session import Session
-from contracts.canvas_activity import CanvasRequest, CanvasRun
-from contracts.meeting_detection import AutomaticStatus
-from contracts.meetings import MeetingConversation
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job, State
-from contracts.task import TextAnswer
-from contracts.work_canvas_contracts import CanvasPublication
-from contracts.work_canvas_edits import UserEdit
-from contracts.work_commands import WorkViewCommand
-from contracts.work_snapshot import WorkSnapshot
 from protocol import Tool
-from winapi.system_notices import Observed
 
 # ---- to the desktop: states ------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
-class SessionChanged:
-    """The agent conversation, as the bar, inbox and canvas show it."""
-
-    session: Session
-
-
-@dataclass(frozen=True, slots=True)
-class WorkChanged:
-    snapshot: WorkSnapshot
-
-
-@dataclass(frozen=True, slots=True)
-class CanvasChanged:
-    publication: CanvasPublication
-
-
-@dataclass(frozen=True, slots=True)
 class VoiceChanged:
-    """What the tray shows, and whether the held key speaks to the agent."""
+    """What the tray shows."""
 
     state: State
-    agent_speaking: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,11 +44,6 @@ class RecordingChanged:
 
 
 @dataclass(frozen=True, slots=True)
-class AutomaticChanged:
-    status: AutomaticStatus
-
-
-@dataclass(frozen=True, slots=True)
 class MicLevel:
     """The microphone's level while it listens, for the bar's trace; None when unobserved."""
 
@@ -88,24 +54,9 @@ class MicLevel:
             raise ValueError(f"A microphone level is from 0 to 1, not {self.level}.")
 
 
-type DesktopState = SessionChanged | WorkChanged | CanvasChanged | VoiceChanged | JobChanged | RecordingChanged | AutomaticChanged | MicLevel
+type DesktopState = VoiceChanged | JobChanged | RecordingChanged | MicLevel
 
 # ---- to the desktop: events ------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class ShowWork:
-    """Open the canvas: the agent's session asked to be seen."""
-
-    focus: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class RouteSpeech:
-    """Spoken words for the agent: the desktop sends them where its focus says (a waiting
-    question, the canvas's instruction, or the conversation as `SpeakToAgent`)."""
-
-    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,51 +68,14 @@ class Notify:
     warning: bool = field(default=False, kw_only=True)
 
 
-@dataclass(frozen=True, slots=True)
-class OpenReference:
-    """A work source's original document or page, for the desktop's shell to open."""
-
-    url: str
-
-
-@dataclass(frozen=True, slots=True)
-class ReplyFailed:
-    """A spoken reply to a canvas question could not be delivered."""
-
-
-@dataclass(frozen=True, slots=True)
-class MeetingPage:
-    """The page of a meeting's conversation the desktop asked for; None when it can't be read."""
-
-    transcript_path: str
-    page: MeetingConversation | None
-
-
-@dataclass(frozen=True, slots=True)
-class RunRefused:
-    """A canvas instruction the assistant saved but couldn't queue: the canvas keeps it
-    pending, so a retry reuses the same binding instead of saving another."""
-
-    run: CanvasRun
-    reason: str
-
-
-@dataclass(frozen=True, slots=True)
-class CanvasStatus:
-    """A word for the canvas's status line about what the user just asked of it."""
-
-    text: str
-
-
-type DesktopEvent = ShowWork | RouteSpeech | Notify | OpenReference | ReplyFailed | MeetingPage | RunRefused | CanvasStatus
-type ToDesktop = DesktopState | DesktopEvent
+type ToDesktop = DesktopState | Notify
 
 # ---- to the assistant ------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class UseTool:
-    """A tool chosen in the bar or tray that the assistant owns (stop, type a task, copy)."""
+    """A tool chosen in the bar or tray that the assistant owns, such as copying the latest transcript."""
 
     tool: Tool
 
@@ -171,124 +85,15 @@ class Record:
     action: RecordingAction
 
 
-@dataclass(frozen=True, slots=True)
-class WorkCommand:
-    command: WorkViewCommand
-
-
-@dataclass(frozen=True, slots=True)
-class EditCanvas:
-    """A user edit the desktop has already applied to its copy; the assistant's is the record."""
-
-    edit: UserEdit
-
-
-@dataclass(frozen=True, slots=True)
-class StartRun:
-    run: CanvasRun
-
-
-@dataclass(frozen=True, slots=True)
-class ContinueWork:
-    work_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class AnswerCanvas:
-    request: CanvasRequest
-    answer: TextAnswer
-
-
-@dataclass(frozen=True, slots=True)
-class SelectAttention:
-    request: CanvasRequest | None
-
-
-@dataclass(frozen=True, slots=True)
-class CanvasNoticed:
-    """A canvas finding interrupted the user; the session announces it once."""
-
-    title: str
-    target: str
-
-
-@dataclass(frozen=True, slots=True)
-class SpeakToAgent:
-    """Spoken words the desktop routed to the conversation."""
-
-    text: str
-
-
-@dataclass(frozen=True, slots=True)
-class NoticesObserved:
-    """Windows notifications the desktop observed, for the assistant's inbox triage."""
-
-    observed: Observed
-
-
-@dataclass(frozen=True, slots=True)
-class WorkShown:
-    """The canvas opened; the assistant refreshes what it shows."""
-
-
-type ToAssistant = (
-    UseTool
-    | Record
-    | WorkCommand
-    | EditCanvas
-    | StartRun
-    | ContinueWork
-    | AnswerCanvas
-    | SelectAttention
-    | CanvasNoticed
-    | SpeakToAgent
-    | NoticesObserved
-    | WorkShown
-)
+type ToAssistant = UseTool | Record
 
 # ---- the wire --------------------------------------------------------------------------
 
 _TO_DESKTOP: Final[frozendict[str, TypeAdapter[ToDesktop]]] = frozendict(
-    {
-        kind.__name__: TypeAdapter[ToDesktop](kind)
-        for kind in (
-            SessionChanged,
-            WorkChanged,
-            CanvasChanged,
-            VoiceChanged,
-            JobChanged,
-            RecordingChanged,
-            AutomaticChanged,
-            MicLevel,
-            ShowWork,
-            RouteSpeech,
-            Notify,
-            OpenReference,
-            ReplyFailed,
-            MeetingPage,
-            RunRefused,
-            CanvasStatus,
-        )
-    }
+    {kind.__name__: TypeAdapter[ToDesktop](kind) for kind in (VoiceChanged, JobChanged, RecordingChanged, MicLevel, Notify)}
 )
 _TO_ASSISTANT: Final[frozendict[str, TypeAdapter[ToAssistant]]] = frozendict(
-    {
-        kind.__name__: TypeAdapter[ToAssistant](kind)
-        for kind in (
-            UseTool,
-            Record,
-            WorkCommand,
-            EditCanvas,
-            StartRun,
-            ContinueWork,
-            AnswerCanvas,
-            SelectAttention,
-            CanvasNoticed,
-            SpeakToAgent,
-            NoticesObserved,
-            WorkShown,
-        )
-    }
+    {kind.__name__: TypeAdapter[ToAssistant](kind) for kind in (UseTool, Record)}
 )
 
 
@@ -332,11 +137,9 @@ def state_key(message: ToDesktop) -> str | None:
     """A state's coalescing key (its type): the latest replaces a waiting one and is replayed
     to a desktop that connects. Events have none."""
     match message:
-        case (
-            SessionChanged() | WorkChanged() | CanvasChanged() | VoiceChanged() | JobChanged() | RecordingChanged() | AutomaticChanged() | MicLevel()
-        ):
+        case VoiceChanged() | JobChanged() | RecordingChanged() | MicLevel():
             return type(message).__name__
-        case ShowWork() | RouteSpeech() | Notify() | OpenReference() | ReplyFailed() | MeetingPage() | RunRefused() | CanvasStatus():
+        case Notify():
             return None
         case _:
             assert_never(message)

@@ -11,10 +11,9 @@ from pathlib import Path
 from typing import Final, TypedDict, assert_never
 from urllib.parse import urlsplit
 
-from pydantic import ConfigDict, TypeAdapter, ValidationError
-lazy from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI, omit
+from pydantic import TypeAdapter, ValidationError
+lazy from openai import APIConnectionError, APIStatusError, OpenAI, omit
 
-from contracts.json_value import Json
 from link.endpoint import read
 from winapi.pcm import RATE
 
@@ -23,13 +22,7 @@ MAX_SECONDS: Final = 300
 MIN_SECONDS: Final = 0.3
 """Shorter recordings are accidental taps, and aren't sent."""
 
-_SCHEMA = TypeAdapter(dict[str, Json], config=ConfigDict(allow_inf_nan=False))
-
-
 # ---- Settings --------------------------------------------------------------------------
-
-FAST_MODEL: Final = "gpt-6-luna"
-AGENT_MODEL: Final = "gpt-6-astra"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,19 +33,9 @@ class Settings:
     transcribe_model: str
     vocabulary: str
     """Names and terms to expect when transcribing; helps with jargon. Empty: none."""
-    fast_model: str = FAST_MODEL
-    """Quick jobs: tidying dictation and screening notifications."""
-    agent_model: str = AGENT_MODEL
-    """The agent and every other model job."""
-    agent_reasoning_effort: str = "low"
-    """Reasoning effort for agent tasks; independent of the fast model."""
     gateway: Path | None = None
     """Where the AI connection publishes its endpoint; requests go through it once it
     has. None calls `base_url` directly."""
-
-    def __post_init__(self) -> None:
-        if not self.fast_model.strip() or not self.agent_model.strip():
-            raise ValueError("Model IDs must not be empty.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,9 +55,6 @@ def settings_from(env: Mapping[str, str], gateway: Path | None = None) -> Settin
         api_key=env["OPENAI_API_KEY"],
         transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
         vocabulary=env.get("WORKSPACE_VOCABULARY", ""),
-        fast_model=env.get("WORKSPACE_FAST_MODEL", FAST_MODEL),
-        agent_model=env.get("WORKSPACE_AGENT_MODEL", AGENT_MODEL),
-        agent_reasoning_effort=env.get("WORKSPACE_AGENT_REASONING_EFFORT", "low"),
         gateway=gateway,
     )
 
@@ -98,31 +78,7 @@ def wav(pcm: bytes, rate: int) -> bytes:
     return out.getvalue()
 
 
-# ---- Tools and results -----------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class ToolCall:
-    id: str
-    name: str
-    arguments: str
-    """JSON, as the model wrote it (it may not be valid)."""
-
-
-@dataclass(frozen=True, slots=True)
-class ToolSpec:
-    """A function the model may call."""
-
-    name: str
-    description: str
-    parameters: bytes
-    """Validated schema wire bytes; adapters parse their own fresh SDK/HTTP values."""
-
-
-def tool_spec(name: str, description: str, parameters: Mapping[str, Json]) -> ToolSpec:
-    """Snapshot a tool schema at its declaration boundary without retaining aliases."""
-    schema = _SCHEMA.validate_python(parameters)
-    return ToolSpec(name, description, _SCHEMA.dump_json(schema))
+# ---- Results ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,13 +109,6 @@ def route(settings: Settings) -> tuple[str, str]:
     if settings.gateway is not None and (endpoint := read(settings.gateway)) is not None:
         return endpoint.base_url, endpoint.token
     return settings.base_url, settings.api_key
-
-
-def async_client(settings: Settings, *, timeout_s: float, max_retries: int = 0) -> AsyncOpenAI:
-    """The endpoint for every SDK model. The gateway's and the SDK's HTTP clients use
-    the system's proxy settings and certificate store, so company TLS inspection works."""
-    base_url, api_key = route(settings)
-    return AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=max_retries)
 
 
 def _client(settings: Settings, timeout_s: float) -> OpenAI:

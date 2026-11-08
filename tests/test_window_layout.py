@@ -12,7 +12,6 @@ from desktop_ui.window_layout import (
     Screens,
     Setup,
     Target,
-    WorkspaceView,
     dark_when_away,
     groups,
     managed,
@@ -76,10 +75,8 @@ def test_home_places_terminals_and_code_across_the_4k_and_teams_on_the_laptop() 
         Group(PinnedApp.TEAMS, (4,)),
         Group(EDGE, (5,)),
         Group(PinnedApp.OUTLOOK, (6,)),
-        Group(WorkspaceView.CANVAS, (7,)),
     )
     assert targets(place(home, apps, NOWHERE)) == {
-        7: (0, Rect(1920, -269, 5760, 1891)),
         1: (1, Rect(1920, -269, 3200, 1891)),
         2: (1, Rect(3200, -269, 4480, 1891)),
         3: (1, Rect(4480, -269, 5760, 1891)),
@@ -89,13 +86,12 @@ def test_home_places_terminals_and_code_across_the_4k_and_teams_on_the_laptop() 
     }
 
 
-def test_laptop_alone_gives_the_canvas_the_first_of_five_desktops_and_terminals_two_more() -> None:
-    # Defects: the canvas isn't alone on the first desktop, the second terminal
-    # doesn't take the right half of desktop 3, or the third doesn't join Code.
+def test_laptop_alone_gives_the_terminals_two_desktops() -> None:
+    # Defects: the second terminal doesn't take the right half of desktop 3, or
+    # the third doesn't join Code.
     alone = screens((LAPTOP,))
     assert alone is not None
     apps = (
-        Group(WorkspaceView.CANVAS, (9,)),
         Group(PinnedApp.OUTLOOK, (1,)),
         Group(PinnedApp.TEAMS, (2,)),
         Group(TERMINAL, (3, 6, 7)),
@@ -103,7 +99,6 @@ def test_laptop_alone_gives_the_canvas_the_first_of_five_desktops_and_terminals_
         Group(EDGE, (5,)),
     )
     assert targets(place(alone, apps, NOWHERE)) == {
-        9: (0, Rect(0, 0, 1920, 1200)),
         1: (1, Rect(0, 0, 960, 1200)),
         2: (1, Rect(960, 0, 1920, 1200)),
         3: (2, Rect(0, 0, 960, 1200)),
@@ -129,12 +124,12 @@ def test_windows_beyond_an_apps_places_share_its_last_place_and_fewer_leave_plac
     assert targets(place(alone, (Group(TERMINAL, (3,)),), NOWHERE)) == {3: (2, Rect(0, 0, 960, 1200))}
 
 
-def test_work_gives_the_canvas_the_upper_screen_then_everything_on_one_desktop() -> None:
+def test_work_puts_everything_on_one_desktop() -> None:
+    # Defect: an app at work lands on the wrong screen or a desktop of its own.
     work = screens((LAPTOP, ABOVE, SIDE))
     assert work is not None
     apps = (Group(PinnedApp.TEAMS, (1,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(CODE, (4,)), Group(EDGE, (5,)))
-    assert targets(place(work, (Group(WorkspaceView.CANVAS, (6,)), *apps), NOWHERE)) == {
-        6: (0, Rect(-320, -1440, 2240, 0)),
+    assert targets(place(work, apps, NOWHERE)) == {
         1: (1, Rect(-1760, -1360, -320, -80)),
         2: (1, Rect(-1760, -80, -320, 1200)),
         3: (1, Rect(-320, -1440, 960, 0)),
@@ -198,12 +193,11 @@ def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() 
     work = screens((LAPTOP, ABOVE, SIDE))
     assert work is not None
     apps = (Group(EDGE, (5,)), Group(CODE, (4,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(PinnedApp.TEAMS, (1,)))
-    placement = place(work, (Group(WorkspaceView.CANVAS, (6,)), *apps), NOWHERE)
+    placement = place(work, apps, NOWHERE)
     windows = frozendict((group.app, group.windows) for group in apps)
     # SIDE is leftmost (Teams above Outlook), then ABOVE's Terminal, then the laptop's Edge, then ABOVE's Code.
     assert reading_order(work, windows, placement, 1) == (PinnedApp.TEAMS, PinnedApp.OUTLOOK, TERMINAL, EDGE, CODE)
-    assert reading_order(work, windows, placement, 0) == (WorkspaceView.CANVAS,)
     alone = screens((LAPTOP,))
     assert reading_order(alone, frozendict(), NOWHERE, 3) == (TERMINAL, CODE)
     assert reading_order(alone, frozendict(), NOWHERE, 5) == ()
-    assert reading_order(None, windows, placement, 0) == ()
+    assert reading_order(None, frozendict(), NOWHERE, 1) == ()

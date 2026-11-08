@@ -137,5 +137,5 @@ def test_every_tool_has_one_owner_and_the_desktops_keys_need_no_assistant() -> N
     desktop = {tool for tool in Tool if owner(tool) is Side.DESKTOP}
     assert desktop == DESKTOP_TOOLS
     assert owner(App("terminal", Installed("windowsterminal.exe", "wt.exe"))) is Side.DESKTOP
-    assert all(keyed(tool) is not None for tool in desktop - {Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER})
+    assert all(keyed(tool) is not None for tool in desktop - {Tool.WINDOW_SWITCHER})
     assert all(keyed(tool) is None for tool in set(Tool) - desktop)

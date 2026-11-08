@@ -18,10 +18,8 @@ from typing import Protocol, assert_never, override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-import desktop_ui.request_panel
 from components import BAR_WINDOW
 from desktop_ui import island_menu, ui_spec
-from desktop_ui.agent_progress import Phase
 from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components import appearance, typeface
 from desktop_ui.components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, look, reading, rim_stops
@@ -29,11 +27,9 @@ from desktop_ui.components.meaning import Tint, Tone
 from desktop_ui.components.text import color
 from desktop_ui.island_layout import Content, Framed, Spot, Tile, arrange, tiles
 from desktop_ui.island_menu import Face, Item, Live, Menu, Slider, Toggle, TrayIcon
-from desktop_ui.island_model import Action, Badge, CapsuleView, Control, Glyph, Key, Marker, Part, Spinner, Text
-from desktop_ui.island_moment import Inbox, Row
+from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import EventLoop
-from desktop_ui.request_panel import InboxPanel, RequestActions, RequestPanel, list_height
 from desktop_ui.shell_surface import ShellSections, pixmap
 from desktop_ui.vector_icons import icon
 from desktop_ui.view_publication import log_view
@@ -57,8 +53,6 @@ class Owner(Protocol):
     def tray(self, slot: int, click: Click) -> None: ...
     def key(self, press: island_menu.Press) -> None: ...
     def deactivated(self) -> None: ...
-    def request_actions(self) -> RequestActions | None: ...
-    def choose(self, row: Row) -> None: ...
     def render(self) -> None: ...
 
 
@@ -83,7 +77,7 @@ class Presented:
 
     drawn: tuple[Drawn, ...]
     height: float
-    opened: Menu | Phase | Inbox | None
+    opened: Menu | None
     sizes: ui_spec.Sizes = field(kw_only=True)
     frost: Frost = field(kw_only=True)
     contrast: bool = field(kw_only=True)
@@ -106,7 +100,7 @@ def radius(height: float, sizes: ui_spec.Sizes) -> float:
 
 
 def expanded(height: float, sizes: ui_spec.Sizes) -> bool:
-    """Taller than a capsule's row: the capsule shows a menu, request or list."""
+    """Taller than a capsule's row: the capsule shows the menu."""
     return height > sizes.capsule.height + 0.5
 
 
@@ -118,7 +112,7 @@ def visibility(presence: float) -> float:
 def animated(part: Part) -> bool:
     """Parts that move on their own, painted every frame rather than kept as a still."""
     match part:
-        case Spinner() | Marker.DOTS | Marker.WAVE:
+        case Marker.DOTS | Marker.WAVE:
             return True
         case _:
             return False
@@ -248,9 +242,8 @@ class MenuCell(QtWidgets.QAbstractButton):
 
     def describe(self) -> None:
         match self.tile.cell.entry:
-            case Live(label=label, detail=detail, stop=stop):
-                action = "Stop recording" if stop is island_menu.Command.STOP_RECORDING else "Stop agent work"
-                name = " · ".join(part for part in (label, detail, action) if part)
+            case Live(label=label, detail=detail):
+                name = " · ".join(part for part in (label, detail, "Stop recording") if part)
             case Item(label=label, key=key):
                 name = f"{label} · {key}" if key else label
             case Toggle(label=label, detail=detail):
@@ -433,11 +426,8 @@ class MenuCell(QtWidgets.QAbstractButton):
         lettering, bounds = self.capsule.look.lettering, QtCore.QRectF(self.rect())
         ink, quiet = color(lettering.ink), color(lettering.quiet)
         middle = bounds.height() / 2
-        if activity.stop is island_menu.Command.STOP_RECORDING:
-            painter.setBrush(QtGui.QColor(RED) if not self.capsule.contrast else ink)
-            painter.drawEllipse(QtCore.QPointF(20, middle), 5, 5)
-        else:
-            self.capsule.paint_spinner(painter, Spot(Spinner(activity.label), 13, 14), middle)
+        painter.setBrush(QtGui.QColor(RED) if not self.capsule.contrast else ink)
+        painter.drawEllipse(QtCore.QPointF(20, middle), 5, 5)
         painter.setFont(font(strong=True))
         painter.setPen(ink)
         painter.drawText(
@@ -501,8 +491,6 @@ class Capsule(KeyboardFocus):
         self.contrast = False
         self.controls: tuple[ControlButton, ...] = ()
         self.cells: tuple[MenuCell, ...] = ()
-        self.request: RequestPanel | None = None
-        self.inbox: InboxPanel | None = None
         self.placed: tuple[QtCore.QRect, float, float, Content, tuple[Tile, ...]] | None = None
         self.stills: frozendict[tuple[Content, Look, bool, float, ui_spec.Sizes], QtGui.QPixmap] = frozendict()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -548,29 +536,6 @@ class Capsule(KeyboardFocus):
             cell.update_tile(tile)
             cell.update()
 
-    def show_opened(self, opened: Phase | Inbox | None) -> None:
-        """The island's request or list, while the capsule is expanded for it."""
-        if not isinstance(opened, Phase) and self.request is not None:
-            self.request.hide()
-        if not isinstance(opened, Inbox) and self.inbox is not None:
-            self.inbox.hide()
-        match opened:
-            case Phase():
-                actions = self.window_.owner.request_actions()
-                if actions is None:
-                    return
-                if self.request is None:
-                    self.request = RequestPanel(self, actions)
-                self.request.present(opened, self.look)
-                self.request.show()
-            case Inbox(rows=rows):
-                if self.inbox is None:
-                    self.inbox = InboxPanel(self, self.window_.owner.choose)
-                self.inbox.present(rows, self.look)
-                self.inbox.show()
-            case None:
-                pass
-
     def place_cells(self) -> None:
         sizes = self.window_.sizes
         top = round(sizes.bar.top)
@@ -594,7 +559,7 @@ class Capsule(KeyboardFocus):
     def frame(self, framed: Framed) -> None:
         """The widget spans the edge strip and the capsule below it."""
         sizes = self.window_.sizes
-        top, head = round(sizes.bar.top), round(sizes.menu.head)
+        top = round(sizes.bar.top)
         geometry = QtCore.QRect(round(framed.box.x), 0, max(1, round(framed.box.width)), top + round(framed.box.height))
         placed = (geometry, self.fade, self.presence, self.content, tuple(cell.tile for cell in self.cells))
         if placed == self.placed:
@@ -603,29 +568,9 @@ class Capsule(KeyboardFocus):
         self.setGeometry(geometry)
         self.place_controls()
         self.place_cells()
-        if self.inbox is not None and self.inbox.isVisible():
-            self.inbox.setGeometry(
-                round((self.width() - desktop_ui.request_panel.WIDTH) / 2),
-                top + head,
-                desktop_ui.request_panel.WIDTH,
-                max(0, self.height() - top - head),
-            )
-            self.inbox.setEnabled(self.width() >= desktop_ui.request_panel.WIDTH - 1)
-        if self.request is not None and self.request.isVisible():
-            self.request.setGeometry(
-                round((self.width() - desktop_ui.request_panel.WIDTH) / 2),
-                top + head,
-                desktop_ui.request_panel.WIDTH,
-                max(0, self.height() - top - head),
-            )
-            self.request.setEnabled(
-                self.width() >= desktop_ui.request_panel.WIDTH - 1 and self.request.height() >= self.request.measure(self.request.phase)
-                if self.request.phase is not None
-                else False
-            )
 
     def update_indicators(self) -> None:
-        """Repaint only the live indicators (spinner, dots, trace); the rest of the capsule is unchanged."""
+        """Repaint only the live indicators (dots, trace); the rest of the capsule is unchanged."""
         sizes = self.window_.sizes
         shift = self.shift(self.content)
         for spot in self.content.spots:
@@ -633,12 +578,6 @@ class Capsule(KeyboardFocus):
                 self.update(
                     QtCore.QRect(math.floor(shift + spot.x) - 2, round(sizes.bar.top), math.ceil(spot.width) + 4, round(sizes.capsule.height))
                 )
-        for cell in self.cells:
-            match cell.tile.cell.entry:
-                case Live(stop=island_menu.Command.STOP_AGENT):
-                    cell.update(QtCore.QRect(11, cell.height() // 2 - 9, 18, 18))
-                case _:
-                    pass
 
     @override
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
@@ -698,7 +637,7 @@ class Capsule(KeyboardFocus):
             painter.drawPixmap(QtCore.QPointF(0, 0), self.still(content))
             for spot in content.spots:
                 if animated(spot.part):
-                    self.paint_part(painter, spot, None, middle)
+                    self.paint_part(painter, spot, middle)
             if expanded(content.height, sizes) and not content.spots:
                 self.paint_heading(painter)  # An expanded capsule's own row replaces the heading.
             painter.restore()
@@ -711,23 +650,15 @@ class Capsule(KeyboardFocus):
         if cached is not None:
             return cached
         scale = self.devicePixelRatioF()
-        top, row, lined = sizes.bar.top, sizes.capsule.height, sizes.detail
+        top, row = sizes.bar.top, sizes.capsule.height
         image = QtGui.QPixmap(max(1, math.ceil(content.width * scale)), math.ceil((top + max(row, content.height)) * scale))
         image.setDevicePixelRatio(scale)
         image.fill(Qt.GlobalColor.transparent)
         painter = QtGui.QPainter(image)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        previous: Spot | None = None
         for spot in content.spots:
             if not animated(spot.part):
-                self.paint_part(painter, spot, previous, top + row / 2)
-            previous = spot
-        painter.setFont(font(strong=False))
-        painter.setPen(color(self.look.lettering.quiet))
-        for index, text in enumerate(content.lines):
-            pad = sizes.capsule.text_pad
-            line = QtCore.QRectF(pad, top + lined.top + index * lined.line, content.width - 2 * pad, lined.line)
-            painter.drawText(line, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
+                self.paint_part(painter, spot, top + row / 2)
         painter.end()
         # Only the content showing now and the content fading out are kept.
         kept = {(c, self.look, self.contrast, scale, sizes) for c in (self.content, self.previous) if c is not None}
@@ -741,11 +672,11 @@ class Capsule(KeyboardFocus):
         painter.setPen(color(self.look.lettering.ink))
         painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "Workspace")
 
-    def paint_part(self, painter: QtGui.QPainter, spot: Spot, previous: Spot | None, middle: float) -> None:
+    def paint_part(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
         lettering = self.look.lettering
         match spot.part:
-            case Text(text=text, tone=tone, strong=strong):
-                painter.setFont(font(strong=strong))
+            case Text(text=text, tone=tone):
+                painter.setFont(font(strong=False))
                 painter.setPen(color(reading(lettering, tone, contrast=self.contrast)))
                 row = QtCore.QRectF(spot.x, self.window_.sizes.bar.top, spot.width + 1, self.window_.sizes.capsule.height)
                 painter.drawText(row, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
@@ -756,19 +687,6 @@ class Capsule(KeyboardFocus):
                 side = round(self.window_.sizes.capsule.icon)
                 icon(name, ink.color).paint(painter, QtCore.QRect(round(spot.x), round(middle - side / 2), side, side))
                 painter.restore()
-            case Spinner():
-                self.paint_spinner(painter, spot, middle)
-            case Badge(text=text):
-                anchor = previous.x + previous.width if previous is not None else spot.x
-                badge = face(10, QtGui.QFont.Weight.Bold)
-                width = max(15.0, QtGui.QFontMetricsF(badge).horizontalAdvance(text) + 8)
-                rect = QtCore.QRectF(min(anchor - 7, self.content.width - width - 1), self.window_.sizes.bar.top + 1, width, 15)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QtGui.QColor(RED) if not self.contrast else color(lettering.ink))
-                painter.drawRoundedRect(rect, 7.5, 7.5)
-                painter.setFont(badge)
-                painter.setPen(QtGui.QColor("#ffffff") if not self.contrast else color(lettering.press))
-                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
             case Control():
                 pass  # A child button paints it.
             case Marker.WAVE:
@@ -793,7 +711,7 @@ class Capsule(KeyboardFocus):
                 assert_never(spot.part)
 
     def paint_dots(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
-        """A quick job: three dots pulsing in turn, distinct from the agent's ring."""
+        """A quick job: three dots pulsing in turn."""
         ink = self.look.lettering.ink
         cycle = (90 - self.window_.spin_angle) % 360 / 360  # One turn of the frame clock per pulse cycle.
         painter.setPen(Qt.PenStyle.NoPen)
@@ -801,15 +719,6 @@ class Capsule(KeyboardFocus):
             lift = max(0.0, math.sin((cycle - index / 6) * 2 * math.pi))
             painter.setBrush(color(Shade(ink.color, ink.opacity * (0.35 + 0.65 * lift))))
             painter.drawEllipse(QtCore.QPointF(spot.x + 3 + index * 6, middle - lift * 1.5), 2.2, 2.2)
-
-    def paint_spinner(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
-        lettering = self.look.lettering
-        ring = QtCore.QRectF(spot.x + 0.9, middle - 6.1, 12.2, 12.2)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QtGui.QPen(color(Shade(lettering.ink.color, 0.3)), 1.8))
-        painter.drawEllipse(ring)
-        painter.setPen(QtGui.QPen(color(lettering.ink), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        painter.drawArc(ring, round(self.window_.spin_angle * 16), 90 * 16)
 
 
 class BarWindow(QtWidgets.QWidget):
@@ -822,9 +731,6 @@ class BarWindow(QtWidgets.QWidget):
         self.sizes = sizes
         """The sizes of the frame being shown; each `Presented` frame brings its own."""
         self.menu: Menu | None = None
-        self.request: Phase | None = None
-        self.inbox: Inbox | None = None
-        self.request_measurement: RequestPanel | None = None
         self.look: Look = look(Material.SOLID, appearance.Capsule(Frost.SMOKED), Tint.NONE)
         self.capsules: Mapping[Key, Capsule] = frozendict()
         self.spin_angle = 90.0
@@ -896,21 +802,9 @@ class BarWindow(QtWidgets.QWidget):
 
     def measure(self, view: CapsuleView) -> Content:
         def width(text: Text) -> float:
-            return math.ceil(QtGui.QFontMetricsF(font(strong=text.strong)).horizontalAdvance(text.text))
+            return math.ceil(QtGui.QFontMetricsF(font(strong=False)).horizontalAdvance(text.text))
 
-        return arrange(view.slots, width, self.sizes, view.detail)
-
-    def measure_request(self, phase: Phase) -> Content:
-        actions = self.owner.request_actions()
-        if actions is None:
-            return Content(desktop_ui.request_panel.WIDTH, (), 120)
-        if self.request_measurement is None:
-            self.request_measurement = RequestPanel(self, actions)
-            self.request_measurement.hide()
-        return Content(desktop_ui.request_panel.WIDTH, (), self.sizes.menu.head + self.request_measurement.measure(phase))
-
-    def measure_inbox(self, rows: tuple[Row, ...]) -> Content:
-        return Content(desktop_ui.request_panel.WIDTH, (), self.sizes.menu.head + list_height(rows))
+        return arrange(view.slots, width, self.sizes)
 
     def use(self, sizes: ui_spec.Sizes) -> None:
         """Measure and paint with these sizes from now on; the trace keeps one sample per bar."""
@@ -940,18 +834,13 @@ class BarWindow(QtWidgets.QWidget):
         height = round(presented.sizes.bar.top) + math.ceil(presented.height)
         if self.geometry() != QtCore.QRect(area.x(), area.y(), area.width(), height):
             self.setGeometry(area.x(), area.y(), area.width(), height)
-        opened = presented.opened
-        self.menu = opened if isinstance(opened, Menu) else None
-        self.request = opened if isinstance(opened, Phase) else None
-        self.inbox = opened if isinstance(opened, Inbox) else None
+        self.menu = presented.opened
         keys = frozenset(each.view.key for each in presented.drawn)
         for each in presented.drawn:
             capsule = self.capsule(each.view.key)
             capsule.show_view(each, contrast=presented.contrast)
             if each.view.key is Key.STATUS:
                 capsule.show_menu(self.menu if expanded(each.content.height, presented.sizes) else None)
-            if each.view.key is Key.ISLAND:
-                capsule.show_opened((self.request or self.inbox) if expanded(each.content.height, presented.sizes) else None)
             capsule.frame(each.framed)
             capsule.show()
         for key, capsule in self.capsules.items():
@@ -1006,9 +895,6 @@ class BarWindow(QtWidgets.QWidget):
             Qt.Key.Key_Space: island_menu.Key.ENTER,
             Qt.Key.Key_Escape: island_menu.Key.ESCAPE,
         }
-        if (self.request is not None or self.inbox is not None) and event.key() == Qt.Key.Key_Escape:
-            self.owner.press(Action.CLOSE_MENU)
-            return
         if self.menu is None:
             super().keyPressEvent(event)
             return
@@ -1026,11 +912,11 @@ class BarWindow(QtWidgets.QWidget):
         if event.type() is QtCore.QEvent.Type.ActivationChange:
             if self.isActiveWindow():
                 self.deactivation_timer.stop()
-            elif (self.menu is not None or self.request is not None or self.inbox is not None) and not self.deactivation_timer.isActive():
+            elif self.menu is not None and not self.deactivation_timer.isActive():
                 self.deactivation_timer.start(16)
 
     def dismiss_inactive(self) -> None:
-        if (self.menu is not None or self.request is not None or self.inbox is not None) and not self.isActiveWindow():
+        if self.menu is not None and not self.isActiveWindow():
             self.owner.deactivated()
 
     def bounds(self, key: Key) -> Rect | None:

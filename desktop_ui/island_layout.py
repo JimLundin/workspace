@@ -18,7 +18,7 @@ from typing import assert_never
 
 from desktop_ui import ui_spec
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
-from desktop_ui.island_model import Badge, Control, Detail, Glyph, Key, Marker, Part, Slot, Spinner, Text, Zone
+from desktop_ui.island_model import Control, Glyph, Key, Marker, Part, Slot, Text, Zone
 
 # Every size comes from `ui_spec.Sizes` (`desktop_ui/spec/sizes.py`), which the
 # desktop reloads while it runs; nothing here keeps a size of its own.
@@ -38,7 +38,6 @@ class Content:
     width: float
     spots: tuple[Spot, ...]
     height: float
-    lines: tuple[str, ...] = ()  # Detail under the row, already fitted to the width.
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,14 +78,10 @@ def expansion(menu: Menu, row: Content, grid: ui_spec.MenuGrid) -> Content:
 
 def extent(part: Part, measure: Callable[[Text], float], capsule: ui_spec.Capsule) -> float:
     match part:
-        case Text(tone=tone, strong=strong, reserve=reserve):
-            return max(measure(part), measure(Text(reserve, tone, strong=strong))) if reserve else measure(part)
+        case Text(tone=tone, reserve=reserve):
+            return max(measure(part), measure(Text(reserve, tone))) if reserve else measure(part)
         case Glyph():
             return capsule.icon
-        case Spinner():
-            return capsule.spinner
-        case Badge():
-            return 0  # It overlays the corner of the symbol before it.
         case Control():
             return capsule.control
         case Marker.WAVE:
@@ -138,14 +133,11 @@ def _placed(steps: Iterable[_Step], start: float) -> Iterator[Spot]:
         x += step.width
 
 
-def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: ui_spec.Sizes, detail: Detail | None = None) -> Content:
+def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: ui_spec.Sizes) -> Content:
     """Parts left to right with their gaps. A control at either end sits concentric with the capsule;
     content without text pads like an icon and is never narrower than a circle.
-
-    Detail lines go under the row, fitted to the capsule's width. A detail wider
-    than the row keeps the row at its leading edge and a trailing control at the far one.
     """
-    capsule, lined = sizes.capsule, sizes.detail
+    capsule = sizes.capsule
     parts = tuple(part for slot in slots for part in slot)
     pad = capsule.text_pad if any(textual(part) for part in parts) else capsule.icon_pad
     inset = capsule.inset
@@ -163,36 +155,9 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: ui_s
     # Added left to right like the placement, so the end matches the last part exactly.
     x = reduce(add, chain.from_iterable((step.gap, step.width) for step in steps), start)
     end = x + (edge(parts[-1]) if parts else pad)
-    if detail is None:
-        width = max(float(capsule.height), end)
-        shift = (width - end) / 2
-        return Content(width, tuple(Spot(spot.part, spot.x + shift, spot.width) for spot in spots), capsule.height)
-    width = max(float(capsule.height), end, detail.width)
-    trailing = len(spots) - next((index for index, spot in enumerate(reversed(spots)) if not isinstance(spot.part, Control)), len(spots))
-    moved = tuple(Spot(spot.part, spot.x + (width - end if index >= trailing else 0), spot.width) for index, spot in enumerate(spots))
-    lines = tuple(
-        row for paragraph in detail.paragraphs for row in wrap(paragraph, width - 2 * capsule.text_pad, detail.rows, lambda text: measure(Text(text)))
-    )
-    return Content(width, moved, lined.top + lined.line * len(lines) + lined.bottom if lines else capsule.height, lines)
-
-
-def wrap(text: str, width: float, rows: int, measure: Callable[[str], float]) -> tuple[str, ...]:
-    """Words filled into at most `rows` lines of `width`; text that doesn't fit ends the last line with an ellipsis."""
-    words = text.split()
-    lines: tuple[str, ...] = ()
-    while words and len(lines) < rows:
-        count = 1
-        while count < len(words) and measure(" ".join(words[: count + 1])) <= width:
-            count += 1
-        lines, words = (*lines, " ".join(words[:count])), words[count:]
-    if not lines:
-        return ()
-    last = lines[-1]
-    if words or measure(last) > width:
-        last = last + "…"
-        while measure(last) > width and len(last) > 1:
-            last = last[:-2].rstrip() + "…"
-    return (*lines[:-1], last)
+    width = max(float(capsule.height), end)
+    shift = (width - end) / 2
+    return Content(width, tuple(Spot(spot.part, spot.x + shift, spot.width) for spot in spots), capsule.height)
 
 
 @dataclass(frozen=True, slots=True)

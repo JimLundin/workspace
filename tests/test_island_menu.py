@@ -2,10 +2,8 @@
 
 from dataclasses import replace
 
-from contracts.meeting_detection import AutomaticStatus
 from desktop_ui.island_layout import tiles
 from desktop_ui.island_menu import (
-    COLUMNS,
     Applied,
     Chosen,
     Command,
@@ -35,7 +33,7 @@ from protocol import Tool
 
 SPEC = CONTROLS
 
-RESTING = Controls(None, None, sound=Slider("Sound", 0.4, muted=False))
+RESTING = Controls(None, sound=Slider("Sound", 0.4, muted=False))
 
 
 def at(menu: Menu, name: str) -> Menu:
@@ -58,13 +56,10 @@ def opened(outcome: Outcome) -> Menu:
             raise AssertionError(f"Expected the menu to stay open, got {other}")
 
 
-def test_running_activities_lead_as_cards_and_recording_replaces_its_start() -> None:
-    # Defects: a running recording still offers "Record a meeting", or agent work has no Stop in the menu.
-    cells = entries(Controls("02:05", "Reading the request"), SPEC)
-    assert [(cell.entry, cell.face) for cell in cells[:2]] == [
-        (Live("Agent working", "Reading the request", Command.STOP_AGENT), Face.CARD),
-        (Live("Recording", "02:05", Command.STOP_RECORDING), Face.CARD),
-    ]
+def test_a_running_recording_leads_as_a_card_and_replaces_its_start() -> None:
+    # Defects: a running recording still offers "Record a meeting", or has no Stop in the menu.
+    cells = entries(Controls("02:05"), SPEC)
+    assert (cells[0].entry, cells[0].face) == (Live("Recording", "02:05", Command.STOP_RECORDING), Face.CARD)
     assert all(label(cell.entry) != "Record a meeting" for cell in cells)
     assert any(label(cell.entry) == "Record a meeting" for cell in entries(RESTING, SPEC))
 
@@ -72,7 +67,7 @@ def test_running_activities_lead_as_cards_and_recording_replaces_its_start() -> 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     # Defect: a track or column offset places one tile over another or past the menu's edge.
     tray = tuple(f"App {index}" for index in range(11))
-    for controls in (RESTING, Controls("02:05", None), Controls("02:05", "Reading"), replace(RESTING, agent="Reading"), replace(RESTING, tray=tray)):
+    for controls in (RESTING, Controls("02:05"), replace(RESTING, tray=tray)):
         laid = tiles(Menu(entries(controls, SPEC)), SIZES.menu)
         for tile in laid:
             assert tile.x > 0 and tile.x + tile.width < SIZES.menu.width
@@ -90,10 +85,9 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
 
 def test_toggles_show_their_state_and_apply_in_place() -> None:
     # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
-    cells = entries(Controls(None, None, AutomaticStatus.READY, overlay=True, taskbar=False, dark_when_away=2), SPEC)
+    cells = entries(Controls(None, overlay=True, taskbar=False, dark_when_away=2), SPEC)
     toggles = [cell.entry for cell in cells if cell.face is Face.TOGGLE]
     assert toggles == [
-        Toggle("Auto-record", "Teams · On", "mic", Command.AUTOMATIC_RECORDING, on=True),
         Toggle("Keyboard overlay", "On", "layers", Command.OVERLAY, on=True),
         Toggle("Windows taskbar", "Hidden", "table", Command.TASKBAR, on=False),
         Toggle("Placement", "On", "grid", Command.PLACEMENT, on=True),
@@ -101,34 +95,23 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
     ]
     menu = Menu(cells)
     assert press(at(menu, "Keyboard overlay"), Key.ENTER) == Applied(Command.OVERLAY)
-    assert press(at(menu, "Your work canvas"), Key.ENTER) == Chosen(Command.CANVAS)
-
-
-def test_automatic_recording_reports_connection_failure_while_opted_in() -> None:
-    # Defect: the toggle advertises monitoring after a connection failure, or reads as off while still opted in.
-    for status, detail, on in (
-        (AutomaticStatus.OFF, "Teams · Off", False),
-        (AutomaticStatus.CHECKING, "Teams · Connecting…", True),
-        (AutomaticStatus.UNAVAILABLE, "Teams · Check connection", True),
-    ):
-        toggle = next(cell.entry for cell in entries(Controls(None, None, status), SPEC) if cell.face is Face.TOGGLE)
-        assert toggle == Toggle("Auto-record", detail, "mic", Command.AUTOMATIC_RECORDING, on=on)
+    assert press(at(menu, "Keyboard map"), Key.ENTER) == Chosen(Command.KEYMAP)
 
 
 def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     # Defects: an arrow skips the cell beside or below the selection, Left leaves
     # the grid's edge, or Down from the last cell strands the selection.
     menu = Menu(entries(RESTING, SPEC))
-    assert selected(press(menu, Key.DOWN)) == "Auto-record"
-    assert selected(press(at(menu, "Auto-record"), Key.RIGHT)) == "Your work canvas"
+    assert selected(press(menu, Key.DOWN)) == "Keyboard overlay"
+    assert selected(press(at(menu, "Keyboard overlay"), Key.RIGHT)) == "Windows taskbar"
     assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Placement"
     assert selected(press(at(menu, "Windows taskbar"), Key.LEFT)) == "Keyboard overlay"
     assert selected(press(at(menu, "Dark when away"), Key.DOWN)) == "Record a meeting"
     assert selected(press(at(menu, "Record a meeting"), Key.DOWN)) == "Sound"
     assert selected(press(at(menu, "Copy latest transcript"), Key.RIGHT)) == "Keyboard map"
     assert selected(press(at(menu, "Switch windows"), Key.LEFT)) == "Switch windows"
-    assert selected(press(at(menu, "All Workspace controls…"), Key.DOWN)) == "Auto-record"
-    assert selected(press(at(menu, "Auto-record"), Key.UP)) == "All Workspace controls…"
+    assert selected(press(at(menu, "All Workspace controls…"), Key.DOWN)) == "Keyboard overlay"
+    assert selected(press(at(menu, "Keyboard overlay"), Key.UP)) == "All Workspace controls…"
 
 
 def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
@@ -139,7 +122,7 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
     assert press(menu, Key.LEFT) == Applied(Volume(0.35))
     full = at(Menu(entries(replace(RESTING, sound=Slider("Sound", 0.98, muted=False)), SPEC)), "Sound")
     assert press(full, Key.RIGHT) == Applied(Volume(1.0))
-    unknown = at(Menu(entries(Controls(None, None), SPEC)), "Sound")
+    unknown = at(Menu(entries(Controls(None), SPEC)), "Sound")
     assert press(unknown, Key.RIGHT) == unknown
     assert press(menu, Key.ENTER) == menu
 
@@ -147,7 +130,7 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
 def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> None:
     # Defects: Enter on a card doesn't stop its activity, Escape chooses something,
     # or a repeated letter stays on its first match.
-    menu = Menu(entries(Controls("02:05", None), SPEC), selected=0)
+    menu = Menu(entries(Controls("02:05"), SPEC), selected=0)
     assert press(menu, Key.ENTER) == Chosen(Command.STOP_RECORDING)
     assert press(menu, Key.ESCAPE) is Dismissed.ESCAPE
     first = opened(press(menu, Letter("k")))
@@ -160,17 +143,14 @@ def test_tool_cells_derive_hints_and_short_captions() -> None:
     # small tile shows a caption that doesn't name its tool.
     tools = [(cell.entry, cell.caption) for cell in entries(RESTING, SPEC) if cell.face is Face.TOOL]
     assert tools[0] == (Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), "X S"), "Switch")
-    assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map", "Agent"]
-    # Defect: the tool row leaves part of the menu's width empty.
-    row = [cell for cell in entries(RESTING, SPEC) if cell.face is Face.TOOL]
-    assert sum(cell.span for cell in row) == COLUMNS
+    assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map"]
 
 
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:
     # Defects: a window tool acts on the menu instead of the user's window, or a Workspace
     # view that just opened loses the keyboard to the previous window.
     assert restores_focus(ToolChoice(Tool.COPY_TRANSCRIPT)) and restores_focus(Command.TASKBAR)
-    assert not restores_focus(Command.CANVAS) and not restores_focus(Command.KEYMAP) and not restores_focus(TrayChoice(0))
+    assert not restores_focus(Command.KEYMAP) and not restores_focus(TrayChoice(0))
 
 
 def test_tray_icons_fill_rows_of_eight_after_the_tools_and_click_their_own_slot() -> None:

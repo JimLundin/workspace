@@ -1,8 +1,7 @@
 """Qt owns the desktop's main thread; callers enqueue work or await explicit input.
 
-The desktop shows what the assistant publishes (its session, work and canvas)
-and sends the assistant commands through an `AssistantPort`; nothing of the
-assistant runs here. No GUI objects cross the keyboard process.
+The desktop shows what the assistant publishes (its voice, jobs and recording);
+nothing of the assistant runs here. No GUI objects cross the keyboard process.
 """
 
 import queue
@@ -14,77 +13,17 @@ from dataclasses import dataclass, field, replace
 from typing import Protocol, assert_never
 
 lazy import shiboken6
-lazy from PySide6 import QtCore, QtGui, QtWidgets
+lazy from PySide6 import QtCore, QtWidgets
 
 import winapi.shapes
 from cell import Cell
-from contracts.canvas_activity import CanvasRequest
-from contracts.desktop_link import (
-    AnswerCanvas,
-    CanvasNoticed,
-    CanvasStatus,
-    JobChanged,
-    MeetingPage,
-    NoticesObserved,
-    OpenReference,
-    RecordingChanged,
-    ReplyFailed,
-    RunRefused,
-    SelectAttention,
-    ShowWork,
-    SpeakToAgent,
-    ToDesktop,
-    VoiceChanged,
-    WorkChanged,
-    WorkCommand,
-    WorkShown,
-)
-from contracts.task import TextAnswer
+from contracts.desktop_link import JobChanged, RecordingChanged, ToDesktop
 from desktop_ui import job_queue
-from desktop_ui.bar_events import (
-    AgentShown,
-    AutomaticShown,
-    ChordHeld,
-    DictationShown,
-    InboxShown,
-    JobShown,
-    LayoutShown,
-    OverlayShown,
-    RecordingShown,
-    RequestsShown,
-)
+from desktop_ui.bar_events import ChordHeld, DictationShown, JobShown, LayoutShown, OverlayShown, RecordingShown
 from desktop_ui.qt_runtime import prepare
-from desktop_ui.ui_control import (
-    BarAutomatic,
-    BarBuilt,
-    BarDictation,
-    BarOverlay,
-    BarSession,
-    CanvasVoice,
-    Effect,
-    Fact,
-    InboxOpened,
-    OverlayPublished,
-    PublishCanvas,
-    Published,
-    Route,
-    ShowInbox,
-    ToView,
-    UiState,
-    ViewMessage,
-    transition,
-)
+from desktop_ui.ui_control import BarBuilt, BarDictation, BarOverlay, Effect, Fact, OverlayPublished, Published, ToView, UiState, transition
 from winapi.shapes import Rect
-lazy import contracts.desktop_attention
-lazy import winapi.system_notices
-lazy from contracts.card_actions import OpenCanvas
 lazy from contracts.recording_state import RecordingAction
-lazy from contracts.status import State
-lazy from contracts.work_canvas_contracts import CanvasEdits, CanvasPublication
-lazy from contracts.work_commands import WorkViewCommand
-lazy from desktop_ui import island_agent
-lazy from desktop_ui.agent_progress import phases
-lazy from desktop_ui.assistant_port import UNAVAILABLE, AssistantPort, RemoteCanvas
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.dialogs import Job, bring_forward, near_pointer
@@ -92,11 +31,8 @@ lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import Indicator
 lazy from desktop_ui.navigation import Order
 lazy from desktop_ui.qt_ui import application
-lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.vector_icons import icon
 lazy from desktop_ui.window_switcher import WindowSwitcher
-lazy from desktop_ui.work_canvas_window import CanvasWindow
-lazy from desktop_ui.work_window import WorkWindow
 lazy from miryoku.layout import Layer, Scancode
 lazy from protocol import Tool
 
@@ -112,29 +48,11 @@ def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | No
     return DesktopBar.open(actions, audio_level=audio_level)
 
 
-def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
-    return CanvasWindow.open(root, work, canvas)
-
-
 @dataclass(frozen=True, slots=True)
 class Views:
     """How Ui builds its native views; a test builds isolated ones and keeps what it built."""
 
     desktop: DesktopFactory = _native_desktop
-    canvas: Callable[[QtWidgets.QApplication, WorkWindow, CanvasEdits], CanvasWindow] = _native_canvas_view
-
-
-@dataclass(frozen=True, slots=True)
-class WaitCursor:
-    """The standard wait cursor from the canvas's first reveal until its first paint."""
-
-    root: QtWidgets.QApplication
-
-    def show(self) -> None:
-        self.root.setOverrideCursor(QtGui.QCursor(QtCore.Qt.CursorShape.WaitCursor))
-
-    def close(self) -> None:
-        self.root.restoreOverrideCursor()
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +60,6 @@ class _Built:
     """The views built so far, on the Qt thread, each made on first use."""
 
     bar: DesktopBar | None = None
-    canvas: CanvasWindow | None = None
     switcher: WindowSwitcher | None = None
     indicator: Indicator | None = None
     keymap: KeymapWindow | None = None
@@ -160,18 +77,13 @@ class Ui:
     """The desktop's views on the Qt thread, and the fold of what the assistant publishes into them.
 
     Any thread posts a job or reports a fact; the Qt thread drains them in order.
-    Ui owns the desktop's views; the assistant is reached only through its port.
     """
 
     _views: Views
-    _assistant: AssistantPort
     _on_problem: Callable[[str], None] | None
     _root: QtWidgets.QApplication
     _poll_timer: QtCore.QTimer
     _thread: threading.Thread
-    _canvas: RemoteCanvas
-    _work: WorkWindow
-    """The work controller; its view is made on first use."""
     _qt: Cell[_OnQt] = field(default_factory=lambda: Cell(_OnQt()), init=False, repr=False)
     """The fold's state and the views built so far: the Qt thread alone replaces it."""
     _jobs: queue.Queue[Job] = field(default_factory=queue.Queue[Job], init=False, repr=False)
@@ -181,7 +93,7 @@ class Ui:
     _inputs_closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
-    def start(cls, assistant: AssistantPort, *, views: Views | None = None, on_problem: Callable[[str], None] | None = None) -> Ui:
+    def start(cls, *, views: Views | None = None, on_problem: Callable[[str], None] | None = None) -> Ui:
         """Qt on the process's main thread, polling the job queue every 20 ms."""
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Qt must be created on the process's main thread.")
@@ -189,23 +101,7 @@ class Ui:
         root.setStyleSheet(tooltip_style(tokens(scheme())))
         timer = QtCore.QTimer(root)
         timer.setInterval(20)
-
-        # The work controller posts to, and builds its view through, the Ui made just after it.
-        def post(job: Callable[[], None]) -> None:
-            ui.post(lambda _: job())
-
-        def create_work(work: WorkWindow) -> CanvasWindow:
-            return ui.create_work(work)
-
-        def send(command: WorkViewCommand) -> None:
-            ui.work_command(command)
-
-        def problem(message: str) -> None:
-            ui.problem(message)
-
-        work = WorkWindow.open(send, post=post, create_view=create_work, on_problem=problem, create_loading=lambda: WaitCursor(root))
-        canvas = RemoteCanvas(assistant)
-        ui = cls(Views() if views is None else views, assistant, on_problem, root, timer, threading.current_thread(), canvas, work)
+        ui = cls(Views() if views is None else views, on_problem, root, timer, threading.current_thread())
         timer.timeout.connect(ui.drain)
         timer.start()
         return ui
@@ -240,15 +136,9 @@ class Ui:
         self._qt.set(replace(self._qt.get(), built=built))
 
     def close_views(self) -> None:
-        """Close every view on the Qt thread, running queued jobs until each acknowledges."""
+        """Close every view on the Qt thread."""
         self._poll_timer.stop()
-        try:
-            self.close_desktop()
-        finally:
-            self.close_windows()
-            self._set_built(replace(self._built, canvas=None))
-            while not self._work.publication.closed_ready.is_set():
-                self.drain()
+        self.close_desktop()
 
     def _close_inputs(self) -> None:
         self._inputs_closed.set()
@@ -303,107 +193,27 @@ class Ui:
     def _bar(self) -> DesktopBar | None:
         return self._built.bar
 
-    @property
-    def _canvas_view(self) -> CanvasWindow | None:
-        return self._built.canvas
-
     def _perform(self, effect: Effect) -> None:
         match effect:
-            case BarSession(session):
-                if (bar := self._bar) is not None:
-                    bar.handle(AgentShown(island_agent.activity(session)))
-                    bar.handle(RequestsShown(tuple(phases(session))))
-                    bar.notices_changed(island_agent.notices(session))
             case BarDictation(active):
                 if (bar := self._bar) is not None:
                     bar.handle(DictationShown(active))
-            case CanvasVoice(pressed):
-                if (view := self._canvas_view) is not None:
-                    view.voice_pressed(pressed=pressed)
-            case BarAutomatic(status):
-                if (bar := self._bar) is not None:
-                    bar.handle(AutomaticShown(status))
             case BarOverlay(enabled):
                 if (bar := self._bar) is not None:
                     bar.handle(OverlayShown(enabled))
-            case PublishCanvas(publication, replay=replay):
-                self._publish_canvas(publication, replay=replay)
-            case ShowInbox(asked):
-                if self._accepting() and ((bar := self._bar) is None or not bar.open_inbox(asked)):
-                    self.show_canvas()
-            case Route(text, question):
-                self._route(text, question)
             case ToView(message):
                 self._to_view(message)
             case _:
                 assert_never(effect)
 
-    def _publish_canvas(self, publication: CanvasPublication, *, replay: bool) -> None:
-        """Every view takes the publication; a replay to a late-built view repeats no notice."""
-        self._canvas.published(publication)
-        if (bar := self._bar) is not None:
-            bar.handle(InboxShown(len(publication.waiting)))
-        view = self._canvas_view
-        if view is not None:
-            view.show_document(publication.document)
-        if not replay:
-            notice = contracts.desktop_attention.interrupts(publication.notice, view.focus() if view is not None else None)
-            if notice is not None:
-                self._assistant.send(CanvasNoticed(notice.title, notice.target))
-
-    def _route(self, text: str, question: CanvasRequest | None) -> None:
-        """A waiting question takes spoken words first, then the canvas's instruction, then the conversation.
-
-        A rejected clarification reply is consumed here, so it cannot accidentally
-        answer another question or become a new task. Dictation has its own path.
-        """
-        if question is not None:
-            self.answer_canvas(question, text)
+    def _to_view(self, message: JobChanged | RecordingChanged) -> None:
+        if (bar := self._bar) is None:
             return
-        view = self._canvas_view
-        target = contracts.desktop_attention.speech_target(self._canvas.waiting(), view.focus() if view is not None else None)
-        match target:
-            case contracts.desktop_attention.AnswerQuestion(request=request):
-                if not self.answer_canvas(request, text) and view is not None:
-                    view.reply_failed()
-            case contracts.desktop_attention.Speech.INSTRUCT:
-                if view is not None:
-                    view.instruct(text)
-            case contracts.desktop_attention.Speech.CONVERSATION:
-                if not self._assistant.send(SpeakToAgent(text)):
-                    self.problem(UNAVAILABLE)
-            case _:
-                assert_never(target)
-
-    def _to_view(self, message: ViewMessage) -> None:
-        bar, view = self._bar, self._canvas_view
         match message:
             case JobChanged(job=job):
-                if bar is not None:
-                    bar.handle(JobShown(job))
+                bar.handle(JobShown(job))
             case RecordingChanged(recording=recording):
-                if bar is not None:
-                    bar.handle(RecordingShown(recording))
-            case WorkChanged(snapshot=snapshot):
-                self._canvas.catalog_changed(snapshot.personal.catalog)
-                self.work_window().publish(snapshot)
-            case ShowWork():
-                self.work_window().show()
-            case OpenReference(url=url):
-                if not QtGui.QDesktopServices.openUrl(QtCore.QUrl(url)):
-                    self.problem("The original reference could not be opened.")
-            case ReplyFailed():
-                if view is not None:
-                    view.reply_failed()
-            case MeetingPage(transcript_path=path, page=page):
-                if view is not None:
-                    view.meeting_page(path, page)
-            case CanvasStatus(text=text):
-                if view is not None:
-                    view.canvas_status(text)
-            case RunRefused(run=run, reason=reason):
-                if view is not None:
-                    view.run_refused(run, reason)
+                bar.handle(RecordingShown(recording))
             case _:
                 assert_never(message)
 
@@ -413,18 +223,8 @@ class Ui:
         """Any thread: show what the assistant published."""
         self.report(Published(message))
 
-    def desktop_state(self, state: State, *, agent_speaking: bool = False) -> None:
-        self.show(VoiceChanged(state, agent_speaking=agent_speaking))
-
     def desktop_overlay(self, *, enabled: bool) -> None:
         self.report(OverlayPublished(enabled))
-
-    def open_inbox(self) -> None:
-        self.report(InboxOpened())
-
-    def system_notices(self, observation: winapi.system_notices.Observed) -> None:
-        """Windows notifications the bar observed go to the assistant's inbox triage."""
-        self._assistant.send(NoticesObserved(observation))
 
     # ---- the key map and the layer indicator ------------------------------------------
 
@@ -483,68 +283,14 @@ class Ui:
         """Shows a message in the indicator for a moment."""
         self.post(lambda root: self._indicator(root).flash(text, work, seconds))
 
-    # ---- the work window and the canvas ------------------------------------------------
-
-    def close_windows(self) -> None:
-        """Close the work window; off the Qt thread, wait briefly for its view to release."""
-        work = self._work
-        work.close()
-        if self._closed.is_set():
-            work.publication.abandon()
-        elif threading.current_thread() is not self._thread:
-            work.publication.closed_ready.wait(timeout=3)
-
-    def work_command(self, command: WorkViewCommand) -> None:
-        if not self._assistant.send(WorkCommand(command)):
-            raise OSError(UNAVAILABLE)
-
-    def work_window(self) -> WorkWindow:
-        """The work controller; native preparation and showing are explicit."""
-        return self._work
-
-    def create_work(self, work: WorkWindow) -> CanvasWindow:
-        view = self._views.canvas(self._root, work, self._canvas)
-        self._set_built(replace(self._built, canvas=view))
-        view.voice_pressed(pressed=self._qt.get().state.agent_speaking)
-        return view
-
-    def open_canvas_at(self, identity: str) -> None:
-        self.show_canvas()
-
-        def reveal(_: QtWidgets.QApplication) -> None:
-            if (view := self._canvas_view) is not None:
-                view.open_at(identity)
-
-        self.post(reveal)
-
-    def answer_canvas(self, request: CanvasRequest, value: str) -> bool:
-        try:
-            answer = TextAnswer(value)
-        except ValueError:
-            return False
-        return self._assistant.send(AnswerCanvas(request, answer))
-
-    def show_canvas(self) -> None:
-        self.work_window().show()
-        self._assistant.send(WorkShown())
-
-    def request_action(self, action: OpenCanvas) -> None:
-        if (bar := self._bar) is not None:
-            bar.close_menu(restore=False)
-        self.open_canvas_at(action.target)
-
-    def select_request(self, request: CanvasRequest | None) -> None:
-        self._assistant.send(SelectAttention(request))
-
     # ---- the bar -----------------------------------------------------------------------
 
-    # View navigation, stop, overlay, menu dispatch and error reporting remain
-    # distinct effect ports; audio observation and tool dispatch complete bar composition.
-    def desktop(  # noqa: PLR0913 - one callback per window event
+    # Recording, overlay and menu dispatch remain distinct effect ports; audio
+    # observation and tool dispatch complete bar composition.
+    def desktop(
         self,
         *,
         record: Callable[[RecordingAction], None],
-        stop: Callable[[], None],
         overlay: Callable[[], None],
         menu: Callable[[], None],
         audio_level: Callable[[], float | None] | None = None,
@@ -556,20 +302,7 @@ class Ui:
             if not self._accepting() or self._bar is not None:
                 return
             try:
-                actions = BarActions(
-                    self.show_canvas,
-                    stop,
-                    record,
-                    self.show_keymap,
-                    overlay,
-                    menu,
-                    self.problem,
-                    tool or (lambda _tool: None),
-                    self.system_notices,
-                    inbox=self.open_inbox,
-                    open_item=self.open_canvas_at,
-                    requests=RequestActions(self.request_action, self.select_request),
-                )
+                actions = BarActions(record, self.show_keymap, overlay, menu, self.problem, tool or (lambda _tool: None))
                 self._set_built(replace(self._built, bar=self._views.desktop(actions, audio_level=audio_level)))
                 self._fold(BarBuilt())
             except Exception:

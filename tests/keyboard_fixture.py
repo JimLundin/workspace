@@ -108,7 +108,7 @@ class KeyboardFixture:
         pass
 
 
-APPS_THUMB, DICTATE_KEY, AGENT_KEY, TOGGLE_KEY = Scancode(0x2D), Scancode(0x26), Scancode(0x25), Scancode(0x2B)
+APPS_THUMB, DICTATE_KEY, TOGGLE_KEY = Scancode(0x2D), Scancode(0x26), Scancode(0x2B)
 SPACEBAR, N_KEY, B_KEY = Scancode(0x39), Scancode(0x31), Scancode(0x30)
 
 
@@ -156,9 +156,6 @@ SHIFT = inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0)
 
 
 DICTATE_LETTER = inputs.KeyEvent(0x48, 0x23, 0, 10, 0)  # H
-
-
-AGENT_LETTER = inputs.KeyEvent(0x4B, 0x25, 0, 10, 0)  # K
 
 
 def requests_of(driver: KeyboardFixture) -> list[tuple[int, int]]:

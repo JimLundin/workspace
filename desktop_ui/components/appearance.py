@@ -3,8 +3,7 @@
 Glass and content have no colour of their own: neutral surfaces and monochrome
 ink in a dark and a light scheme, after the kit at JimLundin/liquid-glass.
 Colour carries meaning only: the soft-blue accent for the primary action and
-selection, orange for a question, red for recording and errors, and each app's
-own colour on its badge.
+selection, orange for attention, red for recording and errors.
 """
 
 from dataclasses import dataclass
@@ -19,7 +18,7 @@ from winapi import appearance
 from winapi.shapes import Stop
 
 GLASS_ACCENT: Final = "#4b8fe8"  # a soft blue, lighter and less saturated than system blue
-ATTENTION: Final = "#f08a00"  # a question waits
+ATTENTION: Final = "#f08a00"  # something needs you
 RED: Final = "#ff453a"  # recording, low battery, errors
 MICROPHONE: Final = "#ff9f0a"  # the microphone is live, as Apple's privacy indicator
 
@@ -51,45 +50,24 @@ class Rim:
 
 
 @dataclass(frozen=True, slots=True)
-class Shadow:
-    """A soft shadow in two steps: the opacity of its near, tight step and its far, spread one."""
-
-    near: float
-    far: float
-
-
-@dataclass(frozen=True, slots=True)
 class Palette:
-    """What a scheme paints beyond its tokens: veils behind cards and the canvas bar, the glass rim, and shadows."""
+    """What a scheme paints beyond its tokens: the veil behind the canvas bar and the glass rim."""
 
-    card_veil: Shade
     canvas_bar_veil: Shade
     rim: Rim
-    card_shadow: Shadow
-    bar_shadow: Shadow
-    bar_edge: float
-    """The opacity of the canvas bar's hairline edge."""
     thumb: str
     """A solid window's scroll bar thumb."""
 
 
 class Scheme(Enum):
     DARK = Palette(
-        card_veil=Shade("#222226", 0.64),
         canvas_bar_veil=Shade("#1e1e22", 0.84),
         rim=Rim(0.55, 0.06, 0.22),
-        card_shadow=Shadow(near=0.30, far=0.16),
-        bar_shadow=Shadow(near=0.22, far=0.10),
-        bar_edge=115 / 255,
         thumb="rgba(255,255,255,56)",
     )
     LIGHT = Palette(
-        card_veil=Shade("#fafafc", 0.66),
         canvas_bar_veil=Shade("#fbfbfd", 0.86),
         rim=Rim(0.95, 0.16, 0.42),
-        card_shadow=Shadow(near=0.07, far=0.04),
-        bar_shadow=Shadow(near=0.07, far=0.05),
-        bar_edge=26 / 255,
         thumb="#ffffff",
     )
 
@@ -192,39 +170,6 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 """ + tooltip_style(theme)
 
 
-def canvas_style(theme: Tokens) -> str:
-    """The canvas: a solid content window; its toolbars and inspector carry the floating controls."""
-    ink2, fill, hover, press, line = theme.ink2.css, theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
-    return f"""
-QWidget {{ color: {theme.ink.css}; font-family: '{typeface.FAMILY}'; font-size: 13px; background: transparent; }}
-QFrame#canvasPill {{ background: {theme.solid}; border: 1px solid {theme.solid_edge.css}; border-radius: 18px; }}
-QLabel {{ background: transparent; border: none; }}
-QLabel#muted {{ color: {ink2}; font-size: 11.5px; }}
-QLabel#title {{ font-size: 14px; font-weight: 600; }}
-QToolButton {{ border: none; border-radius: 14px; padding: 5px 11px; background: transparent; font-weight: 500; }}
-QToolButton:hover {{ background: {hover}; }}
-QToolButton:pressed {{ background: {press}; }}
-QToolButton:checked {{ background: {hover}; }}
-QToolButton:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 3px 9px; }}
-QToolButton:disabled {{ color: {theme.ink3.css}; }}
-QToolButton#primary {{ background: {GLASS_ACCENT}; color: #ffffff; font-weight: 600; }}
-QToolButton#primary:hover {{ background: #6aa2ec; }}
-QLineEdit, QPlainTextEdit, QComboBox {{
- background: {fill}; border: none; border-radius: 10px; padding: 7px 10px; selection-background-color: {GLASS_ACCENT};
-}}
-QLineEdit:focus, QPlainTextEdit:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 5px 8px; }}
-QPlainTextEdit:read-only {{ background: transparent; border: none; padding: 0; }}
-QLineEdit#canvasSearch {{ background: transparent; border: none; padding: 5px 8px; }}
-QComboBox QAbstractItemView {{ background: {theme.solid}; selection-background-color: {GLASS_ACCENT}; }}
-QMenu {{ background: {theme.solid}; border: 1px solid {line}; border-radius: 12px; padding: 6px; }}
-QMenu::item {{ padding: 6px 14px; border-radius: 15px; }}
-QMenu::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
-QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
-QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: 3px; min-height: 20px; }}
-QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ height: 0; width: 0; background: transparent; }}
-""" + tooltip_style(theme)
-
-
 # Every glass surface shares its ink and rim vocabulary.
 @dataclass(frozen=True, slots=True)
 class Lettering:
@@ -272,20 +217,13 @@ class Menu:
 
 
 @dataclass(frozen=True, slots=True)
-class Card:
-    """Large desktop glass follows the app scheme."""
-
-    scheme: Scheme
-
-
-@dataclass(frozen=True, slots=True)
 class CanvasBar:
     """Qt-painted glass is thicker over the canvas's content scheme."""
 
     scheme: Scheme
 
 
-type Pane = Capsule | Menu | Card | CanvasBar
+type Pane = Capsule | Menu | CanvasBar
 
 
 def lettering(theme: Tokens) -> Lettering:
@@ -331,7 +269,7 @@ def _scheme(pane: Pane, material: appearance.Material) -> Scheme:
                 case _:
                     assert_never(material)
             return FROSTS[frost].scheme
-        case Card(scheme=scheme) | CanvasBar(scheme=scheme):
+        case CanvasBar(scheme=scheme):
             return scheme
         case _:
             assert_never(pane)
@@ -344,8 +282,6 @@ def _veil(pane: Pane) -> Shade:
         case Menu(frost=frost):
             small = FROSTS[frost].small_veil
             return Shade(small.color, max(small.opacity, 0.64))
-        case Card(scheme=scheme):
-            return scheme.value.card_veil
         case CanvasBar(scheme=scheme):
             return scheme.value.canvas_bar_veil
         case _:
@@ -359,7 +295,7 @@ def _attention(pane: Pane) -> GlassLook:
     match pane:
         case CanvasBar():
             return GlassLook(Shade(ATTENTION, 0.94), rim, ink)
-        case Capsule() | Menu() | Card():
+        case Capsule() | Menu():
             return GlassLook(Shade(ATTENTION, 0.9), rim, ink)
         case _:
             assert_never(pane)

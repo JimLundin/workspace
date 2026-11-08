@@ -1,15 +1,15 @@
 """The desktop's UI as data: the values in `desktop_ui/spec/`, and their checks.
 
 Each spec module holds one frozen value built from typed dataclasses: the sizes
-here, the menus in `island_menu`, the bar's composition in `island_model`, the
-canvas toolbar in `canvas_toolbar` and the tray in `assistant.control_policy`.
+here, the menus in `island_menu`, the bar's composition in `island_model` and
+the tray in `desktop_controls`.
 Pyright checks a spec's shape and names; each type checks its own ranges as it
 is built; the `problems` checks catch what a type can't say, such as an action
 placed twice.
 
 The keeper restarts nothing when a spec module changes. The bar re-imports its
-specs when their files change (`ui_spec_watch`); the tray and the canvas
-toolbar re-import theirs as they open. A spec that fails to import or check
+specs when their files change (`ui_spec_watch`); the tray re-imports its own
+as it opens. A spec that fails to import or check
 raises `SpecError` naming its file, and the reader keeps the spec it has.
 """
 
@@ -18,10 +18,9 @@ from pathlib import Path
 from types import ModuleType
 from typing import Final
 
-from desktop_ui.canvas_toolbar import CanvasToolbarSpec, toolbar_problems
 from desktop_ui.island_menu import ControlsSpec, problems
 from desktop_ui.island_model import IslandSpec, island_problems
-lazy from desktop_ui.spec import canvas, controls, island, sizes
+lazy from desktop_ui.spec import controls, island, sizes
 
 FOLDER: Final = Path(__file__).resolve().parent / "spec"
 """The spec modules installed with this copy of Workspace."""
@@ -59,7 +58,6 @@ class Capsule:
     control: float
     """A concentric control: (height - control) / 2 from the capsule's edge."""
     icon: float
-    spinner: float
     dot: float
     """The recording dot."""
     dots: float
@@ -75,7 +73,7 @@ class Capsule:
     """...and when it holds only symbols."""
 
     def __post_init__(self) -> None:
-        at_least("capsule", 1, height=self.height, control=self.control, icon=self.icon, spinner=self.spinner, dot=self.dot, dots=self.dots)
+        at_least("capsule", 1, height=self.height, control=self.control, icon=self.icon, dot=self.dot, dots=self.dots)
         at_least("capsule", 1, wave_bars=self.wave_bars)
         at_least("capsule", 0, part_gap=self.part_gap, slot_gap=self.slot_gap, text_pad=self.text_pad, icon_pad=self.icon_pad)
         if self.control > self.height:
@@ -112,27 +110,12 @@ class MenuGrid:
 
 
 @dataclass(frozen=True, slots=True)
-class Detail:
-    """Lines of detail under a capsule's row."""
-
-    line: float
-    top: float
-    """The first line, tucked into the row's lower padding."""
-    bottom: float
-
-    def __post_init__(self) -> None:
-        at_least("detail", 1, line=self.line)
-        at_least("detail", 0, top=self.top, bottom=self.bottom)
-
-
-@dataclass(frozen=True, slots=True)
 class Sizes:
     """`spec/sizes.py`: every size the island bar lays out and paints."""
 
     bar: Bar
     capsule: Capsule
     menu: MenuGrid
-    detail: Detail
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,10 +156,3 @@ def bar_specs(*, reload: bool = True) -> Specs:
         checked("controls.py", controls.CONTROLS, problems(controls.CONTROLS)),
         checked("island.py", island.ISLAND, island_problems(island.ISLAND)),
     )
-
-
-def canvas_toolbar(*, reload: bool = True) -> CanvasToolbarSpec:
-    """The canvas toolbar's spec as its module says now."""
-    if reload:
-        fresh(canvas)
-    return checked("canvas.py", canvas.CANVAS, toolbar_problems(canvas.CANVAS))

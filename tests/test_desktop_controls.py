@@ -62,7 +62,7 @@ class LayoutFixture:
 
 def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:
     for layout in (LayoutState.ON, LayoutState.OFF):
-        state = MenuState(layout=layout, overlay_enabled=True, agent_running=False, capturing=False)
+        state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
         item = menu_items(state, TRAY)[0]
         assert item.id == Menu.TOGGLE_LAYOUT.value
         assert item.text == f"Layout: {layout.name.lower()}\tTap §"
@@ -74,7 +74,7 @@ def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:
 
 def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None:
     for layout in (None, LayoutState.QUIT):
-        state = MenuState(layout=layout, overlay_enabled=True, agent_running=False, capturing=False)
+        state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
         items = menu_items(state, TRAY)
         assert items[0].text == "Layout: not running"
         assert not items[0].enabled and not items[0].checked
@@ -83,18 +83,11 @@ def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None
     assert not toggle_layout(unavailable) and not unavailable.messages
 
 
-def test_tray_agent_advertises_the_layout_shortcut_in_readme_notation() -> None:
-    # Defect: the tray diverges from the shared physical-key formatter.
-    state = MenuState(layout=LayoutState.ON, overlay_enabled=True, agent_running=False, capturing=False)
-    agent = next(item for item in menu_items(state, TRAY) if item.id == Menu.AGENT.value)
-    assert agent.text == "Agent session\tHold X + Ö"
-
-
 def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle() -> None:
     # Defect: the transcripts entry is dropped or disabled during capture. It is the
-    # only way to browse saved meetings that are not on the canvas.
+    # only way to browse saved meetings.
     for capturing in (False, True):
-        state = MenuState(layout=LayoutState.ON, overlay_enabled=True, agent_running=False, capturing=capturing)
+        state = MenuState(layout=LayoutState.ON, overlay_enabled=True, capturing=capturing)
         item = next(item for item in menu_items(state, TRAY) if item.id == Menu.TRANSCRIPTS.value)
         assert (item.text, item.enabled) == ("Open meeting transcripts", True)
 
@@ -102,7 +95,7 @@ def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle(
 def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> None:
     # Defect: the tray shows the overlay as on after the user turned it off, or the reverse.
     for enabled in (False, True):
-        state = MenuState(layout=LayoutState.ON, overlay_enabled=enabled, agent_running=False, capturing=False)
+        state = MenuState(layout=LayoutState.ON, overlay_enabled=enabled, capturing=False)
         item = next(item for item in menu_items(state, TRAY) if item.id == Menu.OVERLAY.value)
         assert item.checked is enabled
 

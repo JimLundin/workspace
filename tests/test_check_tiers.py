@@ -62,13 +62,11 @@ def test_every_slow_entry_names_an_existing_test_with_a_reason_within_its_cap() 
     assert not any(Path(entry.partition("::")[0]).name.startswith("test_windows_") for entry in SLOW)
 
 
-def test_a_native_test_over_its_budget_fails_by_name_unless_listed() -> None:
-    # Defects: a slow native test passes unnoticed, a listed exception fails
-    # anyway, or a portable test is held to the native budget.
-    listed = sorted(NATIVE_SLOW)[0].replace("/", ".").replace(".py::", ".")
+def test_a_native_test_over_its_budget_fails_by_name() -> None:
+    # Defects: a slow native test passes unnoticed, or a portable test is held
+    # to the native budget. (NATIVE_SLOW is empty, so no listed exception to check.)
     durations = (
         (NATIVE_BUDGET_S + 1, "worker:tests.test_windows_bar.test_slow"),
-        (NATIVE_BUDGET_S + 9, listed),
         (NATIVE_BUDGET_S - 1, "tests.test_windows_bar.test_quick"),
         (NATIVE_BUDGET_S + 1, "tests.test_agent.test_portable"),
     )

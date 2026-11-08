@@ -1,11 +1,11 @@
-"""The desktop: Workspace's bar, canvas views, tray, key map and window placement.
+"""The desktop: Workspace's bar, tray, key map and window placement.
 
 It runs without the assistant and the assistant without it. The keyboard sends
-it the requests it owns (app keys, window keys, the inbox, the switcher) and its
+it the requests it owns (app keys, window keys, the switcher) and its
 indicator, key and chord messages, to its own hidden window; tools the assistant
 owns go there as `contracts.desktop_link` commands over the link. What the
-assistant publishes (its session, work, canvas, voice and recording) arrives
-the same way and is shown here.
+assistant publishes (its voice, jobs and recording) arrives the same way and is
+shown here.
 """
 
 import contextlib
@@ -24,14 +24,9 @@ import launch
 import usage
 from cell import Cell
 from config import APPS
-from contracts.desktop_link import (
-    Record,
-    UseTool,
-    WireError,
-    from_assistant,
-)
+from contracts.desktop_link import Record, WireError, from_assistant
 from desktop_ui import desktop_controls
-from desktop_ui.assistant_port import UNAVAILABLE, AssistantPort, LinkedAssistant
+from desktop_ui.assistant_port import AssistantPort, LinkedAssistant
 from desktop_ui.desktop_control import (
     AssistantSaid,
     Beep,
@@ -52,7 +47,6 @@ from desktop_ui.desktop_control import (
     MenuChosen,
     MenuRequested,
     Navigate,
-    OpenInbox,
     OpenLogs,
     OpenUsage,
     OverlayEnabled,
@@ -63,7 +57,6 @@ from desktop_ui.desktop_control import (
     RecordUse,
     RestoreTray,
     Send,
-    ShowCanvas,
     ShowKeymap,
     ShowMenu,
     ShowOverlay,
@@ -93,7 +86,6 @@ from protocol import (
     WM_QUERY_LAYOUT_STATE,
     WM_REQUEST,
     WM_WINDOWS_KEY_TAP,
-    Tool,
 )
 from usage import DIRECTORY
 from winapi import screen, shell, system, windows
@@ -107,6 +99,8 @@ WM_TRAY: Final = system.WM_APP + 20
 WM_SHOW_MENU: Final = 0x8056
 WM_EVENTS: Final = system.WM_APP + 22
 """Any thread -> Qt thread: events are waiting in the inbox."""
+UNAVAILABLE: Final = "The assistant is restarting; try again in a moment."
+"""Why a command for the assistant was refused."""
 
 
 def log(text: str) -> None:
@@ -232,17 +226,15 @@ class DesktopApp:
         return app
 
     def start(self) -> None:
-        """Qt thread: the bar and the canvas's controller, then the layout's state, then readiness."""
+        """Qt thread: the bar, then the layout's state, then readiness."""
         report, state = self.inbox.report, self.state
         self.ui.desktop(
             record=lambda action: report(Send(Record(action))),
-            stop=lambda: report(Send(UseTool(Tool.STOP))),
             overlay=lambda: report(OverlayToggled()),
             menu=lambda: report(MenuRequested()),
             audio_level=lambda: state.get().level,
             tool=lambda tool: report(Controlled(desktop_controls.ChosenTool(tool))),
         )
-        self.ui.work_window().prepare()
         if (layout := windows.find(components.LAYOUT.window.title)) is not None:
             system.post_message(layout, WM_QUERY_LAYOUT_STATE, 0, 0)
         self.perform(TrayShow(tray_state(state.get().shown)))
@@ -267,7 +259,7 @@ class DesktopApp:
                     yield Problem(UNAVAILABLE)
             case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep():
                 self._tray(effect)
-            case ShowViews() | Navigate() | OpenInbox() | SwitchWindows() | Chord() | ToggleTaskbar() | ShowKeymap() | ShowCanvas():
+            case ShowViews() | Navigate() | SwitchWindows() | Chord() | ToggleTaskbar() | ShowKeymap():
                 self._views(effect)
             case ShowOverlay() | OverlayEnabled() | Flash() | LayoutShown() | PressedKeys() | Indicate() | ToggleLayout():
                 yield from self._keys(effect)
@@ -295,14 +287,12 @@ class DesktopApp:
             case _:
                 assert_never(effect)
 
-    def _views(self, effect: ShowViews | Navigate | OpenInbox | SwitchWindows | Chord | ToggleTaskbar | ShowKeymap | ShowCanvas) -> None:
+    def _views(self, effect: ShowViews | Navigate | SwitchWindows | Chord | ToggleTaskbar | ShowKeymap) -> None:
         match effect:
             case ShowViews(message):
                 self.ui.show(message)
             case Navigate(order):
                 self.ui.navigate(order)
-            case OpenInbox():
-                self.ui.open_inbox()
             case SwitchWindows():
                 self._switch_windows()
             case Chord(held):
@@ -311,8 +301,6 @@ class DesktopApp:
                 self.ui.toggle_taskbar()
             case ShowKeymap():
                 self.ui.show_keymap()
-            case ShowCanvas():
-                self.ui.show_canvas()
             case _:
                 assert_never(effect)
 
@@ -383,7 +371,6 @@ class DesktopApp:
             self.ui.close_desktop()
         except OSError as error:
             log(str(error))
-        self.ui.close_windows()
         self.tray.remove()
         self.inbox.window.destroy()
         self.ui.close()
@@ -421,7 +408,7 @@ def run(*, window: components.Window = components.DESKTOP.window, lock_name: str
 
         client = Client(published, lambda frame: received(inbox, frame), status) if published is not None else None
         port: AssistantPort = LinkedAssistant(client) if client is not None else Offline()
-        ui = Ui.start(port, views=views, on_problem=lambda message: inbox.report(Problem(message)))
+        ui = Ui.start(views=views, on_problem=lambda message: inbox.report(Problem(message)))
         app = DesktopApp.compose(ui, port, inbox)
         ui.post(lambda _: app.start())
         if client is not None:

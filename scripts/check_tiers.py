@@ -26,9 +26,6 @@ CHECK_PROCESS: Final = "runs real check subprocesses on a temporary tree; the de
 SLOW: Final[frozendict[str, str]] = frozendict(
     {
         "tests/test_architecture.py::test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt": CHECK_PROCESS,
-        "tests/test_computer_tools.py::test_automatic_and_explicit_screenshots_share_the_same_history_limit": (
-            "three full agent runs fill the screenshot history past its limit"
-        ),
         "tests/test_meetings.py::test_recording_and_transcription_continue_while_the_markdown_file_is_locked": (
             "waits through the meeting service's real publish pacing while the transcript is locked"
         ),
@@ -37,14 +34,8 @@ SLOW: Final[frozendict[str, str]] = frozendict(
         ),
         "tests/test_quality.py::test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt": CHECK_PROCESS,
         "tests/test_quality.py::test_standards_fail_on_a_lint_error_outside_the_selected_tests_before_tests_or_a_receipt": CHECK_PROCESS,
-        "tests/test_self_review.py::test_history_tool_pages_day_and_recent_then_drills_into_diagnostics": (
-            "several SDK turns against the fake endpoint, one per history page"
-        ),
         "tests/test_source_analysis.py::test_cached_quality_cannot_accept_changed_boolean_signature_or_import_ownership": (
             "real Ruff scans, before and after an edit"
-        ),
-        "tests/test_work_submissions.py::test_unrelated_failures_cannot_evict_a_watched_identity_collision": (
-            "300 submissions, enough to pass the 256-problem limit"
         ),
     }
 )
@@ -59,37 +50,7 @@ NATIVE_BUDGET_S: Final = 3.0
 Native tests run in parallel lanes beside other work, so the budget sits well
 above what a cheap native test takes there."""
 
-NATIVE_SLOW: Final[frozendict[str, str]] = frozendict(
-    {
-        "tests/test_windows_browser.py::test_attached_browser_dom_tabs_and_cancellation_share_a_personal_browser": (
-            "a real personal Edge reached over CDP"
-        ),
-        "tests/test_windows_browser.py::test_managed_browser_dom_teams_persistence_and_cancellation": (
-            "one managed Edge launch shared by DOM, Teams, business apps, meeting detection and cancellation"
-        ),
-        "tests/test_windows_computer.py::test_powershell_preserves_utf8_large_scripts_cwd_and_failure_status": (
-            "real PowerShell runs: UTF-8, large scripts and exit codes"
-        ),
-        "tests/test_windows_computer.py::test_uia_controls_are_inspected_and_operated_across_separate_processes": (
-            "a WPF window in PowerShell, inspected and operated through UI Automation across processes"
-        ),
-        "tests/test_windows_development.py::test_native_check_reviews_source_once_across_desktop_handoff": (
-            "a real native check handed to a private desktop"
-        ),
-        "tests/test_windows_development.py::test_watch_rechecks_fresh_source_and_retains_baseline_after_failed_edits": (
-            "real file watching and checks after each save"
-        ),
-        "tests/test_windows_run_alone.py::test_the_assistant_runs_and_quits_with_no_desktop": (
-            "the whole assistant starts and quits in a fresh interpreter"
-        ),
-        "tests/test_windows_run_alone.py::test_the_desktop_runs_and_quits_with_no_assistant": (
-            "the whole desktop starts and quits in a fresh interpreter"
-        ),
-        "tests/test_windows_test_desktop.py::test_desktop_bootstrap_preserves_arguments_streams_and_failure_status": (
-            "relaunches Python onto a private desktop"
-        ),
-    }
-)
+NATIVE_SLOW: Final[frozendict[str, str]] = frozendict()
 """Native tests allowed over the native budget, each with the real thing only it can show."""
 
 

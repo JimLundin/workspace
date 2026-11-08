@@ -1,7 +1,7 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
-from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap, wrap
-from desktop_ui.island_model import Action, Badge, Control, Detail, Glyph, Key, Marker, Spinner, Text, Zone, order
+from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
+from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from desktop_ui.spec.island import ISLAND
 from desktop_ui.spec.sizes import SIZES
 
@@ -21,32 +21,20 @@ def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:
 
 def test_neighbours_sit_one_gap_apart_and_grow_outward_in_order() -> None:
     # Defect: zones overlap the island, the gap differs between neighbours, or the order flips.
-    placed = [
-        Placed(Key.INBOX, Zone.TRAIL, 34, 34),
-        Placed(Key.ISLAND, Zone.ISLAND, 112, 34),
-        Placed(Key.JOB, Zone.LEAD, 70, 34),
-        Placed(Key.RECORDING, Zone.TRAIL, 86, 34),
-        Placed(Key.AGENT, Zone.LEAD, 34, 34),
-    ]
+    placed = [Placed(Key.RECORDING, Zone.TRAIL, 86, 34), Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.JOB, Zone.LEAD, 70, 34)]
     assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000), ORDER)] == [
-        (Key.AGENT, 328, 34),
         (Key.JOB, 368, 70),
         (Key.ISLAND, 444, 112),
         (Key.RECORDING, 562, 86),
-        (Key.INBOX, 654, 34),
     ]
 
 
-def test_a_capsule_part_way_in_shares_a_gap_scaled_by_the_less_present_neighbour() -> None:
-    # Defect: an entering capsule opens a full gap at once, or its neighbour keeps a stale gap.
-    placed = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0.5), Placed(Key.INBOX, Zone.TRAIL, 34, 34)]
-    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000), ORDER)] == [
-        (Key.ISLAND, 444, 112),
-        (Key.RECORDING, 559, 43),
-        (Key.INBOX, 605, 34),
-    ]
-    absent = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0), Placed(Key.INBOX, Zone.TRAIL, 34, 34)]
-    assert [(f.key, f.box.x) for f in frame(absent, metrics(1000), ORDER)] == [(Key.ISLAND, 444), (Key.INBOX, 562)]
+def test_a_capsule_part_way_in_opens_a_gap_scaled_by_its_presence() -> None:
+    # Defect: an entering capsule opens a full gap at once, or an absent one still takes space.
+    placed = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0.5)]
+    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000), ORDER)] == [(Key.ISLAND, 444, 112), (Key.RECORDING, 559, 43)]
+    absent = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0)]
+    assert [(f.key, f.box.x) for f in frame(absent, metrics(1000), ORDER)] == [(Key.ISLAND, 444)]
 
 
 def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
@@ -79,19 +67,17 @@ def width_of(text: Text) -> float:
 def test_text_content_pads_twelve_and_separates_slots_and_readings_further_than_parts() -> None:
     # Defects: readings crowd the capsule edge, two slots read as one, or two
     # readings run together while a symbol drifts from the text it labels.
-    content = arrange(((Spinner("Transcribing"),), (Text("10:22"), Text("73%"))), width_of, SIZES)
-    assert [spot.x for spot in content.spots] == [12, 38, 85]
-    assert content.width == 12 + 14 + 12 + 35 + 12 + 21 + 12
-    assert [spot.x for spot in arrange(((Text("Needs you"), Glyph("down")),), width_of, SIZES).spots] == [12, 81]
+    content = arrange(((Marker.DOTS,), (Text("10:22"), Text("73%"))), width_of, SIZES)
+    assert [spot.x for spot in content.spots] == [12, 42, 89]
+    assert content.width == 12 + 18 + 12 + 35 + 12 + 21 + 12
+    assert [spot.x for spot in arrange(((Text("Recording"), Glyph("stop")),), width_of, SIZES).spots] == [12, 81]
 
 
-def test_a_control_at_the_edge_sits_concentric_and_a_badge_takes_no_width() -> None:
-    # Defects: Stop keeps the text padding and breaks the 3 px concentric inset,
-    # or the count badge widens the inbox capsule.
-    stop = Control("stop", "Stop agent work", Action.STOP_AGENT)
-    content = arrange(((Spinner("Agent working"), stop),), width_of, SIZES)
-    assert content.spots[-1] == Spot(stop, 30, 28) and content.width == 61
-    assert arrange(((Glyph("bell"), Badge("99+")),), width_of, SIZES).width == arrange(((Glyph("bell"),),), width_of, SIZES).width == 36
+def test_a_control_at_the_edge_sits_concentric() -> None:
+    # Defect: Stop keeps the text padding and breaks the 3 px concentric inset.
+    stop = Control("stop", "Stop recording", Action.STOP_RECORDING)
+    content = arrange(((Marker.DOT, Text("02:05"), stop),), width_of, SIZES)
+    assert content.spots[-1] == Spot(stop, 67, 28) and content.width == 98
 
 
 def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> None:
@@ -112,26 +98,3 @@ def test_content_narrower_than_a_circle_centres_in_one() -> None:
     # Defect: a lone marker collapses the capsule below its height, losing its round shape.
     content = arrange(((Marker.DOT,),), width_of, SIZES)
     assert content.width == 34 and content.spots == (Spot(Marker.DOT, 13, 8),)
-
-
-def test_wrapping_fills_lines_and_ends_overflow_with_an_ellipsis() -> None:
-    # Defects: a line overflows the capsule, words go missing between lines, or
-    # text that doesn't fit is cut without a sign that more is on the canvas.
-    assert wrap("Revenue is up four percent", 12, 2, len) == ("Revenue is", "up four…")
-    assert wrap("Revenue is up", 12, 2, len) == ("Revenue is", "up")
-    assert wrap("Unbreakablewordhere", 8, 1, len) == ("Unbreak…",)
-    assert wrap("   ", 12, 2, len) == ()
-
-
-def test_detail_lines_sit_under_the_row_and_a_wider_detail_keeps_dismiss_at_the_far_edge() -> None:
-    # Defects: detail changes the row's own layout, grows the capsule without its
-    # lines, or leaves Dismiss beside the title instead of at the trailing edge.
-    dismiss = Control("close", "Dismiss", Action.DISMISS_NOTICE)
-    row = ((Glyph("agent"), Text("Budget")), (dismiss,))
-    content = arrange(row, width_of, SIZES, Detail(("Approved totals match",), 2, 200))
-    assert content.width == 200 and content.lines == ("Approved totals match",)
-    assert content.height == SIZES.detail.top + SIZES.detail.line + SIZES.detail.bottom
-    assert [spot.x for spot in content.spots] == [12, 34, 200 - 31]
-    steps = arrange(((Spinner("Agent"), Text("Reading budget")),), width_of, SIZES, Detail(("PowerShell", "Comparing both sheets in detail"), 1))
-    assert steps.width == arrange(((Spinner("Agent"), Text("Reading budget")),), width_of, SIZES).width
-    assert len(steps.lines) == 2 and steps.lines[1].endswith("…")

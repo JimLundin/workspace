@@ -207,7 +207,7 @@ APPLICATION_LAYERS: Final = ("assistant", "desktop_ui")
 
 def _keyboard(module: str) -> bool:
     """Whether the keyboard process may load module: anything outside the application layers."""
-    return not any(_within(module, layer) for layer in (*APPLICATION_LAYERS, "automation"))
+    return not any(_within(module, layer) for layer in APPLICATION_LAYERS)
 
 
 def _onward(_: str) -> bool:
@@ -234,7 +234,7 @@ def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward:
         )
 
 
-CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm", "winapi.system_notices"})
+CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm"})
 """Beyond the standard library, pydantic, `cell` and each other, all a contract may import:
 the wire protocol and the plain-Python winapi value modules."""
 
@@ -257,8 +257,8 @@ def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Fi
 
 PROCESSES: Final = frozendict(
     {
-        ("desktop_ui", "desktop"): ("assistant", "automation"),
-        ("assistant", "automation"): ("desktop_ui", "desktop", "PySide6", "PyQt6"),
+        ("desktop_ui", "desktop"): ("assistant",),
+        ("assistant",): ("desktop_ui", "desktop", "PySide6", "PyQt6"),
     }
 )
 """Each program's packages, and what none of them may reach even through others: the desktop

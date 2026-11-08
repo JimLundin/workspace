@@ -13,7 +13,6 @@ from typing import Final, Protocol, assert_never
 import protocol
 from components import LAYOUT
 from desktop_ui import ui_spec
-from desktop_ui.keymap import shortcut, shortcut_hint
 from miryoku.layout import Scancode
 from protocol import App, LayoutState, Request, Tool
 lazy import desktop_ui.spec.tray
@@ -24,15 +23,12 @@ class Menu(Enum):
     KEYMAP = 9
     TOGGLE_LAYOUT = 1
     RESTART_LAYOUT = 2
-    AGENT = 4
-    STOP_AGENT = 5
     USAGE = 6
     LOGS = 7
     QUIT = 8
     OVERLAY = 11
     MEETING = 12
     TRANSCRIPTS = 13
-    WORK = 14
     TASKBAR = 15
     RESTART_ASSISTANT = 18
     RESTART_DESKTOP = 19
@@ -40,11 +36,10 @@ class Menu(Enum):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MenuState:
-    """The four observations that decide the tray's choices and labels."""
+    """The three observations that decide the tray's choices and labels."""
 
     layout: LayoutState | None
     overlay_enabled: bool
-    agent_running: bool
     capturing: bool
 
 
@@ -57,7 +52,7 @@ class TrayAction:
     label: str = ""
     """Its words; the layout and meeting items word their state themselves."""
     key: str = ""
-    """A key hint at the trailing edge; the agent's come from the key map."""
+    """A key hint at the trailing edge."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,16 +108,7 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
             return MenuItem(item.action.value, "Stop recording" if state.capturing else "Record a meeting")
         case Menu.OVERLAY:
             return MenuItem(item.action.value, item.label + hint, checked=state.overlay_enabled)
-        case Menu.AGENT:
-            return MenuItem(item.action.value, f"{item.label}\t{shortcut_hint(shortcut(Tool.AGENT_TYPED))}")
-        case Menu.STOP_AGENT:
-            return MenuItem(item.action.value, f"{item.label}\t{shortcut_hint(shortcut(Tool.STOP))}", enabled=state.agent_running)
-        case (
-            (Menu.KEYMAP | Menu.WORK | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.USAGE | Menu.LOGS)
-            | Menu.RESTART_ASSISTANT
-            | Menu.RESTART_DESKTOP
-            | Menu.QUIT
-        ):
+        case (Menu.KEYMAP | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.USAGE | Menu.LOGS) | Menu.RESTART_ASSISTANT | Menu.RESTART_DESKTOP | Menu.QUIT:
             return MenuItem(item.action.value, item.label + hint)
         case _:
             assert_never(item.action)

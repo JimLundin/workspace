@@ -16,18 +16,13 @@ from enum import Enum, StrEnum, auto
 from itertools import accumulate, chain
 from typing import Final, assert_never
 
-from contracts.meeting_detection import AutomaticStatus
-from contracts.members import every_member
 from desktop_ui.keymap import shortcut, shortcut_hint
 from protocol import Tool
 
 
 class Command(Enum):
-    CANVAS = auto()
     RECORD = auto()
     STOP_RECORDING = auto()
-    AUTOMATIC_RECORDING = auto()
-    STOP_AGENT = auto()
     KEYMAP = auto()
     OVERLAY = auto()
     TASKBAR = auto()
@@ -144,24 +139,11 @@ class Cell:
     caption: str = ""  # A tile's short name; its entry's label stays its accessible name.
 
 
-AUTOMATIC_DETAILS: Final = every_member(
-    AutomaticStatus,
-    {
-        AutomaticStatus.OFF: "Teams · Off",
-        AutomaticStatus.CHECKING: "Teams · Connecting…",
-        AutomaticStatus.READY: "Teams · On",
-        AutomaticStatus.UNAVAILABLE: "Teams · Check connection",
-    },
-)
-
-
 @dataclass(frozen=True, slots=True)
 class Controls:
     """What the menu reads: running activities' readings, each toggle's state and the speaker's."""
 
     recording: str | None
-    agent: str | None
-    automatic: AutomaticStatus = AutomaticStatus.OFF
     overlay: bool = field(default=False, kw_only=True)
     taskbar: bool = field(default=False, kw_only=True)
     placement_paused: bool = field(default=False, kw_only=True)
@@ -178,8 +160,6 @@ class EntryId(StrEnum):
     """The entries a spec can place. What each does, and any wording that follows
     state, stays here; the spec gives its place, look, label and symbol."""
 
-    AUTO_RECORD = auto()
-    CANVAS = auto()
     OVERLAY = auto()
     TASKBAR = auto()
     PLACEMENT = auto()
@@ -189,7 +169,6 @@ class EntryId(StrEnum):
     SWITCH_WINDOWS = auto()
     COPY_TRANSCRIPT = auto()
     KEYMAP = auto()
-    AGENT_TYPED = auto()
     NOTIFICATIONS = auto()
     ALL_CONTROLS = auto()
 
@@ -260,20 +239,11 @@ class ControlsSpec:
 def faces(entry: EntryId) -> frozenset[Face]:
     """How each entry may present itself; cards and tray icons come only from their rows."""
     match entry:
-        case EntryId.AUTO_RECORD | EntryId.OVERLAY | EntryId.TASKBAR | EntryId.PLACEMENT | EntryId.DARK_WHEN_AWAY:
+        case EntryId.OVERLAY | EntryId.TASKBAR | EntryId.PLACEMENT | EntryId.DARK_WHEN_AWAY:
             return frozenset({Face.TOGGLE})
         case EntryId.SOUND:
             return frozenset({Face.SLIDER})
-        case (
-            EntryId.CANVAS
-            | EntryId.RECORD
-            | EntryId.SWITCH_WINDOWS
-            | EntryId.COPY_TRANSCRIPT
-            | EntryId.KEYMAP
-            | EntryId.AGENT_TYPED
-            | EntryId.NOTIFICATIONS
-            | EntryId.ALL_CONTROLS
-        ):
+        case EntryId.RECORD | EntryId.SWITCH_WINDOWS | EntryId.COPY_TRANSCRIPT | EntryId.KEYMAP | EntryId.NOTIFICATIONS | EntryId.ALL_CONTROLS:
             return frozenset({Face.TILE, Face.WIDE, Face.TOOL, Face.LINK})
         case _:
             assert_never(entry)
@@ -310,8 +280,6 @@ def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
 def entry(spec: CellSpec, controls: Controls) -> Entry | None:
     """The entry `spec` places, as it reads now; None while it doesn't apply."""
     match spec.entry:
-        case EntryId.AUTO_RECORD:
-            return toggle(spec, AUTOMATIC_DETAILS[controls.automatic], Command.AUTOMATIC_RECORDING, on=controls.automatic is not AutomaticStatus.OFF)
         case EntryId.OVERLAY:
             return toggle(spec, "On" if controls.overlay else "Off", Command.OVERLAY, on=controls.overlay)
         case EntryId.TASKBAR:
@@ -321,8 +289,6 @@ def entry(spec: CellSpec, controls: Controls) -> Entry | None:
         case EntryId.DARK_WHEN_AWAY:
             away = controls.dark_when_away
             return toggle(spec, "Off" if away is None else f"External · {away} min idle", Command.DARK_WHEN_AWAY, on=away is not None)
-        case EntryId.CANVAS:
-            return Item(spec.label, spec.icon, Command.CANVAS)
         case EntryId.RECORD:
             return None if controls.recording is not None else Item(spec.label, spec.icon, Command.RECORD)
         case EntryId.SOUND:
@@ -333,8 +299,6 @@ def entry(spec: CellSpec, controls: Controls) -> Entry | None:
             return tool_item(spec.label, spec.icon, Tool.COPY_TRANSCRIPT)
         case EntryId.KEYMAP:
             return Item(spec.label, spec.icon, Command.KEYMAP)
-        case EntryId.AGENT_TYPED:
-            return tool_item(spec.label, spec.icon, Tool.AGENT_TYPED)
         case EntryId.NOTIFICATIONS:
             return Item(spec.label, spec.icon, Command.NOTIFICATIONS)
         case EntryId.ALL_CONTROLS:
@@ -344,10 +308,7 @@ def entry(spec: CellSpec, controls: Controls) -> Entry | None:
 
 
 def activities(controls: Controls) -> tuple[Live, ...]:
-    return (
-        *((Live("Agent working", controls.agent, Command.STOP_AGENT),) if controls.agent is not None else ()),
-        *((Live("Recording", controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()),
-    )
+    return (Live("Recording", controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()
 
 
 def present_cells(controls: Controls, specs: tuple[CellSpec, ...]) -> tuple[tuple[CellSpec, Entry], ...]:
@@ -557,18 +518,9 @@ def restores_focus(choice: Choice) -> bool:
     match choice:
         case ToolChoice() | Volume():
             return True
-        case (
-            Command.OVERLAY
-            | Command.TASKBAR
-            | Command.PLACEMENT
-            | Command.DARK_WHEN_AWAY
-            | Command.RECORD
-            | Command.STOP_RECORDING
-            | Command.STOP_AGENT
-            | Command.AUTOMATIC_RECORDING
-        ):
+        case Command.OVERLAY | Command.TASKBAR | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.RECORD | Command.STOP_RECORDING:
             return True
-        case Command.CANVAS | Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
+        case Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
             return False
         case _:
             assert_never(choice)

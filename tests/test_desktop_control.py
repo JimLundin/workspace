@@ -44,12 +44,12 @@ def folded(events: Iterable[Event], state: DesktopState | None = None) -> tuple[
 def test_the_tray_shows_recording_first_and_layout_off_while_the_assistant_is_away() -> None:
     # Defect: a live recording is hidden behind the voice state, or a disconnected
     # assistant's last state stays on the tray as if it were still running.
-    connected, effects = folded((Connection(Status.CONNECTED), AssistantSaid(VoiceChanged(State.LISTENING, agent_speaking=False))))
+    connected, effects = folded((Connection(Status.CONNECTED), AssistantSaid(VoiceChanged(State.LISTENING))))
     assert effects[-1] == TrayShow(State.LISTENING)
     _, recording = folded((AssistantSaid(RecordingChanged(RecordingState(phase="recording"))),), connected)
     assert recording[-1] == TrayShow(State.RECORDING)
     away, gone = folded((AssistantSaid(MicLevel(0.4)), Connection(Status.DISCONNECTED)), connected)
-    assert gone[-1] == TrayShow(State.LAYOUT_OFF) and away.level is None and not away.shown.agent_running
+    assert gone[-1] == TrayShow(State.LAYOUT_OFF) and away.level is None and not away.shown.connected
 
 
 def test_a_warning_from_the_assistant_beeps_once_and_reaches_the_tray_and_the_views() -> None:
@@ -73,7 +73,7 @@ def test_assistant_tools_go_over_the_link_and_desktop_requests_stay_here() -> No
     # Defect: a tool the assistant owns is handled locally, or a desktop key release acts like a press.
     _, chosen = folded((Controlled(ChosenTool(Tool.MEETING_TOGGLE)),))
     assert chosen == (Send(UseTool(Tool.MEETING_TOGGLE)),)
-    _, released = folded((Controlled(FeatureRequest(Tool.OPEN_INBOX, down=False)),))
+    _, released = folded((Controlled(FeatureRequest(Tool.ZOOM, down=False)),))
     assert released == ()
 
 

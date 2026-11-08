@@ -6,6 +6,7 @@ showing hints only moves, repaints and reveals windows. Nothing runs while
 they're hidden.
 """
 
+import math
 from dataclasses import dataclass, field, replace
 from typing import Final, Protocol, assert_never, override
 
@@ -13,8 +14,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Lettering, Look, Scheme, Shade, SolidLook, look
-from desktop_ui.components.bubble import rim_gradient
+from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Lettering, Look, Rim, Scheme, Shade, SolidLook, look, rim_stops
 from desktop_ui.components.meaning import Tint
 from desktop_ui.components.text import color, face
 from desktop_ui.key_hints import ActionCap, AppCap, Badge, DirectionCap, Keycap
@@ -33,6 +33,18 @@ CORNER: Final = 8
 """Each badge's inset from its window's top-left corner."""
 ARROWS: Final = {Direction.LEFT: "←", Direction.DOWN: "↓", Direction.UP: "↑", Direction.RIGHT: "→"}
 WHITE: Final = Shade("#ffffff")
+
+
+def rim_gradient(bounds: QtCore.QRectF, rim: Rim) -> QtGui.QLinearGradient:
+    """CSS's 160deg gradient: brightest where light catches the upper-leading curve."""
+    angle = math.radians(160)
+    dx, dy = math.sin(angle), -math.cos(angle)
+    half = (abs(bounds.width() * dx) + abs(bounds.height() * dy)) / 2
+    center = bounds.center()
+    gradient = QtGui.QLinearGradient(center - QtCore.QPointF(dx * half, dy * half), center + QtCore.QPointF(dx * half, dy * half))
+    for stop in rim_stops(rim):
+        gradient.setColorAt(stop.offset, color(Shade(stop.color, stop.opacity)))
+    return gradient
 
 
 class HintSurface(Protocol):

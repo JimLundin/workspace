@@ -27,8 +27,7 @@ lazy import usage
 lazy import winapi.ambient
 lazy from config import APPS
 lazy from contracts.recording_state import RecordingAction
-lazy from desktop_ui import island_menu, island_moment, ui_spec
-lazy from desktop_ui.agent_progress import Phase
+lazy from desktop_ui import island_menu, ui_spec
 lazy from desktop_ui.ambient import Ambient, SystemStatus
 lazy from desktop_ui.application_observer import ApplicationObserver, Arrangement
 lazy from desktop_ui.audio_meter import AudioMeter
@@ -38,7 +37,6 @@ lazy from desktop_ui.bar_events import (
     AllControls,
     BarAction,
     BarModel,
-    Chose,
     ClickTray,
     Closing,
     Deactivated,
@@ -47,16 +45,11 @@ lazy from desktop_ui.bar_events import (
     Expand,
     Framed,
     Hovered,
-    InboxRequested,
     Keyboard,
     MenuKey,
     Navigate,
-    NoticesShown,
     NotificationSettings,
-    Opened,
-    OpenInbox,
     Opening,
-    OpenItem,
     Overlay,
     PaintDue,
     Picked,
@@ -70,10 +63,8 @@ lazy from desktop_ui.bar_events import (
     Sampled,
     SampleDue,
     Selected,
-    SelectRequest,
     SetVolume,
     ShowHints,
-    Stop,
     TickDue,
     Ticked,
     ToggleAway,
@@ -84,8 +75,6 @@ lazy from desktop_ui.bar_events import (
     UseTool,
     Visibility,
     VolumeSet,
-    Work,
-    inbox_rows,
     menu,
     next_frame,
     transition,
@@ -98,8 +87,7 @@ lazy from desktop_ui.island_layout import Content, Metrics, expansion, frame, sn
 lazy from desktop_ui.island_menu import (
     Menu,
 )
-lazy from desktop_ui.island_model import Action, CapsuleView, Expansion, Key, Marker, Observed, island, order
-lazy from desktop_ui.island_moment import Inbox, Notice, Row
+lazy from desktop_ui.island_model import Action, CapsuleView, Key, Marker, Observed, island, order
 lazy from desktop_ui.island_motion import IslandMotion, Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
@@ -107,16 +95,14 @@ lazy from desktop_ui.key_hints import hints
 lazy from desktop_ui.navigation import AppKey, CycleApp, Order, ShowWindow, Source
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import EventLoop, application
-lazy from desktop_ui.request_panel import RequestActions
 lazy from desktop_ui.shell_controls import TaskbarControl
 lazy from desktop_ui.shell_items import Application, Item, Pinned, PinnedApp, Shelf
 lazy from desktop_ui.ui_spec_watch import SpecWatch
-lazy from desktop_ui.window_layout import App, Program, WorkspaceView
+lazy from desktop_ui.window_layout import App, Program
 lazy from protocol import Installed, Tool
 lazy from usage import Detail
-lazy from winapi import appearance, inputs, session, shell, system_notices, windows
+lazy from winapi import appearance, inputs, session, shell, windows
 lazy from winapi.machine_status import Power, PowerUnavailable
-lazy from winapi.notifications import NotificationObserver
 lazy from winapi.tray_host import Click, Entry, TrayHost
 
 prepare()
@@ -124,18 +110,12 @@ prepare()
 
 @dataclass(frozen=True, slots=True)
 class BarActions:
-    work: Callable[[], None]
-    stop: Callable[[], None]
     record: Callable[[RecordingAction], None]
     keyboard: Callable[[], None]
     overlay: Callable[[], None]
     menu: Callable[[], None]
     problem: Callable[[str], None]
-    inbox: Callable[[], None] = field(kw_only=True)
-    open_item: Callable[[str], None] = field(kw_only=True)  # The canvas, at one of its items.
     tool: Callable[[Tool], None] = lambda tool: None
-    notices: Callable[[system_notices.Observed], None] = lambda _: None
-    requests: RequestActions | None = field(default=None, kw_only=True)
     taskbar: Callable[[], None] | None = field(default=None, kw_only=True)
     """Toggle the taskbar; None toggles the real one."""
     notification_settings: Callable[[], None] | None = field(default=None, kw_only=True)
@@ -164,9 +144,8 @@ def level(value: float | None) -> float:
 
 @dataclass(frozen=True, slots=True)
 class _Shell:
-    """The production desktop's native owners: notifications, system status, shell controls and taskbar recovery."""
+    """The production desktop's native owners: system status, shell controls and taskbar recovery."""
 
-    notifications: NotificationObserver
     status: StatusObserver
     controls: shell.AppWindow
     away: AwayScreens
@@ -181,12 +160,10 @@ class _Reporter:
     """What the bar window, its loop and timers report, delivered to the bar once it exists.
 
     They are made before the bar, so `deliver` holds it once it does: the Qt-boundary
-    binding. Each call becomes an event, stamped with the bar's clock where it matters.
+    binding. Each call becomes an event.
     """
 
     deliver: Cell[Callable[[Event], None] | None]
-    clock: Callable[[], float]
-    requests: RequestActions | None
 
     def report(self, event: Event) -> None:
         if (handle := self.deliver.get()) is not None:
@@ -196,7 +173,7 @@ class _Reporter:
         self.report(Pressed(action))
 
     def hover(self, key: Key | None) -> None:
-        self.report(Hovered(key, self.clock()))
+        self.report(Hovered(key))
 
     def select(self, index: int) -> None:
         self.report(Selected(index))
@@ -215,12 +192,6 @@ class _Reporter:
 
     def deactivated(self) -> None:
         self.report(Deactivated())
-
-    def request_actions(self) -> RequestActions | None:
-        return self.requests
-
-    def choose(self, row: Row) -> None:
-        self.report(Chose(row))
 
     def render(self) -> None:
         self.report(Rerender())
@@ -261,7 +232,7 @@ class DesktopBar:
     ) -> DesktopBar:
         observed = BarObservations() if observations is None else observations
         deliver: Cell[Callable[[Event], None] | None] = Cell(None)
-        reporter = _Reporter(deliver, observed.clock, actions.requests)
+        reporter = _Reporter(deliver)
         errors: queue.Queue[str] = queue.Queue()
         specs = ui_spec.bar_specs(reload=False)
         loop = EventLoop.start(application(), lambda: reporter.report(PaintDue()))
@@ -312,7 +283,6 @@ class DesktopBar:
         return bar
 
     def _start_shell(self) -> _Shell:
-        notifications = NotificationObserver.start()
         status = StatusObserver.start()
         away = AwayScreens.start(_record_usage)
 
@@ -327,7 +297,6 @@ class DesktopBar:
             self.errors.put(f"Screens can't go dark when locked: {error}")
         worker = threading.Thread(target=self._start_taskbar, name="taskbar recovery", daemon=True)
         built = _Shell(
-            notifications,
             status,
             controls,
             away,
@@ -356,7 +325,7 @@ class DesktopBar:
         return self.model.visible
 
     @property
-    def opened(self) -> Opened | None:
+    def opened(self) -> Menu | None:
         return self.model.opened
 
     @property
@@ -405,9 +374,6 @@ class DesktopBar:
                 windows.allow_activation(int(self.window.winId()), allowed=False)
                 if target:
                     self.observations.focus(target)
-            case SelectRequest(request):
-                if self.actions.requests is not None:
-                    self.actions.requests.select(request)
             case Act(action):
                 self._act(action)
             case Navigate(order):
@@ -428,16 +394,8 @@ class DesktopBar:
 
     def _act(self, action: BarAction) -> None:
         match action:
-            case Work():
-                self.actions.work()
-            case Stop():
-                self.actions.stop()
             case Record(action=recording):
                 self.actions.record(recording)
-            case OpenInbox():
-                self.actions.inbox()
-            case OpenItem(target):
-                self.actions.open_item(target)
             case Keyboard():
                 self.actions.keyboard()
             case Overlay():
@@ -496,52 +454,18 @@ class DesktopBar:
     # ---- measuring and painting ----------------------------------------------------------
 
     def _observed(self, model: BarModel) -> Observed:
-        asking = model.agent is not None and model.agent.waiting
-        moment = island_moment.moment(dictating=model.dictating, asking=asking, notices=model.notices)
-        return Observed(
-            model.agent,
-            model.job,
-            model.recording,
-            model.ambient,
-            model.system,
-            model.inbox,
-            plain_keyboard=not model.layout_enabled,
-            dictating=model.dictating,
-            unread=island_moment.unread(model.notices),
-            notice=moment if isinstance(moment, Notice) else None,
-        )
+        return Observed(model.job, model.recording, model.ambient, model.system, plain_keyboard=not model.layout_enabled, dictating=model.dictating)
 
-    def _measure(self, model: BarModel, view: CapsuleView, opened: Opened | None) -> Content:
-        match opened:
-            case Phase() if view.key is Key.ISLAND:
-                return self.window.measure_request(opened)
-            case Inbox(rows=rows) if view.key is Key.ISLAND:
-                return self.window.measure_inbox(rows)
-            case Menu() if view.key is Key.STATUS:
-                return expansion(opened, self.window.measure(view), model.specs.sizes.menu)
-            case _:
-                return self.window.measure(view)
+    def _measure(self, model: BarModel, view: CapsuleView, opened: Menu | None) -> Content:
+        if opened is not None and view.key is Key.STATUS:
+            return expansion(opened, self.window.measure(view), model.specs.sizes.menu)
+        return self.window.measure(view)
 
     def _retargeted(self) -> Event:
         """Retarget the capsules at what the bar should show now; frames carry them there."""
         model = self.model
-        opened = menu(model) if isinstance(model.opened, Menu) else model.opened
-        # A notice waits while dictation, a question or anything the person opened holds the island.
-        asking = model.agent is not None and model.agent.waiting
-        notices = island_moment.advance(model.notices, blocked=model.dictating or asking or opened is not None, now=self.observations.clock())
-        match opened:
-            case Menu():
-                expanded: Expansion | None = Expansion.MENU
-            case Phase():
-                expanded = Expansion.REQUEST
-            case Inbox():
-                expanded = Expansion.INBOX
-            case None:
-                expanded = None
-            case _:
-                assert_never(opened)
-        current = replace(model, notices=notices, opened=opened)
-        views = island(self._observed(current), model.specs.island, hovered=model.hovered, expanded=expanded)
+        opened = menu(model) if model.opened is not None else None
+        views = island(self._observed(model), model.specs.island, hovered=model.hovered, expanded=opened is not None)
         shown = tuple(Shown(view, self._measure(model, view, opened)) for view in views)
         motion = retarget(model.motion, shown, animate=self.visible and self.observations.motion())
         listening = model.dictating
@@ -555,7 +479,7 @@ class DesktopBar:
         if self.audio_meter is not None:
             self.audio_meter.listen(enabled=listening)
         self.window.setVisible(self.visible)
-        return Retargeted(views, motion, notices, opened)
+        return Retargeted(views, motion, opened)
 
     def _draw(self, model: BarModel) -> None:
         width = QtGui.QGuiApplication.primaryScreen().geometry().width()
@@ -603,7 +527,7 @@ class DesktopBar:
             )
         )
         # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
-        if self.shell is not None and isinstance(model.opened, Menu):
+        if self.shell is not None and model.opened is not None:
             self.shell.tray.locate(self.window.tray_locations())
 
     def _paint(self) -> Iterator[Event]:
@@ -615,7 +539,7 @@ class DesktopBar:
         self._draw(replace(model, motion=drawn.motion))
         if drawn.indicators:
             for key, capsule in self.window.capsules.items():
-                if key in (Key.ISLAND, Key.STATUS, Key.AGENT, Key.JOB):
+                if key in (Key.ISLAND, Key.STATUS, Key.JOB):
                     capsule.update_indicators()
         self.resolution.update(active=drawn.running)
         self.loop.watch(visible=drawn.running)
@@ -630,7 +554,6 @@ class DesktopBar:
             self.actions.problem(self.errors.get_nowait())
         model = self.model
         if self.shell is not None:
-            self._poll_notifications(self.shell)
             self.shell.away.poll(recording=model.recording.capturing)
         now = self.observations.clock()
         applications, arrangement = self._poll_shell(model)
@@ -684,15 +607,6 @@ class DesktopBar:
             self._show_hints()
         return applications, arrangement
 
-    def _poll_notifications(self, built: _Shell) -> None:
-        with suppress(queue.Empty):
-            observed = built.notifications.results.get_nowait()
-            match observed:
-                case system_notices.Observed():
-                    self.actions.notices(observed)
-                case system_notices.Unavailable():
-                    pass
-
     def _sample_audio(self) -> Iterator[Event]:
         model = self.model
         if not model.dictating:
@@ -710,10 +624,6 @@ class DesktopBar:
     def app_click(self, app: App, click: Click) -> None:
         """A pager icon: go to the app, cycling its windows or starting it; right-click lists its windows."""
         match app:
-            case WorkspaceView.CANVAS:
-                if click is Click.LEFT:
-                    self.close_menu(restore=False)
-                    self.actions.work()
             case PinnedApp():
                 self._application_click(next((slot for slot in self.model.applications.pinned if slot.app is app), Pinned(app, ())), click)
             case Program(exe=exe):
@@ -759,23 +669,13 @@ class DesktopBar:
         self.handle(Navigate(order))
 
     def hover(self, key: Key | None) -> None:
-        self.handle(Hovered(key, self.observations.clock()))
+        self.handle(Hovered(key))
 
     def deactivated(self) -> None:
         self.handle(Deactivated())
 
     def close_menu(self, *, restore: bool) -> None:
         self.handle(Pressed(Action.CLOSE_MENU) if restore else Deactivated())
-
-    def open_inbox(self, questions: tuple[Phase, ...]) -> bool:
-        """The bell's list, or straight to the one question when nothing else waits; False with nothing to show."""
-        if not inbox_rows(self.model, questions):
-            return False
-        self.handle(InboxRequested(questions))
-        return True
-
-    def notices_changed(self, current: tuple[Notice, ...]) -> None:
-        self.handle(NoticesShown(current, self.observations.clock()))
 
     def close(self) -> None:
         if self.model.closed:
@@ -791,7 +691,6 @@ class DesktopBar:
         if built is not None:
             built.hints.close()
             built.status.close()
-            built.notifications.close()
             built.tray.close()
             built.applications.close()
         try:

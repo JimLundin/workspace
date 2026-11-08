@@ -7,12 +7,9 @@ name = "workspace"
 version = "0.1.0"
 requires-python = ">=3.15"
 dependencies = [
-    "openai-agents==0.24.0",
     "openai==3.35.1",
     "pydantic==2.14.1",
-    "markdown-it-py==4.0.0",
     "httpx==0.28.1",
-    "websockets==16.1.1",
     "PySide6-Essentials==6.12.0; sys_platform == 'win32'",
     "win32more-core==0.8.7; sys_platform == 'win32'",
     "win32more-Microsoft.Windows.SDK.Contracts==0.8.10.0.28000.2705; sys_platform == 'win32'",
@@ -33,53 +30,24 @@ package = false
 constraint-dependencies = [
     "annotated-types==0.8.0",
     "anyio==4.15.1",
-    "attrs==26.1.0",
     "certifi==2026.10.18",
-    "cffi==2.1.1",
-    "charset-normalizer==3.5.2",
-    "click==8.5.0",
-    "cryptography==50.0.2",
-    "griffelib==2.3.2",
     "h11==0.16.0",
     "httpcore==1.0.9",
     "httpcore2==2.14.0",
     "httpx==0.28.1",
-    "httpx-sse==0.4.3",
     "httpx2==2.14.0",
     "idna==3.20",
     "jiter==0.17.0",
-    "jsonschema==4.26.0",
-    "jsonschema-specifications==2025.9.1",
-    "markdown-it-py==4.0.0",
-    "mcp==1.30.0",
-    "mdurl==0.1.2",
     "openai==3.35.1",
-    "openai-agents==0.24.0",
-    "pycparser==3.11",
     "pydantic==2.14.1",
     "pydantic_core==2.50.1",
-    "pydantic-settings==2.16.1",
-    "PyJWT==2.15.1",
-    "python-dotenv==1.2.4",
-    "python-multipart==0.0.32",
-    "pywin32==312; sys_platform == 'win32'",
-    "referencing==0.37.0",
-    "requests==2.34.2",
-    "rpds-py==2026.9.1",
     "sniffio==1.3.1",
-    "sse-starlette==3.5.0",
-    "starlette==1.9.0",
     "truststore==0.10.5",
     "typing_extensions==4.16.0",
     "typing-inspection==0.4.4",
-    "urllib3==2.8.0",
-    "uvicorn==0.54.0",
-    "websockets==16.1.1",
     "PySide6-Essentials==6.12.0; sys_platform == 'win32'",
     "shiboken6==6.12.0; sys_platform == 'win32'",
     "win32more-core==0.8.7; sys_platform == 'win32'",
-    "win32more-Microsoft.Windows.SDK.Contracts==0.8.10.0.28000.2705; sys_platform == 'win32'",
-    "win32more-Microsoft.Windows.SDK.Win32Metadata==0.8.71.0.26; sys_platform == 'win32'",
     "nodeenv==1.11.0",
     "pyright==1.1.414",
     "ruff==0.17.3",
@@ -298,20 +266,12 @@ ban-relative-imports = "all"
 py-modules = ["cell", "components", "config", "diagnostics", "launch", "protocol", "usage"]
 
 [tool.setuptools.packages.find]
-include = ["assistant*", "contracts*", "desktop_ui*", "automation*", "gateway*", "link*", "miryoku*", "winapi*"]
+include = ["assistant*", "contracts*", "desktop_ui*", "gateway*", "link*", "miryoku*", "winapi*"]
 
 [tool.setuptools.package-data]
-assistant = ["*.js", "*.ps1", "*.yaml"]
 desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 
 [tool.workspace.architecture]
-
-[[tool.workspace.architecture.exceptions]]
-rule = "mutable-parameter"
-module = "assistant.sdk"
-declaration = "after_tools.results"
-expression = "list[FunctionToolResult]"
-reason = "The Agents SDK's ToolsToFinalOutputFunction, passed as tool_use_behavior, dictates the signature; the results are not read."
 
 [[tool.workspace.architecture.exceptions]]
 rule = "mutable-parameter"
@@ -326,41 +286,6 @@ module = "scripts.benchmark_keyboard"
 declaration = "round_latencies.observe_gc"
 expression = "Callable[[str, dict[str, int]], None]"
 reason = "The callback is appended to gc.callbacks, whose element type dictates its signature."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "assistant.communications_browser"
-declaration = "TeamsWeb.adopt"
-expression = "adopt"
-reason = "An agent-core test seam: the Teams tests start a collector on a tab they opened. It goes with the agent core's replacement."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "assistant.communications_service"
-declaration = "Communications.poll_next"
-expression = "poll_next"
-reason = "An agent-core test seam: a test chooses the next followed conversation to poll. It goes with the agent core's replacement."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "assistant.feed_triage_service"
-declaration = "Triage.set_board"
-expression = "set_board"
-reason = "An agent-core test seam: feed tests start from a given board. It goes with the agent core's replacement."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "assistant.feed_triage_service"
-declaration = "Triage.set_candidates"
-expression = "set_candidates"
-reason = "An agent-core test seam: a feed test starts from given candidates. It goes with the agent core's replacement."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "assistant.work_bridge_contracts"
-declaration = "BRIDGE_COMMAND"
-expression = "BRIDGE_COMMAND"
-reason = "An agent-core test seam: bridge tests encode commands as the desktop does. It goes with the agent core's replacement."
 
 [[tool.workspace.architecture.exceptions]]
 rule = "unused-definition"

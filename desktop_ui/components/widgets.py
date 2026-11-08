@@ -125,46 +125,6 @@ def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWi
         (target or window).setFocus(Qt.FocusReason.OtherFocusReason)
 
 
-class Editor(QtWidgets.QPlainTextEdit):
-    submitted = QtCore.Signal()
-
-    def __init__(self, parent: QtWidgets.QWidget | None = None, *, readonly: bool = False, enter_sends: bool = False) -> None:
-        super().__init__(parent)
-        self.enter_sends = enter_sends
-        self.setReadOnly(readonly)
-        self.setTabChangesFocus(True)
-        self.setMinimumHeight(60)
-
-    @override
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-        send = (
-            not bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
-            if self.enter_sends
-            else bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
-        )
-        if enter and send and not self.isReadOnly():
-            self.submitted.emit()
-            event.accept()
-        else:
-            super().keyPressEvent(event)
-
-
-def replace_text(widget: QtWidgets.QPlainTextEdit, value: str) -> None:
-    if widget.toPlainText() == value:
-        return
-    cursor = widget.textCursor()
-    anchor, position, selected = cursor.anchor(), cursor.position(), cursor.selectedText()
-    scroll = widget.verticalScrollBar().value()
-    widget.setPlainText(value)
-    maximum = widget.document().characterCount() - 1
-    cursor.setPosition(min(anchor, maximum))
-    cursor.setPosition(min(position, maximum), QtGui.QTextCursor.MoveMode.KeepAnchor)
-    if cursor.selectedText() == selected:
-        widget.setTextCursor(cursor)
-    widget.verticalScrollBar().setValue(scroll)
-
-
 def _spaced[L: QtWidgets.QBoxLayout](layout: L, spacing: int) -> L:
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(spacing)

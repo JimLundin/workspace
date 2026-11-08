@@ -23,12 +23,10 @@ def test_apps_thumb_letters_reach_navigation_voice_and_the_configured_apps() -> 
     held = {"apps_held": True}
     assert [shortcut(ord(letter), **held) for letter in "NEIO"] == [Tool.FOCUS_LEFT, Tool.FOCUS_DOWN, Tool.FOCUS_UP, Tool.FOCUS_RIGHT]
     assert [shortcut(ord(letter), **held) for letter in "JLUY"] == [Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4]
-    assert [shortcut(ord(letter), **held) for letter in "MXCDV"] == [Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.WINDOW_SWITCHER, Tool.PLACE_NOW, Tool.STOP]
+    assert [shortcut(ord(letter), **held) for letter in "MXCD"] == [Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.WINDOW_SWITCHER, Tool.PLACE_NOW]
     assert [shortcut(ord(letter), **held) for letter in "QWFPBARSTG"] == list(APPS[:10])
     assert shortcut(ord("H"), apps_held=True) is Tool.DICTATE
-    assert shortcut(ord("K"), apps_held=True) is Tool.AGENT_VOICE
     assert shortcut(0x20, apps_held=True) is Tool.MEETING_TOGGLE  # the Space thumb's place
-    assert shortcut(ord("Z"), apps_held=True) is Tool.AGENT_VOICE_TOGGLE
 
 
 def test_without_the_apps_thumb_and_for_unassigned_keys_keys_keep_their_meaning() -> None:

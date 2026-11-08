@@ -12,12 +12,9 @@ from dataclasses import dataclass, field, replace
 from typing import Final, assert_never
 
 from config import DARK_WHEN_IDLE_MINUTES
-from contracts.canvas_activity import CanvasRequest
-from contracts.meeting_detection import AutomaticStatus
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job
-from desktop_ui import island_menu, island_moment, ui_spec
-from desktop_ui.agent_progress import Phase, coalesced, hint, stable_phases
+from desktop_ui import island_menu, ui_spec
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.application_observer import EMPTY_ARRANGEMENT, Arrangement
 from desktop_ui.island_menu import (
@@ -34,8 +31,7 @@ from desktop_ui.island_menu import (
     entries,
     restores_focus,
 )
-from desktop_ui.island_model import Action, Agent, CapsuleView, Key, Marker, Spinner, capture
-from desktop_ui.island_moment import Asked, Inbox, Notice, Notices, Row
+from desktop_ui.island_model import Action, CapsuleView, Key, Marker, capture
 from desktop_ui.island_motion import IslandMotion, advance, finish, settled
 from desktop_ui.navigation import Order, Placing
 from desktop_ui.shell_items import EMPTY_SHELF, Shelf
@@ -44,9 +40,6 @@ from winapi import appearance
 from winapi.machine_status import Power, PowerUnavailable, Speakers
 from winapi.shapes import Rect
 from winapi.tray_host import Click
-
-type Opened = Menu | Phase | Inbox
-"""What the person opened in the island."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,25 +50,20 @@ class BarModel:
     closed: bool = False
     visible: bool = True
     """Whether the bar's window is meant to be on screen."""
-    opened: Opened | None = None
+    opened: Menu | None = None
+    """The controls menu, while it is open."""
     menu_target: int = 0
-    """The window that had the keyboard before the island opened."""
+    """The window that had the keyboard before the menu opened."""
     hovered: Key | None = None
-    notices: Notices = field(default_factory=Notices)
-    choices: tuple[Phase, ...] = ()
-    """The session's phases, for a question opened from the island."""
     # Each activity comes from its own owner: dictation and quick jobs from the
-    # voice controller, the agent from its session.
+    # voice controller, the recording from the meeting recorder.
     dictating: bool = False
-    automatic: AutomaticStatus = AutomaticStatus.OFF
     overlay_enabled: bool = False
     job: Job | None = None
-    agent: Agent | None = None
     recording: RecordingState = field(default_factory=RecordingState)
     chord_held: bool = False
     """Either keyboard is holding its Apps key."""
     layout_enabled: bool = True
-    inbox: int = 0
     # What the tick observes.
     system: SystemStatus = field(default_factory=SystemStatus)
     power: Power = PowerUnavailable.UNKNOWN
@@ -102,14 +90,11 @@ class BarModel:
 def menu(model: BarModel) -> Menu:
     """The menu for what's happening now, keeping the current selection."""
     recorded = capture(model.recording) if model.recording.capturing else None
-    working = model.agent if model.agent is not None and not model.agent.waiting else None
     sound = Slider("Sound", model.system.volume, muted=model.system.speakers is Speakers.MUTED)
     built = Menu(
         entries(
             Controls(
                 recorded.title if recorded is not None else None,
-                working.phase if working is not None else None,
-                model.automatic,
                 overlay=model.overlay_enabled,
                 taskbar=model.taskbar_revealed,
                 placement_paused=model.arrangement.paused,
@@ -120,7 +105,7 @@ def menu(model: BarModel) -> Menu:
             model.specs.controls,
         )
     )
-    return replace(built, selected=model.opened.selected) if isinstance(model.opened, Menu) else built
+    return replace(built, selected=model.opened.selected) if model.opened is not None else built
 
 
 # ---- facts --------------------------------------------------------------------------
@@ -134,7 +119,6 @@ class Pressed:
 @dataclass(frozen=True, slots=True)
 class Hovered:
     key: Key | None
-    now: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,11 +139,6 @@ class MenuKey:
 @dataclass(frozen=True, slots=True)
 class Deactivated:
     """Another window took the keyboard: the island closes without taking it back."""
-
-
-@dataclass(frozen=True, slots=True)
-class Chose:
-    row: Row
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,23 +173,8 @@ class JobShown:
 
 
 @dataclass(frozen=True, slots=True)
-class AgentShown:
-    agent: Agent | None
-
-
-@dataclass(frozen=True, slots=True)
-class InboxShown:
-    count: int
-
-
-@dataclass(frozen=True, slots=True)
 class RecordingShown:
     recording: RecordingState
-
-
-@dataclass(frozen=True, slots=True)
-class AutomaticShown:
-    status: AutomaticStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +183,7 @@ class LayoutShown:
 
 
 # The views' publisher changed one of the activities the bar shows.
-type ActivityChange = OverlayShown | DictationShown | JobShown | AgentShown | InboxShown | RecordingShown | AutomaticShown | LayoutShown
+type ActivityChange = OverlayShown | DictationShown | JobShown | RecordingShown | LayoutShown
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,28 +192,10 @@ class ChordHeld:
 
 
 @dataclass(frozen=True, slots=True)
-class RequestsShown:
-    choices: tuple[Phase, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class NoticesShown:
-    current: tuple[Notice, ...]
-    now: float
-
-
-@dataclass(frozen=True, slots=True)
-class InboxRequested:
-    """The bell's list of these questions and the bar's news; nothing opens with neither."""
-
-    questions: tuple[Phase, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class Opening:
-    """The island took the keyboard to show `opened`; `target` had it before, when it was closed."""
+    """The bar took the keyboard to show `opened`; `target` had it before, when it was closed."""
 
-    opened: Opened
+    opened: Menu
     target: int | None
 
 
@@ -279,12 +225,11 @@ class Respecced:
 
 @dataclass(frozen=True, slots=True)
 class Retargeted:
-    """The window measured the bar: its views, their motion's new targets and the notices it advanced."""
+    """The window measured the bar: its views and their motion's new targets."""
 
     views: tuple[CapsuleView, ...]
     motion: IslandMotion
-    notices: Notices
-    opened: Opened | None
+    opened: Menu | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,15 +295,11 @@ type Event = (
     | Picked
     | MenuKey
     | Deactivated
-    | Chose
     | VolumeSet
     | TrayClicked
     | Rerender
     | ActivityChange
     | ChordHeld
-    | RequestsShown
-    | NoticesShown
-    | InboxRequested
     | Opening
     | Ticked
     | Respecced
@@ -381,22 +322,17 @@ class Render:
 
 @dataclass(frozen=True, slots=True)
 class Expand:
-    """Take the keyboard (remembering who had it, if the island was closed) and open `opened`."""
+    """Take the keyboard (remembering who had it, if the menu was closed) and open `opened`."""
 
-    opened: Opened
+    opened: Menu
     remember: bool
 
 
 @dataclass(frozen=True, slots=True)
 class Release:
-    """Give the keyboard back to `target` (0: to no one) as the island closes."""
+    """Give the keyboard back to `target` (0: to no one) as the menu closes."""
 
     target: int
-
-
-@dataclass(frozen=True, slots=True)
-class SelectRequest:
-    request: CanvasRequest | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -407,28 +343,8 @@ class Act:
 
 
 @dataclass(frozen=True, slots=True)
-class Work:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class Stop:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class Record:
     action: RecordingAction
-
-
-@dataclass(frozen=True, slots=True)
-class OpenInbox:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class OpenItem:
-    target: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -451,7 +367,7 @@ class UseTool:
     tool: Tool
 
 
-type BarAction = Work | Stop | Record | OpenInbox | OpenItem | Keyboard | Overlay | AllControls | UseTool
+type BarAction = Record | Keyboard | Overlay | AllControls | UseTool
 
 
 @dataclass(frozen=True, slots=True)
@@ -491,50 +407,19 @@ class UseSizes:
 
 
 type Effect = (
-    Instruction
-    | Render
-    | Expand
-    | Release
-    | SelectRequest
-    | Act
-    | ToggleTaskbar
-    | ToggleAway
-    | NotificationSettings
-    | SetVolume
-    | ClickTray
-    | ShowHints
-    | UseSizes
+    Instruction | Render | Expand | Release | Act | ToggleTaskbar | ToggleAway | NotificationSettings | SetVolume | ClickTray | ShowHints | UseSizes
 )
 
 
 def _closed(model: BarModel, *, restore: bool) -> tuple[BarModel, tuple[Effect, ...]]:
-    """The island closes, giving the keyboard back to who had it if `restore`."""
+    """The menu closes, giving the keyboard back to who had it if `restore`."""
     if model.opened is None:
         return model, ()
-    return replace(model, opened=None), (SelectRequest(None), Release(model.menu_target if restore else 0), Render())
+    return replace(model, opened=None), (Release(model.menu_target if restore else 0), Render())
 
 
-def _expanded(model: BarModel, opened: Opened) -> tuple[BarModel, tuple[Effect, ...]]:
+def _expanded(model: BarModel, opened: Menu) -> tuple[BarModel, tuple[Effect, ...]]:
     return model, (Expand(opened, remember=model.opened is None),)
-
-
-def _request(model: BarModel, phase: Phase) -> tuple[BarModel, tuple[Effect, ...]]:
-    if model.closed:
-        return model, ()
-    model, effects = _expanded(model, phase)
-    return model, (*effects, SelectRequest(phase.request))
-
-
-def _chose(model: BarModel, row: Row) -> tuple[BarModel, tuple[Effect, ...]]:
-    """A question opens in the island; a notice opens its canvas item and counts as read."""
-    match row:
-        case Asked(phase=phase):
-            return _request(model, phase)
-        case Notice(identity=identity, target=target):
-            model = replace(model, notices=island_moment.read(model.notices, frozenset({identity})))
-            model, closing = _closed(model, restore=False)
-            opening = Act(OpenItem(target)) if target is not None else Act(Work())
-            return model, (*closing, opening, Render())
 
 
 def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[Effect, ...]]:
@@ -542,16 +427,10 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
     match choice:
         case ToolChoice(tool=tool):
             return model, (Act(UseTool(tool)),)
-        case Command.CANVAS:
-            return model, (Act(Work()),)
         case Command.RECORD:
             return model, (Act(Record("start")),)
         case Command.STOP_RECORDING:
             return model, (Act(Record("stop")),)
-        case Command.AUTOMATIC_RECORDING:
-            return model, (Act(Record("automatic")),)
-        case Command.STOP_AGENT:
-            return model, (Act(Stop()),)
         case Command.KEYMAP:
             return model, (Act(Keyboard()),)
         case Command.OVERLAY:
@@ -607,28 +486,12 @@ def _pressed(model: BarModel, action: Action) -> tuple[BarModel, tuple[Effect, .
         case Action.OPEN_MENU:
             if model.closed:
                 return model, ()
-            opened = replace(model, opened=None)
-            model, expanding = _expanded(model, menu(opened))
-            return model, (SelectRequest(None), *expanding)
+            return _expanded(model, menu(replace(model, opened=None)))
         case Action.CLOSE_MENU:
             return _closed(model, restore=True)
-        case Action.STOP_DICTATION | Action.STOP_AGENT:
-            return model, (Act(Stop()),)
-        case Action.OPEN_QUESTION:
-            # "Needs you" opens the session's own waiting question, wherever else the bell has news.
-            phase = next((phase for phase in model.choices if hint(phase.turn)), None)
-            return _request(model, phase) if phase is not None else (model, (Act(OpenInbox()),))
-        case Action.OPEN_INBOX:
-            return model, (Act(OpenInbox()),)
-        case Action.OPEN_NOTICE:
-            notice = island_moment.shown(model.notices)
-            return _chose(model, notice) if notice is not None else (model, ())
-        case Action.DISMISS_NOTICE:
-            if (notice := island_moment.shown(model.notices)) is None:
-                return model, ()
-            return replace(model, notices=island_moment.read(model.notices, frozenset({notice.identity}))), (Render(),)
-        case Action.OPEN_CANVAS:
-            return model, (Act(Work()),)
+        case Action.STOP_DICTATION:
+            # The dictation toggle stops a capture that is listening.
+            return model, (Act(UseTool(Tool.DICTATE_TOGGLE)),)
         case Action.STOP_RECORDING:
             return model, (Act(Record("stop")),)
         case _:
@@ -643,68 +506,16 @@ def _shown(model: BarModel, change: ActivityChange) -> BarModel:
             return replace(model, dictating=active)
         case JobShown(job):
             return replace(model, job=job)
-        case AgentShown(agent):
-            return replace(model, agent=agent)
-        case InboxShown(count):
-            return model if model.closed else replace(model, inbox=count)
         case RecordingShown(recording):
             return replace(model, recording=recording)
-        case AutomaticShown(status):
-            return replace(model, automatic=status)
         case LayoutShown(enabled):
             return replace(model, layout_enabled=enabled)
         case _:
             assert_never(change)
 
 
-def _requests(model: BarModel, shown: tuple[Phase, ...]) -> tuple[BarModel, tuple[Effect, ...]]:
-    request = model.opened if isinstance(model.opened, Phase) else None
-    choices = tuple(coalesced(stable_phases(shown, (request,) if request is not None else ())))
-    model = replace(model, choices=choices)
-    if request is None:
-        return model, ()
-    current = next((phase for phase in choices if phase.key == request.key), None)
-    if current is None:
-        return _closed(model, restore=False)
-    if current == request:
-        return model, ()
-    return replace(model, opened=current), (SelectRequest(current.request), Render())
-
-
-def _inbox(model: BarModel, questions: tuple[Phase, ...]) -> tuple[BarModel, tuple[Effect, ...]]:
-    listed = island_moment.rows(questions, model.notices)
-    match listed:
-        case ():
-            return model, ()
-        case (Asked(phase=phase),):
-            return _request(model, phase)
-        case _:
-            read = island_moment.read(model.notices, frozenset(row.identity for row in listed if isinstance(row, Notice)))
-            return _expanded(replace(model, notices=read), Inbox(listed))
-
-
-def inbox_rows(model: BarModel, questions: tuple[Phase, ...]) -> tuple[Row, ...]:
-    """What the bell would list; empty, it opens nothing."""
-    return island_moment.rows(questions, model.notices)
-
-
-type Interaction = Pressed | Hovered | Selected | Picked | MenuKey | Deactivated | Chose | VolumeSet | TrayClicked | Rerender
-type Observation = (
-    ActivityChange
-    | ChordHeld
-    | RequestsShown
-    | NoticesShown
-    | InboxRequested
-    | Opening
-    | Ticked
-    | Respecced
-    | Retargeted
-    | Framed
-    | Sampled
-    | Closing
-    | Visibility
-    | TrayShown
-)
+type Interaction = Pressed | Hovered | Selected | Picked | MenuKey | Deactivated | VolumeSet | TrayClicked | Rerender
+type Observation = ActivityChange | ChordHeld | Opening | Ticked | Respecced | Retargeted | Framed | Sampled | Closing | Visibility | TrayShown
 
 
 def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Effect, ...]]:
@@ -712,27 +523,24 @@ def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Ef
     match event:
         case Pressed(action):
             return _pressed(model, action)
-        case Hovered(key, now):
+        case Hovered(key):
             if model.hovered is key:
                 return model, ()
-            notices = island_moment.hover(model.notices, inside=key is Key.ISLAND, now=now)
-            return replace(model, hovered=key, notices=notices), (Render(),)
+            return replace(model, hovered=key), (Render(),)
         case Selected(index):
-            if not isinstance(model.opened, Menu) or model.opened.selected == index:
+            if model.opened is None or model.opened.selected == index:
                 return model, ()
             return replace(model, opened=replace(model.opened, selected=index)), (Render(),)
         case Picked(index):
-            if not isinstance(model.opened, Menu):
+            if model.opened is None:
                 return model, ()
             return _settled(model, island_menu.choose(model.opened, model.opened.cells[index].entry))
         case MenuKey(press):
-            if not isinstance(model.opened, Menu):
+            if model.opened is None:
                 return model, ()
             return _settled(model, island_menu.press(model.opened, press))
         case Deactivated():
             return _closed(model, restore=False)
-        case Chose(row):
-            return _chose(model, row)
         case VolumeSet(level):
             return _volume(model, level)
         case TrayClicked(slot, click):
@@ -746,27 +554,21 @@ def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Ef
 def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effect, ...]]:
     """What was published to the bar, or what its own timers and window computed."""
     match event:
-        case OverlayShown() | DictationShown() | JobShown() | AgentShown() | InboxShown() | RecordingShown() | AutomaticShown() | LayoutShown():
+        case OverlayShown() | DictationShown() | JobShown() | RecordingShown() | LayoutShown():
             changed = _shown(model, event)
             return changed, ((Render(),) if changed != model else ())
         case Visibility(visible):
             return replace(model, visible=visible), ()
         case ChordHeld(held):
             return replace(model, chord_held=held), (ShowHints(),)
-        case RequestsShown(choices):
-            return _requests(model, choices)
-        case NoticesShown(current, now):
-            return replace(model, notices=island_moment.observe(model.notices, current, now)), (Render(),)
-        case InboxRequested(questions):
-            return _inbox(model, questions)
         case Opening(opened, target):
             return replace(model, opened=opened, menu_target=target if target is not None else model.menu_target), (Render(),)
         case Ticked():
             return _ticked(model, event), (Render(),)
         case Respecced(specs):
             return replace(model, specs=specs), (UseSizes(specs.sizes), Render())
-        case Retargeted(views, motion, notices, opened):
-            return replace(model, views=views, motion=motion, notices=notices, opened=opened), ()
+        case Retargeted(views, motion, opened):
+            return replace(model, views=views, motion=motion, opened=opened), ()
         case Framed(motion, last_frame):
             return replace(model, motion=motion, last_frame=last_frame), ()
         case Sampled(at):
@@ -782,7 +584,7 @@ def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effe
 def transition(model: BarModel, event: Event) -> tuple[BarModel, Iterator[Effect]]:
     """The model after `event` and the effects it calls for, in order."""
     match event:
-        case Pressed() | Hovered() | Selected() | Picked() | MenuKey() | Deactivated() | Chose() | VolumeSet() | TrayClicked() | Rerender():
+        case Pressed() | Hovered() | Selected() | Picked() | MenuKey() | Deactivated() | VolumeSet() | TrayClicked() | Rerender():
             model, effects = _interacted(model, event)
         case PaintDue() | TickDue() | SampleDue() | Navigate():
             effects = (event,)
@@ -814,17 +616,8 @@ def _ticked(model: BarModel, ticked: Ticked) -> BarModel:
 
 
 def spinning(model: BarModel) -> bool:
-    """Work is running where the bar shows it: a capsule's spinner or dots, or the open menu's spinner."""
-
-    def spinner(part: object) -> bool:
-        match part:
-            case Spinner() | Marker.DOTS:
-                return True
-            case _:
-                return False
-
-    menu_spinner = isinstance(model.opened, Menu) and model.agent is not None and not model.agent.waiting
-    return menu_spinner or any(spinner(part) for view in model.views for slot in view.slots for part in slot)
+    """Work is running where the bar shows it: a capsule's dots."""
+    return any(part is Marker.DOTS for view in model.views for slot in view.slots for part in slot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -833,7 +626,7 @@ class Frame:
 
     motion: IslandMotion
     spin_angle: float
-    """Degrees; 90 is the spinner at rest."""
+    """Degrees; 90 is the dots at rest."""
     wave_progress: float
     """How far the dictation wave has moved from its last sample to the next, 0 to 1."""
     indicators: bool

@@ -22,13 +22,6 @@ CONTROLS: Final = ControlsSpec(
         CellsRow(
             4,
             (
-                CellSpec(EntryId.AUTO_RECORD, Face.TOGGLE, 4, "Auto-record", "mic"),
-                CellSpec(EntryId.CANVAS, Face.TILE, 4, "Your work canvas", "canvas", "Canvas"),
-            ),
-        ),
-        CellsRow(
-            4,
-            (
                 CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
                 CellSpec(EntryId.TASKBAR, Face.TOGGLE, 4, "Windows taskbar", "table"),
             ),
@@ -48,7 +41,6 @@ CONTROLS: Final = ControlsSpec(
                 CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
                 CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
                 CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
-                CellSpec(EntryId.AGENT_TYPED, Face.TOOL, 2, "Type a task for the agent", "agent", "Agent"),
             ),
         ),
         TrayRow(4),

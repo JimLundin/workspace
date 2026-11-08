@@ -108,7 +108,6 @@ _QueryDisplayConfig = fn(
 )
 _DisplayConfigGetDeviceInfo = fn(user32, "DisplayConfigGetDeviceInfo", ctypes.c_long, ctypes.POINTER(DisplaySourceName))
 _MonitorFromWindow = fn(user32, "MonitorFromWindow", wintypes.HMONITOR, wintypes.HWND, wintypes.DWORD)
-_GetSystemMetrics = fn(user32, "GetSystemMetrics", ctypes.c_int, ctypes.c_int)
 _SetProcessDpiAwarenessContext = optional_fn(user32, "SetProcessDpiAwarenessContext", wintypes.BOOL, ctypes.c_ssize_t)
 _SetProcessDPIAware = fn(user32, "SetProcessDPIAware", wintypes.BOOL)
 _SetStretchBltMode = fn(gdi32, "SetStretchBltMode", ctypes.c_int, wintypes.HDC, ctypes.c_int)
@@ -158,12 +157,6 @@ def use_physical_pixels() -> None:
     Call before creating any window."""
     if _SetProcessDpiAwarenessContext is None or not _SetProcessDpiAwarenessContext(_PER_MONITOR_AWARE_V2):
         _SetProcessDPIAware()
-
-
-def virtual_screen() -> Rect:
-    """The rectangle around all monitors."""
-    left, top = int(_GetSystemMetrics(_SM_XVIRTUALSCREEN)), int(_GetSystemMetrics(_SM_YVIRTUALSCREEN))
-    return Rect(left, top, left + int(_GetSystemMetrics(_SM_CXVIRTUALSCREEN)), top + int(_GetSystemMetrics(_SM_CYVIRTUALSCREEN)))
 
 
 def built_in_devices() -> frozenset[str]:

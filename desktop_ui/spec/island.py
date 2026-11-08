@@ -2,7 +2,7 @@
 
 from typing import Final
 
-from desktop_ui.island_model import ActivitiesSpec, Activity, IslandSpec, Reading, StatusSpec, TextSpec
+from desktop_ui.island_model import ActivitiesSpec, Activity, IslandSpec, Reading, StatusSpec
 
 ISLAND: Final = IslandSpec(
     # The fixed capsule at the screen's right edge, which opens the controls menu:
@@ -15,12 +15,8 @@ ISLAND: Final = IslandSpec(
             (Reading.CLOCK, Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY),
         )
     ),
-    # Where activities sit beside the centre island, left to right. The agent and a
-    # transcription step out of the island while you dictate, a question waits or a
-    # notice shows; a recording does too; the inbox's bell shows while anything
-    # waits. Each activity is placed exactly once.
-    activities=ActivitiesSpec(lead=(Activity.AGENT, Activity.JOB), trail=(Activity.RECORDING, Activity.INBOX)),
-    # The agent's phase and a notice's title, in characters, before they elide;
-    # a notice's width in pixels.
-    text=TextSpec(phase=28, title=44, notice_width=340),
+    # Where activities sit beside the centre island, left to right. A transcription
+    # and a recording step out of the island while you dictate. Each activity is
+    # placed exactly once.
+    activities=ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
 )

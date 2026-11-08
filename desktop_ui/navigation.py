@@ -13,7 +13,7 @@ from typing import Final, assert_never
 
 import protocol
 from desktop_ui.shell_items import PinnedApp, next_window
-from desktop_ui.window_layout import App, Placement, Program, WorkspaceView
+from desktop_ui.window_layout import App, Placement, Program
 from winapi.shapes import Rect
 
 
@@ -200,14 +200,11 @@ def identity(target: protocol.Installed | PinnedApp) -> App:
 
 
 def slot_launcher(app: App) -> PinnedApp | None:
-    """Only a slot's web app can be launched from the toolbar; a running application always has windows.
-
-    The canvas opens through its own button, not as a launch.
-    """
+    """Only a slot's web app can be launched from the toolbar; a running application always has windows."""
     match app:
         case PinnedApp():
             return app
-        case Program() | WorkspaceView():
+        case Program():
             return None
         case _:
             assert_never(app)

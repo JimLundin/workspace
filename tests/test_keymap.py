@@ -21,9 +21,8 @@ def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first()
     # Defects: using BASE outputs as keycaps, selecting another layer's thumb,
     # advertising the Tools-layer dictation copy instead of its dedicated key, or
     # dropping the hint of a tool only a chord reaches.
-    assert shortcut(Tool.OPEN_INBOX) == Shortcut("M", "X")
     assert shortcut(Tool.DICTATE) == Shortcut("L", "X")
-    assert shortcut(Tool.AGENT_VOICE) == Shortcut("K", "X")
+    assert shortcut(Tool.MEETING_TOGGLE) == Shortcut("C", "X")
     assert shortcut_hint(shortcut(Tool.WINDOW_SWITCHER), compact=True) == "X S"
 
 
@@ -67,11 +66,9 @@ def test_the_apps_layer_holds_every_workspace_request() -> None:
     # Defects: a voice hold loses its hold marking, or a request moves off the
     # place its firmware chord letter names.
     apps = caps(Layer.APPS)
-    assert apps["K"] == ("Agent talk", "hold", Role.TOOL)
     assert apps["L"] == ("Talk", "hold", Role.TOOL)
     assert apps["2"] == ("Terminal", "", Role.APP)
     assert apps["8"] == ("Desk 1", "", Role.TOOL)
-    assert apps["M"] == ("Inbox", "", Role.TOOL)
     assert apps["X"][2] is Role.HELD
 
 

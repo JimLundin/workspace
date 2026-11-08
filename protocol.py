@@ -53,18 +53,10 @@ class Tool(Enum):
 
     DICTATE = 1
     """Hold and speak: the words are typed as said."""
-    AGENT_VOICE = 30
-    """Hold and say a task for the agent."""
-    AGENT_TYPED = 31
-    """Type a task for the agent in a box."""
-    STOP = 32
-    """Stop the agent."""
     MEETING_TOGGLE = 33
-    AGENT_VOICE_TOGGLE = 34
     COPY_TRANSCRIPT = 35
     WINDOW_SWITCHER = 36
     DICTATE_TOGGLE = 37
-    OPEN_INBOX = 38
     ZOOM = 42
     """Fill the focused window's monitor until pressed again or focus leaves it."""
     FOCUS_LEFT = 50
@@ -135,7 +127,6 @@ DESKTOP_TOOLS: Final = frozenset(
         Tool.DESKTOP_3,
         Tool.DESKTOP_4,
         Tool.DESKTOP_5,
-        Tool.OPEN_INBOX,
         Tool.WINDOW_SWITCHER,
     }
 )

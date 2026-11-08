@@ -11,7 +11,7 @@ from contracts.members import every_literal
 from winapi.pcm import RATE, Dropout, LateAudio, Problem, Skipped, Stall
 
 type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]
-type RecordingAction = Literal["start", "stop", "open", "folder", "retry", "automatic"]
+type RecordingAction = Literal["start", "stop", "open", "folder", "retry"]
 type CompletionPhase = Literal["finishing", "interrupted", "saved"]
 
 

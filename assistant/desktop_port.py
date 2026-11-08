@@ -1,18 +1,16 @@
-"""What the assistant tells the desktop, and the agent session's view over it.
+"""What the assistant tells the desktop.
 
 The assistant never touches the desktop's windows: it sends `contracts.desktop_link`
 messages through a `DesktopPort`. `LinkedDesktop` carries them over the link to
 the desktop process; states are kept and replayed when a desktop connects.
 """
 
-import queue
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from contracts.agent_session import Snapshot
-from contracts.desktop_link import MicLevel, SessionChanged, ShowWork, ToDesktop, state_key, to_desktop
+from contracts.desktop_link import MicLevel, ToDesktop, state_key, to_desktop
 from link.server import Server
 
 
@@ -37,51 +35,6 @@ class LinkedDesktop:
     @property
     def connected(self) -> bool:
         return self.server.connected
-
-
-def _run_jobs(jobs: queue.Queue[Callable[[], None] | None]) -> None:
-    while (job := jobs.get()) is not None:
-        job()
-
-
-@dataclass(frozen=True, slots=True)
-class ViewThread:
-    """One thread for the agent session's view, as Qt's was: jobs run in order, one at a time."""
-
-    _jobs: queue.Queue[Callable[[], None] | None]
-    _thread: threading.Thread
-
-    @classmethod
-    def start(cls) -> ViewThread:
-        jobs = queue.Queue[Callable[[], None] | None]()
-        thread = threading.Thread(target=_run_jobs, args=(jobs,), name="session view", daemon=True)
-        thread.start()
-        return cls(jobs, thread)
-
-    def post(self, job: Callable[[], None]) -> None:
-        self._jobs.put(job)
-
-    def close(self) -> None:
-        self._jobs.put(None)
-        self._thread.join(timeout=5)
-
-
-@dataclass(frozen=True, slots=True)
-class SessionView:
-    """The agent session's view: its snapshots go to the desktop and to the session's other observers."""
-
-    port: DesktopPort
-    observe: Callable[[Snapshot], object]
-
-    def render(self, state: Snapshot) -> None:
-        self.observe(state)
-        self.port.send(SessionChanged(state))
-
-    def show(self, *, focus: bool = False) -> None:
-        self.port.send(ShowWork(focus=focus))
-
-    def close(self) -> None:
-        pass
 
 
 @dataclass(frozen=True, slots=True)

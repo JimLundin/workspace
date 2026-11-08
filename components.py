@@ -43,9 +43,8 @@ class Entry:
 
 # The AI connection holds no state: it creates no window, so the keeper ends it at once.
 GATEWAY: Final = Entry(name="gateway", module="gateway", window=Window("workspace gateway", None), quit_message=WM_CLOSE, shutdown_s=0.0)
-# Assistant cleanup parks ongoing work, closes the agent's browser and joins
-# personal work: a bounded minute. The keyboard has nothing to drain, so a stuck
-# one is replaced quickly.
+# Assistant cleanup is bounded to a minute. The keyboard has nothing to drain, so a
+# stuck one is replaced quickly.
 LAYOUT: Final = Entry(name="layout", module="miryoku", window=Window("workspace layout", None), quit_message=WM_QUIT_LAYOUT, shutdown_s=5.0)
 ASSISTANT: Final = Entry(
     name="assistant",

@@ -1,4 +1,4 @@
-"""Native meeting events and conversations, independent of capture and canvas effects."""
+"""Native meeting events and transcripts, independent of capture."""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -65,28 +65,4 @@ class Meeting:
             raise ValueError("Pending transcription exceeds captured meeting audio.")
 
 
-@dataclass(frozen=True, slots=True)
-class TranscriptEntry:
-    """One transcription batch on the captured-audio timeline, not a speaker turn."""
-
-    start_seconds: Seconds
-    end_seconds: Seconds
-    text: str
-    speaker: Literal["unknown"] = "unknown"
-
-    def __post_init__(self) -> None:
-        if self.end_seconds <= self.start_seconds:
-            raise ValueError("A transcript entry requires a positive time span.")
-
-
-@dataclass(frozen=True, slots=True)
-class MeetingConversation:
-    meeting: Meeting
-    entries: tuple[TranscriptEntry, ...]
-    total: int
-    next_offset: int | None
-    kind: Literal["meeting_conversation"] = "meeting_conversation"
-
-
 MEETING = TypeAdapter(Meeting)
-CONVERSATION = TypeAdapter(MeetingConversation)

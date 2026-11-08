@@ -7,7 +7,6 @@ from typing import cast, override
 
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
-from contracts.json_value import Json
 from contracts.status import Job, State
 from protocol import App, Installed, Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
@@ -18,16 +17,8 @@ from winapi.shapes import InputRejectedError
 SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
 
 
-def dumps(value: Json) -> str:
-    return json.dumps(value)
-
-
 def said(text: str) -> Reply:
-    return Reply(dumps({"text": text}).encode())
-
-
-def answered(text: str) -> Reply:
-    return Reply(dumps({"choices": [{"message": {"role": "assistant", "content": text}}]}).encode())
+    return Reply(json.dumps({"text": text}).encode())
 
 
 class FakeDesktop:
@@ -78,15 +69,6 @@ class FakeControls:
     def __init__(self, record: Callable[[str], None]) -> None:
         self.record: Callable[[str], None] = record
 
-    def run_agent(self, text: str) -> None:
-        self.record(text)
-
-    def show_agent(self) -> None:
-        self.record("SHOW")
-
-    def stop_agent(self) -> None:
-        self.record("STOP")
-
     def toggle_meeting(self) -> None:
         self.record("MEETING")
 
@@ -96,9 +78,9 @@ def run_immediately(job: Callable[[], None]) -> None:
 
 
 class Rig:
-    """An assistant wired to fakes: what it did is in `desktop.log`, `used` and `agent`."""
+    """An assistant wired to fakes: what it did is in `desktop.log`, `used` and `controlled`."""
 
-    __slots__ = ("agent", "assistant", "desktop", "endpoint", "used")
+    __slots__ = ("assistant", "controlled", "desktop", "endpoint", "used")
 
     # The fixture composes endpoint, credential gate, desktop effects and worker scheduling.
     def __init__(
@@ -113,14 +95,14 @@ class Rig:
         self.endpoint = endpoint
         self.desktop = desktop if desktop is not None else FakeDesktop()
         self.used: list[tuple[str, Mapping[str, Detail]]] = []
-        self.agent: list[str] = []
+        self.controlled: list[str] = []
         settings = Settings(endpoint.url, "k", "transcribe", "")
         self.assistant = Assistant(
             self.desktop,
             settings,
             record=lambda feature, details: self.used.append((feature, details)),
             submit=submit,
-            controls=FakeControls(self.agent.append),
+            controls=FakeControls(self.controlled.append),
             missing=missing,
             clock=clock,
         )
@@ -195,18 +177,6 @@ def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> N
         assert desktop.log[-1] == "clipboard The complete transcript."
 
 
-def test_agent_capture_toggle_ignores_releases_and_stops_on_the_second_press() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [said("Please do this.")]
-        rig = Rig(endpoint)
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=True)
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=False)
-        assert rig.take() == ["listen"]
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=True)
-        rig.assistant.handle(Tool.AGENT_VOICE_TOGGLE, down=False)
-        assert rig.assistant.listening is None and rig.agent == ["Please do this."]
-
-
 def test_space_release_does_not_stop_dictation_started_with_the_toggle() -> None:
     with fake_endpoint() as endpoint:
         endpoint.replies = [said("Complete capture")]
@@ -273,9 +243,9 @@ def test_lost_voice_release_finishes_at_the_existing_microphone_limit() -> None:
 def test_shutdown_discards_active_voice_without_submitting_a_task() -> None:
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint)
-        rig.press(Tool.AGENT_VOICE_TOGGLE)
+        rig.press(Tool.DICTATE_TOGGLE)
         rig.assistant.stop_capture(discard=True, reason="shutdown")
-        assert rig.assistant.listening is None and rig.agent == [] and not endpoint.received
+        assert rig.assistant.listening is None and not endpoint.received
         assert rig.take() == ["listen", "stop listening"]
 
 
@@ -306,24 +276,20 @@ def test_unexpected_microphone_stop_error_clears_capture_and_allows_another_reco
 
 def test_voice_diagnostics_keep_the_full_ending_and_record_only_lengths() -> None:
     transcript = "It gets neatly cut off after like the first sentence.\nEverything afterwards just kind of disappears."
-    for tool in (Tool.DICTATE, Tool.AGENT_VOICE):
-        with fake_endpoint() as endpoint:
-            endpoint.replies = [said(transcript)]
-            rig = Rig(endpoint)
-            rig.hold(tool)
-            details = dict(rig.used)[tool.name.lower()]
-            expected = transcript.replace("\n", " ") + " " if tool is Tool.DICTATE else transcript
-            assert details["transcript_characters"] == len(transcript)
-            assert details["requested_characters"] == details["submitted_characters"] == len(expected)
-            for name in ("transcribe_seconds", "submit_seconds"):
-                duration = details[name]
-                assert isinstance(duration, float) and duration >= 0
-            assert "Everything afterwards" not in str(rig.used)
-            assert len(endpoint.received) == 1  # B and N do not send a cleanup request.
-            if tool is Tool.DICTATE:
-                assert rig.take()[-1] == f"type {expected!r}"
-            else:
-                assert rig.agent == [expected]
+    with fake_endpoint() as endpoint:
+        endpoint.replies = [said(transcript)]
+        rig = Rig(endpoint)
+        rig.hold(Tool.DICTATE)
+        details = dict(rig.used)["dictate"]
+        expected = transcript.replace("\n", " ") + " "
+        assert details["transcript_characters"] == len(transcript)
+        assert details["requested_characters"] == details["submitted_characters"] == len(expected)
+        for name in ("transcribe_seconds", "submit_seconds"):
+            duration = details[name]
+            assert isinstance(duration, float) and duration >= 0
+        assert "Everything afterwards" not in str(rig.used)
+        assert len(endpoint.received) == 1  # Dictation sends no cleanup request.
+        assert rig.take()[-1] == f"type {expected!r}"
 
 
 def test_voice_diagnostics_distinguish_a_failed_request_from_failed_input() -> None:
@@ -378,17 +344,6 @@ def test_a_tap_of_a_talk_key_sends_nothing() -> None:
         assert endpoint.received == []
 
 
-def test_a_second_talk_key_while_listening_is_ignored() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [said("one")]
-        rig = Rig(endpoint)
-        rig.assistant.handle(Tool.DICTATE, down=True)
-        rig.assistant.handle(Tool.AGENT_VOICE, down=True)
-        rig.assistant.handle(Tool.AGENT_VOICE, down=False)
-        rig.assistant.handle(Tool.DICTATE, down=False)
-        assert rig.take() == ["listen", "stop listening", "clipboard one", "type 'one '"]
-
-
 def test_endpoint_failures_are_reported_and_logged() -> None:
     with fake_endpoint() as endpoint:
         endpoint.replies = [Reply(b'{"error": {"message": "Invalid session key"}}', status=401)]
@@ -399,15 +354,13 @@ def test_endpoint_failures_are_reported_and_logged() -> None:
 
 
 def test_an_incomplete_recording_is_reported_without_sending_a_partial_prompt() -> None:
-    for tool in (Tool.DICTATE, Tool.AGENT_VOICE):
-        with fake_endpoint() as endpoint:
-            rig = Rig(endpoint, desktop=FakeDesktop(recording_error=OSError("The microphone did not finish returning audio.")))
-            rig.hold(tool)
-            assert endpoint.received == []
-            assert rig.agent == []
-            assert rig.take()[-1] == "problem The microphone did not finish returning audio."
-            assert not rig.ok(tool.name.lower())
-            assert rig.assistant.listening is None
+    with fake_endpoint() as endpoint:
+        rig = Rig(endpoint, desktop=FakeDesktop(recording_error=OSError("The microphone did not finish returning audio.")))
+        rig.hold(Tool.DICTATE)
+        assert endpoint.received == []
+        assert rig.take()[-1] == "problem The microphone did not finish returning audio."
+        assert not rig.ok("dictate")
+        assert rig.assistant.listening is None
 
 
 def test_the_tray_shows_listening_then_working_then_ready() -> None:
@@ -419,32 +372,19 @@ def test_the_tray_shows_listening_then_working_then_ready() -> None:
         assert states == ["state LISTENING", "state WORKING", "state READY"]
 
 
-# ---- the agent -------------------------------------------------------------------------
-
-
-def test_voice_sends_a_task_and_typed_opens_the_agent_session() -> None:
-    with fake_endpoint() as endpoint:
-        endpoint.replies = [said("tidy my downloads")]
-        rig = Rig(endpoint)
-        rig.hold(Tool.AGENT_VOICE)
-        rig.press(Tool.AGENT_TYPED)
-        rig.press(Tool.STOP)
-        assert rig.agent == ["tidy my downloads", "SHOW", "STOP"]
-
-
 # ---- apps and windows ------------------------------------------------------------------
 
 TERMINAL = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
 
 
 def test_desktop_owned_keys_never_reach_the_assistants_features() -> None:
-    # Defect: an app, window, inbox or switcher key (the desktop's) also runs in
+    # Defect: an app, window or switcher key (the desktop's) also runs in
     # the assistant, so it acts twice or records usage the desktop already did.
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint)
-        for request in (TERMINAL, Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.OPEN_INBOX, Tool.WINDOW_SWITCHER):
+        for request in (TERMINAL, Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.WINDOW_SWITCHER):
             rig.press(request)
-        assert not rig.take() and not rig.used and not rig.agent
+        assert not rig.take() and not rig.used and not rig.controlled
 
 
 def test_desktop_controls_run_on_press_without_worker_submission() -> None:
@@ -454,7 +394,7 @@ def test_desktop_controls_run_on_press_without_worker_submission() -> None:
         jobs: list[Callable[[], None]] = []
         rig = Rig(endpoint, submit=jobs.append)
         rig.press(Tool.MEETING_TOGGLE)
-        assert rig.agent == ["MEETING"]
+        assert rig.controlled == ["MEETING"]
         assert not jobs and not rig.used and not rig.desktop.jobs and not rig.take()
 
 
@@ -465,11 +405,11 @@ def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -
     with fake_endpoint() as endpoint:
         rig = Rig(endpoint, missing=Missing(("OPENAI_API_KEY",)))
         rig.hold(Tool.DICTATE)
-        rig.press(Tool.AGENT_TYPED)
+        rig.press(Tool.DICTATE_TOGGLE)
         rig.press(Tool.MEETING_TOGGLE)
         problem = "problem Set OPENAI_API_KEY to use the AI tools (see the README)."
         assert rig.take() == [problem, problem]
-        assert rig.agent == ["MEETING"]
+        assert rig.controlled == ["MEETING"]
         assert endpoint.received == []
 
 

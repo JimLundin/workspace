@@ -50,11 +50,8 @@ Recorder = Callable[[str, Mapping[str, Detail]], None]
 
 
 class Controls(Protocol):
-    """Assistant-owned effects; agent callbacks marshal their own worker invocations."""
+    """Assistant-owned effects the keys reach."""
 
-    def run_agent(self, text: str) -> None: ...
-    def show_agent(self) -> None: ...
-    def stop_agent(self) -> None: ...
     def toggle_meeting(self) -> None: ...
 
 
@@ -101,7 +98,7 @@ class Capture:
     started: float
 
 
-LISTENING_TOOLS: Final[frozendict[Tool, Tool]] = frozendict({Tool.DICTATE_TOGGLE: Tool.DICTATE, Tool.AGENT_VOICE_TOGGLE: Tool.AGENT_VOICE})
+LISTENING_TOOLS: Final[frozendict[Tool, Tool]] = frozendict({Tool.DICTATE_TOGGLE: Tool.DICTATE})
 """A toggle listens as its hold tool; every other tool listens as itself."""
 
 
@@ -183,17 +180,10 @@ class Assistant:
                     self.stop_capture(reason="toggle")
                 else:
                     self.hold(request, down=True)
-            case Route.STOP:
-                if self.listening is not None:
-                    self.stop_capture(reason="stop")
-                else:
-                    self.controls.stop_agent()
             case Route.TRANSCRIPT:
                 self.submit(self.copy_transcript)
-            case Route.NAVIGATE | Route.INBOX | Route.SWITCHER:
+            case Route.NAVIGATE | Route.SWITCHER:
                 pass  # The desktop's (see `owner`).
-            case Route.AGENT_SESSION:
-                self.submit(lambda: self.timed(request.name.lower(), self.agent_session))
             case Route.MEETING:
                 self.controls.toggle_meeting()
             case _:
@@ -342,8 +332,6 @@ class Assistant:
         match tool:
             case Tool.DICTATE:
                 submit_voice_text(typed_text(transcript), self.desktop.type_text, progress)
-            case Tool.AGENT_VOICE:
-                submit_voice_text(transcript, self.controls.run_agent, progress)
             case _:
                 raise AssertionError(f"{tool} doesn't listen")
         return None
@@ -366,6 +354,3 @@ class Assistant:
             self.desktop.set_clipboard(transcript)
         except OSError as error:
             self.desktop.problem(str(error))
-
-    def agent_session(self) -> None:
-        self.controls.show_agent()

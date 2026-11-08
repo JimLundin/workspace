@@ -10,12 +10,9 @@ from protocol import Tool
 class Route(Enum):
     HOLD = auto()
     TOGGLE = auto()
-    STOP = auto()
-    AGENT_SESSION = auto()
     TRANSCRIPT = auto()
     NAVIGATE = auto()
     SWITCHER = auto()
-    INBOX = auto()
     MEETING = auto()
 
 
@@ -23,11 +20,7 @@ ROUTES: Final = every_member(
     Tool,
     {
         Tool.DICTATE: Route.HOLD,
-        Tool.AGENT_VOICE: Route.HOLD,
         Tool.DICTATE_TOGGLE: Route.TOGGLE,
-        Tool.AGENT_VOICE_TOGGLE: Route.TOGGLE,
-        Tool.STOP: Route.STOP,
-        Tool.AGENT_TYPED: Route.AGENT_SESSION,
         Tool.COPY_TRANSCRIPT: Route.TRANSCRIPT,
         Tool.ZOOM: Route.NAVIGATE,
         Tool.FOCUS_LEFT: Route.NAVIGATE,
@@ -42,7 +35,6 @@ ROUTES: Final = every_member(
         Tool.PLACEMENT_PAUSE: Route.NAVIGATE,
         Tool.PLACE_NOW: Route.NAVIGATE,
         Tool.WINDOW_SWITCHER: Route.SWITCHER,
-        Tool.OPEN_INBOX: Route.INBOX,
         Tool.MEETING_TOGGLE: Route.MEETING,
     },
 )
@@ -54,12 +46,9 @@ NEEDS_SETTINGS: Final = every_member(
     {
         Route.HOLD: True,
         Route.TOGGLE: True,
-        Route.AGENT_SESSION: True,
-        Route.STOP: False,
         Route.TRANSCRIPT: False,
         Route.NAVIGATE: False,
         Route.SWITCHER: False,
-        Route.INBOX: False,
         Route.MEETING: False,
     },
 )

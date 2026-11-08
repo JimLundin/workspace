@@ -122,14 +122,12 @@ _CHORD_NAMES: Final = frozendict({UNDO: "Undo", REDO: "Redo", COPY: "Copy", PAST
 _MOD_NAMES: Final = every_member(Mod, {Mod.GUI: "Win", Mod.ALT: "Alt", Mod.CTRL: "Ctrl", Mod.SHIFT: "Shift"})
 TOOL_NAMES: Final = every_member(Tool, {
     Tool.DICTATE: "Talk",
-    Tool.AGENT_VOICE: "Agent talk", Tool.AGENT_TYPED: "Agent", Tool.STOP: "Stop",
     Tool.ZOOM: "Zoom",
     Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",
     Tool.DESKTOP_1: "Desk 1", Tool.DESKTOP_2: "Desk 2", Tool.DESKTOP_3: "Desk 3", Tool.DESKTOP_4: "Desk 4", Tool.DESKTOP_5: "Desk 5",
     Tool.PLACEMENT_PAUSE: "Pause place", Tool.PLACE_NOW: "Re-place",
-    Tool.MEETING_TOGGLE: "Record", Tool.AGENT_VOICE_TOGGLE: "Agent toggle", Tool.COPY_TRANSCRIPT: "Copy speech",
+    Tool.MEETING_TOGGLE: "Record", Tool.COPY_TRANSCRIPT: "Copy speech",
     Tool.DICTATE_TOGGLE: "Dictate toggle",
-    Tool.OPEN_INBOX: "Inbox",
     Tool.WINDOW_SWITCHER: "Windows",
 })  # fmt: skip
 
@@ -210,9 +208,3 @@ def indicator_text(layer: Layer | None, *, locked: bool, caps_word: bool) -> str
     if caps_word:
         parts.append("CAPS WORD")
     return " · ".join(parts) or None
-
-
-AGENT_HOLD: Final = shortcut_hint(shortcut(Tool.AGENT_VOICE))
-"""How to hold agent speech on the laptop, such as "Hold X + K"."""
-INBOX_HOLD: Final = shortcut_hint(shortcut(Tool.OPEN_INBOX))
-"""How to open the inbox on the laptop, such as "Hold X + M"."""

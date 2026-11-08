@@ -2,11 +2,12 @@
 
 from dataclasses import replace
 
+from contracts.status import Job
 from desktop_ui import ui_spec
-from desktop_ui.bar_events import BarModel, menu, next_frame, spinning
+from desktop_ui.bar_events import BarModel, menu, next_frame
 from desktop_ui.island_model import island
 from desktop_ui.spec.island import ISLAND
-from tests.test_island_model import RESTING, WORKING
+from tests.test_island_model import RESTING
 
 
 def model() -> BarModel:
@@ -14,8 +15,8 @@ def model() -> BarModel:
 
 
 def working() -> BarModel:
-    """A settled bar whose island shows the agent working."""
-    return replace(model(), agent=WORKING, views=island(replace(RESTING, agent=WORKING), ISLAND))
+    """A settled bar whose island shows a quick job running."""
+    return replace(model(), job=Job.TRANSCRIBING, views=island(replace(RESTING, job=Job.TRANSCRIBING), ISLAND))
 
 
 def test_a_settled_idle_bar_stops_its_frame_loop() -> None:
@@ -26,22 +27,13 @@ def test_a_settled_idle_bar_stops_its_frame_loop() -> None:
 
 
 def test_running_work_spins_only_while_motion_is_allowed() -> None:
-    # Defects: the agent's spinner is painted frozen, keeps the frame loop
+    # Defects: the job's dots paint frozen, keep the frame loop
     # running after work ends, or ignores Windows' reduced-motion setting.
     first, later = next_frame(working(), 10.0, animate=True), next_frame(working(), 10.3, animate=True)
     assert first.running and first.indicators and first.spin_angle != later.spin_angle
     still = next_frame(working(), 10.3, animate=False)
     assert still.spin_angle == 90.0 and not still.running and still.indicators
     assert not next_frame(model(), 10.3, animate=True).running
-
-
-def test_the_open_menu_keeps_its_spinner_after_the_island_settles() -> None:
-    # Defect: expanding moves activity out of the compact slots, so the menu's
-    # spinner loses the frame loop and freezes once geometry settles.
-    opened = replace(model(), agent=WORKING, opened=menu(model()))
-    assert spinning(opened) and next_frame(opened, 10.0, animate=True).running
-    asking = replace(opened, agent=replace(WORKING, waiting=True))
-    assert not spinning(asking)
 
 
 def test_dictation_moves_the_wave_between_samples_and_rests_behind_an_open_island() -> None:

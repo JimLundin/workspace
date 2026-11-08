@@ -1,6 +1,6 @@
 """How shared glass surfaces read under each material and their owner's observations."""
 
-from desktop_ui.components.appearance import ATTENTION, CanvasBar, Capsule, Card, GlassLook, Menu, Scheme, Shade, SolidLook, look, reading, tokens
+from desktop_ui.components.appearance import ATTENTION, CanvasBar, Capsule, GlassLook, Menu, Scheme, Shade, SolidLook, look, reading, tokens
 from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance
 
@@ -52,26 +52,25 @@ def test_high_contrast_keeps_every_reading_in_the_system_foreground() -> None:
     assert reading(glass, Tone.LOW, contrast=False) != glass.ink
 
 
-def test_cards_and_canvas_toolbar_use_system_ink_under_high_contrast() -> None:
+def test_the_scheme_owned_pane_uses_system_ink_under_high_contrast() -> None:
     # Defect: routing a large surface through the recipe bypasses high contrast
     # and retains Workspace's veil or translucent text instead of system colours.
     contrast = appearance.Contrast("#000000", "#ffff00")
     for scheme in Scheme:
-        for pane in (Card(scheme), CanvasBar(scheme)):
-            match look(contrast, pane, Tint.NONE):
-                case SolidLook(fill=fill, edge=edge, lettering=ink):
-                    assert fill == Shade(contrast.background)
-                    assert edge == ink.ink == ink.quiet == Shade(contrast.foreground)
-                case other:
-                    raise AssertionError(f"High contrast produced {other}")
+        match look(contrast, CanvasBar(scheme), Tint.NONE):
+            case SolidLook(fill=fill, edge=edge, lettering=ink):
+                assert fill == Shade(contrast.background)
+                assert edge == ink.ink == ink.quiet == Shade(contrast.foreground)
+            case other:
+                raise AssertionError(f"High contrast produced {other}")
 
 
-def test_reduce_transparency_gives_cards_their_scheme_owned_solid_surface() -> None:
-    # Defect: a card keeps glass when transparency is disabled, or falls back
+def test_reduce_transparency_gives_a_scheme_owned_pane_its_solid_surface() -> None:
+    # Defect: a scheme-owned pane keeps glass when transparency is disabled, or falls back
     # to the capsule's fixed dark surface instead of its own app scheme.
     for scheme in Scheme:
         theme = tokens(scheme)
-        match look(appearance.Material.SOLID, Card(scheme), Tint.NONE):
+        match look(appearance.Material.SOLID, CanvasBar(scheme), Tint.NONE):
             case SolidLook(fill=fill, lettering=ink):
                 assert fill == Shade(theme.solid) and ink.ink == theme.ink
             case other:

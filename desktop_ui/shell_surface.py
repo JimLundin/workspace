@@ -1,4 +1,4 @@
-"""The desktop bar's compact sections: Canvas with the pinned slots, the desktop pager and the scrollable running applications.
+"""The desktop bar's compact sections: the pinned slots, the desktop pager and the scrollable running applications.
 
 Each target is a round control the bar paints itself, as the island's own
 controls are, so no stylesheet can pad, re-font or restyle it.
@@ -23,7 +23,7 @@ from desktop_ui.desktop_pager import PagerDesktop, PagerView
 from desktop_ui.navigation import Navigation, PagerClick, Source
 from desktop_ui.shell_items import WEB_APPS, PinnedApp, Shelf
 from desktop_ui.vector_icons import icon
-from desktop_ui.window_layout import App, Program, WorkspaceView
+from desktop_ui.window_layout import App, Program
 from winapi.icon_pixels import Pixels
 from winapi.tray_host import Click
 
@@ -324,12 +324,10 @@ def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
 
 
 def app_icon(app: App, images: Mapping[str, Pixels | None]) -> Icon:
-    """The icon the bar shows an app by: a web app's or the canvas's symbol, else the program's own icon."""
+    """The icon the bar shows an app by: a web app's symbol, else the program's own icon."""
     match app:
         case PinnedApp():
             return Glyph(WEB_APPS[app].glyph + ".fill")
-        case WorkspaceView.CANVAS:
-            return Glyph("canvas")
         case Program(exe=exe):
             image = images.get(exe)
             return Glyph("window") if image is None else image

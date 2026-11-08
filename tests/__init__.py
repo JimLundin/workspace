@@ -1,9 +1,1 @@
-"""Ordinary native fixtures own a desktop that is never shown to the user."""
-
-import os
-import sys
-
-lazy import tests.desktop_session
-
-if sys.platform == "win32" and os.environ.get("WORKSPACE_E2E") != "1":
-    tests.desktop_session.attach()
+"""Workspace's tests: plain ones run anywhere; test_windows_* modules need Windows itself."""

@@ -5,8 +5,7 @@ pure placement of observed windows onto them.
 Each declared application has an ordered list of places: a region of one
 role's monitor on one desktop. Its windows fill the places in their stable
 order, and windows beyond the last place share that place equally: side by side
-in a landscape region, stacked in a portrait one. Every setup keeps the canvas
-alone on the first desktop. Every other application gets a desktop of its own
+in a landscape region, stacked in a portrait one. Every other application gets a desktop of its own
 after the declared ones, filling the laptop's work area, and keeps that desktop
 while others come and go. Regions are exact fractions, so
 neighbours' pixel edges are computed from the same value and meet without
@@ -110,17 +109,7 @@ class Program:
     exe: str
 
 
-class WorkspaceView(Enum):
-    """Workspace's own windows that have a place, as other applications do."""
-
-    CANVAS = "canvas"
-
-
-CANVAS_TITLE = "Workspace · Canvas"
-"""The canvas window's title, which tells it apart from Workspace's other windows."""
-
-
-type App = PinnedApp | Program | WorkspaceView
+type App = PinnedApp | Program
 
 TERMINAL, CODE, EDGE = Program("windowsterminal.exe"), Program("code.exe"), Program("msedge.exe")
 """Ordinary Edge is every Edge window that isn't a pinned web app's."""
@@ -160,7 +149,6 @@ LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
     {
         Setup.LAPTOP_ONLY: frozendict(
             {
-                WorkspaceView.CANVAS: (Position(0, Role.LAPTOP, FULL),),
                 PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, LEFT_HALF),),
                 PinnedApp.TEAMS: (Position(1, Role.LAPTOP, RIGHT_HALF),),
                 # Two terminals on desktop 3; the third works beside Code on desktop 4.
@@ -171,7 +159,6 @@ LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
         ),
         Setup.HOME: frozendict(
             {
-                WorkspaceView.CANVAS: (Position(0, Role.MAIN, FULL),),
                 # Two terminals read Terminal | Terminal | Code across the 4K screen.
                 TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
                 CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
@@ -182,7 +169,6 @@ LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
         ),
         Setup.WORK: frozendict(
             {
-                WorkspaceView.CANVAS: (Position(0, Role.ABOVE, FULL),),
                 PinnedApp.TEAMS: (Position(1, Role.SIDE, TOP_HALF),),
                 PinnedApp.OUTLOOK: (Position(1, Role.SIDE, BOTTOM_HALF),),
                 TERMINAL: (Position(1, Role.ABOVE, LEFT_HALF),),

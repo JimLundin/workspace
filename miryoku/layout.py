@@ -381,10 +381,10 @@ APPS_LAYER: Final[Board[Action]] = Board(
                   (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.DESKTOP_5)),
     home=     Row((_APP[5],         _APP[6],               _APP[7],              _APP[8],         _APP[9]      ),
                   (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
-    bottom=   Row((Tool.AGENT_VOICE_TOGGLE, Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  Tool.STOP    ),
-                  (Tool.AGENT_VOICE, Tool.DICTATE,         Tool.AGENT_TYPED,     Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
+    bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  XX           ),
+                  (XX,              Tool.DICTATE,          XX,                   Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
     # The Tab place stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
-    thumbs=Thumbs((XX,              Tool.MEETING_TOGGLE,   XX), (Tool.OPEN_INBOX, XX, XX)),
+    thumbs=Thumbs((XX,              Tool.MEETING_TOGGLE,   XX), (XX,              XX, XX)),
 )
 # fmt: on
 

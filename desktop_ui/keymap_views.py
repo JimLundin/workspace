@@ -371,7 +371,7 @@ class KeymapWindow:
         layout.addWidget(canvas)
         layout.addWidget(
             label(
-                "Hold . for Apps: L dictate · K agent · ' dictation toggle · S windows",
+                "Hold . for Apps: L dictate · ' dictation toggle · S windows",
                 "muted",
             )
         )

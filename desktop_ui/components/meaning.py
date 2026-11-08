@@ -4,7 +4,7 @@ from enum import Enum, auto
 
 
 class Tint(Enum):
-    """A surface's meaning: none, or a question waiting for you."""
+    """A surface's meaning: none, or something that needs your attention."""
 
     NONE = auto()
     ATTENTION = auto()

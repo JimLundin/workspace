@@ -16,9 +16,9 @@ from typing import Final
 
 from pydantic import TypeAdapter
 
-from automation import journal
+from assistant import journal
 from contracts.capture import AudioSource
-from contracts.meetings import CONVERSATION, MEETING, Ended, InProgress, Meeting, MeetingConversation, TranscriptEntry, TranscriptState, UnknownEnd
+from contracts.meetings import MEETING, Ended, InProgress, Meeting, TranscriptState, UnknownEnd
 from contracts.recording_state import SOURCE_NAMES, Batch, StoredState, duration
 from winapi.pcm import RATE, quiet_tail
 
@@ -220,21 +220,6 @@ class MeetingStore:
         # Existing dataclass instances are trusted by Pydantic. The IO round trip
         # revalidates constrained journal numbers before publishing typed values.
         return MEETING.validate_json(MEETING.dump_json(observed))
-
-    def conversation(self, offset: int = 0, limit: int = 50) -> MeetingConversation:
-        """Read a bounded page of ordered conversation batches from the authoritative journal."""
-        if offset < 0 or not 1 <= limit <= 100:
-            raise ValueError("Meeting conversation pages require a nonnegative offset and 1-100 entries.")
-        with self.reading() as connection:
-            meeting = self._meeting(self._state(connection))
-            count = connection.execute("SELECT COUNT(*) FROM segments WHERE text!=''").fetchone()
-            rows = connection.execute(
-                "SELECT start, end, text FROM segments WHERE text!='' ORDER BY start LIMIT ? OFFSET ?", (limit, offset)
-            ).fetchall()
-        total = _integer(count[0]) if count is not None else 0
-        entries = tuple(TranscriptEntry(_integer(row[0]) / RATE, _integer(row[1]) / RATE, _text(row[2])) for row in rows)
-        observed = MeetingConversation(meeting, entries, total, offset + len(entries) if offset + len(entries) < total else None)
-        return CONVERSATION.validate_json(CONVERSATION.dump_json(observed))
 
     def batch(self) -> Batch | None:
         with self.reading() as connection:
