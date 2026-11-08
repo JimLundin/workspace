@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
-from assistant.communications import Feed, TeamsActivity, Update, UpdateKind, WindowsNotice
+from assistant.communications import Activity, Feed, TeamsActivity, Update, WindowsNotice
 from assistant.feed_contracts import ChooseSolution, DismissItem, Disposition, ReadFeed, RejectProposal, SaveRule, StoredBoard
 from assistant.feed_sources import Candidate, Excerpt, PendingFeed
 from assistant.feed_triage import Assessment, Board, decode, proposal_revision, saved
@@ -108,7 +108,7 @@ def test_only_reviewed_actionable_notifications_activate_work_with_retry(tmp_pat
             raise ValueError("The work queue is temporarily full.")
         tasks.submit(task, "Notification", prompt, RequestSource("notifications", profile), at=10)
 
-    reaction = Update(TeamsActivity("reaction"), "Anna liked a message", "👍", "Teams", 1, UpdateKind.REACTION)
+    reaction = Update(TeamsActivity("reaction", Activity.REACTION), "Anna liked a message", "👍", "Teams", 1)
     hidden = Update(WindowsNotice(NoticeKey(7, 8), "hidden-app"), "Approval", "Review the supplier approval.", "Outlook", 2)
     actionable = Update(TeamsActivity("review"), "Supplier review", "Please review the figures.", "Teams", 3)
     quiet = Update(TeamsActivity("fyi"), "Status", "Routine FYI.", "Teams", 4)

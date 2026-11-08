@@ -18,6 +18,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 from assistant.browser_documents import Download, Downloaded
 from assistant.browser_requests import BrowserRequest, Evaluate
 from assistant.browser_values import BrowserError
+from assistant.communications import Activity
 from contracts.members import every_member
 from contracts.work_documents import LocalDocument
 lazy from assistant.browser import BrowserResult
@@ -230,7 +231,6 @@ type ChatIdentity = Annotated[str, Field(max_length=512, pattern=r"^19:\S*@\S*$"
 class TeamsChat:
     identity: ChatIdentity
     title: Annotated[str, Field(max_length=300, pattern=r"\S")]
-    kind: Literal["chat", "meeting"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,7 +259,7 @@ class ActivityItem:
     identity: Annotated[str, Field(max_length=32, pattern=r"^[0-9]+$")]
     title: Annotated[str, Field(max_length=512, pattern=r"\S")]
     text: Annotated[str, Field(max_length=4000, pattern=r"\S")]
-    kind: Literal["reaction", "invitation", "mention", "update"]
+    activity: Activity
     created_at: Annotated[float, Field(strict=True, ge=0, lt=100_000_000_000)]
     """Zero when Teams shows only a relative or partial date."""
     date_hint: Annotated[str, Field(max_length=256)] = ""
@@ -429,12 +429,12 @@ OBSERVE = r"""(() => {
    const match = value.match(/19:[^\s/]+@(?:thread\.v2|unq\.gbl\.spaces)/);
    if (!match || !['chat','muted-chat'].includes(row.getAttribute('data-item-type')) || seen.has(match[0])) continue;
    const title = clean(row.innerText).split('\n').filter(Boolean)[0] || 'Teams conversation';
-   conversations.push({identity:match[0], title:title.slice(0,300), kind:match[0].includes('meeting_')?'meeting':'chat'});
+   conversations.push({identity:match[0], title:title.slice(0,300)});
    seen.add(match[0]);
  }
  const title = clean(document.querySelector('[data-tid="chat-title"]')?.innerText).slice(0,300);
  if (current && !seen.has(current)) conversations.push({
-   identity:current,title:title||'Teams conversation',kind:current.includes('meeting_')?'meeting':'chat'
+   identity:current,title:title||'Teams conversation'
  });
  const messages = [];
  for (const row of document.querySelectorAll('[data-mid]')) {
@@ -480,14 +480,14 @@ ACTIVITY_OBSERVE = r"""(() => {
    const preview = clean(row.querySelector('[id^="activity-feed-item-message-preview-"]')?.innerText);
    const place = clean(row.querySelector('[id^="activity-feed-item-location-"]')?.innerText);
    const text = [reaction?reactionLabel:'',preview,place].filter(Boolean).join('\n').slice(0,4000) || title;
-   const kind = /\b(invited|invitation|meeting invite)\b/i.test(title+' '+text)?'invitation':
+   const activity = /\b(invited|invitation|meeting invite)\b/i.test(title+' '+text)?'invitation':
      /\bmentioned\b/i.test(title)?'mention':reaction?'reaction':'update';
    const clock = row.querySelector('[id^="activity-feed-item-timestamp-"]');
    const raw = clock?.getAttribute('datetime') || clock?.querySelector('time[datetime]')?.getAttribute('datetime') ||
      clock?.getAttribute('title') || '';
    const parsed = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:/.test(raw) ? Date.parse(raw) : NaN;
    const date_hint = [...new Set([clean(raw),clean(clock?.innerText)].filter(Boolean))].join(' · ').slice(0,256);
-   items.push({identity,title:title.slice(0,512),text,kind,created_at:Number.isFinite(parsed)?parsed/1000:0,date_hint});
+   items.push({identity,title:title.slice(0,512),text,activity,created_at:Number.isFinite(parsed)?parsed/1000:0,date_hint});
  }
  const result = {ready:!!document.querySelector('[data-tid="activity-list-container"]'),items:items.slice(0,80)};
  while(JSON.stringify(result).length>18500 && result.items.length>1)result.items.pop();

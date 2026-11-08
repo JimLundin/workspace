@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from assistant.communications import Feed, SourceDate, SourceDateStatus, TeamsActivity, Update
+from assistant.communications import Activity, Feed, SourceDate, SourceDateStatus, TeamsActivity, Update
 from assistant.communications_browser import activity_observation, observation
 from assistant.feed_contracts import Disposition
 from assistant.feed_sources import Candidate, Excerpt, PendingFeed, triage_evidence
@@ -108,7 +108,7 @@ def test_voice_feed_snapshot_keeps_the_source_date_with_its_text(tmp_path: Path)
 
 
 def test_teams_activity_uses_the_provider_date_instead_of_its_collection_time() -> None:
-    item = ActivityItem("123", "Meeting reminder", "The meeting is tomorrow.", "invitation", LAST_WEEK, "20 October 2026")
+    item = ActivityItem("123", "Meeting reminder", "The meeting is tomorrow.", Activity.INVITATION, LAST_WEEK, "20 October 2026")
     observed = activity_observation(ActivityPage((item,), ready=True), THIS_WEEK)
     sources = triage_evidence(PendingFeed(Feed(updates=observed.items)))
     with fake_endpoint.fake_endpoint() as endpoint:

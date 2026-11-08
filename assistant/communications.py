@@ -4,7 +4,7 @@ import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import date
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
 from itertools import groupby
 from typing import Literal
 
@@ -27,7 +27,11 @@ class Status(Enum):
 class Conversation:
     identity: str
     title: str
-    kind: Literal["chat", "meeting"] = "chat"
+
+    @property
+    def meeting(self) -> bool:
+        """A meeting's chat, which Teams names by its meeting."""
+        return "meeting_" in self.identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,11 +76,13 @@ class Acknowledgement:
     fingerprint: str
 
 
-class UpdateKind(Enum):
-    REACTION = auto()
-    INVITATION = auto()
-    MENTION = auto()
-    UPDATE = auto()
+class Activity(StrEnum):
+    """What a Teams activity reports."""
+
+    REACTION = "reaction"
+    INVITATION = "invitation"
+    MENTION = "mention"
+    UPDATE = "update"
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +106,7 @@ type SourceTime = SourceDate | SourceDateHint | SourceDateStatus
 @dataclass(frozen=True, slots=True)
 class TeamsActivity:
     identity: str
+    activity: Activity = Activity.UPDATE
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +126,6 @@ class Update:
     app_name: str
     created_at: float
     # Activity ordering keeps first observation separate from the provider's date.
-    kind: UpdateKind = UpdateKind.UPDATE
     source_time: SourceTime = field(default=SourceDateStatus.UNKNOWN, kw_only=True)
 
     @property

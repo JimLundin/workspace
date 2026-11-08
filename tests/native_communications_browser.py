@@ -19,7 +19,7 @@ from assistant.browser import Browser, BrowserResult
 from assistant.browser_requests import BrowserRequest, Open
 from assistant.browser_session import BrowserConnection, BrowserSession, NativeSessions, Owner, Source
 from assistant.browser_values import BrowserError, BrowserStatus, PageList
-from assistant.communications import SourceDate, SourceDateHint, SourceDateStatus, TeamsActivity, UpdateKind
+from assistant.communications import Activity, SourceDate, SourceDateHint, SourceDateStatus, TeamsActivity
 from assistant.communications_browser import TeamsWeb
 from contracts.json_value import Json
 from tests.browser_fixture import fixture
@@ -232,7 +232,8 @@ def verify_activity_identity_dates_and_read_action(web: TeamsWeb, cancel: thread
     assert isinstance(first.items[0].source, TeamsActivity)
     assert first.items[0].source.identity == "123"
     assert first.items[0].text == "Like\nReady **literal text** Åäö\nPlanning"
-    assert first.items[0].kind is UpdateKind.REACTION and first.items[1].kind is UpdateKind.INVITATION
+    assert isinstance(second := first.items[1].source, TeamsActivity)
+    assert first.items[0].source.activity is Activity.REACTION and second.activity is Activity.INVITATION
     assert first.items[0].source_time == SourceDate(datetime(2026, 10, 20, 7, 30, tzinfo=UTC).timestamp())
     assert first.items[1].source_time is SourceDateStatus.UNKNOWN
     page_value(web, "(() => {document.querySelector('[id^=activity-feed-item-timestamp]').textContent='Yesterday';return true})()", cancel)

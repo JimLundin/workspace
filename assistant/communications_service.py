@@ -255,7 +255,7 @@ class Communications:
         known.update({chat.identity: chat for chat in found.conversations})
         followed = self.feed.followed
         if not followed:
-            candidates = (found.current, *(chat.identity for chat in found.conversations if chat.kind == "chat"))
+            candidates = (found.current, *(chat.identity for chat in found.conversations if not chat.meeting))
             followed = tuple(dict.fromkeys(candidate for candidate in candidates if candidate))[:4]
             self._state.set(replace(self._state.get(), dirty=True))
         self.show(replace(self.feed, conversations=tuple(known.values())[:150], followed=followed))

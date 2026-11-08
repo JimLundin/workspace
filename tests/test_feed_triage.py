@@ -4,7 +4,7 @@ import json
 from dataclasses import replace
 from datetime import date
 
-from assistant.communications import Conversation, Feed, Message, TeamsActivity, Update, UpdateKind
+from assistant.communications import Activity, Conversation, Feed, Message, TeamsActivity, Update
 from assistant.feed_contracts import (
     STORED_BOARD,
     CompleteItem,
@@ -63,7 +63,7 @@ def test_reactions_are_counted_quietly_and_never_assessed_as_work() -> None:
         conversations=(Conversation("budget", "Budget"),),
         followed=("budget",),
         messages=(Message("budget", "one", "Anna", "Can you review the budget?", 1, 1),),
-        updates=(Update(TeamsActivity("reaction"), "Anna liked a message", "👍", "Teams", 2, UpdateKind.REACTION),),
+        updates=(Update(TeamsActivity("reaction", Activity.REACTION), "Anna liked a message", "👍", "Teams", 2),),
     )
     candidates = triage_evidence(PendingFeed(feed))
     board = reconcile(Board(enabled=True), candidates)

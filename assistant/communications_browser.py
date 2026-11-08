@@ -32,7 +32,6 @@ from assistant.communications import (
     SourceTime,
     TeamsActivity,
     Update,
-    UpdateKind,
 )
 from assistant.web_apps import ACTIVITY_OBSERVE, ACTIVITY_PAGE, OBSERVE, TEAMS_READ, ActivityItem, ActivityPage, ChatIdentity, TeamsPage, decoded
 from cell import Cell
@@ -92,21 +91,9 @@ def activity_time(item: ActivityItem, observed_at: float) -> SourceTime:
     return SourceDateHint(label, day) if label else SourceDateStatus.UNKNOWN
 
 
-def update_kind(item: ActivityItem) -> UpdateKind:
-    match item.kind:
-        case "reaction":
-            return UpdateKind.REACTION
-        case "invitation":
-            return UpdateKind.INVITATION
-        case "mention":
-            return UpdateKind.MENTION
-        case "update":
-            return UpdateKind.UPDATE
-
-
 def activity_observation(page: ActivityPage, at: float) -> ActivityObservation:
     updates = tuple(
-        Update(TeamsActivity(item.identity), item.title, item.text, "Teams", at, update_kind(item), source_time=activity_time(item, at))
+        Update(TeamsActivity(item.identity, item.activity), item.title, item.text, "Teams", at, source_time=activity_time(item, at))
         for item in page.items
     )
     return ActivityObservation(updates, ready=page.ready)
@@ -133,7 +120,7 @@ class Observation:
 
 def observation(page: TeamsPage, at: float) -> Observation:
     """The page's chats, and the selected chat's messages once it has an exact identity."""
-    chats = tuple(Conversation(chat.identity, chat.title, chat.kind) for chat in page.conversations)
+    chats = tuple(Conversation(chat.identity, chat.title) for chat in page.conversations)
     messages = tuple(
         Message(page.current, post.identity, post.sender, post.text, post.created_at, at, post.reactions, own=post.own)
         for post in page.messages

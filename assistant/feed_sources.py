@@ -14,6 +14,7 @@ from typing import Final, assert_never
 from pydantic import TypeAdapter
 
 from assistant.communications import (
+    Activity,
     ChatTicket,
     Conversation,
     Delivery,
@@ -25,7 +26,6 @@ from assistant.communications import (
     SourceTime,
     TeamsActivity,
     Update,
-    UpdateKind,
     WindowsNotice,
     chat_tickets,
     update_fingerprint,
@@ -233,7 +233,7 @@ def evidence(source: FeedSource) -> tuple[Candidate, ...]:
             return tuple(_message_evidence(message, chat) for message in ticket.messages)
         case UpdateSource(update=update):
             excerpt = Excerpt(update.app_name + ": " + update.title, update.text, update.created_at)
-            captured = replace(_captured(_update_key(update), origin(source), excerpt), reaction=update.kind is UpdateKind.REACTION)
+            captured = replace(_captured(_update_key(update), origin(source), excerpt), reaction=_reaction(update))
             match update.source:
                 case TeamsActivity():
                     # Activity ordering keeps first observation apart from the provider's own date.
@@ -245,6 +245,14 @@ def evidence(source: FeedSource) -> tuple[Candidate, ...]:
             return (_captured(key(source), origin(source), excerpt),)
         case _:
             assert_never(source)
+
+
+def _reaction(update: Update) -> bool:
+    match update.source:
+        case TeamsActivity(activity=activity):
+            return activity is Activity.REACTION
+        case WindowsNotice():
+            return False
 
 
 def _message_key(message: Message) -> SourceKey:

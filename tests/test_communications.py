@@ -6,13 +6,13 @@ from assistant.browser_values import BrowserError, NavigationContextError
 from assistant.communications import (
     MAX_MESSAGES,
     Acknowledgement,
+    Activity,
     Feed,
     Message,
     SourceDateHint,
     SourceDateStatus,
     TeamsActivity,
     Update,
-    UpdateKind,
     acknowledge,
     chat_tickets,
     fingerprint,
@@ -90,7 +90,7 @@ def test_inbox_groups_chat_backlog_and_handles_only_captured_revisions() -> None
 
 
 def test_activity_repeats_replace_one_ticket_and_handled_items_can_be_reopened() -> None:
-    update = Update(TeamsActivity("123"), "Anna reacted", "👍 · Planning", "Teams", 10, UpdateKind.REACTION)
+    update = Update(TeamsActivity("123", Activity.REACTION), "Anna reacted", "👍 · Planning", "Teams", 10)
     feed = updates_observed(Feed(), (update,))
     done = handle(feed, (Acknowledgement(update.key, update_fingerprint(update)),))
     repeated = updates_observed(done, (replace(update, created_at=20),))
@@ -107,8 +107,8 @@ def test_an_undated_activity_keeps_its_visible_date_hint_or_stays_unknown() -> N
     observed = activity_observation(
         ActivityPage(
             (
-                ActivityItem("1", "Reminder", "Tomorrow.", "update", 0, "Yesterday"),
-                ActivityItem("2", "Reminder", "Tomorrow.", "update", 0),
+                ActivityItem("1", "Reminder", "Tomorrow.", Activity.UPDATE, 0, "Yesterday"),
+                ActivityItem("2", "Reminder", "Tomorrow.", Activity.UPDATE, 0),
             ),
             ready=True,
         ),

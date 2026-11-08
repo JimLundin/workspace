@@ -351,7 +351,7 @@ def test_browser_collection_routes_exact_tabs_paginates_and_uses_messages_not_ti
             TeamsQuery("chat"): TeamsPage(
                 selected,
                 "Atlas",
-                (TeamsChat(sidebar, "Atlas", "chat"),),
+                (TeamsChat(sidebar, "Atlas"),),
                 (TeamsPost("message", "Colleague", "Awaiting supplier approval", 0, (), own=False),),
                 editor_ready=True,
             ),
@@ -424,7 +424,7 @@ def test_unavailable_browser_retries_periodically_and_empty_chats_are_not_eviden
     chat = "19:one@thread.v2"
     browser.tabs = (Tab("chat", source(SourceKind.TEAMS).url),)
     available: Mapping[Located, object] = {
-        TeamsQuery("chat"): TeamsPage(chat, "Deploy Atlas", (TeamsChat(chat, "Deploy Atlas", "chat"),), (), editor_ready=True)
+        TeamsQuery("chat"): TeamsPage(chat, "Deploy Atlas", (TeamsChat(chat, "Deploy Atlas"),), (), editor_ready=True)
     }
     browser.answers = available
     fresh = reader.read(70, threading.Event())
