@@ -22,6 +22,25 @@ Left:
   what a plain test already covers. Don't run the native tier per change
   meanwhile; once per batch at most, for the modules a change can't be
   checked without.
+  Done 2026-11-08: about 190 native tests down to 78. Fake-driven tests moved
+  to plain unchanged (`test_keyboard_hook` with `tests/keyboard_fixture.py`,
+  `test_shell_owners`, `test_microphone`, `test_meeting_audio`,
+  `test_machine`, `test_shell_items`, and others); duplicates of plain fold and
+  model tests deleted; the inbox and three canvas tests replaced by plain
+  fold tests. Machine-heavy tests (real Edge, the nested native check and
+  watch, PowerShell/UIA, whole-process run-alone) skip unless
+  `WORKSPACE_HEAVY=1` (`tests/heavy.py`). A plain-only check no longer starts
+  the Windows runner (4-12 s each), and a native check's source work starts
+  from the plain tier's last pass, not a stale native one.
+  Left (pure decisions to extract, then a plain test each): the bar's frame
+  decision in `DesktopBar._paint`/`_retarget` (motion, spin, wave, running,
+  listening: 6 island-bar tests), the pager's canvas-icon routing and stack
+  faces, `bar_events._pressed` per action, canvas `escape` order, wheel
+  pan/zoom clamping, attention redirect expansion, dismissal tiles, `Ui.drain`
+  (clock and queue seam: both ui_scheduling tests), the overlay's drag in
+  physical pixels, the notification observer's poll/clock seam (2 tests with
+  real waits), `window_switcher.matching`, and the machine import-hygiene
+  test through `test_architecture`'s reachability.
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
   three meeting tests from the slow lists.
 - **Skip the Windows runner for pure test modules.** A small check is about 9 s
