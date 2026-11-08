@@ -6,12 +6,13 @@ showing hints only moves, repaints and reveals windows. Nothing runs while
 they're hidden.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final, Protocol, assert_never
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Lettering, Look, Scheme, Shade, SolidLook, look
 from desktop_ui.components.bubble import rim_gradient
 from desktop_ui.components.meaning import Tint
@@ -203,35 +204,41 @@ def logical(x: int, y: int) -> QtCore.QPoint:
     return QtCore.QPoint(x, y)
 
 
+@dataclass(frozen=True, slots=True)
+class _Badges:
+    badges: tuple[BadgeWindow, ...] = ()
+    """Pooled native windows, grown to the most badges shown so far and reused."""
+    shown: tuple[tuple[Badge, ...], Preference] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class KeyHintOverlay:
     """Shows the badges the bar decides; unchanged badges repaint nothing."""
 
-    __slots__ = ("badges", "shown", "surface")
+    surface: HintSurface
+    _state: Cell[_Badges] = field(default_factory=lambda: Cell(_Badges()), init=False, repr=False)
 
-    def __init__(self, surface: HintSurface) -> None:
-        self.surface = surface
-        # Pooled native windows, grown to the most badges shown so far and reused.
-        self.badges: tuple[BadgeWindow, ...] = ()
-        self.shown: tuple[tuple[Badge, ...], Preference] | None = None
+    def _prepared(self) -> BadgeWindow:
+        window = BadgeWindow()
+        self.surface.prepare(window, click_through=True)
+        return window
 
     def show(self, badges: tuple[Badge, ...], preference: Preference) -> None:
-        if self.shown == (badges, preference):
+        if self._state.get().shown == (badges, preference):
             return
-        self.shown = (badges, preference)
+        pooled = self._state.get().badges
+        grown = (*pooled, *(self._prepared() for _ in range(len(badges) - len(pooled))))
+        self._state.set(_Badges(grown, (badges, preference)))
         look = style(preference)
-        while len(self.badges) < len(badges):
-            window = BadgeWindow()
-            self.surface.prepare(window, click_through=True)
-            self.badges = (*self.badges, window)
-        for window, badge in zip(self.badges, badges, strict=False):
+        for window, badge in zip(grown, badges, strict=False):
             window.draw(badge.keycaps, look)
             window.move(logical(badge.rect.left, badge.rect.top) + QtCore.QPoint(CORNER, CORNER))
             self.surface.present(window)
-        for window in self.badges[len(badges) :]:
+        for window in grown[len(badges) :]:
             window.hide()
 
     def close(self) -> None:
-        for window in self.badges:
+        for window in self._state.get().badges:
             window.close()
             window.deleteLater()
-        self.badges = ()
+        self._state.set(replace(self._state.get(), badges=()))

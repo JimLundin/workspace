@@ -7,9 +7,10 @@ is down. `LinkedAssistant` carries them over the link to the assistant process.
 
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
+from cell import Cell
 from contracts.canvas_activity import CanvasQuestion, CanvasRequest, CanvasRun
 from contracts.desktop_link import AnswerCanvas, ContinueWork, EditCanvas, StartRun, ToAssistant, to_assistant
 from contracts.personal_work import Catalog
@@ -38,6 +39,14 @@ class LinkedAssistant:
         return self.client.send(to_assistant(command))
 
 
+@dataclass(frozen=True, slots=True)
+class _Edited:
+    publication: CanvasPublication | None = None
+    """The assistant's latest publication: the record each edit applies to."""
+    catalog: Catalog = field(default_factory=Catalog)
+
+
+@dataclass(frozen=True, slots=True)
 class RemoteCanvas:
     """The canvas document as the desktop edits it: the assistant's latest publication, with
     each edit applied here at once (edits are pure) and sent for the assistant to record.
@@ -46,25 +55,26 @@ class RemoteCanvas:
     refused edit is answered with the record as it stands.
     """
 
-    __slots__ = ("_catalog", "_lock", "_port", "_publication")
+    _port: AssistantPort
+    _state: Cell[_Edited] = field(default_factory=lambda: Cell(_Edited()), init=False, repr=False)
+    """Replaced whole under the lock."""
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
-    def __init__(self, port: AssistantPort) -> None:
-        self._port = port
-        self._lock = threading.Lock()
-        self._publication: CanvasPublication | None = None
-        self._catalog = Catalog()
+    def _document(self) -> CanvasDocument:
+        published = self._state.get().publication
+        return published.document if published is not None else CanvasDocument()
 
     def published(self, publication: CanvasPublication) -> None:
         with self._lock:
-            self._publication = publication
+            self._state.set(replace(self._state.get(), publication=publication))
 
     def catalog_changed(self, catalog: Catalog) -> None:
         with self._lock:
-            self._catalog = catalog
+            self._state.set(replace(self._state.get(), catalog=catalog))
 
     def read(self) -> CanvasDocument:
         with self._lock:
-            return self._publication.document if self._publication is not None else CanvasDocument()
+            return self._document()
 
     def _sent(self, command: ToAssistant) -> None:
         if not self._port.send(command):
@@ -73,8 +83,8 @@ class RemoteCanvas:
     def commit(self, edit: UserEdit) -> CanvasDocument:
         """The edited document at once; an invalid edit raises ValueError and sends nothing."""
         with self._lock:
-            current = self._publication.document if self._publication is not None else CanvasDocument()
-            edited = user_edited(current, self._catalog, edit)
+            current = self._document()
+            edited = user_edited(current, self._state.get().catalog, edit)
         self._sent(EditCanvas(edit))
         return edited
 
@@ -92,7 +102,7 @@ class RemoteCanvas:
 
     def waiting(self) -> tuple[CanvasQuestion, ...]:
         with self._lock:
-            return self._publication.waiting if self._publication is not None else ()
+            return published.waiting if (published := self._state.get().publication) is not None else ()
 
     def answer(self, request: CanvasRequest, value: TextAnswer, deliver: Callable[[CanvasRequest, TextAnswer], bool]) -> bool:
         """The assistant delivers it to the conversation or task that asked; `deliver` is its own."""

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import assert_never
 
 import protocol
+from cell import Cell
 from contracts.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, owner, zoom_after
 from desktop_ui.navigation_log import NAVIGATION_LOG, START, Arrival, Entry, Moment, Tracker, append, arrived, navigated, noticed, seen, settled
@@ -98,24 +99,28 @@ class Observed:
     state: Desktops | None
 
 
+@dataclass(frozen=True, slots=True)
+class _Connected:
+    connection: VirtualDesktops | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Desktop:
     """The worker's connection to the shell's virtual desktops, reconnected after it fails."""
 
-    __slots__ = ("connection",)
-
-    def __init__(self) -> None:
-        self.connection: VirtualDesktops | None = None
+    _state: Cell[_Connected] = field(default_factory=lambda: Cell(_Connected()), init=False, repr=False)
 
     def connected(self) -> VirtualDesktops | None:
-        if self.connection is None:
+        if self._state.get().connection is None:
             with suppress(OSError):  # Another Windows build, or Explorer restarting: try again next poll.
-                self.connection = VirtualDesktops.connect()
-        return self.connection
+                new_connection = VirtualDesktops.connect()
+                self._state.set(replace(self._state.get(), connection=new_connection))
+        return self._state.get().connection
 
     def disconnect(self) -> None:
-        if self.connection is not None:
-            self.connection.close()
-            self.connection = None
+        if (connection := self._state.get().connection) is not None:
+            connection.close()
+            self._state.set(_Connected())
 
     def observe(self) -> Observed:
         """Other desktops' windows are cloaked; the shell's own cloaked hosts are on no desktop and stay out."""
@@ -145,7 +150,7 @@ class Desktop:
         The window in front, `follow`, takes the user along when it moves to another desktop:
         a window just opened or brought forward on the wrong desktop is the one being worked in.
         """
-        connection, state = self.connection, observed.state
+        connection, state = self._state.get().connection, observed.state
         if connection is None or state is None:
             return
         try:
@@ -170,7 +175,7 @@ class Desktop:
 
     def show(self, handle: int) -> None:
         """Bring a window forward, first switching to its desktop when it's on another one."""
-        if (connection := self.connection) is not None:
+        if (connection := self._state.get().connection) is not None:
             with suppress(OSError):
                 current, place_id = connection.observe().current, connection.window_desktop(handle)
                 if place_id is not None and place_id != current:
@@ -178,7 +183,7 @@ class Desktop:
         focus(handle)
 
     def switch(self, index: int) -> bool:
-        if (connection := self.connection) is None:
+        if (connection := self._state.get().connection) is None:
             return False
         try:
             ids = connection.ids()

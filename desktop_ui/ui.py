@@ -414,7 +414,7 @@ class Ui:
         def job(root: QtWidgets.QApplication) -> None:
             built = self._built.get()
             if built.keymap is None or not shiboken6.isValid(built.keymap.window):
-                self._built.set(replace(built, keymap=KeymapWindow(root)))
+                self._built.set(replace(built, keymap=KeymapWindow.open(root)))
             else:
                 bring_forward(built.keymap.window, built.keymap.canvas)
 

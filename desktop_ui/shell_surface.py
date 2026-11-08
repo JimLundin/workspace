@@ -6,13 +6,14 @@ controls are, so no stylesheet can pad, re-font or restyle it.
 
 import math
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from desktop_ui import ui_spec
 from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components import typeface
@@ -340,18 +341,35 @@ def app_icon(app: App, images: Mapping[str, Pixels | None]) -> Icon:
             assert_never(app)
 
 
+@dataclass(frozen=True, slots=True)
+class _Shelved:
+    app_snapshot: tuple[Shelf, int] | None = None
+    pager_view: tuple[PagerView, Mapping[str, Pixels | None]] | None = None
+    icons: frozendict[str, Pixels] = frozendict()
+    """Each program's icon as last read, so an app that isn't running keeps its own face."""
+
+
+@dataclass(frozen=True, slots=True)
 class ShellSections:
     """The surface keeps native buttons only for the current immutable snapshot.
 
     The pager is the bar's only toolbar: every desktop with its apps, each app a click target.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget, sizes: ui_spec.Sizes) -> None:
-        self.pager = Section(parent, sizes)
-        self.app_snapshot: tuple[Shelf, int] | None = None
-        self.pager_view: tuple[PagerView, Mapping[str, Pixels | None]] | None = None
-        self.icons: dict[str, Pixels] = {}
-        """Each program's icon as last read, so an app that isn't running keeps its own face."""
+    pager: Section
+    _state: Cell[_Shelved] = field(default_factory=lambda: Cell(_Shelved()), init=False, repr=False)
+
+    @classmethod
+    def build(cls, parent: QtWidgets.QWidget, sizes: ui_spec.Sizes) -> ShellSections:
+        return cls(Section(parent, sizes))
+
+    @property
+    def app_snapshot(self) -> tuple[Shelf, int] | None:
+        return self._state.get().app_snapshot
+
+    @property
+    def pager_view(self) -> tuple[PagerView, Mapping[str, Pixels | None]] | None:
+        return self._state.get().pager_view
 
     def sections(self) -> tuple[Section]:
         return (self.pager,)
@@ -362,8 +380,8 @@ class ShellSections:
         An empty desktop other than the current one is left out. Programs' icons come from
         the running apps, so a newly read icon redraws the pager too.
         """
-        images: Mapping[str, Pixels | None] = frozendict(self.icons)
-        if (view, images) == self.pager_view:
+        images: Mapping[str, Pixels | None] = self._state.get().icons
+        if (view, images) == self._state.get().pager_view:
             return
         hints = view.hints
 
@@ -389,14 +407,15 @@ class ShellSections:
             )
 
         self.pager.show_targets(pages() if len(view.desktops) > 1 else ())
-        self.pager_view = (view, images)
+        self._state.set(replace(self._state.get(), pager_view=(view, images)))
 
     def applications(self, snapshot: tuple[Shelf, int]) -> None:
         """Remember the running apps' windows and icons; the pager draws them."""
-        if snapshot == self.app_snapshot:
+        if snapshot == self._state.get().app_snapshot:
             return
-        self.icons.update((app.identity, app.image) for app in snapshot[0].running if app.image is not None)
-        self.app_snapshot = snapshot
+        shelved = self._state.get()
+        read = frozendict((app.identity, app.image) for app in snapshot[0].running if app.image is not None)
+        self._state.set(replace(shelved, app_snapshot=snapshot, icons=shelved.icons | read))
 
     def place(self, left: int, width: int) -> None:
         """The pager from the screen's edge, stopping before the leftmost capsule at `left`."""

@@ -842,7 +842,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: Publication | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
-        self.shell_sections = ShellSections(self, sizes)
+        self.shell_sections = ShellSections.build(self, sizes)
         # The bar's latest tray snapshot and Qt copies of its images, for the menu's tray cells.
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()

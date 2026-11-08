@@ -3,7 +3,6 @@
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial
 from typing import Final, assert_never
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -308,49 +307,51 @@ class KeymapOverlay:
                 traceback.print_exc()
 
 
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class KeymapWindow:
-    __slots__ = (
-        "__weakref__",
-        "buttons",
-        "canvas",
-        "layer",
-        "shortcuts",
-        "window",
-    )
+    window: Window
+    canvas: KeymapCanvas
+    buttons: tuple[QtWidgets.QToolButton, ...]
+    shortcuts: tuple[QtGui.QShortcut, ...]
 
-    def __init__(self, root: QtWidgets.QApplication) -> None:
-        self.window = Window("Workspace key map", self.close, width=940, height=390)
-        layout = column(self.window)
+    @classmethod
+    def open(cls, _root: QtWidgets.QApplication) -> KeymapWindow:
+        # The buttons and shortcuts act on the window record made just after them.
+        def close() -> None:
+            window.hide()
+            window.deleteLater()
+
+        def chooser(layer: Layer | None) -> Callable[[], None]:
+            return lambda: shown.draw(layer)
+
+        window = Window("Workspace key map", close, width=940, height=390)
+        layout = column(window)
         layout.setContentsMargins(20, 16, 20, 16)
-        buttons = row()
-        self.buttons: list[QtWidgets.QToolButton] = []
-        self.shortcuts: list[QtGui.QShortcut] = []
-        for index, (name, layer) in enumerate(_LAYERS):
-            choose = partial(self.draw, layer)
-            key = button(name, choose)
+        keys = tuple(button(name, chooser(layer)) for name, layer in _LAYERS)
+        for key in keys:
             key.setCheckable(True)
-            self.buttons.append(key)
-            shortcut = QtGui.QShortcut(QtGui.QKeySequence(str(index + 1)), self.window)
-            shortcut.activated.connect(choose)
-            self.shortcuts.append(shortcut)
-        buttons.addWidget(segmented(self.buttons))
+        shortcuts = tuple(QtGui.QShortcut(QtGui.QKeySequence(str(index + 1)), window) for index in range(len(_LAYERS)))
+        for shortcut, (_, layer) in zip(shortcuts, _LAYERS, strict=True):
+            shortcut.activated.connect(chooser(layer))
+        buttons = row()
+        buttons.addWidget(segmented(list(keys)))
         buttons.addStretch()
         layout.addLayout(buttons)
-        self.canvas = KeymapCanvas(tokens(scheme()))
-        layout.addWidget(self.canvas)
+        canvas = KeymapCanvas(tokens(scheme()))
+        layout.addWidget(canvas)
         layout.addWidget(
             label(
                 "Hold . for Apps: L dictate · K agent · ' dictation toggle · S windows",
                 "muted",
             )
         )
-        self.layer: Layer | None = None
-        self.draw(None)
-        near_pointer(self.window, 940, 390)
-        bring_forward(self.window, self.canvas)
+        shown = cls(window, canvas, keys, shortcuts)
+        shown.draw(None)
+        near_pointer(window, 940, 390)
+        bring_forward(window, canvas)
+        return shown
 
     def draw(self, layer: Layer | None) -> None:
-        self.layer = layer
         self.canvas.draw(layer)
         for key, (_, shown) in zip(self.buttons, _LAYERS, strict=True):
             key.setChecked(shown is layer)
