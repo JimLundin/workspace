@@ -89,4 +89,4 @@ last good one.
 `island_layout`, `island_motion` and `plain_text` in `desktop_ui/` are pure
 decisions. `DesktopBar` owns observations and timers, `island_surface` owns the
 Qt window and its native glass, `shell_surface` draws the pager, and `request_panel` draws the expanded
-request and inbox. `scripts/benchmark_island.py` measures frame cost.
+request and inbox.
