@@ -248,42 +248,33 @@ class ApplicationObserver:
         self.finished.wait(timeout=5)
 
 
+@dataclass(frozen=True, slots=True)
+class _Watched:
+    framed: frozenset[int] = frozenset()
+    previous: Arrangement = EMPTY_ARRANGEMENT
+    placement: Placement = NOWHERE
+    paused: bool = False
+    zoomed: int | None = None
+    recent: tuple[int, ...] = ()
+    launches: Launches = frozendict()
+    world: World | None = None
+    setup: Setup | None = None
+    where: Screens | None = None
+    tracker: Tracker = START
+    arrival: Foreground | None = None
+    """A foreground change waiting for the next poll to identify its window."""
+
+
+@dataclass(frozen=True, slots=True)
 class Worker:
-    """The observer thread's state: the last placement, zoom, pause, recent windows, pending web-app launches and focus history."""
+    """The observer thread's state: the last placement, zoom, pause, recent windows, pending web-app launches and focus history.
 
-    __slots__ = (
-        "arrival",
-        "desktop",
-        "framed",
-        "launches",
-        "observer",
-        "paused",
-        "placement",
-        "previous",
-        "recent",
-        "setup",
-        "tracker",
-        "where",
-        "world",
-        "zoomed",
-    )
+    Only the observer thread reads or replaces it, so it needs no lock.
+    """
 
-    def __init__(self, observer: ApplicationObserver) -> None:
-        self.observer = observer
-        self.desktop = Desktop()
-        self.framed: frozenset[int] = frozenset()
-        self.previous = EMPTY_ARRANGEMENT
-        self.placement: Placement = NOWHERE
-        self.paused = False
-        self.zoomed: int | None = None
-        self.recent: tuple[int, ...] = ()
-        self.launches: Launches = frozendict()
-        self.world: World | None = None
-        self.setup: Setup | None = None
-        self.where: Screens | None = None
-        self.tracker: Tracker = START
-        self.arrival: Foreground | None = None
-        """A foreground change waiting for the next poll to identify its window."""
+    observer: ApplicationObserver
+    desktop: Desktop = field(default_factory=Desktop)
+    _state: Cell[_Watched] = field(default_factory=lambda: Cell(_Watched()), init=False, repr=False)
 
     def run(self) -> None:
         # The hooks' own thread waits for their messages; it only queues each event for this worker.
@@ -298,11 +289,11 @@ class Worker:
                             break
         finally:
             events.close()
-            release(self.framed)
+            release(self._state.get().framed)
             self.desktop.disconnect()
 
     def moment(self, at: float) -> Moment:
-        return Moment(at, datetime.now().astimezone(), self.setup)
+        return Moment(at, datetime.now().astimezone(), self._state.get().setup)
 
     def write(self, entries: Iterable[Entry]) -> None:
         with suppress(OSError):  # A full or locked disk loses entries, never navigation.
@@ -310,20 +301,23 @@ class Worker:
 
     def follow(self) -> None:
         """Resolve a foreground change against the poll that just ran, and let pending expectations expire."""
-        if (world := self.world) is not None:
-            self.tracker = seen(self.tracker, world)
-        if (event := self.arrival) is not None:
-            self.arrival = None
+        watched = self._state.get()
+        world, tracker = watched.world, watched.tracker
+        if world is not None:
+            tracker = seen(tracker, world)
+        if (event := watched.arrival) is not None:
             app = owner(world, event.window) if world is not None else None
             if app is None and (exe := windows.exe(event.window)):
                 app = Program(exe)  # A dialog or shell surface outside the taskbar: its program, never its title.
             here = Arrival(event.window, app, world.current if world is not None else None, held=event.held)
-            self.tracker, entries = arrived(self.tracker, here, self.moment(event.at))
+            tracker, entries = arrived(tracker, here, self.moment(event.at))
         else:
-            self.tracker, entries = settled(self.tracker, self.moment(time.monotonic()))
+            tracker, entries = settled(tracker, self.moment(time.monotonic()))
+        self._state.set(replace(watched, tracker=tracker, arrival=None))
         self.write(entries)
 
     def poll(self) -> None:
+        watched = self._state.get()
         observed = self.desktop.observe()
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
@@ -331,92 +325,106 @@ class Worker:
         # The canvas is Workspace's own window: placed as an app, but never a running app on the shelf.
         canvas = next((w.handle for w in observed.windows if w.title == CANVAS_TITLE and windows.process_id(w.handle) == own), None)
         views = (Group(WorkspaceView.CANVAS, (canvas,)),) if canvas is not None else ()
-        grouped = shelf(tuple(w for w in observed.windows if w.handle != canvas), app_ids, self.previous.shelf)
-        self.launches = outstanding(self.launches, grouped)
+        grouped = shelf(tuple(w for w in observed.windows if w.handle != canvas), app_ids, watched.previous.shelf)
         slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
         current = frozenset(window.handle for window in slots)
         foreground = windows.foreground()
-        self.zoomed = zoom_after(self.zoomed, foreground)
+        zoomed = zoom_after(watched.zoomed, foreground)
         state = observed.state
         where = screens(screen.monitors())
-        self.setup = where.setup if where is not None else None
-        self.where = where
+        placement = watched.placement
         if where is not None and state is not None:
             eligible = frozenset(
                 window.handle
                 for window in observed.windows
                 if managed(window, resizable=windows.resizable(window.handle), own=windows.process_id(window.handle) == own)
             )
-            self.placement = place(where, (*views, *groups(grouped, eligible)), self.placement)
-            if not self.paused and not windows.dragging():  # A window being dragged snaps back once it's let go.
-                kept = frozendict((handle, target) for handle, target in self.placement.items() if handle != self.zoomed)
+            placement = place(where, (*views, *groups(grouped, eligible)), placement)
+            if not watched.paused and not windows.dragging():  # A window being dragged snaps back once it's let go.
+                kept = frozendict((handle, target) for handle, target in placement.items() if handle != zoomed)
                 self.desktop.arrange(observed, kept, current, follow=foreground)
         for window in slots:
             if not window.minimized:
                 frame(window.handle)
-        release(self.framed - current)
-        self.framed = current
+        release(watched.framed - current)
         live = frozenset(window.handle for window in observed.windows)
-        candidates = tuple(handle for handle in (foreground, *self.recent) if handle in self.placement and handle in live)
-        self.recent = tuple(handle for index, handle in enumerate(candidates) if handle not in candidates[:index])[:RECENT]
-        self.world = World(
+        candidates = tuple(handle for handle in (foreground, *watched.recent) if handle in placement and handle in live)
+        recent = tuple(handle for index, handle in enumerate(candidates) if handle not in candidates[:index])[:RECENT]
+        world = World(
             len(state.ids) if state is not None else 1,
             state.ids.index(state.current) if state is not None else 0,
             foreground,
             frozendict((group.app, group.windows) for group in (*views, *groups(grouped, live))),
             observed.desktops,
-            self.placement,
-            self.recent,
-            self.zoomed,
+            placement,
+            recent,
+            zoomed,
+        )
+        self._state.set(
+            replace(
+                watched,
+                launches=outstanding(watched.launches, grouped),
+                zoomed=zoomed,
+                setup=where.setup if where is not None else None,
+                where=where,
+                placement=placement,
+                framed=current,
+                recent=recent,
+                world=world,
+            )
         )
         self.publish(grouped, state)
 
     def placed(self, desktops: int) -> tuple[tuple[App, ...], ...]:
-        world = self.world
-        if world is None:
+        watched = self._state.get()
+        if (world := watched.world) is None:
             return tuple(() for _ in range(desktops))
-        return tuple(reading_order(self.where, world.windows, self.placement, index) for index in range(desktops))
+        return tuple(reading_order(watched.where, world.windows, watched.placement, index) for index in range(desktops))
 
     def publish(self, grouped: Shelf, state: Desktops | None) -> None:
+        watched = self._state.get()
         stop = self.observer.stop
         running = tuple(
             replace(app, image=window_pixels(app.windows[0].handle))
-            if not stop.is_set() and all(old.identity != app.identity for old in self.previous.shelf.running)
+            if not stop.is_set() and all(old.identity != app.identity for old in watched.previous.shelf.running)
             else app
             for app in grouped.running
         )
         desktops, current = (len(state.ids), state.ids.index(state.current)) if state is not None else (0, 0)
-        snapshot = Arrangement(replace(grouped, running=running), desktops, current, self.placed(desktops), paused=self.paused, world=self.world)
-        if snapshot != self.previous:
+        snapshot = Arrangement(
+            replace(grouped, running=running), desktops, current, self.placed(desktops), paused=watched.paused, world=watched.world
+        )
+        if snapshot != watched.previous:
             with suppress(queue.Empty):
                 self.observer.results.get_nowait()
             self.observer.results.put_nowait(snapshot)
-        self.previous = snapshot
+        self._state.set(replace(watched, previous=snapshot))
 
     def carry(self, order: Order | WinEvent) -> bool:
         """Carry out one order; False when the next poll should run first."""
         match order:
             case Foreground():
-                self.arrival = order
+                self._state.set(replace(self._state.get(), arrival=order))
                 return False
             case CaptureStart() | SwitchStart() | SwitchEnd():
-                self.tracker = noticed(self.tracker, order)
+                self._state.update(lambda watched: replace(watched, tracker=noticed(watched.tracker, order)))
                 return True
             case Placing.TOGGLE_PAUSE:
-                self.paused = not self.paused
+                self._state.update(lambda watched: replace(watched, paused=not watched.paused))
                 return False
             case Placing.NOW:
-                self.paused, self.zoomed = False, None
+                self._state.set(replace(self._state.get(), paused=False, zoomed=None))
                 return False
             case _:
-                if (world := self.world) is None:
+                if (world := self._state.get().world) is None:
                     return False
                 fresh = replace(world, foreground=windows.foreground())
                 chosen, record = decide(order, fresh)
-                self.tracker, entries = navigated(self.tracker, (chosen, record), self.moment(time.monotonic()))
+                tracker, entries = navigated(self._state.get().tracker, (chosen, record), self.moment(time.monotonic()))
+                self._state.set(replace(self._state.get(), tracker=tracker))
                 self.effect(chosen)
                 self.write(entries)
-                self.world = replace(fresh, current=record.to_desktop)
+                self._state.update(lambda watched: replace(watched, world=replace(fresh, current=record.to_desktop)))
                 return True
 
     def effect(self, chosen: Effect) -> None:
@@ -429,13 +437,13 @@ class Worker:
             case Launch(app=app):
                 self.start(app)
             case ZoomIn(window=window):
-                self.zoomed = window
-                if (target := self.placement.get(window)) is not None:
-                    resize(window, Target(target.desktop, screen.monitor_of(window).work), slot=window in self.framed)
+                watched = self._state.update(lambda watched: replace(watched, zoomed=window))
+                if (target := watched.placement.get(window)) is not None:
+                    resize(window, Target(target.desktop, screen.monitor_of(window).work), slot=window in watched.framed)
             case ZoomOut(window=window):
-                self.zoomed = None
-                if (target := self.placement.get(window)) is not None:
-                    resize(window, target, slot=window in self.framed)
+                watched = self._state.update(lambda watched: replace(watched, zoomed=None))
+                if (target := watched.placement.get(window)) is not None:
+                    resize(window, target, slot=window in watched.framed)
             case None:
                 pass
             case _:
@@ -455,7 +463,7 @@ class Worker:
 
     def open_web_app(self, app: PinnedApp) -> None:
         """Edge opens the slot's app window in the user's own profile; a repeated launch waits for it."""
-        pending = launch(self.launches, app, time.monotonic())
+        pending = launch(self._state.get().launches, app, time.monotonic())
         if pending is None:
             return
         edge = edge_path()
@@ -467,4 +475,4 @@ class Worker:
         except OSError as error:
             self.observer.problem(f"Could not open {WEB_APPS[app].label}: {error}")
             return
-        self.launches = pending
+        self._state.set(replace(self._state.get(), launches=pending))
