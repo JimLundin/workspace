@@ -121,9 +121,9 @@ def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, theme: Tokens,
     match surface:
         case Surface.CARD | Surface.QUESTION:
             # The kit's solid shadow, folded into two soft steps beneath the card.
-            near, far = (0.30, 0.16) if theme.scheme is Scheme.DARK else (0.07, 0.04)
-            painter.fillPath(rounded(shape.translated(0, 2), CARD_RADIUS), QtGui.QColor(0, 0, 0, round(far * 255)))
-            painter.fillPath(rounded(shape.translated(0, 1), CARD_RADIUS), QtGui.QColor(0, 0, 0, round(near * 255)))
+            shadow = theme.scheme.value.card_shadow
+            painter.fillPath(rounded(shape.translated(0, 2), CARD_RADIUS), QtGui.QColor(0, 0, 0, round(shadow.far * 255)))
+            painter.fillPath(rounded(shape.translated(0, 1), CARD_RADIUS), QtGui.QColor(0, 0, 0, round(shadow.near * 255)))
             edge = text.color(theme.solid_edge) if surface is Surface.CARD else text.color(Shade(ATTENTION, 0.45))
         case Surface.GROUP:
             edge = text.color(Shade(theme.ink.color, 0.07))
@@ -183,13 +183,13 @@ def paint_glass(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: CanvasG
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
     # A row is a pill; the toolbar grown into its sections keeps the island menu's corner.
     corner = min(bounds.height() / 2, PANEL_RADIUS)
-    dark = surface.scheme is Scheme.DARK
-    for spread, drop, alpha in ((6, 6, 0.10 if dark else 0.05), (2, 2, 0.22 if dark else 0.07)):
+    palette = surface.scheme.value
+    for spread, drop, alpha in ((6, 6, palette.bar_shadow.far), (2, 2, palette.bar_shadow.near)):
         painter.fillPath(
             rounded(bounds.adjusted(-spread, -spread + drop, spread, spread + drop), corner + spread), QtGui.QColor(0, 0, 0, round(alpha * 255))
         )
     painter.fillPath(rounded(bounds, corner), text.color(surface.look.veil))
-    painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 115 if dark else 26), 0.5))
+    painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, round(palette.bar_edge * 255)), 0.5))
     painter.drawPath(rounded(bounds.adjusted(-0.25, -0.25, 0.25, 0.25), corner + 0.25))
     # The canvas keeps its existing eight-bit rim alpha at this native boundary;
     # the shared painter owns the light's angle and stop placement.

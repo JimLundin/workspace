@@ -7,7 +7,7 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, control_style, scheme, tokens
+from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens, control_style, scheme, tokens
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
 from winapi import windows
@@ -17,7 +17,7 @@ prepare()
 
 def window_style(theme: Tokens) -> str:
     """The shared controls on the kit's solid window: reading on a solid card, filled buttons, the default action in the accent, segmented choices."""
-    thumb = "rgba(255,255,255,56)" if theme.scheme is Scheme.DARK else theme.solid
+    thumb = theme.scheme.value.thumb
     return (
         control_style(theme)
         + f"""

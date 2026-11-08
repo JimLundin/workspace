@@ -8,7 +8,7 @@ own colour on its badge.
 """
 
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum
 from functools import lru_cache
 from typing import Final, assert_never
 
@@ -41,9 +41,57 @@ class Shade:
         return f"#{round(self.opacity * 255):02x}{self.color[1:]}"
 
 
+@dataclass(frozen=True, slots=True)
+class Rim:
+    """Rim light at the upper-leading curve, middle and trailing foot."""
+
+    high: float
+    low: float
+    end: float
+
+
+@dataclass(frozen=True, slots=True)
+class Shadow:
+    """A soft shadow in two steps: the opacity of its near, tight step and its far, spread one."""
+
+    near: float
+    far: float
+
+
+@dataclass(frozen=True, slots=True)
+class Palette:
+    """What a scheme paints beyond its tokens: veils behind cards and the canvas bar, the glass rim, and shadows."""
+
+    card_veil: Shade
+    canvas_bar_veil: Shade
+    rim: Rim
+    card_shadow: Shadow
+    bar_shadow: Shadow
+    bar_edge: float
+    """The opacity of the canvas bar's hairline edge."""
+    thumb: str
+    """A solid window's scroll bar thumb."""
+
+
 class Scheme(Enum):
-    DARK = auto()
-    LIGHT = auto()
+    DARK = Palette(
+        card_veil=Shade("#222226", 0.64),
+        canvas_bar_veil=Shade("#1e1e22", 0.84),
+        rim=Rim(0.55, 0.06, 0.22),
+        card_shadow=Shadow(near=0.30, far=0.16),
+        bar_shadow=Shadow(near=0.22, far=0.10),
+        bar_edge=115 / 255,
+        thumb="rgba(255,255,255,56)",
+    )
+    LIGHT = Palette(
+        card_veil=Shade("#fafafc", 0.66),
+        canvas_bar_veil=Shade("#fbfbfd", 0.86),
+        rim=Rim(0.95, 0.16, 0.42),
+        card_shadow=Shadow(near=0.07, far=0.04),
+        bar_shadow=Shadow(near=0.07, far=0.05),
+        bar_edge=26 / 255,
+        thumb="#ffffff",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,15 +237,6 @@ class Lettering:
 
 
 @dataclass(frozen=True, slots=True)
-class Rim:
-    """Rim light at the upper-leading curve, middle and trailing foot."""
-
-    high: float
-    low: float
-    end: float
-
-
-@dataclass(frozen=True, slots=True)
 class GlassLook:
     """A veil and rim for composition or Qt, with the same surface lettering."""
 
@@ -278,9 +317,6 @@ FROSTS: Final = every_member(
         appearance.Frost.SMOKED: FrostLook(Scheme.DARK, Shade("#1c1c20", 0.62), 0.36),
     },
 )
-CARD_VEILS: Final = every_member(Scheme, {Scheme.DARK: Shade("#222226", 0.64), Scheme.LIGHT: Shade("#fafafc", 0.66)})
-CANVAS_BAR_VEILS: Final = every_member(Scheme, {Scheme.DARK: Shade("#1e1e22", 0.84), Scheme.LIGHT: Shade("#fbfbfd", 0.86)})
-GLASS_RIMS: Final = every_member(Scheme, {Scheme.DARK: Rim(0.55, 0.06, 0.22), Scheme.LIGHT: Rim(0.95, 0.16, 0.42)})
 
 
 def _scheme(pane: Pane, material: appearance.Material) -> Scheme:
@@ -309,9 +345,9 @@ def _veil(pane: Pane) -> Shade:
             small = FROSTS[frost].small_veil
             return Shade(small.color, max(small.opacity, 0.64))
         case Card(scheme=scheme):
-            return CARD_VEILS[scheme]
+            return scheme.value.card_veil
         case CanvasBar(scheme=scheme):
-            return CANVAS_BAR_VEILS[scheme]
+            return scheme.value.canvas_bar_veil
         case _:
             assert_never(pane)
 
@@ -358,7 +394,7 @@ def look(preference: appearance.Preference, pane: Pane, tint: Tint) -> Look:
         case _:
             assert_never(tint)
     scheme = _scheme(pane, appearance.Material.GLASS)
-    return GlassLook(_veil(pane), GLASS_RIMS[scheme], lettering(tokens(scheme)))
+    return GlassLook(_veil(pane), scheme.value.rim, lettering(tokens(scheme)))
 
 
 def reading(lettering: Lettering, tone: Tone, *, contrast: bool) -> Shade:
