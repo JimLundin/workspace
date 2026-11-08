@@ -140,7 +140,13 @@ violations left, with no baseline of exceptions. Counted in production code on
       model folds `bar_events`), `CanvasPanel`, `CanvasInteraction`,
       `CanvasWindow`, `WorkWindow`, the canvas details,
       `application_observer.Worker`, `KeymapOverlay` and the smaller views.
-      Left: owners whose Cells hold a reducible state machine.
+      Owners whose Cells held a reducible state machine: `WorkAgent` folds
+      its presentation (`work_presentation.present`), the canvas gestures fold
+      through `work_canvas_gestures.transition`, `DesktopBar` folds
+      `bar_events`, and `Triage` keeps its decisions in pure board functions.
+      The keyboard engine keeps one state Cell, as chosen (a fold would need
+      its timer ids fed back as events); `Communications` and the other
+      service loops record I/O results and have no machine left to reduce.
       Patterns that held up:
       - one record per owner works only where every writer holds the owner's
         lock (audit with a scan for unlocked `Cell` writes); state another
