@@ -7,6 +7,7 @@ from datetime import date
 from assistant.communications import Activity, Conversation, Feed, Message, TeamsActivity, Update
 from assistant.feed_contracts import (
     STORED_BOARD,
+    Approach,
     CompleteItem,
     DismissItem,
     Disposition,
@@ -47,8 +48,8 @@ def output(*groups: tuple[list[str], str]) -> str:
                 "summary": "Anna needs your review.",
                 "suggestion": "Check the totals before replying.",
                 "solutions": [
-                    {"label": "Check totals", "kind": "check", "detail": "Compare totals against the budget."},
-                    {"label": "Draft reply", "kind": "draft", "detail": "Prepare a reply explaining the review."},
+                    {"label": "Check totals", "approach": "check", "detail": "Compare totals against the budget."},
+                    {"label": "Draft reply", "approach": "draft", "detail": "Prepare a reply explaining the review."},
                 ],
                 "priority": 1,
             }
@@ -211,10 +212,10 @@ def test_action_solutions_require_valid_distinct_bounded_choices() -> None:
     source = captured("one", Excerpt("Review", "Please review.", 1))
     options: tuple[list[Json], ...] = (
         [],
-        [{"label": "Send", "kind": "send", "detail": "Send it now."}],
-        [{"label": "Check", "kind": "check", "detail": ""}],
-        [{"label": "Check", "kind": "check", "detail": "Check it."}] * 2,
-        [{"label": str(index), "kind": "check", "detail": "Check it."} for index in range(4)],
+        [{"label": "Send", "approach": "send", "detail": "Send it now."}],
+        [{"label": "Check", "approach": "check", "detail": ""}],
+        [{"label": "Check", "approach": "check", "detail": "Check it."}] * 2,
+        [{"label": str(index), "approach": "check", "detail": "Check it."} for index in range(4)],
     )
     for solutions in options:
         payload = json_object(output(([source.identity], "action")))
@@ -237,7 +238,7 @@ def test_voice_correction_replaces_solutions_immediately_even_without_live_sourc
             item=item.identity,
             text="Prepare a short clarification.",
             question="Which totals need review?",
-            solutions=(ProposedSolution("Draft clarification", "draft", "Ask which totals need review."),),
+            solutions=(ProposedSolution("Draft clarification", Approach.DRAFT, "Ask which totals need review."),),
         ),
         EditObservation((), 2),
     )
@@ -279,7 +280,7 @@ def test_meaningful_rejection_records_reason_and_revision_without_completing_or_
         pass
     else:
         raise AssertionError("A stale proposal was rejected.")
-    duplicate: Json = {"label": "Check", "kind": "check", "detail": "Check it."}
+    duplicate: Json = {"label": "Check", "approach": "check", "detail": "Check it."}
     invalid: tuple[tuple[str, dict[str, Json]], ...] = (
         ("work_feed_update", {**arguments, "text": " "}),
         ("work_feed_update", {"operation": "choose", "item": item.identity, "revision": proposal_revision(item), "choice": "1"}),

@@ -136,7 +136,8 @@ SPECS: Final = (
                     "minItems": 1,
                     "maxItems": 3,
                     "items": schema(
-                        {"label": TEXT, "kind": {"type": "string", "enum": ["draft", "check", "plan"]}, "detail": TEXT}, ("label", "kind", "detail")
+                        {"label": TEXT, "approach": {"type": "string", "enum": ["draft", "check", "plan"]}, "detail": TEXT},
+                        ("label", "approach", "detail"),
                     ),
                 },
             },

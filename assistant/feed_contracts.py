@@ -19,10 +19,18 @@ type Choice = Annotated[str, StringConstraints(strip_whitespace=True, min_length
 type CommandText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200, pattern=r"^[^\x00]+$")]
 
 
+class Approach(Enum):
+    """How the agent prepares a solution; each has its trusted recipe."""
+
+    DRAFT = "draft"
+    CHECK = "check"
+    PLAN = "plan"
+
+
 @dataclass(frozen=True, slots=True)
 class ProposedSolution:
     label: Label
-    kind: Literal["draft", "check", "plan"]
+    approach: Approach
     detail: Detail
 
 
@@ -210,17 +218,11 @@ class Disposition(Enum):
     REJECTED = "rejected"
 
 
-class SolutionKind(Enum):
-    DRAFT = "draft"
-    CHECK = "check"
-    PLAN = "plan"
-
-
 @dataclass(frozen=True, slots=True)
 class StoredSolution:
     id: str
     label: str
-    kind: SolutionKind
+    approach: Approach
     detail: str
     recommended: bool = field(kw_only=True)
 
