@@ -86,7 +86,7 @@ architecture review's `contract-isolation` rule enforces it.
 | `ui.py`, `qt_ui.py`, `qt_runtime.py`, `ui_control.py`, `job_queue.py`, `dialogs.py` | Qt dispatch, event-loop ownership and the views' decisions |
 | `desktop_bar.py`, `bar_*.py`, `island_*.py`, `ambient.py`, `audio_meter.py` | The bar ([policy](toolbar-design.md)) and the readings it shows |
 | `shell_*.py`, `desktop_pager.py`, `taskbar_guard.py` | The pager and app shelf, and the Windows taskbar |
-| `application_observer.py`, `window_layout.py`, `navigation.py`, `navigation_log.py`, `window_switcher.py` | [Window placement](window-placement.md), navigation and its log |
+| `application_observer.py`, `window_layout.py`, `navigation.py`, `window_switcher.py` | [Window placement](window-placement.md) and navigation |
 | `key_hints.py`, `key_hint_overlay.py` | The letters drawn while an Apps key is held |
 | `away_screens.py`, `keyboard_light.py`, `laptop_panel.py` | Dark screens, keyboard light and laptop panel while nobody is looking |
 | `keymap*.py`, `overlay*.py`, `layer_indicator.py` | The key map, keyboard overlay and layer indicator |
@@ -100,4 +100,3 @@ architecture review's `contract-isolation` rule enforces it.
 `selection.py` choosing the tests a change affects, `check_tiers.py` the time
 budgets and `check_native.py` the native runners. `architecture.py` and
 `quality.py` are the reviews, `volume.py` counts code volume, and
-`navigation_report.py` reads the navigation log.

@@ -12,23 +12,19 @@ import queue
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
-from datetime import datetime
-from pathlib import Path
 from typing import assert_never
 
 import protocol
 from contracts.geometry import framed
-from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, owner, zoom_after
-from desktop_ui.navigation_log import NAVIGATION_LOG, START, Arrival, Entry, Moment, Tracker, append, arrived, navigated, noticed, seen, settled
+from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, zoom_after
 from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
 from desktop_ui.window_layout import (
     NOWHERE,
     App,
     Placement,
-    Program,
     Screens,
     Setup,
     Target,
@@ -43,7 +39,6 @@ from winapi.icon_pixels import window_pixels
 from winapi.processes import edge_path
 from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
-from winapi.win_events import CaptureStart, Foreground, SwitchEnd, SwitchStart, WinEvent, WinEvents
 
 _CREATE_NO_WINDOW = 0x0800_0000
 RECENT = 32
@@ -209,18 +204,16 @@ class ApplicationObserver:
     """One worker owns native polling, placement, desktops, navigation and slot-window regions; callers receive immutable snapshots."""
 
     problem: Callable[[str], None]
-    log: Path = NAVIGATION_LOG
-    """The navigation log, appended only by the worker."""
     results: queue.Queue[Arrangement] = field(default_factory=lambda: queue.Queue[Arrangement](maxsize=1))
-    requests: queue.Queue[Order | WinEvent | None] = field(default_factory=queue.Queue[Order | WinEvent | None])
-    """Navigation and placement orders and foreground events; None only wakes the worker to stop."""
+    requests: queue.Queue[Order | None] = field(default_factory=queue.Queue[Order | None])
+    """Navigation and placement orders; None only wakes the worker to stop."""
     stop: threading.Event = field(default_factory=threading.Event)
     finished: threading.Event = field(default_factory=threading.Event)
     """Set when the worker thread exits."""
 
     @classmethod
-    def start(cls, problem: Callable[[str], None], log: Path = NAVIGATION_LOG) -> ApplicationObserver:
-        observer = cls(problem, log)
+    def start(cls, problem: Callable[[str], None]) -> ApplicationObserver:
+        observer = cls(problem)
         threading.Thread(target=observer.run, name="application icons", daemon=True).start()
         return observer
 
@@ -252,9 +245,6 @@ class _Watched:
     world: World | None = None
     setup: Setup | None = None
     where: Screens | None = None
-    tracker: Tracker = START
-    arrival: Foreground | None = None
-    """A foreground change waiting for the next poll to identify its window."""
     connection: Connection = None
 
 
@@ -268,45 +258,18 @@ class Worker:
     observer: ApplicationObserver
 
     def run(self) -> None:
-        # The hooks' own thread waits for their messages; it only queues each event for this worker.
-        events = WinEvents.start(self.observer.requests.put)
         watched = _Watched()
         try:
             while not self.observer.stop.is_set():
-                watched = self.follow(self.poll(watched))
+                watched = self.poll(watched)
                 with suppress(queue.Empty):
                     while (order := self.observer.requests.get(timeout=1)) is not None:
                         watched, more = self.carry(watched, order)
                         if not more:
                             break
         finally:
-            events.close()
             release(watched.framed)
             disconnected(watched.connection)
-
-    @staticmethod
-    def moment(at: float, setup: Setup | None) -> Moment:
-        return Moment(at, datetime.now().astimezone(), setup)
-
-    def write(self, entries: Iterable[Entry]) -> None:
-        with suppress(OSError):  # A full or locked disk loses entries, never navigation.
-            append(entries, self.observer.log)
-
-    def follow(self, watched: _Watched) -> _Watched:
-        """Resolve a foreground change against the poll that just ran, and let pending expectations expire."""
-        world, tracker = watched.world, watched.tracker
-        if world is not None:
-            tracker = seen(tracker, world)
-        if (event := watched.arrival) is not None:
-            app = owner(world, event.window) if world is not None else None
-            if app is None and (exe := windows.exe(event.window)):
-                app = Program(exe)  # A dialog or shell surface outside the taskbar: its program, never its title.
-            here = Arrival(event.window, app, world.current if world is not None else None, held=event.held)
-            tracker, entries = arrived(tracker, here, self.moment(event.at, watched.setup))
-        else:
-            tracker, entries = settled(tracker, self.moment(time.monotonic(), watched.setup))
-        self.write(entries)
-        return replace(watched, tracker=tracker, arrival=None)
 
     def poll(self, watched: _Watched) -> _Watched:
         connection, observed = observe(watched.connection)
@@ -389,13 +352,9 @@ class Worker:
             self.observer.results.put_nowait(snapshot)
         return replace(watched, previous=snapshot)
 
-    def carry(self, watched: _Watched, order: Order | WinEvent) -> tuple[_Watched, bool]:
+    def carry(self, watched: _Watched, order: Order) -> tuple[_Watched, bool]:
         """Carry out one order; False when the next poll should run first."""
         match order:
-            case Foreground():
-                return replace(watched, arrival=order), False
-            case CaptureStart() | SwitchStart() | SwitchEnd():
-                return replace(watched, tracker=noticed(watched.tracker, order)), True
             case Placing.TOGGLE_PAUSE:
                 return replace(watched, paused=not watched.paused), False
             case Placing.NOW:
@@ -405,9 +364,7 @@ class Worker:
                     return watched, False
                 fresh = replace(world, foreground=windows.foreground())
                 chosen, record = decide(order, fresh)
-                tracker, entries = navigated(watched.tracker, (chosen, record), self.moment(time.monotonic(), watched.setup))
-                watched = self.effect(replace(watched, tracker=tracker), chosen)
-                self.write(entries)
+                watched = self.effect(watched, chosen)
                 return replace(watched, world=replace(fresh, current=record.to_desktop)), True
 
     def effect(self, watched: _Watched, chosen: Effect) -> _Watched:

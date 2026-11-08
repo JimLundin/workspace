@@ -181,11 +181,6 @@ LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
 """Each application's places per setup, so no application is declared twice."""
 
 
-def first_places(setup: Setup) -> frozendict[App, Position]:
-    """Each declared application's first place: where navigation first finds it."""
-    return frozendict((app, places[0]) for app, places in LAYOUTS[setup].items())
-
-
 def declared_desktops(setup: Setup) -> int:
     return 1 + max((position.desktop for places in LAYOUTS[setup].values() for position in places), default=-1)
 

@@ -37,8 +37,6 @@ ASSET_READERS: Final = frozendict(
         "scripts/dev.ps1": ("scripts/check.py", "launch.py"),
         "StartWorkspace.cmd": ("launch.py",),
         "desktop_ui/fonts/": ("desktop_ui/components/typeface.py", "desktop_ui/components/text.py"),
-        # A sample log for `scripts.navigation_report --log`; no test reads it.
-        "tests/navigation_report_fixture.jsonl": (),
     }
 )
 """Each non-Python source file (or folder ending in /) and the source files that read it.

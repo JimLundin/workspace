@@ -133,10 +133,9 @@ tests aren't covered. Left:
    have theirs. Still hand-written: the bar layout's `Box` scaled to a screen
    `Rect` (`island_surface`, `island_layout`) and `Spot` spans shifted by
    `x + shift`.
-8. **Enums over their values** (user, 2026-11-07, a pattern being tried): the
-   navigation log's `Cause` literal (six causes, of which `navigation.Source`
-   is three) would be better as one enum. Review each `every_member` table:
-   keep it where members share a value or another layer owns the values.
+8. **Enums over their values** (user, 2026-11-07, a pattern being tried): review
+   each `every_member` table: keep it where members share a value or another
+   layer owns the values.
 9. **Every test names its defect**: checkable after all, as a `# Defect:`
    comment at the top of the body. Many tests lack one; backfilling means
    judging each, and deleting a test that guards no plausible defect.

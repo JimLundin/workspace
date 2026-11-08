@@ -152,7 +152,6 @@ Everything is in `%LOCALAPPDATA%\workspace`.
 | File | Contents |
 |---|---|
 | `usage.jsonl` | Feature use and timings, never what you typed or said |
-| `navigation.jsonl` | Each move between windows, never titles or content ([window placement](docs/window-placement.md#navigation-log)) |
 | `assistant.log`, `desktop.log` | Problems and crashes |
 | `state\*.log` | Each program's output and crashes, written by the launcher |
 | `agent-ui.log` | View startup and errors |

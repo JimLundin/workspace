@@ -24,7 +24,6 @@ _GetMessageW = fn(user32, "GetMessageW", wintypes.BOOL, ctypes.POINTER(wintypes.
 _TranslateMessage = fn(user32, "TranslateMessage", wintypes.BOOL, ctypes.POINTER(wintypes.MSG))
 _DispatchMessageW = fn(user32, "DispatchMessageW", ULONG_PTR, ctypes.POINTER(wintypes.MSG))
 _PostQuitMessage = fn(user32, "PostQuitMessage", None, ctypes.c_int)
-_PostThreadMessageW = fn(user32, "PostThreadMessageW", wintypes.BOOL, wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
 _SetTimer = fn(user32, "SetTimer", ULONG_PTR, wintypes.HWND, ULONG_PTR, wintypes.UINT, ctypes.c_void_p)
 _KillTimer = fn(user32, "KillTimer", wintypes.BOOL, wintypes.HWND, ULONG_PTR)
 _MessageBeep = fn(user32, "MessageBeep", wintypes.BOOL, wintypes.UINT)
@@ -96,10 +95,6 @@ def post_quit() -> None:
 def post_message(hwnd: int, message: int, wparam: int, lparam: int) -> bool:
     """Queues a message for a window (any process's); doesn't wait for it."""
     return bool(PostMessageW(hwnd, message, wparam, lparam))
-
-
-def post_thread_message(thread: int, message: int, wparam: int, lparam: int) -> bool:
-    return bool(_PostThreadMessageW(thread, message, wparam, lparam))
 
 
 def thread_id() -> int:

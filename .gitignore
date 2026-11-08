@@ -9,7 +9,6 @@ typings/.workspace-typeshed/
 .env.*
 *.log
 *.jsonl
-!tests/navigation_report_fixture.jsonl
 
 .runtime/
 .python/
