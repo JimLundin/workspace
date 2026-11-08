@@ -13,6 +13,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
+from concurrent.futures import Future
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final, Protocol
@@ -122,25 +123,18 @@ class Spool:
 
 
 @dataclass(frozen=True, slots=True)
-class _Writer:
+class _Blocks:
     """Cut handed-over audio into the journal's one-second blocks."""
 
     store: MeetingStore
-    _pending: Cell[bytes] = field(default_factory=lambda: Cell(b""), init=False, repr=False)
-    """Audio short of a whole block, held until more arrives."""
 
-    def feed(self, pcm: bytes) -> bool:
-        pending = self._pending.get() + pcm
-        whole = len(pending) - len(pending) % (RATE * 2)
-        self._pending.set(pending[whole:])
+    def feed(self, pending: bytes, pcm: bytes) -> tuple[bytes, bool]:
+        """Append every whole block of `pending + pcm`; the rest waits for more, and whether any was written."""
+        audio = pending + pcm
+        whole = len(audio) - len(audio) % (RATE * 2)
         for start in range(0, whole, RATE * 2):
-            self.store.append(pending[start : start + RATE * 2])
-        return whole > 0
-
-    def finish(self) -> None:
-        block = self._pending.get()
-        self._pending.set(b"")
-        self.store.append(block)
+            self.store.append(audio[start : start + RATE * 2])
+        return audio[whole:], whole > 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,20 +146,29 @@ class _Journal:
     changed: Callable[[], None]
     publish: Callable[[], None]
     log: Callable[[str], None]
-    _problem: Cell[str] = field(default_factory=lambda: Cell(""), init=False, repr=False)
+    outcome: Future[str] = field(default_factory=Future[str], init=False, repr=False)
+    """Why the journal stopped saving, or empty when it saved everything; set when `run` returns."""
 
     @property
     def problem(self) -> str:
-        return self._problem.get()
+        return self.outcome.result() if self.outcome.done() else ""
 
     def run(self, stop: threading.Event) -> None:
-        writer = _Writer(self.store)
+        problem = self._journal()
+        self.outcome.set_result(problem)
+        if problem:
+            # Saving failed: end capture, and never store audio captured after the failure.
+            stop.set()
+
+    def _journal(self) -> str:
+        blocks, pending = _Blocks(self.store), b""
         published, dirty = time.monotonic() - PUBLISH_SECONDS, False
         try:
             while True:
                 due = published + PUBLISH_SECONDS - time.monotonic()
                 taken = self.spool.take(max(0.0, due) if dirty else PUBLISH_SECONDS)
-                if writer.feed(taken.pcm):
+                pending, written = blocks.feed(pending, taken.pcm)
+                if written:
                     self.changed()
                     dirty = True
                 if taken.problems:
@@ -181,16 +184,14 @@ class _Journal:
                     self.publish()
                     published, dirty = now, False
                 if taken.closed:
-                    writer.finish()
+                    self.store.append(pending)
                     self.changed()
-                    return
+                    return ""
         except (OSError, ValueError, sqlite3.Error) as error:
-            self._problem.set(str(error))
+            return str(error)
         except Exception:
-            self._problem.set("Recording stopped unexpectedly. The captured part is saved in the meetings folder.")
             self.log(traceback.format_exc())
-        # Saving failed: end capture, and never store audio captured after the failure.
-        stop.set()
+            return "Recording stopped unexpectedly. The captured part is saved in the meetings folder."
 
 
 def _unlogged(text: str) -> None:
