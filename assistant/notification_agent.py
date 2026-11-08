@@ -4,6 +4,7 @@ import hashlib
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from typing import Final
 
 from pydantic import TypeAdapter
 
@@ -14,10 +15,14 @@ from contracts.task import FeedHandoff, Profile
 
 _NOTIFICATION = TypeAdapter(Candidate)
 _QUEUE_WAIT = "Notification work awaits queue access; retrying automatically."
+PROMPT_SCHEME: Final = "2"
+"""Bumped whenever the prompt's wording or its captured JSON changes, so a replay
+of an earlier task gets a new identity instead of colliding with the old prompt."""
 
 
 def notification_id(item: Candidate) -> str:
-    return "workspace-notification:" + hashlib.sha256((item.identity + ":" + item.revision).encode()).hexdigest()[:32]
+    key = item.identity + ":" + item.revision + ":" + PROMPT_SCHEME
+    return "workspace-notification:" + hashlib.sha256(key.encode()).hexdigest()[:32]
 
 
 def notification_task(item: Candidate) -> tuple[str, str, FeedHandoff]:
@@ -25,7 +30,7 @@ def notification_task(item: Candidate) -> tuple[str, str, FeedHandoff]:
     # restart. They must not change the prompt for this exact content revision.
     captured = replace(item, created_at=0, source_time=SourceDateStatus.UNKNOWN)
     # Saved tasks bind this exact text to their identity, so replays after a
-    # restart are refused if it changes; new wording needs a new identity scheme.
+    # restart are refused if it changes; new wording needs a new PROMPT_SCHEME.
     prompt = (
         "Review this received notification on the user's behalf. Investigate its relevance using saved work, "
         "project context, standing instructions and the source application. Carry out already-authorized actions "

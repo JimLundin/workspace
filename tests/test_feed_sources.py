@@ -15,12 +15,12 @@ from assistant.communications import (
 )
 from assistant.feed_sources import (
     Attention,
+    Channel,
     ChatTicketSource,
     FeedSource,
     NoticesObserved,
     PendingFeed,
     ReplySource,
-    SourceKind,
     TeamsObserved,
     UpdateSource,
     attention,
@@ -65,20 +65,20 @@ def test_each_report_keeps_the_others_in_the_pending_feed() -> None:
 def test_each_source_variant_owns_its_attention_key_origin_and_evidence() -> None:
     # Defect: the feed and triage disagree about a variant, e.g. an in-flight
     # send is quoted to triage, or a source is badged wrongly.
-    table: tuple[tuple[FeedSource, Attention, SourceKind, App, int], ...] = (
-        (ChatTicketSource(ChatTicket("chat", (FIRST, SECOND)), CHAT), Attention.TRIAGE, SourceKind.CHAT, App.TEAMS, 2),
-        (UpdateSource(ACTIVITY), Attention.TRIAGE, SourceKind.ACTIVITY, App.TEAMS, 1),
-        (UpdateSource(MAIL), Attention.TRIAGE, SourceKind.WINDOWS, App.OUTLOOK, 1),
-        (UpdateSource(OTHER), Attention.TRIAGE, SourceKind.WINDOWS, App.WINDOWS, 1),
-        (ReplySource(REPLY), Attention.SETTLING, SourceKind.REPLY, App.TEAMS, 0),
-        (ReplySource(replace(REPLY, delivery=Delivery.SENDING)), Attention.SETTLING, SourceKind.REPLY, App.TEAMS, 0),
-        (ReplySource(replace(REPLY, delivery=Delivery.UNKNOWN)), Attention.TRIAGE, SourceKind.REPLY, App.TEAMS, 1),
-        (ReplySource(replace(REPLY, delivery=Delivery.FAILED)), Attention.TRIAGE, SourceKind.REPLY, App.TEAMS, 1),
-        (ReplySource(replace(REPLY, delivery=Delivery.OBSERVED)), Attention.RESOLVED, SourceKind.REPLY, App.TEAMS, 0),
-        (ReplySource(replace(REPLY, delivery=Delivery.REVIEWED)), Attention.RESOLVED, SourceKind.REPLY, App.TEAMS, 0),
+    table: tuple[tuple[FeedSource, Attention, Channel, App, int], ...] = (
+        (ChatTicketSource(ChatTicket("chat", (FIRST, SECOND)), CHAT), Attention.TRIAGE, Channel.CHAT, App.TEAMS, 2),
+        (UpdateSource(ACTIVITY), Attention.TRIAGE, Channel.ACTIVITY, App.TEAMS, 1),
+        (UpdateSource(MAIL), Attention.TRIAGE, Channel.WINDOWS, App.OUTLOOK, 1),
+        (UpdateSource(OTHER), Attention.TRIAGE, Channel.WINDOWS, App.WINDOWS, 1),
+        (ReplySource(REPLY), Attention.SETTLING, Channel.REPLY, App.TEAMS, 0),
+        (ReplySource(replace(REPLY, delivery=Delivery.SENDING)), Attention.SETTLING, Channel.REPLY, App.TEAMS, 0),
+        (ReplySource(replace(REPLY, delivery=Delivery.UNKNOWN)), Attention.TRIAGE, Channel.REPLY, App.TEAMS, 1),
+        (ReplySource(replace(REPLY, delivery=Delivery.FAILED)), Attention.TRIAGE, Channel.REPLY, App.TEAMS, 1),
+        (ReplySource(replace(REPLY, delivery=Delivery.OBSERVED)), Attention.RESOLVED, Channel.REPLY, App.TEAMS, 0),
+        (ReplySource(replace(REPLY, delivery=Delivery.REVIEWED)), Attention.RESOLVED, Channel.REPLY, App.TEAMS, 0),
     )
-    for source, expected, kind, app, quoted in table:
-        assert (attention(source), key(source).kind, origin(source).app, len(evidence(source))) == (expected, kind, app, quoted), source
+    for source, expected, channel, app, quoted in table:
+        assert (attention(source), key(source).channel, origin(source).app, len(evidence(source))) == (expected, channel, app, quoted), source
         assert all(item.origin == origin(source) for item in evidence(source))
 
 
@@ -96,8 +96,8 @@ def test_pending_listing_keeps_filtered_notices_unhandled_and_replies_until_they
     )
     pending = tuple(key(source) for source in listed(feed))
     # The filtered notice is visible elsewhere, never quoted to triage.
-    assert [item.kind for item in triage_evidence(feed)] == [SourceKind.CHAT, SourceKind.WINDOWS]
-    assert [item.kind for item in pending] == [SourceKind.CHAT, SourceKind.WINDOWS, SourceKind.REPLY]
+    assert [item.channel for item in triage_evidence(feed)] == [Channel.CHAT, Channel.WINDOWS]
+    assert [item.channel for item in pending] == [Channel.CHAT, Channel.WINDOWS, Channel.REPLY]
 
 
 def test_chat_evidence_names_its_exact_message_for_research() -> None:

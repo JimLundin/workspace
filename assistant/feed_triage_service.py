@@ -111,7 +111,7 @@ def source_evidence(item: Candidate) -> SourceEvidence:
             created, hint, observed_on = None, None, None
         case _ as unreachable:
             assert_never(unreachable)
-    return SourceEvidence(item.identity, item.revision, item.kind.value, item.title, item.body, created, hint, observed_on)
+    return SourceEvidence(item.identity, item.revision, item.channel.value, item.title, item.body, created, hint, observed_on)
 
 
 def classify(  # noqa: PLR0913 - injected collaborators and test seams

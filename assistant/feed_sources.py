@@ -78,8 +78,8 @@ def needs_attention(feed: PendingFeed, update: Update) -> bool:
     ) and not feed.notices.filter.hides(update)
 
 
-class SourceKind(Enum):
-    """The prefix of triage evidence identities."""
+class Channel(Enum):
+    """Where a piece of triage evidence came from; the prefix of its identity."""
 
     CHAT = "chat"
     ACTIVITY = "activity"
@@ -89,7 +89,7 @@ class SourceKind(Enum):
 
 @dataclass(frozen=True, slots=True)
 class SourceKey:
-    kind: SourceKind
+    channel: Channel
     identity: str
 
 
@@ -132,7 +132,7 @@ class Candidate:
 
     identity: str
     revision: str
-    kind: SourceKind
+    channel: Channel
     origin: Origin
     title: str
     body: str
@@ -180,11 +180,11 @@ def key(source: FeedSource) -> SourceKey:
     """The source's identity in the pending listing and its triage evidence."""
     match source:
         case ChatTicketSource(ticket=ticket):
-            return SourceKey(SourceKind.CHAT, ticket.conversation)
+            return SourceKey(Channel.CHAT, ticket.conversation)
         case UpdateSource(update=update):
             return _update_key(update)
         case ReplySource(reply=reply):
-            return SourceKey(SourceKind.REPLY, reply.identity)
+            return SourceKey(Channel.REPLY, reply.identity)
         case _:
             assert_never(source)
 
@@ -193,9 +193,9 @@ def _update_key(update: Update) -> SourceKey:
     _, identity = update.key
     match update.source:
         case TeamsActivity():
-            return SourceKey(SourceKind.ACTIVITY, identity)
+            return SourceKey(Channel.ACTIVITY, identity)
         case WindowsNotice():
-            return SourceKey(SourceKind.WINDOWS, identity)
+            return SourceKey(Channel.WINDOWS, identity)
 
 
 def origin(source: FeedSource) -> Origin:
@@ -257,7 +257,7 @@ def _reaction(update: Update) -> bool:
 
 def _message_key(message: Message) -> SourceKey:
     # Triage identities predate the rendered message key; the JSON pair stays unambiguous.
-    return SourceKey(SourceKind.CHAT, _CHAT_KEY.dump_json(message.key).decode())
+    return SourceKey(Channel.CHAT, _CHAT_KEY.dump_json(message.key).decode())
 
 
 def _message_evidence(message: Message, chat: Conversation | None) -> Candidate:
@@ -266,14 +266,14 @@ def _message_evidence(message: Message, chat: Conversation | None) -> Candidate:
 
 
 def _identity(source: SourceKey) -> str:
-    return source.kind.value + ":" + hashlib.sha256(source.identity.encode()).hexdigest()[:24]
+    return source.channel.value + ":" + hashlib.sha256(source.identity.encode()).hexdigest()[:24]
 
 
 def _captured(source: SourceKey, at: Origin, excerpt: Excerpt) -> Candidate:
     return Candidate(
         _identity(source),
         hashlib.sha256((excerpt.title + "\n" + excerpt.body).encode()).hexdigest(),
-        source.kind,
+        source.channel,
         at,
         excerpt.title[:512],
         excerpt.body[:6000],

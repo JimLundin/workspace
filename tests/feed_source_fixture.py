@@ -6,7 +6,7 @@ from typing import Literal
 
 from assistant.communications import SourceDate, SourceDateStatus
 from assistant.feed_contracts import SCREENING, ScreenedSource, Screening
-from assistant.feed_sources import Candidate, Excerpt, SourceKind
+from assistant.feed_sources import Candidate, Channel, Excerpt
 from contracts.feed_origin import App, Origin
 from tests.fake_endpoint import Reply
 lazy from tests.test_agent import says
@@ -20,7 +20,7 @@ def captured(key: str, excerpt: Excerpt) -> Candidate:
     return Candidate(
         "chat:" + key,
         hashlib.sha256((excerpt.title + "\n" + excerpt.body).encode()).hexdigest(),
-        SourceKind.CHAT,
+        Channel.CHAT,
         Origin(App.TEAMS, App.TEAMS.value),
         excerpt.title,
         excerpt.body,
