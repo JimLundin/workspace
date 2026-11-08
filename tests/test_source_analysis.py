@@ -46,6 +46,6 @@ def test_cached_quality_cannot_accept_changed_boolean_signature_or_import_owners
     path.write_text("\n\ndef update(enabled: bool):\n    from owner import Event\n")
     found = scan(tmp_path, cache=cache)
     assert found == scan(tmp_path)
-    assert {item.rule for item in found} == {"FBT001", "inline-import"}
+    assert {item.rule for item in found} == {"FBT001", "PLC0415"}
     path.write_text("def update(*, enabled: bool):\n    pass\n")
     assert not scan(tmp_path, cache=cache)

@@ -20,8 +20,8 @@ from pydantic import StrictInt, StrictStr, StringConstraints, TypeAdapter
 from scripts.architecture import python_sources
 from scripts.source_analysis import Cache, Source, parse
 
-type LintRule = Literal["FBT001", "FBT002", "PLR0913"]
-type Rule = LintRule | Literal["import-alias", "re-export", "inline-import", "relative-import"]
+type LintRule = Literal["FBT001", "FBT002", "PLR0913", "PLC0415", "TID252"]
+type Rule = LintRule | Literal["import-alias", "re-export"]
 type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
@@ -78,7 +78,7 @@ def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None 
             "ruff",
             "check",
             "--select",
-            "FBT001,FBT002,PLR0913",
+            "FBT001,FBT002,PLR0913,PLC0415,TID252",
             "--output-format",
             "json",
             "--config",
@@ -104,27 +104,13 @@ def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None 
 
 
 def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
-    def walk(node: ast.AST, scope: str = "<module>") -> Iterator[Finding]:
+    for node in ast.walk(tree):
         match node:
-            case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                scope = name if scope == "<module>" else scope + "." + name
-            case ast.Import(names=names) | ast.ImportFrom(names=names):
-                match node:
-                    case ast.ImportFrom(level=level) if level:
-                        yield Finding(path, node.lineno, "relative-import", "Use an absolute import from the owning module.")
-                    case _:
-                        pass
-                if scope != "<module>":
-                    yield Finding(path, node.lineno, "inline-import", "Declare imports at module level; use lazy imports to defer loading.")
-                if any(alias.asname for alias in names):
-                    detail = "Import from the owner and use module-qualified names instead of cosmetic aliases."
-                    yield Finding(path, node.lineno, "import-alias", detail)
+            case ast.Import(names=names) | ast.ImportFrom(names=names) if any(alias.asname for alias in names):
+                detail = "Import from the owner and use module-qualified names instead of cosmetic aliases."
+                yield Finding(path, node.lineno, "import-alias", detail)
             case _:
                 pass
-        for child in ast.iter_child_nodes(node):
-            yield from walk(child, scope)
-
-    yield from walk(tree)
 
     def bindings() -> Iterator[tuple[Literal["import", "local"], str]]:
         for node in tree.body:

@@ -16,7 +16,10 @@ from tests.git_fixture import initialized
 def source_tree(root: Path, text: str) -> None:
     (root / "assistant").mkdir()
     (root / "assistant" / "api.py").write_text(text, encoding="utf-8")
-    (root / "pyproject.toml").write_text("[tool.workspace.architecture]\n[tool.ruff.lint.pylint]\nmax-args = 5\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        '[tool.workspace.architecture]\n[tool.ruff.lint.pylint]\nmax-args = 5\n[tool.ruff.lint.flake8-tidy-imports]\nban-relative-imports = "all"\n',
+        encoding="utf-8",
+    )
 
 
 def development_lint() -> None:
@@ -50,18 +53,15 @@ def test_import_ownership_rejects_aliases_and_forwarding() -> None:
     assert not tuple(imports("assistant/api.py", ast.parse('from owner import Event\ndef local():\n    pass\n__all__ = ("local",)\n')))
 
 
-def test_gate_blocks_imports_inside_function_bodies() -> None:
-    inline = "def run():\n    from owner import activate\n    activate()\n"
-    findings = tuple(imports("assistant/api.py", ast.parse(inline)))
-    assert tuple(item.rule for item in findings) == ("inline-import",)
-
-
-def test_absolute_import_gate_covers_lazy_and_parent_imports(tmp_path: Path) -> None:
+def test_import_gate_covers_lazy_parent_and_function_body_imports(tmp_path: Path) -> None:
     # A missing level check would let explicit test scopes accept relative
     # dependencies even though ordinary Ruff lint rejects them.
     development_lint()
-    source_tree(tmp_path, "from .owner import Event\nlazy from .. import model\nfrom assistant.owner import Local\n")
-    assert tuple((item.rule, item.line) for item in scan(tmp_path)) == (("relative-import", 1), ("relative-import", 2))
+    source_tree(
+        tmp_path,
+        "from .owner import Event\nlazy from .. import model\nfrom assistant.owner import Local\n\n\ndef run():\n    from owner import activate\n",
+    )
+    assert tuple((item.rule, item.line) for item in scan(tmp_path)) == (("TID252", 1), ("TID252", 2), ("PLC0415", 7))
 
 
 def test_explicit_test_scope_cannot_bypass_quality_or_write_a_receipt(tmp_path: Path) -> None:
