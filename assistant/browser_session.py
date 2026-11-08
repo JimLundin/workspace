@@ -1,6 +1,7 @@
 """Browser discovery, consent, and ownership of one live CDP session."""
 
 import contextlib
+import itertools
 import os
 import re
 import socket
@@ -8,7 +9,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
@@ -26,7 +27,6 @@ from assistant.browser_values import (
     NavigationContextError,
     navigation_context_error,
 )
-from cell import Cell
 from contracts.json_value import Json
 lazy from assistant.browser_host import connect_shared
 lazy from usage import DIRECTORY
@@ -180,8 +180,8 @@ class Cdp:
 
     channel: Channel
     clock: Callable[[], float] = field(default=time.monotonic, kw_only=True)
-    _sequence: Cell[int] = field(default_factory=lambda: Cell(0), init=False, repr=False)
-    """The last command's identity."""
+    _sequence: Iterator[int] = field(default_factory=lambda: itertools.count(1), init=False, repr=False)
+    """Each command's identity, in order."""
 
     @classmethod
     def connect(
@@ -250,7 +250,7 @@ class Cdp:
     ) -> dict[str, Json]:
         if cancel.is_set():
             raise InterruptedError("Stopped. Inspect the page before retrying an action that may already have completed.")
-        identity = self._sequence.update(lambda sequence: sequence + 1)
+        identity = next(self._sequence)
         request = Command(identity, method, frozendict(params), session or None)
         deadline = self.clock() + timeout
         try:

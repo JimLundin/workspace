@@ -242,11 +242,11 @@ def _identity() -> str:
 class HostedConnection:
     location: Endpoint
     identity: str = field(default_factory=_identity)
-    _closed: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
+    _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @property
     def closed(self) -> bool:
-        return self._closed.get()
+        return self._closed.is_set()
 
     def call(
         self,
@@ -264,7 +264,7 @@ class HostedConnection:
 
     def close(self) -> None:
         if not self.closed:
-            self._closed.set(True)
+            self._closed.set()
             with contextlib.suppress(OSError, ValueError):
                 self.location.exchange(ReleaseRequest(self.location.token, self.identity), threading.Event(), timeout=4)
 

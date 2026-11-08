@@ -8,6 +8,7 @@ panes move without moving any window.
 """
 
 import ctypes
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -131,7 +132,7 @@ class DesktopComposition:
     queue: DispatcherQueueController
     compositor: Compositor
     interop: ICompositorDesktopInterop
-    _closed: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
+    _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
     def start(cls) -> DesktopComposition:
@@ -147,7 +148,7 @@ class DesktopComposition:
 
     @property
     def closed(self) -> bool:
-        return self._closed.get()
+        return self._closed.is_set()
 
     def glass(self) -> Glass:
         return Glass.create(self)
@@ -159,7 +160,7 @@ class DesktopComposition:
         """Drain the native dispatcher before its owning UI thread can exit."""
         if self.closed:
             return
-        self._closed.set(True)
+        self._closed.set()
         self.compositor.Close()
         shutdown = self.queue.ShutdownQueueAsync().as_(IAsyncInfo)
         deadline = time.monotonic() + 2

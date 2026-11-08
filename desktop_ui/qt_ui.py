@@ -1,5 +1,6 @@
 """One Qt event loop and Windows composition lifetime for all assistant views."""
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Final
@@ -67,7 +68,7 @@ class EventLoop:
     painted: Callable[[], None]
     timer: QtCore.QTimer
     composition: DesktopComposition | None
-    _closed: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
+    _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
     def start(cls, app: QApplication, painted: Callable[[], None]) -> EventLoop:
@@ -86,7 +87,7 @@ class EventLoop:
 
     @property
     def closed(self) -> bool:
-        return self._closed.get()
+        return self._closed.is_set()
 
     def pump(self) -> None:
         self.app.processEvents()
@@ -118,7 +119,7 @@ class EventLoop:
     def close(self) -> None:
         if self.closed:
             return
-        self._closed.set(True)
+        self._closed.set()
         self.timer.stop()
         self.timer.deleteLater()
         shared = _SHARED.get()

@@ -6,6 +6,7 @@ reads accessibility settings and samples nearby pixels off the UI thread.
 
 import ctypes
 import math
+import threading
 import winreg
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -129,18 +130,20 @@ class TimerResolution:
     """
 
     period: TimerPeriod = field(default_factory=NativeTimerPeriod)
-    _active: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
+    _active: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    """Set while a granted request is outstanding."""
 
     @property
     def active(self) -> bool:
-        return self._active.get()
+        return self._active.is_set()
 
     def update(self, *, active: bool) -> None:
         if active and not self.active:
-            self._active.set(self.period.request())
+            if self.period.request():
+                self._active.set()
         elif not active and self.active:
             self.period.release()
-            self._active.set(False)
+            self._active.clear()
 
 
 def animations_enabled() -> bool:

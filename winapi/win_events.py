@@ -10,11 +10,11 @@ import ctypes
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import Future
 from ctypes import wintypes
 from dataclasses import dataclass, field
 from typing import Final
 
-from cell import Cell
 from winapi import system
 from winapi._core import fn, user32
 
@@ -99,7 +99,8 @@ class WinEvents:
 
     proc: object
     """The ctypes callback, kept alive while the hooks are installed."""
-    _thread_id: Cell[int] = field(default_factory=lambda: Cell(0), init=False, repr=False)
+    _thread_id: Future[int] = field(default_factory=Future[int], init=False, repr=False)
+    """The hook thread's id, once its hooks are installed."""
     """The hook thread, once it has installed the hooks."""
     _finished: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
@@ -129,7 +130,7 @@ class WinEvents:
             (_EVENT_SYSTEM_SWITCHSTART, _EVENT_SYSTEM_SWITCHEND),
         )
         hooks = tuple(hook for low, high in ranges if (hook := _SetWinEventHook(low, high, None, self.proc, 0, 0, flags)))
-        self._thread_id.set(system.thread_id())
+        self._thread_id.set_result(system.thread_id())
         ready.set()
         try:
             for _ in system.messages():
@@ -139,6 +140,6 @@ class WinEvents:
                 _UnhookWinEvent(hook)
 
     def close(self) -> None:
-        if thread_id := self._thread_id.get():
+        if self._thread_id.done() and (thread_id := self._thread_id.result()):
             system.post_thread_message(thread_id, _WM_QUIT, 0, 0)
         self._finished.wait(timeout=5)
