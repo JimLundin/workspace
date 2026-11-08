@@ -11,6 +11,7 @@ immutable policy reports leave this owner.
 
 import ast
 import os
+import re
 import sys
 import tomllib
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -475,9 +476,20 @@ def value_shapes(
             case ast.Subscript(value=ast.Name(id="tuple"), slice=ast.Tuple(elts=[_, _, *_] as items)) if _numeric(items):
                 detail = "Name the values with a frozen domain type and its bounds, such as winapi.shapes.Point or Size."
                 yield Finding("bare-tuple", module, declaration, ast.unparse(child), child.lineno, detail)
+            case ast.Constant(value=str() as text) if _script(text):
+                detail = "Put a page script in a .js file beside the module that runs it, and pass values as its arguments."
+                yield Finding("inline-script", module, declaration, text.strip().partition("\n")[0], child.lineno, detail)
             case _:
                 pass
         yield from value_shapes(child, module, declaration, function)
+
+
+_SCRIPT_MARKS: Final = re.compile(r"=>|\bfunction\s*\w*\(|\bdocument\.[a-z]|querySelector")
+
+
+def _script(text: str) -> bool:
+    """A string that reads as JavaScript: script syntax or DOM calls, over at least two lines that end as code does."""
+    return _SCRIPT_MARKS.search(text) is not None and sum(1 for line in text.splitlines() if line.rstrip().endswith((";", "{", "}"))) >= 2
 
 
 CONTAINERS: Final = frozenset({"list", "dict", "set", "bytearray", "deque", "defaultdict", "Counter", "OrderedDict"})
