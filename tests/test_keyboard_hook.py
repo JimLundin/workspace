@@ -289,7 +289,7 @@ def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> Non
     keyboard.host.own(Key.A)
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
     assert not bool(keyboard.engine_state.enabled) and not keyboard.busy
-    assert keyboard.fault is not None and keyboard.fault.kind == "RuntimeError"
+    assert keyboard.fault is not None and keyboard.fault.error_type == "RuntimeError"
     assert not driver.recoveries
     for _ in range(5):
         keyboard.maintenance()

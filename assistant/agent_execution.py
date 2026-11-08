@@ -63,14 +63,14 @@ class AgentExecution:
             return work.outcome(agent.report, stop)
         except (ActionError, OSError, ValueError) as error:
             fault = failure_info(error)
-            self.report_error(f"Agent execution failed: {fault.kind}; {' > '.join(fault.locations)}")
+            self.report_error(f"Agent execution failed: {fault.error_type}; {' > '.join(fault.locations)}")
             reason = "Execution could not establish a durable result. Resume to inspect its state."
             log.problem(reason)
             agent.reported(Incomplete(str(error)))
             return Waiting(Blocked(reason))
         except Exception as error:
             fault = failure_info(error)
-            self.report_error(f"Agent execution failed: {fault.kind}; {' > '.join(fault.locations)}")
+            self.report_error(f"Agent execution failed: {fault.error_type}; {' > '.join(fault.locations)}")
             log.problem("Something went wrong; it's in the assistant's log.")
             return Waiting(Blocked("Execution failed before a verified result. Resume to inspect its state."))
         finally:
@@ -78,7 +78,7 @@ class AgentExecution:
                 self.close_background(keep_browser=not stop.is_set())
             except OSError as error:
                 fault = failure_info(error)
-                self.report_error(f"Agent browser cleanup failed: {fault.kind}; {' > '.join(fault.locations)}")
+                self.report_error(f"Agent browser cleanup failed: {fault.error_type}; {' > '.join(fault.locations)}")
                 log.problem("The agent browser could not close; its background pages may still be using memory.")
             with contextlib.suppress(OSError):
                 self.record({"durable": True, "seconds": round(time.monotonic() - started, 1), **agent.timings})

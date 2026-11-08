@@ -68,9 +68,9 @@ class Endpoint:
                 raise DisconnectedError(message)
             case Refusal(Failure("InterruptedError", message)):
                 raise InterruptedError(message)
-            case Refusal(Failure(kind, message)) if kind == "NavigationContextError" or navigation_context_error(message):
+            case Refusal(Failure(error_type, message)) if error_type == "NavigationContextError" or navigation_context_error(message):
                 raise NavigationContextError(message)
-            case Refusal(Failure(_kind, message)):
+            case Refusal(Failure(_error_type, message)):
                 raise BrowserError(message)
 
 
@@ -130,7 +130,7 @@ class HostStatus:
 
 @dataclass(frozen=True, slots=True)
 class Failure:
-    kind: str
+    error_type: str
     message: str
 
 

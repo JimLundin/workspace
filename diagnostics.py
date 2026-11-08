@@ -10,13 +10,13 @@ from winapi.shapes import InputRejectedError
 
 @dataclass(frozen=True, slots=True)
 class FailureInfo:
-    kind: str
+    error_type: str
     locations: tuple[str, ...]
     accepted: int | None
     expected: int | None
 
     def details(self) -> dict[str, Detail]:
-        details: dict[str, Detail] = {"error_type": self.kind, "locations": " > ".join(self.locations)}
+        details: dict[str, Detail] = {"error_type": self.error_type, "locations": " > ".join(self.locations)}
         if self.accepted is not None and self.expected is not None:
             details.update(input_accepted=self.accepted, input_expected=self.expected)
         return details
