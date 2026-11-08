@@ -1,10 +1,12 @@
 """Dedicated desktop canvas window. Qt owns the mutable widget lifetimes."""
 
 from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from contracts.canvas_activity import CanvasRun
 from contracts.desktop_attention import CanvasFocus
 from contracts.meetings import MeetingConversation
@@ -20,27 +22,55 @@ from desktop_ui.work_canvas_panel import CanvasPanel, WindowControls
 from desktop_ui.work_window import WorkWindow
 
 
+@dataclass(frozen=True, slots=True)
+class _Previewed:
+    preview_prepared: bool = False
+    """The initial visible viewport has been painted once while hidden."""
+    presentation: PaintReady | None = None
+
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class CanvasWindow:
-    def __init__(self, root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> None:
-        self.root: QtWidgets.QApplication = root
-        self.work: WorkWindow = work
-        self.preview_prepared: bool = False
-        self.presentation: PaintReady | None = None
-        self.window: CanvasFrame = CanvasFrame(self.hide, self.escape, tokens(scheme()))
+    root: QtWidgets.QApplication
+    work: WorkWindow
+    window: CanvasFrame
+    panel: CanvasPanel
+    layout: QtWidgets.QVBoxLayout
+    grip: QtWidgets.QSizeGrip
+    _previewed: Cell[_Previewed] = field(default_factory=lambda: Cell(_Previewed()), init=False, repr=False)
+
+    @classmethod
+    def open(cls, root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
+        # The frame and its controls act on the canvas window made just after them.
+        def hide() -> None:
+            shown.hide()
+
+        def escape() -> None:
+            shown.escape()
+
+        def maximize() -> None:
+            shown.maximize()
+
+        window = CanvasFrame(hide, escape, tokens(scheme()))
         # Qt resolves native fonts once during desktop preparation. The first
         # visible source preview must not pay that setup cost on a user click.
         QtGui.QFontMetricsF(face(Role.BODY)).horizontalAdvance("Workspace")
-        self.window.setWindowState(Qt.WindowState.WindowMaximized)
+        window.setWindowState(Qt.WindowState.WindowMaximized)
         # Window controls are the toolbar's Window section; the toolbar carries no duplicate Close.
-        self.panel: CanvasPanel = CanvasPanel(self.window, work, canvas, WindowControls(self.maximize, self.hide))
-        self.panel.position_chrome()
-        layout = column(self.window)
-        self.layout: QtWidgets.QVBoxLayout = layout
+        panel = CanvasPanel(window, work, canvas, WindowControls(maximize, hide))
+        panel.position_chrome()
+        layout = column(window)
         layout.setSpacing(0)
-        layout.addWidget(self.panel.frame)
-        self.grip: QtWidgets.QSizeGrip = QtWidgets.QSizeGrip(self.panel.frame)
-        self.panel.frame.resized.connect(self.position_controls)
-        self.position_controls()
+        layout.addWidget(panel.frame)
+        grip = QtWidgets.QSizeGrip(panel.frame)
+        shown = cls(root, work, window, panel, layout, grip)
+        panel.frame.resized.connect(shown.position_controls)
+        shown.position_controls()
+        return shown
+
+    @property
+    def preview_prepared(self) -> bool:
+        return self._previewed.get().preview_prepared
 
     def position_controls(self) -> None:
         self.grip.setGeometry(self.panel.frame.width() - 20, self.panel.frame.height() - 20, 16, 16)
@@ -100,12 +130,13 @@ class CanvasWindow:
                 )
             finally:
                 painter.end()
-            self.preview_prepared = True
+            self._previewed.update(lambda previewed: replace(previewed, preview_prepared=True))
 
     def show(self, *, focus: bool = True, on_presented: Callable[[], None] | None = None) -> None:
-        if self.presentation is not None:
-            self.presentation.cancel()
-        self.presentation = PaintReady(self.panel.canvas.viewport(), on_presented) if on_presented is not None else None
+        if (previous := self._previewed.get().presentation) is not None:
+            previous.cancel()
+        presentation = PaintReady(self.panel.canvas.viewport(), on_presented) if on_presented is not None else None
+        self._previewed.update(lambda previewed: replace(previewed, presentation=presentation))
         # Native maximization resizes several child surfaces synchronously.
         # Paint their final geometry once, after the window state is settled.
         self.window.setUpdatesEnabled(False)
@@ -115,8 +146,8 @@ class CanvasWindow:
             self.window.setUpdatesEnabled(True)
 
     def hide(self) -> None:
-        if self.presentation is not None:
-            self.presentation.cancel()
+        if (presentation := self._previewed.get().presentation) is not None:
+            presentation.cancel()
         self.window.hide()
         self.work.cancel_show(self)
 

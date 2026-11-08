@@ -101,7 +101,7 @@ def _native_desktop(actions: BarActions, *, audio_level: Callable[[], float | No
 
 
 def _native_canvas_view(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
-    return CanvasWindow(root, work, canvas)
+    return CanvasWindow.open(root, work, canvas)
 
 
 @dataclass(frozen=True, slots=True)

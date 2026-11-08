@@ -116,7 +116,7 @@ class NativeCanvas:
                 pass
 
     def build(self, work: WorkWindow) -> CanvasWindow:
-        self.view = CanvasWindow(self.root, work, self.store)
+        self.view = CanvasWindow.open(self.root, work, self.store)
         return self.view
 
     def pump(self) -> None:
@@ -411,7 +411,7 @@ def test_first_canvas_open_shows_a_wait_cursor_until_its_first_paint(tmp_path: P
     def create(work: WorkWindow) -> WorkView:
         cursor = QtWidgets.QApplication.overrideCursor()
         building.append(cursor.shape() if cursor is not None else None)
-        view = CanvasWindow(root, work, store)
+        view = CanvasWindow.open(root, work, store)
         view.panel.canvas.viewport().installEventFilter(observer)
         views.append(view)
         return view

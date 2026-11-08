@@ -65,7 +65,7 @@ class InboxUi:
             return bar
 
         def create_canvas(root: QtWidgets.QApplication, work: WorkWindow, canvas: CanvasEdits) -> CanvasWindow:
-            view = CanvasWindow(root, work, canvas)
+            view = CanvasWindow.open(root, work, canvas)
             recorded.update(lambda views: replace(views, canvas=view))
             return view
 
