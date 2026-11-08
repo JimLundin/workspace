@@ -18,7 +18,6 @@ from desktop_ui.bar_events import (
     Render,
     RequestsShown,
     SelectRequest,
-    Showing,
     menu,
     transition,
 )
@@ -54,9 +53,9 @@ def test_losing_the_keyboard_closes_without_taking_it_back_but_escape_returns_it
 
 def test_an_unchanged_publication_does_not_render_again() -> None:
     # Defect: every repeated publication relays the bar out, or a real change doesn't.
-    dictating, effects = transition(model(), Showing(DictationShown(active=True)))
+    dictating, effects = transition(model(), DictationShown(active=True))
     assert dictating.dictating and tuple(effects) == (Render(),)
-    _, repeated = transition(dictating, Showing(DictationShown(active=True)))
+    _, repeated = transition(dictating, DictationShown(active=True))
     assert tuple(repeated) == ()
 
 

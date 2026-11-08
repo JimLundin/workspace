@@ -26,9 +26,7 @@ lazy import desktop_ui.components.appearance
 lazy import usage
 lazy import winapi.ambient
 lazy from config import APPS
-lazy from contracts.meeting_detection import AutomaticStatus
-lazy from contracts.recording_state import RecordingAction, RecordingState
-lazy from contracts.status import Job
+lazy from contracts.recording_state import RecordingAction
 lazy from desktop_ui import island_menu, island_moment, ui_spec
 lazy from desktop_ui.agent_progress import Phase
 lazy from desktop_ui.ambient import Ambient, SystemStatus
@@ -37,27 +35,20 @@ lazy from desktop_ui.audio_meter import AudioMeter
 lazy from desktop_ui.away_screens import AwayScreens
 lazy from desktop_ui.bar_events import (
     Act,
-    AgentShown,
     AllControls,
-    AutomaticShown,
     BarAction,
     BarModel,
-    ChordHeld,
     Chose,
     ClickTray,
     Closing,
     Deactivated,
-    DictationShown,
     Effect,
     Event,
     Expand,
     Framed,
     Hovered,
     InboxRequested,
-    InboxShown,
-    JobShown,
     Keyboard,
-    LayoutShown,
     MenuKey,
     Navigate,
     NoticesShown,
@@ -67,15 +58,12 @@ lazy from desktop_ui.bar_events import (
     Opening,
     OpenItem,
     Overlay,
-    OverlayShown,
     PaintDue,
     Picked,
     Pressed,
     Record,
-    RecordingShown,
     Release,
     Render,
-    RequestsShown,
     Rerender,
     Respecced,
     Retargeted,
@@ -85,7 +73,6 @@ lazy from desktop_ui.bar_events import (
     SelectRequest,
     SetVolume,
     ShowHints,
-    Showing,
     Stop,
     TickDue,
     Ticked,
@@ -111,7 +98,7 @@ lazy from desktop_ui.island_layout import Content, Metrics, expansion, frame, sn
 lazy from desktop_ui.island_menu import (
     Menu,
 )
-lazy from desktop_ui.island_model import Action, Agent, CapsuleView, Expansion, Key, Marker, Observed, island, order
+lazy from desktop_ui.island_model import Action, CapsuleView, Expansion, Key, Marker, Observed, island, order
 lazy from desktop_ui.island_moment import Inbox, Notice, Row
 lazy from desktop_ui.island_motion import IslandMotion, Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
@@ -787,38 +774,8 @@ class DesktopBar:
         self.handle(InboxRequested(questions))
         return True
 
-    def requests_changed(self, choices: tuple[Phase, ...]) -> None:
-        self.handle(RequestsShown(choices))
-
     def notices_changed(self, current: tuple[Notice, ...]) -> None:
         self.handle(NoticesShown(current, self.observations.clock()))
-
-    def overlay_changed(self, *, enabled: bool) -> None:
-        self.handle(Showing(OverlayShown(enabled)))
-
-    def dictation(self, *, active: bool) -> None:
-        self.handle(Showing(DictationShown(active)))
-
-    def job_changed(self, job: Job | None) -> None:
-        self.handle(Showing(JobShown(job)))
-
-    def agent_changed(self, agent: Agent | None) -> None:
-        self.handle(Showing(AgentShown(agent)))
-
-    def inbox_changed(self, count: int) -> None:
-        self.handle(Showing(InboxShown(count)))
-
-    def recording_changed(self, recording: RecordingState) -> None:
-        self.handle(Showing(RecordingShown(recording)))
-
-    def automatic_changed(self, status: AutomaticStatus) -> None:
-        self.handle(Showing(AutomaticShown(status)))
-
-    def layout(self, *, enabled: bool) -> None:
-        self.handle(Showing(LayoutShown(enabled)))
-
-    def chord(self, *, held: bool) -> None:
-        self.handle(ChordHeld(held))
 
     def close(self) -> None:
         if self.model.closed:

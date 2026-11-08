@@ -10,6 +10,7 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import GetWindow
 lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from desktop_ui.bar_events import AgentShown, InboxShown
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
 from desktop_ui.island_model import Agent
@@ -66,9 +67,9 @@ def test_the_bar_publishes_one_final_glass_frame_per_qt_turn_behind_its_window()
         assert "STATUS" in baseline_keys
         assert not {"VOLUME", "WIFI"} & baseline_keys, "Status controls must share one glass capsule."
         assert "ISLAND" not in baseline_keys and "INBOX" not in baseline_keys
-        bar.agent_changed(Agent("Comparing both sheets", waiting=False))
-        bar.inbox_changed(3)
-        bar.agent_changed(None)
+        bar.handle(AgentShown(Agent("Comparing both sheets", waiting=False)))
+        bar.handle(InboxShown(3))
+        bar.handle(AgentShown(None))
         assert scene.published() == published, "Intermediate bar state reached Windows composition."
         app.processEvents()
         assert {pane.key for pane in scene.published()} == baseline_keys | {"INBOX"}

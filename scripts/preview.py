@@ -15,6 +15,7 @@ lazy from PySide6 import QtCore, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
+from desktop_ui.bar_events import AgentShown, DictationShown, JobShown, RecordingShown
 from desktop_ui.qt_runtime import prepare
 lazy from contracts.recording_state import RecordingState
 lazy from contracts.status import Job
@@ -149,11 +150,11 @@ class Preview:
         self.files.state.write_bytes(CHOICE.dump_json(Choice(index)))
         recording = RecordingState(phase="recording", seconds=125) if index in (2, 6) else RecordingState()
         if (bar := previewing.bar) is not None:
-            bar.recording_changed(recording)
+            bar.handle(RecordingShown(recording))
             asking = Agent("Which sheet should the reply cover?", waiting=True)
-            bar.agent_changed(WORKING if index in (1, 6) else asking if index == 3 else None)
-            bar.job_changed(Job.TRANSCRIBING if index in (4, 6) else None)
-            bar.dictation(active=index in (5, 6))
+            bar.handle(AgentShown(WORKING if index in (1, 6) else asking if index == 3 else None))
+            bar.handle(JobShown(Job.TRANSCRIBING if index in (4, 6) else None))
+            bar.handle(DictationShown(index in (5, 6)))
             if index == 7:
                 # A fresh identity announces the sample again each time it is chosen.
                 at = time.time()

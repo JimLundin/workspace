@@ -41,6 +41,18 @@ from contracts.desktop_link import (
 )
 from contracts.task import TextAnswer
 from desktop_ui import job_queue
+from desktop_ui.bar_events import (
+    AgentShown,
+    AutomaticShown,
+    ChordHeld,
+    DictationShown,
+    InboxShown,
+    JobShown,
+    LayoutShown,
+    OverlayShown,
+    RecordingShown,
+    RequestsShown,
+)
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.ui_control import (
     BarAutomatic,
@@ -299,21 +311,21 @@ class Ui:
         match effect:
             case BarSession(session):
                 if (bar := self._bar) is not None:
-                    bar.agent_changed(island_agent.activity(session))
-                    bar.requests_changed(tuple(phases(session)))
+                    bar.handle(AgentShown(island_agent.activity(session)))
+                    bar.handle(RequestsShown(tuple(phases(session))))
                     bar.notices_changed(island_agent.notices(session))
             case BarDictation(active):
                 if (bar := self._bar) is not None:
-                    bar.dictation(active=active)
+                    bar.handle(DictationShown(active))
             case CanvasVoice(pressed):
                 if (view := self._canvas_view) is not None:
                     view.voice_pressed(pressed=pressed)
             case BarAutomatic(status):
                 if (bar := self._bar) is not None:
-                    bar.automatic_changed(status)
+                    bar.handle(AutomaticShown(status))
             case BarOverlay(enabled):
                 if (bar := self._bar) is not None:
-                    bar.overlay_changed(enabled=enabled)
+                    bar.handle(OverlayShown(enabled))
             case PublishCanvas(publication, replay=replay):
                 self._publish_canvas(publication, replay=replay)
             case ShowInbox(asked):
@@ -330,7 +342,7 @@ class Ui:
         """Every view takes the publication; a replay to a late-built view repeats no notice."""
         self._canvas.published(publication)
         if (bar := self._bar) is not None:
-            bar.inbox_changed(len(publication.waiting))
+            bar.handle(InboxShown(len(publication.waiting)))
         view = self._canvas_view
         if view is not None:
             view.show_document(publication.document)
@@ -368,10 +380,10 @@ class Ui:
         match message:
             case JobChanged(job=job):
                 if bar is not None:
-                    bar.job_changed(job)
+                    bar.handle(JobShown(job))
             case RecordingChanged(recording=recording):
                 if bar is not None:
-                    bar.recording_changed(recording)
+                    bar.handle(RecordingShown(recording))
             case WorkChanged(snapshot=snapshot):
                 self._canvas.catalog_changed(snapshot.personal.catalog)
                 self.work_window().publish(snapshot)
@@ -574,10 +586,10 @@ class Ui:
         self.post(job)
 
     def desktop_layout(self, *, enabled: bool) -> None:
-        self._with_bar(lambda bar: bar.layout(enabled=enabled))
+        self._with_bar(lambda bar: bar.handle(LayoutShown(enabled)))
 
     def desktop_chord(self, *, held: bool) -> None:
-        self._with_bar(lambda bar: bar.chord(held=held))
+        self._with_bar(lambda bar: bar.handle(ChordHeld(held)))
 
     def navigate(self, order: Order) -> None:
         self._with_bar(lambda bar: bar.navigate(order))

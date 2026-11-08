@@ -19,7 +19,18 @@ from contracts.meeting_detection import AutomaticStatus
 from contracts.recording_state import RecordingState
 from contracts.status import Job
 from desktop_ui import shell_surface
-from desktop_ui.bar_events import Opening, PaintDue, Pressed, SampleDue
+from desktop_ui.bar_events import (
+    AgentShown,
+    AutomaticShown,
+    DictationShown,
+    InboxShown,
+    JobShown,
+    Opening,
+    PaintDue,
+    Pressed,
+    RecordingShown,
+    SampleDue,
+)
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
 from desktop_ui.island_menu import Menu
@@ -63,9 +74,9 @@ def test_idle_toolbar_preserves_application_focus_and_menu_can_take_the_keyboard
 
 
 def rest(bar: DesktopBar) -> None:
-    bar.dictation(active=False)
-    bar.job_changed(None)
-    bar.agent_changed(None)
+    bar.handle(DictationShown(False))
+    bar.handle(JobShown(None))
+    bar.handle(AgentShown(None))
 
 
 def recorded(invoked: list[str], *, tools: list[Tool] | None = None) -> BarActions:
@@ -164,7 +175,7 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         press(bar, Key.STATUS)
         assert bar.opened is not None and menu_row(bar, "Your work canvas").accessibleName() == "Your work canvas"
         QTest.keyClick(bar.window, QtCore.Qt.Key.Key_Escape)
-        bar.agent_changed(WORKING)
+        bar.handle(AgentShown(WORKING))
         island = bar.window.capsules[Key.ISLAND]
         assert "Comparing both sheets" in island.accessibleName()
         stop = stop_button(bar, Key.ISLAND)
@@ -172,26 +183,26 @@ def test_the_island_keeps_canvas_navigation_and_each_capsule_acts_on_what_it_sho
         bar.hover(Key.ISLAND)
         assert island.geometry() == before, "Hover changed the running agent's toolbar width."
         stop.click()
-        bar.recording_changed(RecordingState(phase="recording", seconds=125))
-        bar.dictation(active=True)
+        bar.handle(RecordingShown(RecordingState(phase="recording", seconds=125)))
+        bar.handle(DictationShown(True))
         assert shown(bar) == [Key.AGENT, Key.ISLAND, Key.RECORDING, *FIXED]
         press(bar, Key.ISLAND)
         press(bar, Key.RECORDING)
         bar.hover(Key.RECORDING)
         stop_button(bar, Key.RECORDING).click()
         bar.hover(None)
-        bar.dictation(active=False)
-        bar.agent_changed(Agent("Which sheet?", waiting=True))
+        bar.handle(DictationShown(False))
+        bar.handle(AgentShown(Agent("Which sheet?", waiting=True)))
         press(bar, Key.ISLAND)
-        bar.inbox_changed(120)
+        bar.handle(InboxShown(120))
         assert "120 clarifications" in bar.window.capsules[Key.INBOX].accessibleName()
         press(bar, Key.INBOX)
         assert invoked == ["stop", "stop", "canvas", "record-stop", "inbox", "inbox"]
-        bar.recording_changed(RecordingState(phase="saved"))
-        bar.inbox_changed(0)
+        bar.handle(RecordingShown(RecordingState(phase="saved")))
+        bar.handle(InboxShown(0))
         rest(bar)
         assert shown(bar) == FIXED
-        bar.automatic_changed(AutomaticStatus.READY)
+        bar.handle(AutomaticShown(AutomaticStatus.READY))
         press(bar, Key.STATUS)
         menu_row(bar, "Auto-record: Teams · On").click()
         assert invoked[-1] == "record-automatic"
@@ -210,7 +221,7 @@ def test_pointer_reaches_capsules_and_their_edge_strip_but_passes_through_elsewh
     )
     try:
         bar.show(visible=True)
-        bar.agent_changed(WORKING)
+        bar.handle(AgentShown(WORKING))
         bar.timer.stop()
         app.processEvents()
         if bar.loop.composition is None:
@@ -324,14 +335,14 @@ def test_dictation_traces_the_microphone_only_while_listening() -> None:
     bar = DesktopBar.open(recorded([]), native_shell=False, audio_level=lambda: level[0])
     try:
         assert not bar.audio_timer.isActive()
-        bar.dictation(active=True)
+        bar.handle(DictationShown(True))
         assert bar.audio_timer.isActive()
         sampled(app, bar, lambda: bar.window.samples[-1] > 0)
         level[0] = 0
         sampled(app, bar, lambda: bar.window.samples[-1] == 0)
         trace = tuple(bar.window.samples)
-        bar.dictation(active=False)
-        bar.job_changed(Job.TRANSCRIBING)
+        bar.handle(DictationShown(False))
+        bar.handle(JobShown(Job.TRANSCRIBING))
         assert not bar.audio_timer.isActive()
         bar.handle(SampleDue())
         assert tuple(bar.window.samples) == trace
@@ -353,7 +364,7 @@ def test_slow_native_audio_level_does_not_block_the_waveform_ui() -> None:
 
     bar = DesktopBar.open(recorded([]), native_shell=False, audio_level=level)
     try:
-        bar.dictation(active=True)
+        bar.handle(DictationShown(True))
         started = time.monotonic()
         bar.handle(SampleDue())
         assert time.monotonic() - started < 0.025, "A slow driver blocked a waveform frame."
@@ -377,7 +388,7 @@ def test_dictation_animates_between_samples_without_republishing_glass() -> None
     bar.show(visible=True)
     try:
         bar.timer.stop()
-        bar.dictation(active=True)
+        bar.handle(DictationShown(True))
         now[0] += 2
         bar.handle(PaintDue())
         app.processEvents()
@@ -394,7 +405,7 @@ def test_dictation_animates_between_samples_without_republishing_glass() -> None
         now[0] += 0.025
         bar.handle(PaintDue())
         assert bar.window.capsules[Key.ISLAND].grab().toImage() != halfway
-        bar.dictation(active=False)
+        bar.handle(DictationShown(False))
         now[0] += 2
         bar.handle(PaintDue())
         assert not bar.loop.timer.isActive() and not bar.resolution.active
@@ -420,7 +431,7 @@ def test_repeated_observations_cannot_postpone_the_next_animation_frame() -> Non
     waiting = QtCore.QEventLoop()
     try:
         bar.timer.stop()
-        bar.agent_changed(WORKING)
+        bar.handle(AgentShown(WORKING))
         app.processEvents()
         bar.loop.timer.timeout.connect(painted)
         updates.start()
@@ -438,7 +449,7 @@ def test_first_menu_open_survives_native_activation_settling() -> None:
     app = application()
     bar = DesktopBar.open(recorded([]), native_shell=False, audio_level=lambda: 0.25, observations=BarObservations(motion=lambda: True))
     bar.show(visible=True)
-    bar.dictation(active=True)
+    bar.handle(DictationShown(True))
     waiting = QtCore.QEventLoop()
     target = QtWidgets.QWidget()
     try:

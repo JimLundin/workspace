@@ -179,13 +179,6 @@ class Rerender:
 
 
 @dataclass(frozen=True, slots=True)
-class Showing:
-    """The views' publisher changed one of the activities the bar shows."""
-
-    change: ActivityChange
-
-
-@dataclass(frozen=True, slots=True)
 class OverlayShown:
     enabled: bool
 
@@ -225,6 +218,7 @@ class LayoutShown:
     enabled: bool
 
 
+# The views' publisher changed one of the activities the bar shows.
 type ActivityChange = OverlayShown | DictationShown | JobShown | AgentShown | InboxShown | RecordingShown | AutomaticShown | LayoutShown
 
 
@@ -360,7 +354,7 @@ type Event = (
     | VolumeSet
     | TrayClicked
     | Rerender
-    | Showing
+    | ActivityChange
     | ChordHeld
     | RequestsShown
     | NoticesShown
@@ -696,7 +690,7 @@ def inbox_rows(model: BarModel, questions: tuple[Phase, ...]) -> tuple[Row, ...]
 
 type Interaction = Pressed | Hovered | Selected | Picked | MenuKey | Deactivated | Chose | VolumeSet | TrayClicked | Rerender
 type Observation = (
-    Showing
+    ActivityChange
     | ChordHeld
     | RequestsShown
     | NoticesShown
@@ -752,8 +746,8 @@ def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Ef
 def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effect, ...]]:
     """What was published to the bar, or what its own timers and window computed."""
     match event:
-        case Showing(change):
-            changed = _shown(model, change)
+        case OverlayShown() | DictationShown() | JobShown() | AgentShown() | InboxShown() | RecordingShown() | AutomaticShown() | LayoutShown():
+            changed = _shown(model, event)
             return changed, ((Render(),) if changed != model else ())
         case Visibility(visible):
             return replace(model, visible=visible), ()
