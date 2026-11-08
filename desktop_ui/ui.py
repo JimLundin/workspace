@@ -7,7 +7,6 @@ assistant runs here. No GUI objects cross the keyboard process.
 
 import queue
 import threading
-import time
 import traceback
 from collections.abc import Callable
 from concurrent.futures import Future
@@ -42,6 +41,7 @@ from contracts.desktop_link import (
     WorkShown,
 )
 from contracts.task import TextAnswer
+from desktop_ui import job_queue
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.ui_control import (
     BarAutomatic,
@@ -246,29 +246,14 @@ class Ui:
         return not self._inputs_closed.is_set()
 
     def drain(self) -> None:
-        """Yield after 4 ms of queued work; call only on the Qt thread.
+        """Run queued jobs for up to a quarter frame; call only on the Qt thread (see `job_queue.drain`)."""
+        job_queue.drain(self._jobs, self._run_job, self._draining)
 
-        A quarter of a 60 Hz frame leaves room for painting and input. One job
-        still runs to completion; expensive preparation belongs off this queue.
-        """
-        if self._draining.is_set():
-            return
-        self._draining.set()
-        deadline = time.monotonic() + 0.004
+    def _run_job(self, job: Job) -> None:
         try:
-            for _ in range(64):
-                try:
-                    job = self._jobs.get_nowait()
-                except queue.Empty:
-                    break
-                try:
-                    job(self._root)
-                except Exception:
-                    traceback.print_exc()
-                if time.monotonic() >= deadline:
-                    break
-        finally:
-            self._draining.clear()
+            job(self._root)
+        except Exception:
+            traceback.print_exc()
 
     def close(self) -> None:
         if self._closed.is_set():
