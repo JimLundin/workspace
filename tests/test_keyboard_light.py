@@ -74,3 +74,13 @@ def test_the_effect_is_read_from_the_answer_to_the_same_request() -> None:
     assert via.effect_reply(sent, bytes((0x08, 3, 2, 9)).ljust(32, b"\0")) == via.Effect(9)
     assert via.effect_reply(sent, bytes((0xFF, 3, 2, 9)).ljust(32, b"\0")) == via.Absent()
     assert via.effect_reply(sent, bytes((0x12, 0, 0, 9)).ljust(32, b"\0")) == via.Absent()
+
+
+def test_a_restart_while_dark_never_remembers_off_as_the_persons_effect() -> None:
+    # Defect: Workspace restarted while away reads the dark keyboard's 0, saves it,
+    # and "restores" 0, leaving the backlight off once the person comes back.
+    keyboard = Keyboard(current=0)
+    owner = light(keyboard).darken()
+    assert owner.restore_to is None and keyboard.sets == []
+    owner.restore()
+    assert keyboard.sets == []

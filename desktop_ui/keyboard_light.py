@@ -55,6 +55,10 @@ class KeyboardLight:
         if self.restore_to is not None:
             return self  # Already off: reading again would remember "off" as the person's setting.
         match self.backlight.effect():
+            case via.Effect(value=0):
+                # Already off, as after Workspace restarted while away: remembering
+                # "off" would leave the keyboard dark once the person came back.
+                return self
             case via.Effect(value=effect):
                 match self.backlight.set_effect(0):
                     case via.Effect():

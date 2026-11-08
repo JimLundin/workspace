@@ -311,19 +311,24 @@ a few in `browser_dom`, `meeting_browser` and `browser`. Each script becomes a
 arguments (CDP `callFunctionOn` or a JSON-encoded argument) instead of
 f-string interpolation; then the review can reject JavaScript in string literals.
 
-## 5. Fix the Charybdis backlight degrading the keyboard
+## 5. Find what degrades the Charybdis
 
-Since `desktop_ui.keyboard_light` arrived (2026-11-06), the Charybdis degrades
-after a while: the second half flickers, the trackball polls slowly and keys
-need a longer press. Replugging the keyboard cleared it (2026-11-08), so it's
-firmware state in RAM, not hardware. The feature switches the RGB matrix effect
-off and back on over VIA (`winapi.via`, id_qmk_rgb_matrix_channel, never
-saved) at every away edge, 362 times between 2026-11-06 and 2026-11-08 morning,
-sometimes a second apart (an idle darken followed by input). Keep the feature
-(the user wants the keyboard dark while away); find what the toggling leaves
-behind. Candidates: effect 0 versus the matrix's own off switch
-(`rgb_matrix_disable_noeeprom`, VIA's brightness channel) and how the split
-half syncs a mode change; rapid off/on pairs; the HID handle opened per
-message. Check against the keyboard's QMK version, and debounce edges that
-reverse within a few seconds.
-
+Since about 2026-11-06 the Charybdis Nano 3x5 (Splinky RP2040 halves, QMK with
+VIA, firmware rev 2.00) degrades after a while: the second half flickers, the
+trackball updates slowly and keys need a longer press. Replugging clears it,
+so it's state in the keyboard or in Windows' view of it. It is plugged into
+the Acer X32 X3's USB hub (Realtek RTS5411), beside the Shure MVX2U.
+Ruled out on 2026-11-08, each after a replug, with the keyboard fine after:
+230 VIA effect off/on toggles (one second, then 0.1 s apart); three DDC/CI
+off/on cycles of the monitor whose hub it's on; microphone streaming (only
+short dictations near either episode); the layout process (idle, 19 MB, its
+live state clean: firmware mode, nothing held). The user noticed the first
+episode while the keyboard code was being changed (the layout's engine and
+hook records, deployed 02:30 and 10:30).
+Diagnostics in `$TEMP/frozen-scan`: `keyboard_diag.py LABEL` (cursor update
+rate while moving the ball, VIA round-trip time; healthy: about 690 updates/s,
+1.1 ms median gap, VIA 4 ms), `layout_state.py` (the layout's live state, via
+`sys.remote_exec`), and `via_watch.py` (VIA timing every 30 s, to date the
+onset). Next time it degrades, run both before replugging.
+Fixed meanwhile: a restart while dark no longer saves "off" as the effect to
+restore.
