@@ -6,7 +6,7 @@ positions and notes have their own local document, outside agent model input.
 
 import sqlite3
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import assert_never
 from uuid import uuid4
@@ -14,6 +14,7 @@ from uuid import uuid4
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
+from cell import Cell
 from contracts.canvas_activity import ROOT_CONTEXT, Attention, CanvasAction, CanvasInstruction, CanvasQuestion, CanvasRun, CanvasUpdate
 from contracts.meetings import MeetingConversation
 from contracts.personal_work import (
@@ -116,6 +117,8 @@ from desktop_ui.work_canvas_gestures import (
     DrawingRelation,
     Gesture,
     GestureEffect,
+    GestureInput,
+    GestureResult,
     GestureScene,
     Idle,
     MovePreview,
@@ -1197,35 +1200,48 @@ class CanvasPanel:
 # Qt owns pointer capture and previews; immutable decisions own the gestures.
 # No document/layout work occurs during pointer movement. The panel applies
 # the single immutable commit effect on release.
+@dataclass(frozen=True, slots=True)
+class _Gesturing:
+    gesture: Gesture = Idle.READY
+    scene: GestureScene = field(default_factory=lambda: GestureScene((), None))
+    """The bubbles as they stood when the gesture began."""
+    relation_preview: QtWidgets.QGraphicsPathItem | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CanvasInteraction:
-    def __init__(self, owner: CanvasPanel) -> None:
-        self.owner: CanvasPanel = owner
-        self.gesture: Gesture = Idle.READY
-        self.gesture_scene: GestureScene = GestureScene((), None)
-        self.relation_preview: QtWidgets.QGraphicsPathItem | None = None
+    owner: CanvasPanel
+    _state: Cell[_Gesturing] = field(default_factory=lambda: Cell(_Gesturing()), init=False, repr=False)
+
+    def _advance(self, event: GestureInput) -> GestureResult:
+        gesturing = self._state.get()
+        result = transition(gesturing.gesture, event, gesturing.scene)
+        self._state.set(replace(gesturing, gesture=result.state))
+        return result
 
     def press_bubble(self, identity: str, point: ScenePoint) -> None:
-        match self.gesture:
+        match self._state.get().gesture:
             case DrawingRelation():
                 return
             case _:
-                self.gesture_scene = self.owner.capture_gesture_scene()
-        target = next(bubble for bubble in self.gesture_scene.bubbles if bubble.id == identity)
+                scene = self.owner.capture_gesture_scene()
+                self._state.update(lambda gesturing: replace(gesturing, scene=scene))
+        target = next(bubble for bubble in scene.bubbles if bubble.id == identity)
         state = self.owner.gesture_placements()
         positions = tuple(position for position in state if position.id in target.members)
         drag = BubbleDrag(identity, point, positions, target.parent_id, target.members)
-        self.gesture = transition(self.gesture, PressBubble(drag), self.gesture_scene).state
+        self._advance(PressBubble(drag))
 
     def pointer(self, event: PointerMoved | PointerReleased | PressConnector) -> None:
         match event:
             case PressConnector():
-                self.gesture_scene = self.owner.capture_gesture_scene()
+                scene = self.owner.capture_gesture_scene()
+                self._state.update(lambda gesturing: replace(gesturing, scene=scene))
             case PointerMoved(point=point):
                 event = PointerMoved(point, QtWidgets.QApplication.startDragDistance() / self.owner.canvas.transform().m11())
             case _:
                 pass
-        result = transition(self.gesture, event, self.gesture_scene)
-        self.gesture = result.state
+        result = self._advance(event)
         match result.effect:
             case MovePreview(positions=positions, target_id=target):
                 indexed = frozendict((position.id, position) for position in positions)
@@ -1248,26 +1264,28 @@ class CanvasInteraction:
                 pass
 
     def clear_gesture_preview(self) -> None:
-        if self.relation_preview is not None:
-            self.owner.scene.removeItem(self.relation_preview)
-            self.relation_preview = None
+        if (preview := self._state.get().relation_preview) is not None:
+            self.owner.scene.removeItem(preview)
+            self._state.update(lambda gesturing: replace(gesturing, relation_preview=None))
         for bubble in self.owner.bubbles():
             bubble.highlight_drop(active=False)
 
     def preview_relation(self, identity: str, point: ScenePoint) -> None:
         source = next(bubble for bubble in self.owner.bubbles() if bubble.identity == identity)
         first = source.mapToScene(source.connector.pos())
-        if self.relation_preview is None:
-            self.relation_preview = QtWidgets.QGraphicsPathItem()
+        preview = self._state.get().relation_preview
+        if preview is None:
+            preview = QtWidgets.QGraphicsPathItem()
             pen = QtGui.QPen(QtGui.QColor(GLASS_ACCENT), 2, Qt.PenStyle.DashLine)
             pen.setCosmetic(True)
-            self.relation_preview.setPen(pen)
-            self.relation_preview.setZValue(30)
-            self.relation_preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
-            self.owner.scene.addItem(self.relation_preview)
+            preview.setPen(pen)
+            preview.setZValue(30)
+            preview.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self.owner.scene.addItem(preview)
+            self._state.update(lambda gesturing: replace(gesturing, relation_preview=preview))
         path = QtGui.QPainterPath(first)
         path.lineTo(point.x, point.y)
-        self.relation_preview.setPath(path)
+        preview.setPath(path)
 
     def start_relation(self, identity: str) -> None:
         self.clear_gesture_preview()
@@ -1277,12 +1295,11 @@ class CanvasInteraction:
         self.owner.gesture_status("Click another bubble to connect; Escape cancels.")
 
     def cancel(self) -> bool:
-        match self.gesture:
+        match self._state.get().gesture:
             case Idle():
                 return False
             case _:
-                result = transition(self.gesture, CancelGesture.CANCEL, self.gesture_scene)
-                self.gesture = result.state
+                result = self._advance(CancelGesture.CANCEL)
                 match result.effect:
                     case MovePreview(positions=positions):
                         indexed = frozendict((position.id, position) for position in positions)
