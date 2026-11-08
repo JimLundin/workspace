@@ -19,7 +19,7 @@ from contracts.meeting_detection import AutomaticStatus
 from contracts.recording_state import RecordingState
 from contracts.status import Job
 from desktop_ui import shell_surface
-from desktop_ui.bar_events import Opening, Pressed, SampleDue
+from desktop_ui.bar_events import Opening, PaintDue, Pressed, SampleDue
 from desktop_ui.desktop_bar import BarActions, BarObservations, DesktopBar
 from desktop_ui.desktop_pager import pager
 from desktop_ui.island_menu import Menu
@@ -379,7 +379,7 @@ def test_dictation_animates_between_samples_without_republishing_glass() -> None
         bar.timer.stop()
         bar.dictation(active=True)
         now[0] += 2
-        bar.paint_frames()
+        bar.handle(PaintDue())
         app.processEvents()
         bar.audio_timer.stop()
         sampled(app, bar, lambda: bar.window.samples[-1] > 0)
@@ -387,16 +387,16 @@ def test_dictation_animates_between_samples_without_republishing_glass() -> None
         app.processEvents()
         first = bar.window.capsules[Key.ISLAND].grab().toImage()
         now[0] += 0.025
-        bar.paint_frames()
+        bar.handle(PaintDue())
         halfway = bar.window.capsules[Key.ISLAND].grab().toImage()
         assert halfway != first, "The waveform jumped only when another microphone sample arrived."
         assert not bar.window.glass_timer.isActive(), "A waveform frame queued unchanged glass publication."
         now[0] += 0.025
-        bar.paint_frames()
+        bar.handle(PaintDue())
         assert bar.window.capsules[Key.ISLAND].grab().toImage() != halfway
         bar.dictation(active=False)
         now[0] += 2
-        bar.paint_frames()
+        bar.handle(PaintDue())
         assert not bar.loop.timer.isActive() and not bar.resolution.active
     finally:
         closed(app, bar)

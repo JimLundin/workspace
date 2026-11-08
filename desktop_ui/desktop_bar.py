@@ -758,9 +758,6 @@ class DesktopBar:
     def render(self) -> None:
         self.handle(Rerender())
 
-    def paint_frames(self) -> None:
-        self.handle(PaintDue())
-
     def show(self, *, visible: bool) -> None:
         """Show or hide the bar; hidden, it lays out without animating."""
         self.handle(Visibility(visible))
