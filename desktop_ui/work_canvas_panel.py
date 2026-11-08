@@ -189,7 +189,6 @@ class _Toolbar:
     clear_context: QtWidgets.QToolButton
     search_button: QtWidgets.QToolButton
     search: QtWidgets.QLineEdit
-    find_shortcut: QtGui.QShortcut
     menu_button: QtWidgets.QToolButton
     recenter: GlassCapsule
     center_button: QtWidgets.QToolButton
@@ -222,8 +221,7 @@ def _toolbar(frame: CanvasSurface, theme: Tokens, act: Callable[[Callable[[Canva
     search.hide()
     search.returnPressed.connect(act(CanvasPanel.find))
     heading.addWidget(search)
-    find_shortcut = QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, frame)
-    find_shortcut.activated.connect(act(CanvasPanel.show_search))
+    QtGui.QShortcut(QtGui.QKeySequence.StandardKey.Find, frame).activated.connect(act(CanvasPanel.show_search))
     menu_button = toolbar.button("more", "Canvas actions", act(CanvasPanel.toggle_expanded))
     menu_button.setCheckable(True)
     heading.addWidget(menu_button)
@@ -246,7 +244,6 @@ def _toolbar(frame: CanvasSurface, theme: Tokens, act: Callable[[Callable[[Canva
         clear_context,
         search_button,
         search,
-        find_shortcut,
         menu_button,
         recenter,
         center_button,
@@ -306,10 +303,6 @@ class CanvasPanel:
         return panel
 
     @property
-    def scroll_edge(self) -> ScrollEdge:
-        return self._toolbar.scroll_edge
-
-    @property
     def toolbar(self) -> CanvasToolbar:
         return self._toolbar.toolbar
 
@@ -328,10 +321,6 @@ class CanvasPanel:
     @property
     def search(self) -> QtWidgets.QLineEdit:
         return self._toolbar.search
-
-    @property
-    def find_shortcut(self) -> QtGui.QShortcut:
-        return self._toolbar.find_shortcut
 
     @property
     def menu_button(self) -> QtWidgets.QToolButton:
@@ -358,10 +347,6 @@ class CanvasPanel:
         return self._toolbar.status
 
     @property
-    def toolbar_layout(self) -> QtWidgets.QHBoxLayout:
-        return self._toolbar.toolbar.content
-
-    @property
     def cards(self) -> tuple[CanvasCard, ...]:
         return self._state.get().cards
 
@@ -378,14 +363,6 @@ class CanvasPanel:
         return self._state.get().document
 
     @property
-    def draft(self) -> WorkDetail | None:
-        return self._state.get().draft
-
-    @property
-    def draft_known(self) -> frozenset[str]:
-        return self._state.get().draft_known
-
-    @property
     def draft_proxy(self) -> QtWidgets.QGraphicsProxyWidget | None:
         return self._state.get().draft_proxy
 
@@ -398,28 +375,8 @@ class CanvasPanel:
         return self._state.get().expanded
 
     @property
-    def focus_timer(self) -> QtCore.QTimer | None:
-        return self._state.get().focus_timer
-
-    @property
-    def group_cache(self) -> tuple[CanvasGroup, ...]:
-        return self._state.get().group_cache
-
-    @property
     def group_frames(self) -> tuple[CanvasGroup, ...]:
         return self._state.get().group_frames
-
-    @property
-    def has_context(self) -> bool:
-        return self._state.get().has_context
-
-    @property
-    def instruction_run(self) -> CanvasRun | None:
-        return self._state.get().instruction_run
-
-    @property
-    def last_spec(self) -> CanvasToolbarSpec:
-        return self._state.get().last_spec
 
     @property
     def linking(self) -> WorkThread | None:
@@ -430,16 +387,8 @@ class CanvasPanel:
         return self._state.get().pinned
 
     @property
-    def positioned(self) -> bool:
-        return self._state.get().positioned
-
-    @property
     def projection(self) -> CanvasScene:
         return self._state.get().projection
-
-    @property
-    def rendered(self) -> tuple[PersonalView, CanvasDocument, CanvasScope] | None:
-        return self._state.get().rendered
 
     @property
     def scope(self) -> CanvasScope:
@@ -472,7 +421,7 @@ class CanvasPanel:
             self._state.set(replace(self._state.get(), last_spec=new_last_spec))
         except ui_spec.SpecError as error:
             self.work.problem(f"The canvas toolbar kept its last good spec: {error}")
-        return self.last_spec
+        return self._state.get().last_spec
 
     def bubble_subject(self, identity: str | None) -> Bubble | None:
         current = next((each for each in containers(self.view.catalog, self.document) if each.id == identity), None)
@@ -505,11 +454,11 @@ class CanvasPanel:
         for each in self.pinned:
             each.hide()
             each.deleteLater()
-        place = self.toolbar_layout.indexOf(self.search_button)
+        place = self._toolbar.toolbar.content.indexOf(self.search_button)
         new_pinned = tuple(self.toolbar.tile_button(tile, self.perform) for tile in row(spec, selected, self.related(selected), collapsed=collapsed))
         self._state.set(replace(self._state.get(), pinned=new_pinned))
         for offset, each in enumerate(self.pinned):
-            self.toolbar_layout.insertWidget(place + offset, each)
+            self._toolbar.toolbar.content.insertWidget(place + offset, each)
         subject = self.subject if self.subject is not None else selected
         groups = sections(spec, subject, self.related(subject), self.dismissed(), collapsed=collapsed) if self.expanded else ()
         # The expanded toolbar keeps the window's top margin and the status line above it.
@@ -624,7 +573,7 @@ class CanvasPanel:
         except ValueError as error:
             self.status.setText(str(error))
             return False
-        pending = self.instruction_run
+        pending = self._state.get().instruction_run
         if pending is None or pending.intent != intent:
             pending = CanvasRun("canvas:instruction:" + uuid4().hex, self.selected or ROOT_CONTEXT, intent)
         try:
@@ -648,7 +597,7 @@ class CanvasPanel:
         # Searching turns the island into its field; speaking and options return afterwards.
         searching = not self.search.isHidden()
         self.voice_hint.setVisible(not searching)
-        self.clear_context.setVisible(self.has_context and not searching)
+        self.clear_context.setVisible(self._state.get().has_context and not searching)
         self.menu_button.setVisible(not searching)
         for capsule in (self.toolbar, self.recenter, self.questions):
             capsule.content.activate()
@@ -662,10 +611,10 @@ class CanvasPanel:
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status.setGeometry(24, self.toolbar.y() + SHADOW.top() - 28, self.frame.width() - 48, 20)
         viewport = self.canvas.geometry()
-        self.scroll_edge.setGeometry(viewport.left(), viewport.bottom() + 1 - 90, viewport.width(), 90)
-        for widget in (self.scroll_edge, self.recenter, self.toolbar, self.questions, self.status):
+        self._toolbar.scroll_edge.setGeometry(viewport.left(), viewport.bottom() + 1 - 90, viewport.width(), 90)
+        for widget in (self._toolbar.scroll_edge, self.recenter, self.toolbar, self.questions, self.status):
             widget.raise_()
-        if (self.visible_cards or self.group_frames) and not self.positioned:
+        if (self.visible_cards or self.group_frames) and not self._state.get().positioned:
             self.home()
 
     def update_recenter(self) -> None:
@@ -779,7 +728,7 @@ class CanvasPanel:
     def render(self, view: PersonalView) -> None:
         self.status.setToolTip(view.status)
         self.status.setText("" if not self.linking else "Select a source to connect")
-        if self.rendered == (view, self.document, self.scope):
+        if self._state.get().rendered == (view, self.document, self.scope):
             return
         self.interaction.cancel()
         self._state.set(replace(self._state.get(), view=view))
@@ -790,7 +739,7 @@ class CanvasPanel:
         if self.selected not in retained:
             self._state.set(replace(self._state.get(), selected=None))
         self.update_voice_context()
-        new_group_cache = tuple(group for group in self.group_cache if group.context.id in retained)
+        new_group_cache = tuple(group for group in self._state.get().group_cache if group.context.id in retained)
         self._state.set(replace(self._state.get(), group_cache=new_group_cache))
         for identity, dialog in self.editors:
             if identity not in retained:
@@ -827,17 +776,17 @@ class CanvasPanel:
         self.reflow()
         self.position_chrome()
         self.canvas.setSceneRect(self.scene.itemsBoundingRect().adjusted(-1500, -1500, 1500, 1500))
-        if not self.positioned and (self.visible_cards or self.group_frames):
+        if not self._state.get().positioned and (self.visible_cards or self.group_frames):
             self.home()
         self.update_recenter()
         self.reconcile_draft()
         self._state.set(replace(self._state.get(), rendered=(view, self.document, self.scope)))
 
     def reconcile_draft(self) -> None:
-        if self.draft is not None and self.draft.pending is not None:
+        state = self._state.get()
+        if state.draft is not None and (pending := state.draft.pending) is not None:
             saved = next(
-                (item for item in self.view.catalog.works if item.id not in self.draft_known and item.definition == self.draft.pending.definition),
-                None,
+                (item for item in state.view.catalog.works if item.id not in state.draft_known and item.definition == pending.definition), None
             )
             if saved is not None:
                 self.cancel_create()
@@ -889,7 +838,7 @@ class CanvasPanel:
             path.highlight(identity)
 
     def locate(self, identity: str) -> None:
-        cancel(self.focus_timer)
+        cancel(self._state.get().focus_timer)
         self._state.set(replace(self._state.get(), focus_timer=None))
         bubble = next((bubble for bubble in self.bubbles() if bubble.identity == identity), None)
         if bubble is not None:
@@ -899,7 +848,7 @@ class CanvasPanel:
             self.canvas.centerOn(bounds.center().x(), bounds.top() + min(bounds.height() / 2, visible_height / 2 - 100))
 
     def queue_location(self, identity: str) -> None:
-        cancel(self.focus_timer)
+        cancel(self._state.get().focus_timer)
         new_focus_timer = later(self.frame, 0, lambda: self.locate(identity))
         self._state.set(replace(self._state.get(), focus_timer=new_focus_timer))
 
@@ -1053,7 +1002,7 @@ class CanvasPanel:
         for card in self.visible_cards:
             position = positions[card.content.id]
             card.setPos(position.x, position.y)
-        previous = frozendict((frame.context.id, frame) for frame in self.group_cache)
+        previous = frozendict((frame.context.id, frame) for frame in self._state.get().group_cache)
         retained = frozenset(frame.identity for frame in arranged.frames)
         for old_frame in self.group_frames:
             if old_frame.context.id not in retained:
@@ -1073,7 +1022,7 @@ class CanvasPanel:
             native = previous.get(frame.identity)
             if native is None:
                 native = CanvasGroup(group, bounds, self)
-                self._state.set(replace(self._state.get(), group_cache=(*self.group_cache, native)))
+                self._state.set(replace(self._state.get(), group_cache=(*self._state.get().group_cache, native)))
             else:
                 native.refresh(group, bounds)
             if native.scene() is not self.scene:
@@ -1313,7 +1262,7 @@ class CanvasPanel:
         self.work.send(RefreshPersonalWork.REFRESH)
 
     def fit(self) -> None:
-        cancel(self.focus_timer)
+        cancel(self._state.get().focus_timer)
         self._state.set(replace(self._state.get(), focus_timer=None))
         if self.visible_cards or self.group_frames:
             # The floating toolbar consumes visible space without resizing the
