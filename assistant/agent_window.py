@@ -114,20 +114,15 @@ class AgentWindow:
         on_work: Callable[[], None] | None = None,
         log: Callable[[str], None],
     ) -> AgentWindow:
-        bound: Cell[AgentWindow | None] = Cell(None)
-
+        # The publication creates and renders the view only once posted, after the window below exists.
         def create() -> View:
-            window = bound.get()
-            assert window is not None, "The view is created only through the window's own publication."
             return create_view(window)
 
         def render(view: View | None) -> None:
-            if (window := bound.get()) is not None:
-                window._render(view)
+            window._render(view)
 
         callbacks = _Callbacks(stop, on_problem, on_reset, on_submit, on_waiting, on_recording, on_work)
         window = cls(callbacks, ViewPublication(post, create, render, log=log), log)
-        bound.set(window)
         window.publication.post(window._prepare)
         return window
 
