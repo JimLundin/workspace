@@ -199,21 +199,29 @@ type Action = Output | Mod | Layer | TapHold | Command | Tool | App
 while the key is held; a Tool or App is a request to the assistant (see `protocol`)."""
 
 
-CHARACTERS: Final[dict[Key, tuple[str, str]]] = {
-    **{key: (chr(key.value).lower(), chr(key.value)) for key in Key if key.is_letter()},
-    **{Key[f"N{d}"]: (str(d), ")!@#$%^&*("[d]) for d in range(10)},
-    Key.GRAVE: ("`", "~"), Key.MINUS: ("-", "_"), Key.EQUAL: ("=", "+"),
-    Key.LBRACKET: ("[", "{"), Key.RBRACKET: ("]", "}"), Key.BACKSLASH: ("\\", "|"),
-    Key.SEMICOLON: (";", ":"), Key.QUOTE: ("'", '"'), Key.COMMA: (",", "<"),
-    Key.PERIOD: (".", ">"), Key.SLASH: ("/", "?"), Key.SPACE: (" ", " "),
-}  # fmt: skip
-"""The character each key types on the US English layout: (plain, shifted)."""
+@dataclass(frozen=True, slots=True)
+class Typed:
+    """What a key types on the US English layout, plain and with Shift."""
+
+    plain: str
+    shifted: str
+
+
+CHARACTERS: Final[frozendict[Key, Typed]] = frozendict({
+    **{key: Typed(chr(key.value).lower(), chr(key.value)) for key in Key if key.is_letter()},
+    **{Key[f"N{d}"]: Typed(str(d), ")!@#$%^&*("[d]) for d in range(10)},
+    Key.GRAVE: Typed("`", "~"), Key.MINUS: Typed("-", "_"), Key.EQUAL: Typed("=", "+"),
+    Key.LBRACKET: Typed("[", "{"), Key.RBRACKET: Typed("]", "}"), Key.BACKSLASH: Typed("\\", "|"),
+    Key.SEMICOLON: Typed(";", ":"), Key.QUOTE: Typed("'", '"'), Key.COMMA: Typed(",", "<"),
+    Key.PERIOD: Typed(".", ">"), Key.SLASH: Typed("/", "?"), Key.SPACE: Typed(" ", " "),
+})  # fmt: skip
+"""The character each key types on the US English layout."""
 
 
 def character(key: Key, *, shifted: bool) -> str | None:
     """What a key types, or None for keys that don't type (arrows, Enter...)."""
-    pair = CHARACTERS.get(key)
-    return None if pair is None else pair[shifted]
+    typed = CHARACTERS.get(key)
+    return None if typed is None else typed.shifted if shifted else typed.plain
 
 
 def describe(a: Action) -> str:
@@ -395,13 +403,15 @@ def _flatten[CellT](board: Board[CellT]) -> tuple[CellT, ...]:
     return cells
 
 
-TABLE: Final[dict[Layer | None, tuple[Action, ...]]] = {
-    None: _flatten(BASE),
-    Layer.NAV: _flatten(NAV_LAYER),
-    Layer.NUM: _flatten(NUM_LAYER),
-    Layer.SYM: _flatten(SYM_LAYER),
-    Layer.APPS: _flatten(APPS_LAYER),
-}
+TABLE: Final[frozendict[Layer | None, tuple[Action, ...]]] = frozendict(
+    {
+        None: _flatten(BASE),
+        Layer.NAV: _flatten(NAV_LAYER),
+        Layer.NUM: _flatten(NUM_LAYER),
+        Layer.SYM: _flatten(SYM_LAYER),
+        Layer.APPS: _flatten(APPS_LAYER),
+    }
+)
 """Every layer flattened, by layer (None: the base layer) then cell."""
 
 
