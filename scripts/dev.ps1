@@ -13,6 +13,9 @@ if ($Command -eq 'setup') {
     # uv, as installs use: --native-tls trusts the Windows certificate store (company TLS inspection).
     Remove-Item (Join-Path $root '.venv\Lib\site-packages\workspace_runtime.pth') -ErrorAction SilentlyContinue
     & uv sync --native-tls --locked --no-install-project --python 3.15 --project $root
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    # Each commit rewrites docs/volume.md, the code-volume report (.githooks/pre-commit).
+    & git -C $root config core.hooksPath .githooks
     exit $LASTEXITCODE
 }
 if (-not (Test-Path $python)) { throw 'Run Dev.cmd setup first: it creates the development .venv from the lock.' }

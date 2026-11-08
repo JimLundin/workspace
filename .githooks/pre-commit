@@ -1,0 +1,6 @@
+#!/bin/sh
+# Keep docs/volume.md, the committed code-volume report, current with what this commit holds.
+# Dev.cmd setup points git's core.hooksPath here.
+python=".venv/Scripts/python.exe"
+[ -x "$python" ] || python=python
+"$python" -B -m scripts.volume --staged --write docs/volume.md && git add docs/volume.md
