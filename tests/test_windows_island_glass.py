@@ -107,7 +107,7 @@ def test_scene_reuses_a_returning_panes_visuals_and_hides_departed_ones() -> Non
     # Defects: a capsule that returns allocates new native visuals, one that
     # leaves stays on screen, or a direct write targets the wrong COM slot.
     app = application()
-    owner = EventLoop(app, lambda: None)
+    owner = EventLoop.start(app, lambda: None)
     if owner.composition is None:
         owner.close()
         raise unittest.SkipTest("Desktop composition is unavailable.")
@@ -133,7 +133,7 @@ def test_glass_stacks_only_when_real_window_order_needs_correction() -> None:
     # Defect: every frame repeats native stacking even while correctly ordered;
     # blindly caching that state instead fails to repair intervening windows.
     app = application()
-    owner = EventLoop(app, lambda: None)
+    owner = EventLoop.start(app, lambda: None)
     if owner.composition is None:
         owner.close()
         raise unittest.SkipTest("Desktop composition is unavailable.")
@@ -175,7 +175,7 @@ def test_glass_resizes_its_retained_geometry_and_shadow_mask_across_dpi_changes(
     # Defects: a resize rebuilds native geometry and its clip, or the shadow mask
     # keeps an old size or DPI.
     app = application()
-    owner = EventLoop(app, lambda: None)
+    owner = EventLoop.start(app, lambda: None)
     if owner.composition is None:
         owner.close()
         raise unittest.SkipTest("Desktop composition is unavailable.")

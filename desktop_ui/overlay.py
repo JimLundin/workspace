@@ -81,32 +81,27 @@ def fit_position(position: Point, size: Size, work: Rect) -> Point:
     return Point(x, y)
 
 
+@dataclass(frozen=True, slots=True)
 class KeyHighlights:
     """Held keys stay lit; a quick tap stays visible for at least 120 milliseconds."""
 
-    __slots__ = ("_held", "_until")
+    held: frozenset[Scancode] = frozenset()
+    until: frozendict[Scancode, float] = frozendict()
+    """When each recently pressed key may go dark."""
 
-    def __init__(self) -> None:
-        self._held: frozenset[Scancode] = frozenset()
-        self._until: dict[Scancode, float] = {}
-
-    def update(self, held: frozenset[Scancode], now: float) -> None:
-        for key in held - self._held:
-            self._until[key] = now + 0.12
-        self._held = held
+    def updated(self, held: frozenset[Scancode], now: float) -> KeyHighlights:
+        """The highlights once `held` are the keys down at `now`."""
+        pressed = frozendict((key, now + 0.12) for key in held - self.held)
+        kept = frozendict((key, until) for key, until in self.until.items() if key not in pressed and (key in held or until > now))
+        return KeyHighlights(held, kept | pressed)
 
     def visible(self, now: float) -> frozenset[Scancode]:
-        self._until = {key: until for key, until in self._until.items() if key in self._held or until > now}
-        return self._held | frozenset(self._until)
+        return self.held | frozenset(key for key, until in self.until.items() if key in self.held or until > now)
 
     def delay(self, now: float) -> int | None:
         """Milliseconds until the next released key goes dark; no polling while held."""
-        deadlines = [until for key, until in self._until.items() if key not in self._held]
+        deadlines = tuple(until for key, until in self.until.items() if key not in self.held and until > now)
         return max(1, math.ceil((min(deadlines) - now) * 1000)) if deadlines else None
-
-    def clear(self) -> None:
-        self._held = frozenset()
-        self._until.clear()
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,13 +1,15 @@
 """One Qt event loop and Windows composition lifetime for all assistant views."""
 
 from collections.abc import Callable
-from typing import ClassVar
+from dataclasses import dataclass, field, replace
+from typing import Final
 
 lazy import shiboken6
 lazy from PySide6 import QtCore
 lazy from PySide6.QtCore import QCoreApplication, QEvent
 lazy from PySide6.QtWidgets import QApplication
 
+from cell import Cell
 from desktop_ui.qt_runtime import prepare
 lazy from desktop_ui.components import typeface
 lazy from desktop_ui.view_publication import log_view
@@ -47,29 +49,44 @@ def cancel(timer: QtCore.QTimer | None) -> None:
         timer.deleteLater()
 
 
+@dataclass(frozen=True, slots=True)
+class _Shared:
+    """The desktop composition every event loop shares, and how many loops use it."""
+
+    users: int = 0
+    composition: DesktopComposition | None = None
+
+
+_SHARED: Final = Cell(_Shared())
+"""Replaced as loops start and close, on the Qt thread."""
+
+
+@dataclass(frozen=True, slots=True)
 class EventLoop:
-    __slots__ = ("app", "closed", "composition", "painted", "timer")
-    _users: ClassVar[int] = 0
-    _composition: ClassVar[DesktopComposition | None] = None
+    app: QApplication
+    painted: Callable[[], None]
+    timer: QtCore.QTimer
+    composition: DesktopComposition | None
+    _closed: Cell[bool] = field(default_factory=lambda: Cell(False), init=False, repr=False)
 
-    def __init__(self, app: QApplication, painted: Callable[[], None]) -> None:
-        self.app, self.painted = app, painted
-        self.closed = False
-        self.timer = QtCore.QTimer(app)
-        self.timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
-        self.timer.setInterval(16)
-
-        def paint_tick() -> None:
-            self.painted()
-
-        self.timer.timeout.connect(paint_tick)
-        EventLoop._users += 1
-        if EventLoop._users == 1:
+    @classmethod
+    def start(cls, app: QApplication, painted: Callable[[], None]) -> EventLoop:
+        timer = QtCore.QTimer(app)
+        timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
+        timer.setInterval(16)
+        timer.timeout.connect(painted)
+        shared = _SHARED.get()
+        if shared.users == 0:
             try:
-                EventLoop._composition = DesktopComposition.start()
+                shared = replace(shared, composition=DesktopComposition.start())
             except OSError as error:
                 log_view(f"Desktop glass unavailable; using the solid material: {error}")
-        self.composition = EventLoop._composition
+        _SHARED.set(replace(shared, users=shared.users + 1))
+        return cls(app, painted, timer, shared.composition)
+
+    @property
+    def closed(self) -> bool:
+        return self._closed.get()
 
     def pump(self) -> None:
         self.app.processEvents()
@@ -101,12 +118,13 @@ class EventLoop:
     def close(self) -> None:
         if self.closed:
             return
-        self.closed = True
+        self._closed.set(True)
         self.timer.stop()
         self.timer.deleteLater()
-        EventLoop._users -= 1
-        if EventLoop._users == 0 and EventLoop._composition is not None:
-            EventLoop._composition.close(self.app.processEvents)
-            EventLoop._composition = None
-        self.composition = None
+        shared = _SHARED.get()
+        users = shared.users - 1
+        if users == 0 and shared.composition is not None:
+            shared.composition.close(self.app.processEvents)
+            shared = replace(shared, composition=None)
+        _SHARED.set(replace(shared, users=users))
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

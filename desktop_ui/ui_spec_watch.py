@@ -9,38 +9,49 @@ stays.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 from PySide6 import QtCore
 
+from cell import Cell
 from desktop_ui.ui_spec import SpecError
 
 SETTLE_MS: Final = 150
 
 
+@dataclass(frozen=True, slots=True, weakref_slot=True)
 class SpecWatch[T]:
-    __slots__ = ("__weakref__", "_apply", "_current", "_folder", "_load", "_problem", "_settle", "_watcher")
     """Qt connects bound methods through a weak reference to their owner."""
 
-    def __init__(
-        self,
+    _folder: Path
+    _load: Callable[[], T]
+    _apply: Callable[[T], None]
+    _problem: Callable[[str], None]
+    _settle: QtCore.QTimer
+    _watcher: QtCore.QFileSystemWatcher
+    _current: Cell[T]
+    """The last good spec, applied."""
+
+    @classmethod
+    def start(
+        cls,
         folder: Path,
         load: Callable[[], T],
         current: T,
         apply: Callable[[T], None],
         problem: Callable[[str], None],
-    ) -> None:
-        self._folder, self._load, self._current = folder, load, current
-        self._apply, self._problem = apply, problem
-        self._settle = QtCore.QTimer()
-        self._settle.setSingleShot(True)
-        self._settle.setInterval(SETTLE_MS)
-        self._settle.timeout.connect(self.reload)
-        self._watcher = QtCore.QFileSystemWatcher()
-        self._watcher.directoryChanged.connect(self._changed)
-        self._watcher.fileChanged.connect(self._changed)
-        self._watch()
+    ) -> SpecWatch[T]:
+        settle = QtCore.QTimer()
+        settle.setSingleShot(True)
+        settle.setInterval(SETTLE_MS)
+        watch = cls(folder, load, apply, problem, settle, QtCore.QFileSystemWatcher(), Cell(current))
+        settle.timeout.connect(watch.reload)
+        watch._watcher.directoryChanged.connect(watch._changed)
+        watch._watcher.fileChanged.connect(watch._changed)
+        watch._watch()
+        return watch
 
     def _watch(self) -> None:
         paths = [str(self._folder), *(str(path) for path in sorted(self._folder.glob("*.py")))]
@@ -58,8 +69,8 @@ class SpecWatch[T]:
         except SpecError as error:
             self._problem(f"The bar kept its last good spec: {error}")
             return
-        if loaded != self._current:
-            self._current = loaded
+        if loaded != self._current.get():
+            self._current.set(loaded)
             self._apply(loaded)
 
     def close(self) -> None:

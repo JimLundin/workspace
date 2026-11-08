@@ -12,10 +12,10 @@ Q, M = Scancode(0x10), Scancode(0x32)
 
 def test_quick_tap_is_visible_for_at_least_120_milliseconds() -> None:
     highlights = KeyHighlights()
-    highlights.update(frozenset({Q}), 1.0)
+    highlights = highlights.updated(frozenset({Q}), 1.0)
     assert highlights.visible(1.0) == frozenset({Q})
     assert highlights.delay(1.0) is None  # held keys need no timer
-    highlights.update(frozenset(), 1.01)
+    highlights = highlights.updated(frozenset(), 1.01)
     assert highlights.visible(1.119) == frozenset({Q})
     assert highlights.delay(1.119) in (1, 2)
     assert highlights.visible(1.121) == frozenset()
@@ -24,34 +24,34 @@ def test_quick_tap_is_visible_for_at_least_120_milliseconds() -> None:
 
 def test_all_chord_keys_stay_lit_and_long_holds_clear_on_release() -> None:
     highlights = KeyHighlights()
-    highlights.update(frozenset({M}), 1.0)
-    highlights.update(frozenset({M, Q}), 1.2)
+    highlights = highlights.updated(frozenset({M}), 1.0)
+    highlights = highlights.updated(frozenset({M, Q}), 1.2)
     assert highlights.visible(60.0) == frozenset({M, Q})
     assert highlights.delay(60.0) is None
-    highlights.update(frozenset({M}), 60.0)
+    highlights = highlights.updated(frozenset({M}), 60.0)
     assert highlights.visible(60.0) == frozenset({M})
-    highlights.update(frozenset(), 60.1)
+    highlights = highlights.updated(frozenset(), 60.1)
     assert highlights.visible(60.1) == frozenset()
     assert highlights.delay(60.1) is None
 
 
 def test_repressing_during_a_flash_gets_a_new_deadline() -> None:
     highlights = KeyHighlights()
-    highlights.update(frozenset({Q}), 1.0)
-    highlights.update(frozenset(), 1.01)
-    highlights.update(frozenset({Q}), 1.1)
+    highlights = highlights.updated(frozenset({Q}), 1.0)
+    highlights = highlights.updated(frozenset(), 1.01)
+    highlights = highlights.updated(frozenset({Q}), 1.1)
     assert highlights.visible(1.13) == frozenset({Q})
-    highlights.update(frozenset(), 1.14)
+    highlights = highlights.updated(frozenset(), 1.14)
     assert highlights.visible(1.219) == frozenset({Q})
     assert highlights.visible(1.221) == frozenset()
 
 
 def test_independent_taps_expire_in_order_without_extending_each_other() -> None:
     highlights = KeyHighlights()
-    highlights.update(frozenset({Q}), 1.0)
-    highlights.update(frozenset(), 1.01)
-    highlights.update(frozenset({M}), 1.05)
-    highlights.update(frozenset(), 1.06)
+    highlights = highlights.updated(frozenset({Q}), 1.0)
+    highlights = highlights.updated(frozenset(), 1.01)
+    highlights = highlights.updated(frozenset({M}), 1.05)
+    highlights = highlights.updated(frozenset(), 1.06)
     assert highlights.visible(1.119) == frozenset({Q, M})
     assert highlights.visible(1.121) == frozenset({M})
     assert highlights.visible(1.171) == frozenset()
@@ -59,13 +59,13 @@ def test_independent_taps_expire_in_order_without_extending_each_other() -> None
 
 def test_reset_clears_both_held_keys_and_tap_flashes_immediately() -> None:
     highlights = KeyHighlights()
-    highlights.update(frozenset({Q, M}), 1.0)
-    highlights.update(frozenset({M}), 1.01)
-    highlights.clear()
+    highlights = highlights.updated(frozenset({Q, M}), 1.0)
+    highlights = highlights.updated(frozenset({M}), 1.01)
+    highlights = KeyHighlights()  # The owner resets with a fresh value.
     assert highlights.visible(1.02) == frozenset()
     assert highlights.delay(1.02) is None
-    highlights.update(frozenset({M}), 1.03)
-    highlights.update(frozenset(), 1.04)
+    highlights = highlights.updated(frozenset({M}), 1.03)
+    highlights = highlights.updated(frozenset(), 1.04)
     assert highlights.visible(1.149) == frozenset({M})
     assert highlights.visible(1.151) == frozenset()
 

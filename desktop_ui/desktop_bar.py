@@ -278,9 +278,11 @@ class DesktopBar:
         reporter = _Reporter(deliver, observed.clock, actions.requests)
         errors: queue.Queue[str] = queue.Queue()
         specs = ui_spec.bar_specs(reload=False)
-        loop = EventLoop(application(), lambda: reporter.report(PaintDue()))
+        loop = EventLoop.start(application(), lambda: reporter.report(PaintDue()))
         window = BarWindow(loop, reporter, specs.sizes)
-        spec_watch = SpecWatch(observed.spec_folder, ui_spec.bar_specs, specs, lambda changed: reporter.report(Respecced(changed)), errors.put)
+        spec_watch = SpecWatch[ui_spec.Specs].start(
+            observed.spec_folder, ui_spec.bar_specs, specs, lambda changed: reporter.report(Respecced(changed)), errors.put
+        )
         tick, audio = QtCore.QTimer(window), QtCore.QTimer(window)
         tick.setInterval(100)
         tick.timeout.connect(lambda: reporter.report(TickDue()))

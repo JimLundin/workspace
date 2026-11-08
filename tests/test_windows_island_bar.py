@@ -426,7 +426,7 @@ def test_contrast_paints_system_colours_and_releases_only_its_composition_owner(
     # closes the composition that other views still use.
     app = application()
     bar = DesktopBar.open(recorded([]), native_shell=False, observations=BarObservations(material=lambda: appearance.Contrast("#000000", "#ffff00")))
-    other_view = EventLoop(app, lambda: None)
+    other_view = EventLoop.start(app, lambda: None)
     try:
         island = bar.window.capsules[Key.STATUS]
         image = island.grab().toImage()

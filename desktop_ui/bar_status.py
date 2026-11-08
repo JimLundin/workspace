@@ -14,6 +14,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import Final
 
+from cell import Cell
 from desktop_ui.ambient import SystemStatus
 from winapi.machine_status import CpuTimes, cpu_load
 lazy from winapi import resources, system_status
@@ -21,26 +22,31 @@ lazy from winapi import resources, system_status
 RESOURCES: Final = 2.0  # Seconds between processor and memory readings; faster readings only flicker.
 
 
+@dataclass(frozen=True, slots=True)
+class _Sampled:
+    last: SystemStatus = field(default_factory=SystemStatus)
+    times: CpuTimes | None = None
+    """The processor times the next load measures against."""
+    sampled: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     """Each observation reads the speakers and Wi-Fi; processor load needs the previous sample to measure against."""
 
-    __slots__ = ("clock", "last", "sampled", "times")
-
-    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
-        self.clock = clock
-        self.last = SystemStatus()
-        self.times: CpuTimes | None = None
-        self.sampled = 0.0
+    clock: Callable[[], float] = time.monotonic
+    _sampled: Cell[_Sampled] = field(default_factory=lambda: Cell(_Sampled()), init=False, repr=False)
 
     def observe(self) -> SystemStatus:
         audio = system_status.audio()
         now = self.clock()
+        sampled = self._sampled.get()
         # Until a first load is known, the next tick measures one; then every interval.
-        if self.last.cpu is None or now - self.sampled >= RESOURCES:
+        if sampled.last.cpu is None or now - sampled.sampled >= RESOURCES:
             times = resources.cpu_times()
-            self.last = replace(self.last, cpu=cpu_load(self.times, times), memory=resources.memory_load())
-            self.times, self.sampled = times, now
-        return replace(self.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume)
+            sampled = _Sampled(replace(sampled.last, cpu=cpu_load(sampled.times, times), memory=resources.memory_load()), times, now)
+            self._sampled.set(sampled)
+        return replace(sampled.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume)
 
 
 def apply_volume(level: float) -> bool:

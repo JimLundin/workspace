@@ -255,9 +255,9 @@ class KeymapOverlay:
 
     def set_pressed(self, pressed: frozenset[Scancode], *, reset: bool = False) -> None:
         if reset:
-            self._highlights.clear()
+            self._highlights = KeyHighlights()
         if self._view is not None:
-            self._highlights.update(pressed, self._desktop.clock())
+            self._highlights = self._highlights.updated(pressed, self._desktop.clock())
             self._paint_highlights()
 
     def _paint_highlights(self) -> None:

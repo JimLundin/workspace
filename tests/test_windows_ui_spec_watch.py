@@ -59,7 +59,7 @@ def test_installed_edits_apply_and_a_broken_one_keeps_the_last_good_spec(tmp_pat
 
     applied: list[str] = []
     problems: list[str] = []
-    watch = SpecWatch(tmp_path, load, load(), applied.append, problems.append)
+    watch = SpecWatch[str].start(tmp_path, load, load(), applied.append, problems.append)
     try:
         install(tmp_path, "HEIGHT = 36\n")
         assert until(lambda: len(applied) == 1)
