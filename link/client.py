@@ -85,7 +85,7 @@ class Client:
                 if self._closed.is_set():
                     return
                 self._connected.set(_Connected(outbox, connected))
-            writer = threading.Thread(target=self._write, args=(connected, outbox), name="link writer", daemon=True)
+            writer = threading.Thread(target=frames.drain, args=(outbox, connected), name="link writer", daemon=True)
             writer.start()
             self.status(Status.CONNECTED)
             try:
@@ -96,12 +96,6 @@ class Client:
                     self._connected.set(None)
                 outbox.close()
                 self.status(Status.DISCONNECTED)
-
-    @staticmethod
-    def _write(connected: socket.socket, outbox: frames.Outbox) -> None:
-        with contextlib.suppress(OSError):
-            while (payload := outbox.take()) is not None:
-                frames.send(connected, payload)
 
     def close(self) -> None:
         self._closed.set()

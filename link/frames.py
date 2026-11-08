@@ -1,5 +1,6 @@
 """Length-prefixed frames on a stream socket, and an outbox that keeps only each state's latest."""
 
+import contextlib
 import socket
 import threading
 from dataclasses import dataclass, field, replace
@@ -84,3 +85,10 @@ class Outbox:
         with self._condition:
             self._queued.update(lambda queued: replace(queued, closed=True))
             self._condition.notify_all()
+
+
+def drain(outbox: Outbox, connection: socket.socket) -> None:
+    """Send each queued payload until the outbox closes or the connection fails."""
+    with contextlib.suppress(OSError):
+        while (payload := outbox.take()) is not None:
+            send(connection, payload)

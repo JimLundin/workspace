@@ -106,7 +106,7 @@ class Server:
             previous = serving.current
             if previous is not None:
                 previous.close()
-            threading.Thread(target=self._write, args=(connection,), name="link writer", daemon=True).start()
+            threading.Thread(target=frames.drain, args=(connection.outbox, connection.stream), name="link writer", daemon=True).start()
             while (frame := frames.receive(connected)) is not None:
                 self.receive(frame)
         except OSError:
@@ -116,12 +116,6 @@ class Server:
                 if self._serving.get().current is connection:
                     self._serving.update(lambda serving: replace(serving, current=None))
             connection.close()
-
-    @staticmethod
-    def _write(connection: _Connection) -> None:
-        with contextlib.suppress(OSError):
-            while (payload := connection.outbox.take()) is not None:
-                frames.send(connection.stream, payload)
 
     def close(self) -> None:
         with self._lock:
