@@ -10,6 +10,8 @@ immutable policy reports leave this owner.
 """
 
 import ast
+import copy
+import hashlib
 import os
 import re
 import sys
@@ -19,7 +21,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import reduce
 from pathlib import Path
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, Literal, override
 
 from pydantic import StrictStr, StringConstraints, TypeAdapter
 
@@ -117,6 +119,14 @@ class Definition:
 
 
 @dataclass(frozen=True, slots=True)
+class Shape:
+    """A function's structure with its names, attributes and constants erased, which a copy shares."""
+
+    finding: Finding
+    digest: str
+
+
+@dataclass(frozen=True, slots=True)
 class Observation:
     declarations: tuple[Finding, ...]
     dynamic_imports: tuple[Finding, ...]
@@ -124,6 +134,7 @@ class Observation:
     assigned: frozenset[str]
     """Attribute names the module assigns through a receiver other than `self`."""
     definitions: tuple[Definition, ...]
+    shapes: tuple[Shape, ...]
     referenced: frozendict[str, int]
     """How often the module names each name."""
 
@@ -720,6 +731,7 @@ def observation(source: Source, cache: Cache | None) -> Observation:
         tuple(records(tree, module)),
         assigned(tree),
         tuple(definitions(tree.body, module)),
+        tuple(shapes(tree, module)),
         references(tree),
     )
     if cache is not None:
@@ -787,6 +799,61 @@ def _referenced(tree: ast.AST) -> Iterator[str]:
                 yield from re.findall(r"\w+", text)
             case _:
                 pass
+
+
+SHAPE_NODES: Final = 40
+"""The smallest function body, in syntax nodes, whose copy the review reports; below it, shapes recur by chance."""
+
+
+class _Erased(ast.NodeTransformer):
+    """Erase what a copy renames: identifiers, attributes, arguments, annotations and constant values."""
+
+    @override
+    def visit_Name(self, node: ast.Name) -> ast.Name:
+        return ast.Name(id="_", ctx=node.ctx)
+
+    @override
+    def visit_Attribute(self, node: ast.Attribute) -> ast.Attribute:
+        return ast.Attribute(value=self.visit(node.value), attr="_", ctx=node.ctx)
+
+    @override
+    def visit_arg(self, node: ast.arg) -> ast.arg:
+        return ast.arg(arg="_")
+
+    @override
+    def visit_Constant(self, node: ast.Constant) -> ast.Constant:
+        return ast.Constant(value=type(node.value).__name__)
+
+
+def _digest(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    body = ast.Module(body=[_Erased().visit(copy.deepcopy(statement)) for statement in function.body], type_ignores=[])
+    return hashlib.sha256((type(function).__name__ + ast.dump(_Erased().visit(copy.deepcopy(function.args))) + ast.dump(body)).encode()).hexdigest()
+
+
+def shapes(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Shape]:
+    """Every function of at least SHAPE_NODES nodes, with its erased structure."""
+    for child in ast.iter_child_nodes(tree):
+        match child:
+            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                inner = ".".join(part for part in (declaration, name) if part)
+                if sum(1 for statement in child.body for _ in ast.walk(statement)) >= SHAPE_NODES:
+                    detail = "Same structure as another function; keep one and give it the parameters the copies differ by."
+                    yield Shape(Finding("duplicate-code", module, inner, name, child.lineno, detail), _digest(child))
+                yield from shapes(child, module, inner)
+            case ast.ClassDef(name=name):
+                yield from shapes(child, module, ".".join(part for part in (declaration, name) if part))
+            case _:
+                yield from shapes(child, module, declaration)
+
+
+def duplicates(observations: Iterable[Observation]) -> Iterator[Finding]:
+    """Each function whose erased structure another function shares, naming the first of its copies."""
+    found = tuple(shape for observed in observations for shape in observed.shapes)
+    copies = Counter(shape.digest for shape in found)
+    first = {shape.digest: shape.finding for shape in reversed(found)}
+    for shape in found:
+        if copies[shape.digest] > 1 and (original := first[shape.digest]) != shape.finding:
+            yield replace(shape.finding, detail=f"{shape.finding.detail} First copy: {original.module}.{original.declaration}.")
 
 
 def cached_references(source: Source, cache: Cache | None) -> frozenset[str]:
@@ -903,6 +970,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *contract_isolation(imported_by),
         *process_isolation(imported_by),
         *unused_definitions(observations.values(), production, tested),
+        *duplicates(observations.values()),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = (

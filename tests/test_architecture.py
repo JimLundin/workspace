@@ -548,3 +548,25 @@ LIMIT = 3
     )
     found = [(finding.declaration, finding.detail.partition(" ")[0]) for finding in review(tmp_path).failures if finding.rule == "unused-definition"]
     assert sorted(found) == [("Widget.helper", "Only"), ("Widget.make", "Delete"), ("orphan", "Delete")]
+
+
+def test_a_function_copied_under_other_names_is_reported_once_per_copy(tmp_path: Path) -> None:
+    # Defects: a pasted function that differs only in names, attributes and
+    # constants passes the review; or the review flags the first of the copies,
+    # a body too small to be more than a table row, or a function that only
+    # looks alike but branches differently.
+    body = """    total = 0
+    for item in {source}.{field}:
+        if item.{flag} and item.size > {limit}:
+            total = total + item.size * {factor}
+        elif item.size:
+            total = total - 1
+    return total + len({source}.{field}) + {limit} * {factor}
+"""
+    first = "def weighed(order):\n" + body.format(source="order", field="lines", flag="paid", limit=3, factor=2)
+    copy = "def scored(board):\n" + body.format(source="board", field="cards", flag="done", limit=5, factor=7)
+    different = "def other(board):\n" + body.format(source="board", field="cards", flag="done", limit=5, factor=7).replace("elif", "if")
+    small = "def a(x):\n    return x.first == x.second\n\n\ndef b(y):\n    return y.third == y.fourth\n"
+    write_tree(tmp_path, {"one.py": first, "two.py": f"{copy}\n\n{different}\n\n{small}"})
+    found = [(finding.module, finding.declaration) for finding in review(tmp_path).failures if finding.rule == "duplicate-code"]
+    assert found == [("two", "scored")]
