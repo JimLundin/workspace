@@ -689,9 +689,12 @@ def main() -> None:
         print(json.dumps(scope), flush=True)
         # Desktop isolation may relaunch the executor. Keep policy review, source
         # identity and receipt publication in this coordinator, outside that handoff.
+        # Plain tests own no windows: with no native module selected they run here,
+        # without starting the Windows runner or moving it to a private desktop.
+        native = any(name.startswith("tests/test_windows_") for name in selection.tests)
         if os.name == "nt" and current_name() == os.environ.get("WORKSPACE_TEST_DESKTOP"):
             results = execute(selection, ROOT)
-        elif os.name == "nt" or args.native:
+        elif native and (os.name == "nt" or args.native):
             # Whole-tree pyright saturates the cores; native fixtures wait for it.
             results = execute_lanes(ROOT, selection, typed if args.full else check_standards.unchecked)
         else:
