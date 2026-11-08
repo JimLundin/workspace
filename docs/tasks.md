@@ -41,21 +41,23 @@ Left:
   physical pixels, the notification observer's poll/clock seam (2 tests with
   real waits), `window_switcher.matching`, and the machine import-hygiene
   test through `test_architecture`'s reachability.
+- **Stop polling the work journal and the task controller.** The assistant
+  burns about half a core and the desktop a quarter (2026-11-08): the work
+  frontend reads the journal every 0.25 s (`WorkAgent._observe`, about 47 ms a
+  read) and the controller claims work every 0.1 s (`automation.controller`).
+  Wake them on a write instead (the store's own commits, or a change stamp as
+  the notification observer uses), keeping a slow timer as a backstop.
 - **Give the meeting service's 2 s publish pacing a seam.** It removes the
   three meeting tests from the slow lists.
-- **Skip the Windows runner for pure test modules.** A small check is about 9 s
-  end to end; about 5 s of that starts the Windows test runner and moves it
-  onto a private desktop. Test modules that can't touch Qt or Win32 could run
-  in the checker process itself. That is a judgement call on isolation.
 - **An intermittent coordinator crash (`0xC0000409`) in the isolated selfcheck**
   (2026-11-07): three of six full runs died about 96 s in, while
   `test_windows_browser` drove Edge; the rest passed or failed that test with
   "Navigation is still loading". It isn't tied to one commit. The isolated
   launcher now reports the status instead of overflowing `os._exit`.
-- **Investigate the three largest native tests:**
-  - UIA (30 s);
-  - managed Edge (26 s);
-  - attached Edge (19 s).
+- **The three largest native tests** (UIA 30 s, managed Edge 26 s, attached
+  Edge 19 s) are opt-in behind `WORKSPACE_HEAVY=1` now; shorten them when next
+  touched (the managed Edge test repeats snapshot paging and cancellation
+  that `test_browser` covers).
 - **The full native tier dies** (2026-11-07): `Dev.cmd check --native` with no
   native receipt (all 143 modules) fails after about 2.5 min with "The Windows
   test process did not write its result". It fails the same way at `166cd28`,
