@@ -23,9 +23,10 @@ from typing import Final, assert_never
 from contracts.members import every_member
 from contracts.recording_state import RecordingState
 from contracts.status import TRANSCRIBING, Job
+from desktop_ui import ambient
 from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
 from desktop_ui.components import meaning
-from winapi.machine_status import Battery, PowerUnavailable
+from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 
 
 class Key(Enum):
@@ -165,6 +166,10 @@ class Activity(StrEnum):
 class StatusSpec:
     groups: tuple[tuple[Reading, ...], ...]
     """Left to right; readings in a group sit a part gap apart, groups a slot gap."""
+    speakers: frozendict[Speakers, ambient.Reading]
+    """The speakers' symbol and words in each state."""
+    wifi: frozendict[Wifi, ambient.Reading]
+    """Wi-Fi's symbol and words in each state."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,7 +197,9 @@ ISLAND: Final = IslandSpec(
         (
             (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI),
             (Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY, Reading.CLOCK),
-        )
+        ),
+        SPEAKERS,
+        WIFI,
     ),
     # Where activities sit beside the island, left to right. A transcription
     # and a recording step out of the island while you dictate. Each activity is
@@ -233,7 +240,7 @@ def usage(percent: int | None) -> Text:
     return Text("—" if percent is None else f"{percent}%", reserve="100%")
 
 
-def reading(each: Reading, observed: Observed) -> Slot:
+def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
     """One reading's parts. Each reserves its widest form, and power keeps one glyph,
     so a changing reading never shifts the fixed cluster."""
     ambient, system = observed.ambient, observed.system
@@ -241,9 +248,9 @@ def reading(each: Reading, observed: Observed) -> Slot:
         case Reading.KEYBOARD:
             return (Glyph("keyboard"),) if observed.plain_keyboard else ()
         case Reading.SPEAKER:
-            return (Glyph(SPEAKERS[system.speakers].icon),)
+            return (Glyph(status.speakers[system.speakers].icon),)
         case Reading.WIFI:
-            return (Glyph(WIFI[system.wifi].icon),)
+            return (Glyph(status.wifi[system.wifi].icon),)
         case Reading.CLOCK:
             return (Glyph("clock"), Text(ambient.clock, reserve="00:00"))
         case Reading.POWER:
@@ -264,6 +271,10 @@ def reading(each: Reading, observed: Observed) -> Slot:
             return (Glyph("memory"), usage(system.memory))
         case _:
             assert_never(each)
+
+
+def devices(system: SystemStatus, status: StatusSpec) -> str:
+    return status.speakers[system.speakers].description + ". " + status.wifi[system.wifi].description
 
 
 def describe(ambient: Ambient) -> str:
@@ -301,7 +312,7 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
         )
     # The readings stay the top row while their capsule expands into the menu; a
     # group whose readings are all absent (a keyboard typing normally) takes no space.
-    groups = (tuple(part for each in group for part in reading(each, observed)) for group in spec.status.groups)
+    groups = (tuple(part for each in group for part in reading(each, observed, spec.status)) for group in spec.status.groups)
     readings: tuple[Slot, ...] = tuple(group for group in groups if group)
     persistent = (
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
@@ -310,7 +321,8 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
             Key.STATUS,
             Zone.RIGHT,
             readings,
-            ". ".join((observed.system.resource_description, observed.system.description, describe(observed.ambient))) + " · Open Workspace controls",
+            ". ".join((observed.system.resource_description, devices(observed.system, spec.status), describe(observed.ambient)))
+            + " · Open Workspace controls",
             Action.OPEN_MENU,
         ),
     )

@@ -6,11 +6,12 @@ from itertools import pairwise
 from hypothesis import strategies
 
 from desktop_ui.island_layout import Content, Metrics, frame
-from desktop_ui.island_model import ISLAND, Action, CapsuleView, Key, Zone, order
+from desktop_ui.island_model import Action, CapsuleView, Key, Zone, order
 from desktop_ui.island_motion import IslandMotion, Shown, advance, placed, retarget, settled
+from tests import test_island_model, test_island_motion
 from tests.properties.generation import cases, property_test
 
-ORDER = order(ISLAND)
+ORDER = order(test_island_model.SPEC)
 
 ZONES = {Key.JOB: Zone.LEAD, Key.ISLAND: Zone.ISLAND, Key.RECORDING: Zone.TRAIL}
 
@@ -42,7 +43,7 @@ def journeys(draw: strategies.DrawFn) -> Journey:
 def test_capsules_never_overlap_in_flight_and_rest_exactly_one_gap_apart(journey: Journey) -> None:
     motion = IslandMotion()
     for target in journey.arrangements:
-        motion = retarget(motion, target, animate=True)
+        motion = retarget(motion, target, test_island_motion.SPRINGS, animate=True)
         for step in journey.steps:
             motion = advance(motion, step)
             boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12), ORDER))

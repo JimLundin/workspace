@@ -17,13 +17,14 @@ from contracts.status import Job
 from desktop_ui import island_menu
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.application_observer import EMPTY_ARRANGEMENT, Arrangement
+from desktop_ui.island_layout import Sizes
 from desktop_ui.island_menu import (
-    CONTROLS,
     DISMISSED,
     Applied,
     Chosen,
     Command,
     Controls,
+    ControlsSpec,
     Menu,
     Slider,
     ToolChoice,
@@ -32,8 +33,8 @@ from desktop_ui.island_menu import (
     entries,
     restores_focus,
 )
-from desktop_ui.island_model import Action, CapsuleView, Key, Marker, capture
-from desktop_ui.island_motion import IslandMotion, advance, finish, settled
+from desktop_ui.island_model import Action, CapsuleView, IslandSpec, Key, Marker, capture
+from desktop_ui.island_motion import IslandMotion, Springs, advance, finish, settled
 from desktop_ui.navigation import Order, Placing
 from protocol import Tool
 from winapi import appearance
@@ -64,9 +65,20 @@ class Surroundings:
 
 
 @dataclass(frozen=True, slots=True)
+class BarSpec:
+    """Everything the bar is declared as: what it shows, its menu, how it moves and its sizes."""
+
+    island: IslandSpec
+    controls: ControlsSpec
+    springs: Springs
+    sizes: Sizes
+
+
+@dataclass(frozen=True, slots=True)
 class BarModel:
     """Everything the bar shows and decides from; replaced whole on the Qt thread."""
 
+    spec: BarSpec
     closed: bool = False
     opened: Menu | None = None
     """The controls menu, while it is open."""
@@ -109,7 +121,7 @@ def menu(model: BarModel) -> Menu:
                 sound=sound,
                 tray=seen.tray_tips,
             ),
-            CONTROLS,
+            model.spec.controls,
         )
     )
     return replace(built, selected=model.opened.selected) if model.opened is not None else built

@@ -5,11 +5,12 @@ from dataclasses import replace
 from contracts.status import TRANSCRIBING
 from desktop_ui.bar_events import BarModel, menu, next_frame
 from desktop_ui.island_model import island
+from tests import test_bar_specs
 from tests.test_island_model import RESTING, SPEC
 
 
 def model() -> BarModel:
-    return BarModel()
+    return BarModel(test_bar_specs.SPEC)
 
 
 def working() -> BarModel:

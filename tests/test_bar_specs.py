@@ -6,16 +6,20 @@ coordinate, whatever the bar's real sizes are.
 
 from dataclasses import asdict
 
+from desktop_ui.bar_events import BarSpec
 from desktop_ui.island_layout import Bar, Capsule, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
 from desktop_ui.island_menu import Menu, entries
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
-from tests import test_island_menu, test_island_model
+from tests import test_island_menu, test_island_model, test_island_motion
 
 BASE = Sizes(
     Bar(top=5, edge=20, gap=10, radius=3, shadow=7),
     Capsule(height=40, control=30, icon=16, dot=8, dots=18, wave_bars=3, part_gap=4, slot_gap=9, text_pad=11, icon_pad=7),
     MenuGrid(width=200, radius=9, pad=5, head=40, track=4, gutter=2),
 )
+
+SPEC = BarSpec(test_island_model.SPEC, test_island_menu.SPEC, test_island_motion.SPRINGS, BASE)
+"""The test's own bar, for tests of the bar's decisions."""
 
 
 def doubled(sizes: Sizes) -> Sizes:

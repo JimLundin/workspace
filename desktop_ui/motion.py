@@ -23,12 +23,6 @@ class Spring:
             raise ValueError("A spring needs a damping ratio in (0, 1] and a positive response.")
 
 
-MORPH: Final = Spring(0.86, 0.42)  # A capsule changing shape.
-APPEAR: Final = Spring(0.78, 0.42)  # A capsule arriving, with a little overshoot.
-LEAVE: Final = Spring(1.0, 0.3)  # A capsule leaving: critically damped, never past zero.
-FADE: Final = Spring(1.0, 0.2)  # Content crossing over at its measured size.
-
-
 @dataclass(frozen=True, slots=True)
 class Motion:
     """A value in flight toward its target."""

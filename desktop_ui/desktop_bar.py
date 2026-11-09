@@ -33,6 +33,7 @@ lazy from desktop_ui.away_screens import AwayScreens
 lazy from desktop_ui.bar_events import (
     AllControls,
     BarModel,
+    BarSpec,
     ClickTray,
     Closing,
     Deactivated,
@@ -65,9 +66,9 @@ lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.desktop_pager import PAGER, pager
 lazy from desktop_ui.island_layout import SIZES, Content, Metrics, expansion, frame, snap
-lazy from desktop_ui.island_menu import Menu
+lazy from desktop_ui.island_menu import CONTROLS, Menu
 lazy from desktop_ui.island_model import ISLAND, CapsuleView, Key, Marker, Observed, island, order
-lazy from desktop_ui.island_motion import Shown, placed, retarget
+lazy from desktop_ui.island_motion import SPRINGS, Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
@@ -160,7 +161,7 @@ class DesktopBar:
             window,
             tick,
             audio,
-            Cell(BarModel(seen=seen)),
+            Cell(BarModel(BarSpec(ISLAND, CONTROLS, SPRINGS, SIZES), seen=seen)),
         )
         try:
             bar = replace(bar, audio_meter=AudioMeter.start(audio_level) if audio_level is not None else None)
@@ -243,9 +244,9 @@ class DesktopBar:
 
     # ---- measuring and painting ----------------------------------------------------------
 
-    def _measure(self, view: CapsuleView, opened: Menu | None) -> Content:
+    def _measure(self, view: CapsuleView, opened: Menu | None, spec: BarSpec) -> Content:
         if opened is not None and view.key is Key.STATUS:
-            return expansion(opened, self.window.measure(view), SIZES.menu)
+            return expansion(opened, self.window.measure(view), spec.sizes.menu)
         return self.window.measure(view)
 
     def render(self) -> None:
@@ -255,9 +256,9 @@ class DesktopBar:
         observed = Observed(
             model.job, model.recording, model.seen.ambient, model.seen.system, plain_keyboard=not model.layout_enabled, dictating=model.dictating
         )
-        views = island(observed, ISLAND, hovered=model.hovered, expanded=opened is not None)
-        shown = tuple(Shown(view, self._measure(view, opened)) for view in views)
-        motion = retarget(model.motion, shown, animate=appearance.animations_enabled())
+        views = island(observed, model.spec.island, hovered=model.hovered, expanded=opened is not None)
+        shown = tuple(Shown(view, self._measure(view, opened, model.spec)) for view in views)
+        motion = retarget(model.motion, shown, model.spec.springs, animate=appearance.animations_enabled())
         listening = model.dictating
         if listening and not self.audio_timer.isActive():
             self.window.samples.extend(0.0 for _ in range(len(self.window.samples)))
@@ -273,9 +274,11 @@ class DesktopBar:
         self.paint()
 
     def _draw(self, model: BarModel) -> None:
-        seen = model.seen
-        metrics = Metrics(seen.screen.width, SIZES.bar.top, SIZES.bar.gap, SIZES.bar.edge)
-        framed = frozendict((each.key, each) for each in snap(frame(placed(model.motion, SIZES.capsule.height), metrics, order(ISLAND)), seen.scale))
+        seen, sizes = model.seen, model.spec.sizes
+        metrics = Metrics(seen.screen.width, sizes.bar.top, sizes.bar.gap, sizes.bar.edge)
+        framed = frozendict(
+            (each.key, each) for each in snap(frame(placed(model.motion, sizes.capsule.height), metrics, order(model.spec.island)), seen.scale)
+        )
         match seen.preference:
             case appearance.Contrast():
                 contrast = True
@@ -296,7 +299,7 @@ class DesktopBar:
             if moving.key in framed
         )
         # The window keeps the room a capsule is heading for, so it resizes only as an expansion starts and settles.
-        reach = max((max(moving.height.value, moving.height.target) for moving in model.motion.capsules), default=float(SIZES.capsule.height))
+        reach = max((max(moving.height.value, moving.height.target) for moving in model.motion.capsules), default=float(sizes.capsule.height))
         self.window.present(
             Presented(
                 drawn,
@@ -307,7 +310,7 @@ class DesktopBar:
                 frost=seen.frost,
                 contrast=contrast,
                 glass=seen.preference is appearance.Material.GLASS,
-                shell_look=_style(seen, Tint.NONE, SIZES.capsule.height),
+                shell_look=_style(seen, Tint.NONE, sizes.capsule.height),
             )
         )
         # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.

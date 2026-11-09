@@ -8,6 +8,7 @@ from dataclasses import replace
 
 from contracts.recording_state import Phase, RecordingState
 from contracts.status import TRANSCRIBING
+from desktop_ui import ambient
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.island_model import (
     Action,
@@ -31,8 +32,14 @@ from desktop_ui.island_model import (
 )
 from winapi.machine_status import Battery, Speakers, Wifi
 
+SPEAKERS = frozendict((state, ambient.Reading(f"speaker {state.name}", f"speakers {state.name}")) for state in Speakers)
+WIFI = frozendict((state, ambient.Reading(f"wifi {state.name}", f"wifi {state.name}")) for state in Wifi)
 SPEC = IslandSpec(
-    StatusSpec(((Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI), (Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY), (Reading.CLOCK,))),
+    StatusSpec(
+        ((Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI), (Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY), (Reading.CLOCK,)),
+        SPEAKERS,
+        WIFI,
+    ),
     ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
 )
 RESTING = Observed(None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), SystemStatus(), dictating=False)
@@ -45,7 +52,7 @@ def view(observed: Observed, key: Key, *, spec: IslandSpec = SPEC, expanded: boo
 
 
 def parts(observed: Observed, *readings: Reading) -> tuple[Part, ...]:
-    return tuple(part for each in readings for part in reading(each, observed))
+    return tuple(part for each in readings for part in reading(each, observed, SPEC.status))
 
 
 def test_at_rest_the_status_capsule_shows_each_group_of_readings_in_order() -> None:
@@ -61,10 +68,10 @@ def test_a_plain_keyboard_joins_its_group_and_an_empty_group_takes_no_slot() -> 
     # Defects: the keyboard shows while the layout remaps, it opens its own slot
     # beside its group, or a group with nothing to show leaves an empty slot.
     plain = replace(RESTING, plain_keyboard=True)
-    assert reading(Reading.KEYBOARD, RESTING) == () and reading(Reading.KEYBOARD, plain) != ()
+    assert reading(Reading.KEYBOARD, RESTING, SPEC.status) == () and reading(Reading.KEYBOARD, plain, SPEC.status) != ()
     assert view(plain, Key.STATUS).slots[0] == parts(plain, Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI)
     assert view(RESTING, Key.STATUS).slots[0] == parts(RESTING, Reading.SPEAKER, Reading.WIFI)
-    alone = replace(SPEC, status=StatusSpec(((Reading.KEYBOARD,), (Reading.CLOCK,))))
+    alone = replace(SPEC, status=StatusSpec(((Reading.KEYBOARD,), (Reading.CLOCK,)), SPEAKERS, WIFI))
     assert len(view(RESTING, Key.STATUS, spec=alone).slots) == 1
     assert len(view(plain, Key.STATUS, spec=alone).slots) == 2
 

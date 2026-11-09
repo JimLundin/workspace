@@ -43,10 +43,6 @@ class SystemStatus:
     memory: int | None = None  # Physical memory in use, in percent.
 
     @property
-    def description(self) -> str:
-        return SPEAKERS[self.speakers].description + ". " + WIFI[self.wifi].description
-
-    @property
     def resource_description(self) -> str:
         cpu = "CPU unavailable" if self.cpu is None else f"CPU {self.cpu}%"
         memory = "memory unavailable" if self.memory is None else f"memory {self.memory}%"

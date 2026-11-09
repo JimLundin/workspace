@@ -9,10 +9,34 @@ morphs between them.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from typing import Final
 
 from desktop_ui.island_layout import Content, Placed
 from desktop_ui.island_model import CapsuleView, Key, Part, Text
-from desktop_ui.motion import APPEAR, FADE, LEAVE, MORPH, Motion, jump, resting, settle, still, toward
+from desktop_ui.motion import Motion, Spring, jump, resting, settle, still, toward
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Springs:
+    """How each kind of capsule change moves."""
+
+    morph: Spring
+    """A capsule changing shape."""
+    appear: Spring
+    """A capsule arriving."""
+    leave: Spring
+    """A capsule leaving; critically damped, so it never passes zero."""
+    fade: Spring
+    """Content crossing over at its measured size."""
+
+
+SPRINGS: Final = Springs(
+    morph=Spring(0.86, 0.42),
+    appear=Spring(0.78, 0.42),  # A little overshoot.
+    leave=Spring(1.0, 0.3),
+    fade=Spring(1.0, 0.2),
+)
+"""The bar's own springs; its owner passes them in, tests pass their own."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,10 +67,10 @@ class IslandMotion:
     capsules: tuple[Moving, ...] = ()
 
 
-def arrive(shown: Shown, *, animate: bool) -> Moving:
-    presence = toward(still(0.0, APPEAR), 1.0, APPEAR)
-    width, height = still(shown.content.width, MORPH), still(shown.content.height, MORPH)
-    return Moving(shown.view, shown.content, None, width, height, presence if animate else jump(presence, 1.0), still(1.0, FADE))
+def arrive(shown: Shown, springs: Springs, *, animate: bool) -> Moving:
+    presence = toward(still(0.0, springs.appear), 1.0, springs.appear)
+    width, height = still(shown.content.width, springs.morph), still(shown.content.height, springs.morph)
+    return Moving(shown.view, shown.content, None, width, height, presence if animate else jump(presence, 1.0), still(1.0, springs.fade))
 
 
 def outline(part: Part) -> object:
@@ -58,20 +82,20 @@ def outline(part: Part) -> object:
             return part
 
 
-def follow(moving: Moving, shown: Shown, *, animate: bool) -> Moving:
-    width, height = toward(moving.width, shown.content.width, MORPH), toward(moving.height, shown.content.height, MORPH)
-    presence = toward(moving.presence, 1.0, APPEAR)
+def follow(moving: Moving, shown: Shown, springs: Springs, *, animate: bool) -> Moving:
+    width, height = toward(moving.width, shown.content.width, springs.morph), toward(moving.height, shown.content.height, springs.morph)
+    presence = toward(moving.presence, 1.0, springs.appear)
     before, after = (tuple(outline(spot.part) for spot in content.spots) for content in (moving.content, shown.content))
     if before == after:
         fade, previous = moving.fade, moving.previous
     else:
-        fade, previous = toward(still(0.0, FADE), 1.0, FADE), moving.content
+        fade, previous = toward(still(0.0, springs.fade), 1.0, springs.fade), moving.content
     changed = Moving(shown.view, shown.content, previous, width, height, presence, fade)
     return changed if animate else rest(changed)
 
 
-def depart(moving: Moving, *, animate: bool) -> Moving:
-    presence = toward(moving.presence, 0.0, LEAVE)
+def depart(moving: Moving, springs: Springs, *, animate: bool) -> Moving:
+    presence = toward(moving.presence, 0.0, springs.leave)
     return replace(moving, presence=presence if animate else jump(presence, 0.0))
 
 
@@ -86,7 +110,7 @@ def rest(moving: Moving) -> Moving:
     )
 
 
-def retarget(motion: IslandMotion, shown: Iterable[Shown], *, animate: bool) -> IslandMotion:
+def retarget(motion: IslandMotion, shown: Iterable[Shown], springs: Springs, *, animate: bool) -> IslandMotion:
     """New targets for every capsule, continuing from where each is now.
 
     Capsules keep their left-to-right key order; departing ones stay until they've collapsed.
@@ -97,11 +121,11 @@ def retarget(motion: IslandMotion, shown: Iterable[Shown], *, animate: bool) -> 
     def moved(key: Key) -> Moving | None:
         match (current.get(key), wanted.get(key)):
             case (Moving() as moving, Shown() as target):
-                return follow(moving, target, animate=animate)
+                return follow(moving, target, springs, animate=animate)
             case (None, Shown() as target):
-                return arrive(target, animate=animate)
+                return arrive(target, springs, animate=animate)
             case (Moving() as moving, None):
-                return depart(moving, animate=animate)
+                return depart(moving, springs, animate=animate)
             case _:
                 return None
 

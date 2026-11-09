@@ -15,10 +15,11 @@ from desktop_ui.bar_events import (
     transition,
 )
 from desktop_ui.island_model import Action
+from tests import test_bar_specs
 
 
 def model() -> BarModel:
-    return BarModel()
+    return BarModel(test_bar_specs.SPEC)
 
 
 def test_opening_the_menu_remembers_the_keyboard_only_when_the_island_was_closed() -> None:
