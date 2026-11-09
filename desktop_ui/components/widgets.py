@@ -8,6 +8,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from desktop_ui.components.appearance import Shade, Tokens, control_style, scheme, tokens
+from desktop_ui.components.typeface import TYPE
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
 from winapi import windows
@@ -24,7 +25,7 @@ def window_style(theme: Tokens) -> str:
         + f"""
 QWidget#workspaceWindow {{ background: {theme.window}; }}
 QFrame#segmented {{ background: {theme.hover.css}; border-radius: 10px; }}
-QFrame#segmented QToolButton {{ border-radius: 8px; padding: 4px 12px; min-height: 18px; font-size: 12px; }}
+QFrame#segmented QToolButton {{ border-radius: 8px; padding: 4px 12px; min-height: 18px; {TYPE.label.css} }}
 QFrame#segmented QToolButton:focus {{ padding: 2px 10px; }}
 QFrame#segmented QToolButton:checked {{ background: {segment}; }}
 """

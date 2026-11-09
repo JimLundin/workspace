@@ -123,12 +123,13 @@ def control_style(theme: Tokens) -> str:
     """Workspace's dialogs and controls: Inter, capsule buttons, quiet wells and overlay scroll bars."""
     ink, ink2, ink3 = theme.ink.css, theme.ink2.css, theme.ink3.css
     fill, hover, press, line = theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
+    weight = int(typeface.TYPE.title.weight)
     return f"""
-QWidget {{ color: {ink}; font-family: '{typeface.FAMILY}'; font-size: 13px; }}
+QWidget {{ color: {ink}; font-family: '{typeface.FAMILY}'; {typeface.TYPE.body.css} }}
 QDialog {{ background: {theme.window}; }}
 QLabel {{ background: transparent; border: none; }}
-QLabel#muted {{ color: {ink2}; font-size: 11px; }}
-QToolButton {{ border: none; border-radius: 14px; background: transparent; padding: 5px 11px; font-weight: 500; min-height: 18px; }}
+QLabel#muted {{ color: {ink2}; {typeface.TYPE.detail.css} }}
+QToolButton {{ border: none; border-radius: 14px; background: transparent; padding: 5px 11px; font-weight: {weight}; min-height: 18px; }}
 QToolButton:hover {{ background: {hover}; }}
 QToolButton:pressed {{ background: {press}; }}
 QToolButton:focus {{ outline: none; border: 2px solid {GLASS_ACCENT}; padding: 3px 9px; }}

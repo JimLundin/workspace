@@ -19,21 +19,13 @@ def color(shade: Shade) -> QColor:
     return value
 
 
-def face(pixels: float, weight: int = 400, family: str = typeface.FAMILY) -> QFont:
-    """Inter at a pixel size and CSS weight; Qt's 96 logical DPI makes a point 4/3 pixels."""
-    value = QFont(family)
-    value.setPointSizeF(pixels * 0.75)
-    value.setWeight(QFont.Weight(weight))
-    return value
-
-
 @lru_cache(maxsize=32)
-def inter(pixels: int, weight: QFont.Weight, *, tabular: bool = False) -> QFont:
-    """Inter at a whole pixel size, shared and never changed; tabular digits keep a reading's width as it changes."""
+def inter(font: typeface.Font) -> QFont:
+    """The Qt font for `font`, shared and never changed."""
     value = QFont(typeface.FAMILY)
-    value.setPixelSize(pixels)
-    value.setWeight(weight)
-    if tabular:
+    value.setPixelSize(font.pixels)
+    value.setWeight(QFont.Weight(int(font.weight)))
+    if font.tabular:
         value.setFeature(QFont.Tag("tnum"), 1)
     return value
 

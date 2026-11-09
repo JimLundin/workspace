@@ -7,7 +7,8 @@ coordinate, whatever the bar's real sizes are.
 from dataclasses import asdict
 
 from desktop_ui.bar_events import BarSpec
-from desktop_ui.island_layout import Bar, Capsule, Cells, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
+from desktop_ui.components.typeface import Font, Weight
+from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
 from desktop_ui.island_menu import Menu, entries
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_island_menu, test_island_model, test_island_motion
@@ -58,6 +59,7 @@ BASE = Sizes(
         stop_right=5,
         tray_image=20,
     ),
+    type=BarType(reading=Font(11, Weight.MEDIUM), strong=Font(11, Weight.SEMIBOLD), detail=Font(9, Weight.REGULAR)),
 )
 """The test's own sizes, unlike the bar's so a test can't pass on its values."""
 
@@ -75,6 +77,7 @@ def doubled(sizes: Sizes) -> Sizes:
         menu=MenuGrid(**{name: value * 2 for name, value in asdict(sizes.menu).items()}),
         markers=Markers(**{**markers, "dot_count": sizes.markers.dot_count}),
         cells=Cells(**{name: value * 2 for name, value in asdict(sizes.cells).items()}),
+        type=sizes.type,  # Text measures through the test's own widths.
     )
 
 

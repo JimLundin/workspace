@@ -6,15 +6,10 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from desktop_ui.components.appearance import Lettering
-from desktop_ui.components.text import color, inter
+from desktop_ui.components.text import color
 from desktop_ui.qt_runtime import prepare
 
 prepare()
-
-
-def font(*, strong: bool) -> QtGui.QFont:
-    """The bar's reading face: 12 px Inter with tabular digits, so readings keep their width as digits change."""
-    return inter(12, QtGui.QFont.Weight.DemiBold if strong else QtGui.QFont.Weight.Medium, tabular=True)
 
 
 def paint_feedback(  # noqa: PLR0913 - one shape, its corner and the three states it shows, plus the ring's inset

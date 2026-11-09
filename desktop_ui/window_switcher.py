@@ -10,6 +10,7 @@ import winapi.shapes
 from components import SWITCHER_TITLE
 from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens, scheme, tokens
 from desktop_ui.components.text import inter
+from desktop_ui.components.typeface import TYPE
 from desktop_ui.components.widgets import column, glyph, row, surface_style, window_style
 from desktop_ui.qt_runtime import prepare
 
@@ -54,13 +55,13 @@ class _Rows(QtWidgets.QStyledItemDelegate):
             painter.setBrush(QtGui.QColor(GLASS_ACCENT if selected else self.theme.hover.argb))
             painter.drawRoundedRect(bounds, _RADIUS - _INSET, _RADIUS - _INSET)
         text = bounds.adjusted(14, 7, -14, -7)
-        painter.setFont(inter(13, QtGui.QFont.Weight.Medium))
+        painter.setFont(inter(TYPE.title))
         painter.setPen(QtGui.QColor("#ffffff" if selected else self.theme.ink.argb))
-        line = QtGui.QFontMetrics(inter(13, QtGui.QFont.Weight.Medium))
+        line = QtGui.QFontMetrics(inter(TYPE.title))
         painter.drawText(
             text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line.elidedText(title, Qt.TextElideMode.ElideRight, round(text.width()))
         )
-        painter.setFont(inter(11, QtGui.QFont.Weight.Normal))
+        painter.setFont(inter(TYPE.detail))
         painter.setPen(QtGui.QColor(Shade("#ffffff", 0.75).argb if selected else self.theme.ink2.argb))
         painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, detail)
         painter.restore()
@@ -71,11 +72,11 @@ def _style(theme: Tokens) -> str:
         window_style(theme)
         + surface_style(theme, _RADIUS)
         + f"""
-QLineEdit#query {{ background: transparent; border: none; padding: 0; font-size: 19px; }}
+QLineEdit#query {{ background: transparent; border: none; padding: 0; {TYPE.query.css} }}
 QListWidget {{ background: transparent; border: none; outline: none; }}
 QListWidget::item {{ background: transparent; border: none; padding: 0; }}
 QFrame#separator {{ background: {theme.separator.css}; border: none; }}
-QLabel#hint {{ color: {theme.ink3.css}; font-size: 11px; }}
+QLabel#hint {{ color: {theme.ink3.css}; {TYPE.detail.css} }}
 """
     )
 

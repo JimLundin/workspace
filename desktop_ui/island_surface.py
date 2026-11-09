@@ -20,7 +20,7 @@ lazy from PySide6.QtCore import Qt
 
 from components import BAR_WINDOW
 from desktop_ui import island_menu
-from desktop_ui.bar_control import KeyboardFocus, font, paint_feedback
+from desktop_ui.bar_control import KeyboardFocus, paint_feedback
 from desktop_ui.bar_events import Deactivated, Event, Hovered, MenuKey, Picked, Pressed, Selected, TrayClicked, VolumeSet
 from desktop_ui.components import appearance
 from desktop_ui.components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, reading, rim_stops
@@ -313,12 +313,12 @@ class MenuCell(QtWidgets.QAbstractButton):
             case Item(icon=name) if cell.face is Face.TOOL:
                 self.paint_icon(painter, name, lettering.ink, QtCore.QPointF((bounds.width() - icon) / 2, cells.tool_top))
                 painter.setPen(color(lettering.quiet))
-                painter.setFont(inter(11, QtGui.QFont.Weight.Normal))
+                painter.setFont(inter(self.sizes.type.detail))
                 caption = bounds.adjusted(cells.caption_side, 0, -cells.caption_side, -cells.caption_bottom)
                 painter.drawText(caption, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, cell.caption)
             case Item(label=label, icon=name, key=key):
                 self.paint_icon(painter, name, lettering.quiet, QtCore.QPointF(cells.lead, (bounds.height() - icon) / 2))
-                painter.setFont(font(strong=False))
+                painter.setFont(inter(self.sizes.type.reading))
                 painter.setPen(color(lettering.ink))
                 labelled = bounds.adjusted(cells.label_x, 0, -cells.label_right, 0)
                 painter.drawText(labelled, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
@@ -352,16 +352,17 @@ class MenuCell(QtWidgets.QAbstractButton):
     def paint_lines(self, painter: QtGui.QPainter, area: QtCore.QRectF, title: str, detail: str, *, strong: bool) -> None:
         """A title in ink over a quieter detail line, meeting at the cell's middle."""
         lettering, middle = self.capsule.drawn.look.lettering, area.height() / 2
-        painter.setFont(font(strong=strong))
+        text = self.sizes.type
+        painter.setFont(inter(text.strong if strong else text.reading))
         painter.setPen(color(lettering.ink))
         painter.drawText(QtCore.QRectF(area.left(), 0, area.width(), middle + 1), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft, title)
-        painter.setFont(inter(11, QtGui.QFont.Weight.Normal))
+        painter.setFont(inter(text.detail))
         painter.setPen(color(lettering.quiet))
         painter.drawText(QtCore.QRectF(area.left(), middle, area.width(), middle), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, detail)
 
     def paint_slider(self, painter: QtGui.QPainter, slider: Slider) -> None:
         lettering, bounds, cells = self.capsule.drawn.look.lettering, QtCore.QRectF(self.rect()), self.sizes.cells
-        painter.setFont(font(strong=True))
+        painter.setFont(inter(self.sizes.type.strong))
         painter.setPen(color(lettering.ink))
         heading = QtCore.QRectF(cells.lead, cells.slider_label_top, bounds.width() - 2 * cells.lead, cells.slider_label)
         painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, slider.label)
@@ -383,7 +384,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         """An activity card: its glyph, its reading, and its Stop circle."""
         lettering, bounds, cells = self.capsule.drawn.look.lettering, QtCore.QRectF(self.rect()), self.sizes.cells
         paint_dot(painter, color(self.capsule.signal(RED, lettering.ink)), QtCore.QPointF(cells.live_dot_x, bounds.height() / 2), cells.live_dot)
-        detail = QtGui.QFontMetricsF(inter(11, QtGui.QFont.Weight.Normal)).elidedText(
+        detail = QtGui.QFontMetricsF(inter(self.sizes.type.detail)).elidedText(
             activity.detail, Qt.TextElideMode.ElideRight, bounds.width() - cells.live_elide
         )
         area = QtCore.QRectF(cells.live_text_x, 0, bounds.width() - cells.live_text_x - cells.live_text_right, bounds.height())
@@ -610,7 +611,7 @@ class Capsule(KeyboardFocus):
         capsule, markers = sizes.capsule, sizes.markers
         match spot.part:
             case Text(text=text, tone=tone):
-                painter.setFont(font(strong=False))
+                painter.setFont(inter(sizes.type.reading))
                 painter.setPen(color(reading(lettering, tone, contrast=self.contrast)))
                 row = QtCore.QRectF(spot.x, sizes.bar.top, spot.width + 1, capsule.height)
                 painter.drawText(row, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
@@ -730,7 +731,7 @@ class BarWindow(QtWidgets.QWidget):
 
     def measure(self, view: CapsuleView) -> Content:
         def width(text: Text) -> float:
-            return math.ceil(QtGui.QFontMetricsF(font(strong=False)).horizontalAdvance(text.text))
+            return math.ceil(QtGui.QFontMetricsF(inter(self.sizes.type.reading)).horizontalAdvance(text.text))
 
         return arrange(view.slots, width, self.sizes)
 

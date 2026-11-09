@@ -16,7 +16,8 @@ lazy from PySide6.QtCore import Qt
 from cell import Cell
 from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Look, Rim, Scheme, Shade, SolidLook, look, rim_stops
 from desktop_ui.components.meaning import Tint
-from desktop_ui.components.text import color, face, outline, paint_capsule
+from desktop_ui.components.text import color, inter, outline, paint_capsule
+from desktop_ui.components.typeface import TYPE
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.key_hints import ActionCap, AppCap, Badge, DirectionCap, Keycap
 from desktop_ui.navigation import Direction
@@ -163,16 +164,16 @@ class BadgeWindow(QtWidgets.QWidget):
 
     def draw(self, keycaps: tuple[Keycap, ...], look: Style) -> None:
         self.keycaps, self.look = keycaps, look
-        self.resize(badge_width(keycaps, QtGui.QFontMetricsF(face(12, 500))), HEIGHT)
+        self.resize(badge_width(keycaps, QtGui.QFontMetricsF(inter(TYPE.label))), HEIGHT)
         self.update()
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        painter.setFont(face(12, 500))
+        painter.setFont(inter(TYPE.label))
         paint_surface(painter, QtCore.QRectF(self.rect()), self.look.surface)
-        metrics = QtGui.QFontMetricsF(face(12, 500))
+        metrics = QtGui.QFontMetricsF(inter(TYPE.label))
         left = (HEIGHT - CAP) / 2
         for keycap in self.keycaps:
             width = keycap_width(keycap, metrics)

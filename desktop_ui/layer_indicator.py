@@ -10,6 +10,7 @@ from winapi import windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import GLASS_ACCENT, scheme, tokens
 lazy from desktop_ui.components.controls import label
+lazy from desktop_ui.components.typeface import TYPE
 lazy from desktop_ui.components.widgets import device_size, row, surface, tool_window, window_style
 lazy from desktop_ui.qt_ui import cancel, later
 
@@ -53,7 +54,7 @@ class Indicator:
             self._window.hide()
             return
         self._label.setText(text)
-        self._label.setStyleSheet(f"color: {colour}; font-size: 13px; font-weight: 500;")
+        self._label.setStyleSheet(f"color: {colour}; {TYPE.title.css}")
         self._window.adjustSize()
         size = device_size(self._window, self._window.devicePixelRatioF())
         x, y = work.left + (work.width - size.width) // 2, work.bottom - size.height - 28

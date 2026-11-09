@@ -13,9 +13,9 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui.bar_control import KeyboardFocus, font
+from desktop_ui.bar_control import KeyboardFocus
 from desktop_ui.components.appearance import Look
-from desktop_ui.components.text import color, outline, paint_capsule
+from desktop_ui.components.text import color, inter, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
 from desktop_ui.island_layout import Capsule, Sizes, on_pixels
 from desktop_ui.navigation import JumpDesktop, Navigation
@@ -88,7 +88,8 @@ class ShellButton(KeyboardFocus):
                 self.pictures = tuple(pixmap(each) if isinstance(each, Pixels) else None for each in icons)
                 width = control + STACK_STEP * (len(icons) - 1)
             case str() as text:
-                width = max(control, math.ceil(QtGui.QFontMetricsF(font(strong=False)).horizontalAdvance(text)) + 2 * face_inset(capsule))
+                advance = QtGui.QFontMetricsF(inter(pager.sizes.type.reading)).horizontalAdvance(text)
+                width = max(control, math.ceil(advance) + 2 * face_inset(capsule))
             case _:
                 assert_never(target.face)
         self.setFixedSize(width, control)
@@ -173,7 +174,7 @@ class ShellButton(KeyboardFocus):
                         case _:
                             assert_never(each)
             case str() as text:
-                painter.setFont(font(strong=False))
+                painter.setFont(inter(self.pager.sizes.type.reading))
                 painter.setPen(color(lettering.ink))
                 painter.drawText(QtCore.QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, text)
             case _:

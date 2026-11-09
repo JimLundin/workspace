@@ -5,6 +5,8 @@ Regular, Medium, SemiBold and Bold cuts ship in desktop_ui/fonts under the SIL O
 Font License 1.1 (desktop_ui/fonts/OFL.txt).
 """
 
+from dataclasses import dataclass, field
+from enum import IntEnum
 from pathlib import Path
 from typing import Final
 
@@ -18,6 +20,69 @@ prepare()
 FAMILY: Final = "Inter"
 FONTS: Final = Path(__file__).resolve().parent.parent / "fonts"
 CUTS: Final = ("Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "Inter-Bold.ttf")
+
+
+class Weight(IntEnum):
+    """A cut, by its CSS weight."""
+
+    REGULAR = 400
+    MEDIUM = 500
+    SEMIBOLD = 600
+
+
+@dataclass(frozen=True, slots=True)
+class Font:
+    """Inter at a whole pixel size and weight."""
+
+    pixels: int
+    weight: Weight
+    tabular: bool = field(default=False, kw_only=True)
+    """Tabular digits, so a reading keeps its width as its digits change."""
+
+    @property
+    def css(self) -> str:
+        return f"font-size: {self.pixels}px; font-weight: {int(self.weight)};"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TypeScale:
+    """Every size and weight of text Workspace draws."""
+
+    reading: Font
+    """The bar's readings and labels."""
+    strong: Font
+    """A reading that leads, such as an activity card's title."""
+    detail: Font
+    """A quieter second line, caption or hint."""
+    body: Font
+    """Dialog and window text."""
+    title: Font
+    """A window's row titles, buttons and the layer indicator."""
+    label: Font
+    """Small controls: segmented choices and key-hint badges."""
+    query: Font
+    """The window switcher's search field."""
+    keycap_name: Font
+    """A key map key's physical name and hold, before the key map's scale."""
+    keycap: Font
+    """A key map key's legend..."""
+    keycap_long: Font
+    """...and one longer than five characters."""
+
+
+TYPE: Final = TypeScale(
+    reading=Font(12, Weight.MEDIUM, tabular=True),
+    strong=Font(12, Weight.SEMIBOLD, tabular=True),
+    detail=Font(11, Weight.REGULAR),
+    body=Font(13, Weight.REGULAR),
+    title=Font(13, Weight.MEDIUM),
+    label=Font(12, Weight.MEDIUM),
+    query=Font(19, Weight.REGULAR),
+    keycap_name=Font(10, Weight.REGULAR),
+    keycap=Font(15, Weight.SEMIBOLD),
+    keycap_long=Font(12, Weight.SEMIBOLD),
+)
+"""Workspace's type scale; each surface reads its sizes from here or from what its owner passes in."""
 
 
 def load() -> None:

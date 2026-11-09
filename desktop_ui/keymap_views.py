@@ -16,6 +16,7 @@ from winapi.shapes import Offset, Point, Rect, Size
 lazy from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.text import inter
+lazy from desktop_ui.components.typeface import TYPE, Font
 lazy from desktop_ui.components.widgets import (
     Window,
     column,
@@ -134,18 +135,17 @@ class KeymapCanvas(QtWidgets.QWidget):
             painter.setBrush(QtGui.QColor(fill))
             corner = max(4.0, 9 * self.scale)
             painter.drawRoundedRect(bounds.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner)
-            small = inter(max(8, round(10 * self.scale)), QtGui.QFont.Weight.Normal)
+            named = TYPE.keycap_name
+            small = inter(Font(max(8, round(named.pixels * self.scale)), named.weight))
             painter.setFont(small)
             painter.setPen(QtGui.QColor(ink if pressed else self.theme.ink3.argb))
             painter.drawText(bounds.adjusted(5 * self.scale, 3 * self.scale, -3, -3), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, name)
             # Long labels shrink until they fit their key.
-            size = round((15 if len(cap.label) <= 5 else 12) * self.scale)
-            while (
-                size > 7
-                and QtGui.QFontMetricsF(inter(size, QtGui.QFont.Weight.DemiBold)).horizontalAdvance(cap.label) > bounds.width() - 6 * self.scale
-            ):
+            legend = TYPE.keycap if len(cap.label) <= 5 else TYPE.keycap_long
+            size = round(legend.pixels * self.scale)
+            while size > 7 and QtGui.QFontMetricsF(inter(Font(size, legend.weight))).horizontalAdvance(cap.label) > bounds.width() - 6 * self.scale:
                 size -= 1
-            painter.setFont(inter(max(7, size), QtGui.QFont.Weight.DemiBold))
+            painter.setFont(inter(Font(max(7, size), legend.weight)))
             painter.setPen(QtGui.QColor(ink))
             painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, cap.label)
             painter.setFont(small)

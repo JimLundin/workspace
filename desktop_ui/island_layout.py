@@ -16,6 +16,7 @@ from itertools import chain
 from operator import add
 from typing import Final, assert_never
 
+from desktop_ui.components.typeface import TYPE, Font
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
 from desktop_ui.island_model import Control, Glyph, Key, Marker, Part, Slot, Text, Zone
 from winapi.shapes import Rect
@@ -158,6 +159,15 @@ class Cells:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class BarType:
+    """The bar's text: readings, a leading reading, and quieter detail."""
+
+    reading: Font
+    strong: Font
+    detail: Font
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Sizes:
     """Every size the island bar lays out and paints."""
 
@@ -166,6 +176,7 @@ class Sizes:
     menu: MenuGrid
     markers: Markers
     cells: Cells
+    type: BarType
 
 
 SIZES: Final = Sizes(
@@ -214,6 +225,7 @@ SIZES: Final = Sizes(
         stop_right=6,
         tray_image=22,
     ),
+    type=BarType(reading=TYPE.reading, strong=TYPE.strong, detail=TYPE.detail),
 )
 
 
