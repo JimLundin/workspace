@@ -30,7 +30,21 @@ class KeyCode:
     extended: bool = field(default=False, kw_only=True)
 
 
-class Key(Enum):
+class VirtualKey(Enum):
+    """A key Windows is sent, by its `KeyCode`. Members live on the `Key` and `Mod` subclasses."""
+
+    _value_: KeyCode
+
+    @property
+    def vk(self) -> int:
+        return self.value.vk
+
+    @property
+    def extended(self) -> bool:
+        return self.value.extended
+
+
+class Key(VirtualKey):
     """A Windows virtual key the layout sends."""
 
     A = KeyCode(0x41, "a", "A")
@@ -99,14 +113,6 @@ class Key(Enum):
     MENU_MASK = KeyCode(0xE8)
     """Unassigned, so applications ignore it."""
 
-    @property
-    def vk(self) -> int:
-        return self.value.vk
-
-    @property
-    def extended(self) -> bool:
-        return self.value.extended
-
     def typed(self, *, shifted: bool) -> str | None:
         """What the key types, or None for keys that don't type (arrows, Enter...)."""
         return self.value.shifted if shifted else self.value.plain
@@ -119,21 +125,13 @@ class Key(Enum):
         return Key.N0.vk <= self.vk <= Key.N9.vk or self in (Key.BACKSPACE, Key.DELETE)
 
 
-class Mod(Enum):
+class Mod(VirtualKey):
     """The left-hand modifier keys."""
 
     GUI = KeyCode(0x5B, extended=True)
     ALT = KeyCode(0xA4)
     CTRL = KeyCode(0xA2)
     SHIFT = KeyCode(0xA0)
-
-    @property
-    def vk(self) -> int:
-        return self.value.vk
-
-    @property
-    def extended(self) -> bool:
-        return self.value.extended
 
 
 class Layer(Enum):
