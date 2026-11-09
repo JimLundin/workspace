@@ -7,11 +7,11 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import winapi.shapes
+from components import SWITCHER_TITLE
 from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens, scheme, tokens
 from desktop_ui.components.text import inter
 from desktop_ui.components.widgets import column, glyph, row, surface_style, window_style
 from desktop_ui.qt_runtime import prepare
-from protocol import SWITCHER_TITLE
 
 prepare()
 

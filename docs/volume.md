@@ -6,42 +6,41 @@ lines are code lines. Product code averages 6.0 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 81,356 | 13,640 |
-| **support** | 54,003 | 8,011 |
+| **product** | 81,349 | 13,608 |
+| **support** | 54,425 | 8,042 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 41,805 | 6,981 |
-| tests | 38,991 | 5,631 |
-| winapi | 19,567 | 3,285 |
-| scripts | 11,013 | 1,628 |
-| keyboard | 8,722 | 1,393 |
-| assistant | 6,982 | 1,198 |
+| desktop_ui | 41,815 | 6,961 |
+| tests | 38,964 | 5,612 |
+| winapi | 19,649 | 3,306 |
+| scripts | 11,462 | 1,678 |
+| keyboard | 8,637 | 1,361 |
+| assistant | 6,983 | 1,198 |
 | typings | 3,999 | 752 |
 | contracts | 1,609 | 305 |
-| (top level) | 1,573 | 284 |
-| gateway | 1,067 | 186 |
+| (top level) | 1,560 | 283 |
+| gateway | 1,065 | 186 |
 | desktop | 31 | 8 |
 
 The 25 largest files:
 
 | file | nodes | lines |
 |---|---:|---:|
-| `scripts/architecture.py` | 5,669 | 815 |
+| `scripts/architecture.py` | 6,131 | 865 |
 | `desktop_ui/island_surface.py` | 5,322 | 674 |
-| `tests/test_keyboard_hook.py` | 3,899 | 489 |
-| `keyboard/win.py` | 3,677 | 611 |
-| `tests/test_engine.py` | 3,597 | 597 |
+| `tests/test_keyboard_hook.py` | 3,961 | 477 |
+| `keyboard/win.py` | 3,640 | 594 |
+| `tests/test_engine.py` | 3,437 | 569 |
 | `tests/test_meetings.py` | 3,106 | 474 |
 | `assistant/meetings.py` | 2,738 | 456 |
 | `desktop_ui/desktop_bar.py` | 2,333 | 421 |
 | `desktop_ui/keymap_views.py` | 2,330 | 330 |
-| `keyboard/engine.py` | 2,270 | 366 |
+| `keyboard/engine.py` | 2,147 | 336 |
 | `desktop_ui/application_observer.py` | 2,086 | 343 |
-| `keyboard/layout.py` | 2,085 | 283 |
 | `desktop_ui/island_menu.py` | 2,050 | 339 |
-| `desktop_ui/desktop_control.py` | 2,004 | 427 |
-| `desktop_ui/desktop_app.py` | 1,950 | 381 |
+| `desktop_ui/desktop_control.py` | 2,006 | 427 |
+| `desktop_ui/desktop_app.py` | 1,956 | 381 |
 | `desktop_ui/bar_events.py` | 1,864 | 390 |
 | `winapi/audio.py` | 1,826 | 277 |
 | `tests/test_meeting_audio.py` | 1,795 | 226 |
@@ -52,3 +51,4 @@ The 25 largest files:
 | `winapi/recording.py` | 1,696 | 257 |
 | `tests/test_microphone.py` | 1,689 | 300 |
 | `desktop_ui/window_layout.py` | 1,634 | 199 |
+| `assistant/meeting_store.py` | 1,596 | 252 |

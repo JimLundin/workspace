@@ -21,9 +21,9 @@ from typing import Final, Protocol
 from assistant.llm import Failure, Settings, transcribe, wav
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from cell import Cell
+from components import DIRECTORY
 from contracts.capture import AudioSource
 from contracts.recording_state import SOURCE_NAMES, Exhausted, Phase, Publication, RecordingState, RetryPolicy, capture_report, published
-from diagnostics import DIRECTORY
 from winapi.pcm import RATE, Problem
 
 

@@ -19,10 +19,10 @@ from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from assistant.meeting_store import MeetingArchive
 from assistant.meetings import Meetings
+from components import DIRECTORY
 from contracts.recording_state import RecordingAction
 from contracts.status import State
 from desktop_ui.desktop_control import Event, JobChanged, Notified, Problem, RecordingChanged, ShowVoice, idle_state
-from diagnostics import DIRECTORY
 from winapi import audio, recording, system
 from winapi.pcm import RATE
 

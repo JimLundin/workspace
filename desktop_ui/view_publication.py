@@ -3,7 +3,7 @@
 from typing import Final
 
 import diagnostics
-from diagnostics import DIRECTORY
+from components import DIRECTORY
 
 LOG: Final = DIRECTORY / "desktop.log"
 

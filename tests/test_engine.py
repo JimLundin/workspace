@@ -5,11 +5,9 @@ import unittest
 from dataclasses import replace
 from typing import override
 
+from keyboard import engine
 from keyboard.engine import (
-    DEFAULT_CONFIGURATION,
     MAX_BUFFERED,
-    Configuration,
-    Engine,
     EngineState,
     Indicator,
     Modifiers,
@@ -17,20 +15,14 @@ from keyboard.engine import (
     Verdict,
 )
 from keyboard.layout import (
-    ESCAPE,
-    FUNCTION_KEYS,
-    QUICK_TAP_MS,
-    QUIT_HOLD_MS,
-    STREAK_MS,
     Action,
     Chord,
     Key,
     Layer,
     Mod,
     Scancode,
-    TapHold,
-    slot,
 )
+from keyboard.settings import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS
 from protocol import LayoutState, Request, Tool
 
 NAMES = {0xA0: "SFT", 0xA2: "CTL", 0xA4: "ALT", 0x20: "spc", 0x25: "left", 0x08: "bksp", 0xDB: "[", 0xC0: "`", 0xBE: "."}
@@ -94,33 +86,32 @@ class FakeHost:
 class Harness:
     """Holds the engine's state between calls, as the keyboard hook does."""
 
-    __slots__ = ("e", "h", "now", "state")
+    __slots__ = ("h", "now", "state")
 
-    def __init__(self, configuration: Configuration = DEFAULT_CONFIGURATION) -> None:
-        self.e = Engine(configuration=configuration)
+    def __init__(self) -> None:
         self.h = FakeHost()
         self.now = 0
         self.state = EngineState()
 
     def key(self, scancode: Scancode, *, down: bool, now: int) -> Verdict:
-        self.state, verdict = self.e.on_key(self.state, self.h, scancode, down=down, now=now)
+        self.state, verdict = engine.on_key(self.state, self.h, scancode, down=down, now=now)
         return verdict
 
     def release_all(self) -> None:
         try:
-            self.state = self.e.release_all(self.state, self.h)
+            self.state = engine.release_all(self.state, self.h)
         except UnreleasedError as error:
             self.state = error.state
             raise
 
     def toggle(self) -> None:
-        self.state = self.e.toggle(self.state, self.h)
+        self.state = engine.toggle(self.state, self.h)
 
     def press(self, action: Action, now: int) -> None:
-        self.state = self.e.press(self.state, self.h, action, now)
+        self.state = engine.press(self.state, self.h, action, now)
 
     def release(self, action: Action) -> None:
-        self.state = self.e.release(self.state, self.h, action)
+        self.state = engine.release(self.state, self.h, action)
 
     def at(self, ms: int) -> Harness:
         self.now = ms
@@ -138,7 +129,7 @@ class Harness:
 
     def timeout_last(self) -> None:
         """Fire the most recently started timer."""
-        self.state = self.e.timeout(self.state, self.h, self.h.timer)
+        self.state = engine.timeout(self.state, self.h, self.h.timer)
 
     def take(self) -> str:
         log, self.h.log = self.h.log, []
@@ -231,7 +222,7 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
     pressed = (Key.A, Key.B, Mod.SHIFT, Tool.DICTATE, *state.pressed[4:])
     state = replace(state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), active_layers=(Layer.NAV,))
     with unittest.TestCase().assertRaises(UnreleasedError) as refused:
-        Engine().release_all(state, host)
+        engine.release_all(state, host)
     assert host.log == ["-a", "-b", "-SFT", "?dictate-"]
     cleared = refused.exception.state
     assert not cleared.mods.counts
@@ -371,9 +362,10 @@ def test_streak_expires() -> None:
     assert t.take() == "+ALT +j -j -ALT"
 
 
-def test_each_engine_uses_its_configured_timing_boundaries() -> None:
-    for milliseconds, elapsed, letter in ((0, 0, False), (1, 0, True), (1, 1, False)):
-        t = Harness(replace(DEFAULT_CONFIGURATION, streak_ms=milliseconds))
+def test_the_typing_streak_ends_exactly_at_its_boundary() -> None:
+    # Defect: an off-by-one makes a home row mod a letter at the boundary, or a modifier just inside it.
+    for elapsed, letter in ((STREAK_MS - 1, True), (STREAK_MS, False)):
+        t = Harness()
         t.at(0).tap("t")
         t.take()
         t.at(elapsed).d("w")
@@ -383,16 +375,6 @@ def test_each_engine_uses_its_configured_timing_boundaries() -> None:
             assert t.take() == "+ALT"
         t.u("w")
         assert t.take() == ("-r" if letter else "-ALT")
-    t = Harness(replace(DEFAULT_CONFIGURATION, quick_tap_ms=0, quit_hold_ms=1))
-    t.tap("r")
-    t.take()
-    t.d("r")
-    assert t.take() == "", "Disabling quick tap must allow the repeated key to become a hold."
-    t.timeout_last()
-    t.u("r")
-    assert t.take() == "+SFT -SFT"
-    t.key(ESC, down=True, now=0)
-    assert t.key(ESC, down=False, now=1) is Verdict.QUIT
 
 
 def test_streak_never_blocks_shift() -> None:
@@ -649,19 +631,11 @@ def test_releasing_one_of_two_ctrl_keys_keeps_ctrl() -> None:
 # ---- chords ---------------------------------------------------------------------------
 
 
-def test_tap_hold_chords_release_only_the_modifiers_they_added() -> None:
-    redo = TapHold(Chord(Key.Z, frozenset({Mod.CTRL, Mod.SHIFT})), Layer.SYM)
-    cell = slot(sc("2"))
-    assert isinstance(cell, int)
-    row = list(DEFAULT_CONFIGURATION.actions[None])
-    row[cell] = redo
-    t = Harness(replace(DEFAULT_CONFIGURATION, actions={**DEFAULT_CONFIGURATION.actions, None: tuple(row)}))
-    t.press(Mod.CTRL, 0)
-    assert t.take() == "+CTL"
-    t.tap("2")
-    assert t.take() == "+SFT +z -SFT -z"
-    t.release(Mod.CTRL)
-    assert t.take() == "-CTL"
+def test_chords_release_only_the_modifiers_they_added() -> None:
+    # Defect: a chord sent while Ctrl is held releases Ctrl too, or leaves Shift down.
+    host = FakeHost()
+    Modifiers(frozendict({Mod.CTRL: 1})).chord(host, Chord(Key.Z, frozenset({Mod.CTRL, Mod.SHIFT})))
+    assert " ".join(host.log) == "+SFT +z -SFT"
 
 
 def test_overlapping_layers_release_the_most_recent_copy_and_preserve_other_layers() -> None:

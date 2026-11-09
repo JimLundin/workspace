@@ -2,7 +2,7 @@
 
 Run with the same interpreter before and after a keyboard change. Use --root to
 select a saved source tree. Native hook/SendInput latency and OS scheduling need
-separate desktop measurements; this measures Engine.on_key and tap-hold timers.
+separate desktop measurements; this measures engine.on_key and tap-hold timers.
 """
 
 import argparse
@@ -19,7 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
-lazy from keyboard.engine import Engine, EngineState, Indicator
+lazy from keyboard import engine
+lazy from keyboard.engine import EngineState, Indicator
 lazy from keyboard.layout import Key, Mod, Scancode
 lazy from protocol import LayoutState, Request
 
@@ -92,11 +93,10 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
     events = tuple((Scancode(key), down, index * 20) for index in range(count) for key, down in (pattern[index % len(pattern)],))
     host = Host()
     measurements, collections, pauses = measure_latencies(host, events, rounds)
-    engine = Engine()
     gc.collect()
     tracemalloc.start()
     try:
-        play(engine, host, events)
+        play(host, events)
         retained, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -182,7 +182,7 @@ def measure_latencies(
 
     gc.enable()
     # Warm up adaptive bytecode and tables before collecting latency samples.
-    play(Engine(), host, events[:1000])
+    play(host, events[:1000])
     measurements = tuple(round_latencies(host, events, rounds, observe_gc))
     return measurements, tuple(collections), tuple(pauses)
 
@@ -197,7 +197,7 @@ def round_latencies(
     # One preallocated buffer, written in place, so the timed loop never allocates a sample.
     latencies = array("Q", [0]) * len(events)
     for _ in range(rounds):
-        engine, state = Engine(), EngineState()
+        state = EngineState()
         gc.collect()
         gc.callbacks.append(observe_gc)
         try:
@@ -222,7 +222,7 @@ def round_latencies(
         )
 
 
-def play(engine: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> EngineState:
+def play(host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> EngineState:
     """The engine's state after `events`, from a fresh start."""
     state = EngineState()
     for key, down, now in events:

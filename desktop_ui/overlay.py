@@ -8,8 +8,8 @@ from typing import Final
 
 from pydantic import StrictBool, TypeAdapter
 
+from components import DIRECTORY
 from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
-from diagnostics import DIRECTORY
 from keyboard.layout import Layer, Scancode
 from winapi.shapes import Point, Rect, Size
 

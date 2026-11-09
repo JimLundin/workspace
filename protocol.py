@@ -6,36 +6,67 @@ to send, and need no admin rights. Plain Python: importable anywhere.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Final, Literal
 
-LAYOUT_MAGIC: Final = 0x4D49_5250
-"""Layout output: the hook lets its own injected keys through untouched."""
 
-MAGIC: Final = 0x4D49_524F
-"""Tags input the workspace sends, so the layout's hook lets it through untouched."""
+class Origin(IntEnum):
+    """Who sent an injected key, carried in its extra information so the layout's hook lets it through untouched."""
 
-SWITCHER_TITLE: Final = "Workspace window switcher"
-"""The desktop's window switcher; the layout passes Esc, Enter and Tab to it while it has focus."""
+    LAYOUT = 0x4D49_5250
+    """The layout's own output."""
+    DESKTOP = 0x4D49_524F
+    """Text the desktop types, such as dictation."""
 
 
-_WM_APP: Final = 0x8000
-WM_REQUEST: Final = _WM_APP + 1
-"""Layout -> desktop: a key went down (lparam 1) or up (lparam 0); wparam is `encode(request)`."""
-WM_LAYOUT_STATE: Final = _WM_APP + 2
-"""Layout -> desktop: wparam is a `LayoutState` value."""
-# _WM_APP + 3 is `components.WM_QUIT_LAYOUT` (keeper -> layout).
-WM_INDICATOR: Final = _WM_APP + 4
-"""Layout -> desktop: what the layer indicator shows; wparam is `encode_indicator(...)`."""
-WM_TOGGLE_LAYOUT: Final = _WM_APP + 5
-"""Desktop -> layout: toggle on/off, as if the escape key was tapped."""
-WM_QUERY_LAYOUT_STATE: Final = _WM_APP + 6
-"""Desktop -> layout: reply with the layout, layer and physically held keys."""
-WM_KEY_STATE: Final = _WM_APP + 7
-"""Layout -> desktop: physical scancode in wparam, down/up in lparam (1/0).
-Scancode 0 clears the held keys, before a state replay or when the layout stops."""
-WM_CHORD: Final = _WM_APP + 8
-"""Layout -> desktop: wparam is 1 while either keyboard holds its Apps key, else 0."""
+class Message(IntEnum):
+    """The window messages the programs send each other's control windows."""
+
+    CLOSE = 0x0010
+    """Windows' own WM_CLOSE: the gateway and the desktop take it as quit."""
+    REQUEST = 0x8000 + 1
+    """Layout -> desktop: a key went down (lparam 1) or up (lparam 0); wparam is `encode(request)`."""
+    LAYOUT_STATE = 0x8000 + 2
+    """Layout -> desktop: wparam is a `LayoutState` value."""
+    QUIT_LAYOUT = 0x8000 + 3
+    """Launcher -> layout: release held keys, then exit cleanly."""
+    INDICATOR = 0x8000 + 4
+    """Layout -> desktop: what the layer indicator shows; wparam is `encode_indicator(...)`."""
+    TOGGLE_LAYOUT = 0x8000 + 5
+    """Desktop -> layout: toggle on/off, as if the escape key was tapped."""
+    QUERY_LAYOUT_STATE = 0x8000 + 6
+    """Desktop -> layout: reply with the layout, layer and physically held keys."""
+    KEY_STATE = 0x8000 + 7
+    """Layout -> desktop: physical scancode in wparam, down/up in lparam (1/0).
+    Scancode 0 clears the held keys, before a state replay or when the layout stops."""
+    CHORD = 0x8000 + 8
+    """Layout -> desktop: wparam is 1 while either keyboard holds its Apps key, else 0."""
+
+
+type Component = Literal["gateway", "layout", "desktop"]
+
+
+@dataclass(frozen=True, slots=True)
+class Window:
+    """The hidden control window a program creates; other processes find it by title."""
+
+    title: str
+    window_class: str | None
+    """None matches any class: the program uses a system class, not its own."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Entry:
+    """A program the launcher starts, stops and restarts."""
+
+    name: Component
+    module: str
+    """Started as `python -m <module>`."""
+    window: Window
+    quit_message: Message
+    """Posted to `window` to ask for a clean exit; the layout lets go of held keys first."""
+    shutdown_s: float
+    """How long the launcher waits for a clean exit before ending the process."""
 
 
 class LayoutState(Enum):

@@ -82,7 +82,11 @@ _SendInput = fn(user32, "SendInput", wintypes.UINT, wintypes.UINT, ctypes.POINTE
 _MapVirtualKeyW = fn(user32, "MapVirtualKeyW", wintypes.UINT, wintypes.UINT, wintypes.UINT)
 
 LLKHF_EXTENDED, LLKHF_INJECTED = 0x01, 0x10
-KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, KEYEVENTF_SCANCODE = 0x0001, 0x0002, 0x0004, 0x0008
+_KEYEVENTF_EXTENDEDKEY, _KEYEVENTF_KEYUP, _KEYEVENTF_UNICODE, _KEYEVENTF_SCANCODE = 0x0001, 0x0002, 0x0004, 0x0008
+_KEY_DOWNS: Final = frozenset({0x0100, 0x0104})
+"""WM_KEYDOWN and WM_SYSKEYDOWN."""
+_KEY_UPS: Final = frozenset({0x0101, 0x0105})
+"""WM_KEYUP and WM_SYSKEYUP."""
 _WH_KEYBOARD_LL: Final = 13
 _INPUT_KEYBOARD: Final = 1
 _MAPVK_VK_TO_VSC: Final = 0
@@ -101,6 +105,21 @@ class KeyEvent:
     flags: int
     time: int
     extra: int
+
+    @property
+    def extended(self) -> bool:
+        """An extended key (arrows, the right-hand modifiers, numpad Enter...), which shares a scancode with a plain one."""
+        return bool(self.flags & LLKHF_EXTENDED)
+
+    @property
+    def injected(self) -> bool:
+        """Sent by a program, not typed on a keyboard."""
+        return bool(self.flags & LLKHF_INJECTED)
+
+
+def transition(wparam: int) -> bool | None:
+    """What a low-level keyboard hook message is: True for a key going down, False for up, None for neither."""
+    return True if wparam in _KEY_DOWNS else False if wparam in _KEY_UPS else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,13 +170,15 @@ def _send(events: Sequence[INPUT]) -> int:
     return sent
 
 
-def send_key(vk: int, scancode: int, flags: int, extra: int) -> None:
-    _send([_key(vk, scancode, flags, extra)])
+def send_key(vk: int, *, down: bool, extended: bool, extra: int) -> None:
+    """One key, with the scancode some programs read, from Windows' own layout table."""
+    flags = (0 if down else _KEYEVENTF_KEYUP) | (_KEYEVENTF_EXTENDEDKEY if extended else 0)
+    _send([_key(vk, scancode_for(vk), flags, extra)])
 
 
 def send_scancodes(strokes: Sequence[tuple[int, bool]], extra: int) -> None:
     """Physical keys by scancode, as a keyboard would send them (used by tests)."""
-    _send([_key(0, code, KEYEVENTF_SCANCODE | (0 if down else KEYEVENTF_KEYUP), extra) for code, down in strokes])
+    _send([_key(0, code, _KEYEVENTF_SCANCODE | (0 if down else _KEYEVENTF_KEYUP), extra) for code, down in strokes])
 
 
 def type_text(text: str, extra: int) -> None:
@@ -167,8 +188,8 @@ def type_text(text: str, extra: int) -> None:
         event
         for i, line in enumerate(text.split("\n"))
         for event in chain(
-            (_key(_VK_RETURN, enter, flags, extra) for flags in ((0, KEYEVENTF_KEYUP) if i else ())),
-            (_key(0, unit, KEYEVENTF_UNICODE | up, extra) for unit in utf16_units(line) for up in (0, KEYEVENTF_KEYUP)),
+            (_key(_VK_RETURN, enter, flags, extra) for flags in ((0, _KEYEVENTF_KEYUP) if i else ())),
+            (_key(0, unit, _KEYEVENTF_UNICODE | up, extra) for unit in utf16_units(line) for up in (0, _KEYEVENTF_KEYUP)),
         )
     )
     if events:

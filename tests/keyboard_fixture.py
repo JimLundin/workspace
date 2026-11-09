@@ -3,11 +3,11 @@
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
-from components import DESKTOP, Window
+from components import DESKTOP
 from diagnostics import Detail
 from keyboard.layout import Key, Mod, Scancode
 from keyboard.win import Keyboard
-from protocol import WM_REQUEST
+from protocol import Message, Window
 from winapi import inputs, system
 
 
@@ -88,7 +88,7 @@ SPACEBAR, N_KEY, B_KEY = Scancode(0x39), Scancode(0x31), Scancode(0x30)
 
 def hook_key(keyboard: Keyboard, driver: KeyboardFixture, scancode: Scancode, *, down: bool, at: int) -> int:
     driver.key = inputs.KeyEvent(0, scancode, 0, at, 0)
-    return keyboard.hook_proc(0, system.WM_KEYDOWN if down else system.WM_KEYUP, 0)
+    return keyboard.hook_proc(0, system.WindowMessage.KEYDOWN if down else system.WindowMessage.KEYUP, 0)
 
 
 def hold_apps(keyboard: Keyboard, *, at: int) -> None:
@@ -133,4 +133,4 @@ DICTATE_LETTER = inputs.KeyEvent(0x48, 0x23, 0, 10, 0)  # H
 
 
 def requests_of(driver: KeyboardFixture) -> list[tuple[int, int]]:
-    return [(wparam, lparam) for message, wparam, lparam in driver.messages if message == WM_REQUEST]
+    return [(wparam, lparam) for message, wparam, lparam in driver.messages if message == Message.REQUEST]

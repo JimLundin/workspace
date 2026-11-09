@@ -27,6 +27,7 @@ import protocol
 import winapi.shapes
 from assistant.llm import settings_from
 from cell import Cell
+from components import DIRECTORY
 from config import APPS
 from desktop_ui import bar_events
 from desktop_ui.desktop_control import (
@@ -80,8 +81,7 @@ from desktop_ui.qt_runtime import prepare
 from desktop_ui.tray import Tray
 from desktop_ui.view_publication import log
 from desktop_ui.voice import Voice
-from diagnostics import DIRECTORY
-from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_QUERY_LAYOUT_STATE, WM_REQUEST
+from protocol import Message
 from winapi import screen, shell, system, windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
@@ -96,8 +96,8 @@ lazy from desktop_ui.window_switcher import WindowSwitcher
 prepare()
 
 LOCK_NAME: Final = "Local\\workspace-desktop"
-WM_TRAY: Final = system.WM_APP + 20
-WM_EVENTS: Final = system.WM_APP + 22
+WM_TRAY: Final = system.WindowMessage.APP + 20
+WM_EVENTS: Final = system.WindowMessage.APP + 22
 """Any thread -> Qt thread: events are waiting in the inbox."""
 CAPTURE_TIMER_MS: Final = 1000
 """How often the control window checks a voice capture against its time limit."""
@@ -113,19 +113,19 @@ def window_event(message: int, wparam: int, lparam: int) -> Event | None:
     """What a message to the control window reports."""
     if message == shell.TASKBAR_CREATED:
         return RestoreTray()
-    if message == WM_TRAY and lparam in (system.WM_LBUTTONUP, system.WM_RBUTTONUP):
+    if message == WM_TRAY and lparam in (system.WindowMessage.LBUTTONUP, system.WindowMessage.RBUTTONUP):
         return MenuRequested()
-    if message in (WM_KEY_STATE, WM_REQUEST):
+    if message in (Message.KEY_STATE, Message.REQUEST):
         return Controlled(control_event(message, wparam, lparam, APPS))
-    if message == WM_INDICATOR:
+    if message == Message.INDICATOR:
         return Indicated(wparam)
-    if message == WM_LAYOUT_STATE:
+    if message == Message.LAYOUT_STATE:
         return LayoutReported(wparam)
-    if message == WM_CHORD:
+    if message == Message.CHORD:
         return Chord(held=bool(wparam))
-    if message == system.WM_TIMER:  # the capture timer, the control window's only timer
+    if message == system.WindowMessage.TIMER:  # the capture timer, the control window's only timer
         return ExpireCapture(time.monotonic())
-    if message == system.WM_CLOSE:  # Quit Workspace, or a test
+    if message == system.WindowMessage.CLOSE:  # Quit Workspace, or a test
         return Quit()
     return None
 
@@ -144,7 +144,7 @@ class Inbox:
     _handler: Cell[Callable[[Event], None] | None]
 
     @classmethod
-    def open(cls, window: components.Window) -> Inbox:
+    def open(cls, window: protocol.Window) -> Inbox:
         pending = queue.SimpleQueue[Event]()
         handler: Cell[Callable[[Event], None] | None] = Cell(None)
 
@@ -238,7 +238,7 @@ class DesktopApp:
         system.set_window_timer(self.inbox.window.handle, CAPTURE_TIMER_MS)
         self.voice.start()
         if (layout := windows.find(components.LAYOUT.window.title)) is not None:
-            system.post_message(layout, WM_QUERY_LAYOUT_STATE, 0, 0)
+            system.post_message(layout, Message.QUERY_LAYOUT_STATE, 0, 0)
         self.handle(ShowIdle())
 
     # ---- the fold ----------------------------------------------------------------------
@@ -285,7 +285,7 @@ class DesktopApp:
                 self._indicator().set(text, indicator_area())
             case ToggleLayout():
                 layout = windows.find(components.LAYOUT.window.title)
-                if layout is None or not system.post_message(layout, protocol.WM_TOGGLE_LAYOUT, 0, 0):
+                if layout is None or not system.post_message(layout, protocol.Message.TOGGLE_LAYOUT, 0, 0):
                     return Problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case ShowMenu(state):
                 return MenuChosen(shell.show_menu(self.inbox.window.handle, tuple(menu_items(state))))
@@ -449,7 +449,7 @@ def run() -> None:
         return
     try:
         inbox = Inbox.open(components.DESKTOP.window)
-        voice = Voice.open(settings_from(os.environ, components.endpoint("gateway")), inbox.window.handle, inbox.report, log)
+        voice = Voice.open(settings_from(os.environ, components.GATEWAY_ENDPOINT), inbox.window.handle, inbox.report, log)
         root = application()
         root.setStyleSheet(tooltip_style(tokens(scheme())))
         app = DesktopApp.compose(root, voice, inbox)

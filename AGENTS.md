@@ -118,6 +118,17 @@ their tests. Legacy data and backwards compatibility are not requirements.
   structures) are exempt from these rules. A mapping that leaves its owner
   is a `frozendict`, replaced rather than mutated. Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
+- Data declared once is a module of declarations, not a type with one
+  instance: `config.py`, `components.py` and `keyboard/settings.py` hold only
+  imports and constants (the review recognises such a data module by its
+  contents). Read another module's constant only as `module.NAME`, and only
+  from a data module: a bare `NAME` is always the module's own. Never
+  `from x import NAME` for a constant (`constant-import`), and never read a
+  constant out of a module with behaviour (`shared-constant`); share that as an
+  enum (a closed set of codes, like `protocol.Message`), a function, or a
+  type's property. A type for such data earns its place only when something
+  substitutes a second value. The rule covers the packages in
+  `[tool.workspace.architecture] constants`, widening as each one migrates.
 - Satisfy a rule by changing the design, never by its letter. A frozen record
   in a `Cell` is not a set of attributes: decide from one snapshot
   (`state = self._state.get()`), and change related fields in one
@@ -162,8 +173,10 @@ Besides the rules named above, the architecture review rejects JavaScript in
 Python strings (`inline-script`), a definition no production code uses
 (`unused-definition`), two functions of the same structure (`duplicate-code`),
 a Win32 function declared in more than one module (`native-redeclaration`),
-two writes in a row to the same state (`piecemeal-state`) and a private
-property that only returns one field of an owner's state (`mirrored-state`).
+two writes in a row to the same state (`piecemeal-state`), a private
+property that only returns one field of an owner's state (`mirrored-state`),
+and constants read across modules other than as `data_module.NAME`
+(`constant-import`, `shared-constant`).
 
 # Committing and running
 

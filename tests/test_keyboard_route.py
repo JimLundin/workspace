@@ -3,9 +3,10 @@
 from dataclasses import replace
 
 from keyboard.engine import EngineState
-from keyboard.firmware import APPS_KEY, ConsumedKey, FirmwareKeyboard
+from keyboard.firmware import ConsumedKey, FirmwareKeyboard
+from keyboard.settings import APPS_KEY
 from keyboard.win import HookState, Route, identity, owes, route
-from protocol import LAYOUT_MAGIC, MAGIC
+from protocol import Origin
 from winapi.inputs import LLKHF_EXTENDED, LLKHF_INJECTED, KeyEvent
 
 LETTER = KeyEvent(0x41, 0x1E, 0, 0, 0)
@@ -20,9 +21,9 @@ def test_our_own_output_and_keys_during_an_engine_step_are_never_routed() -> Non
     # Defects: the layout remaps its own injected keys, or a key the engine sends while it
     # runs re-enters it, even with the Charybdis connected.
     for state in (HookState(), HookState(firmware=FirmwareKeyboard(resume_layout=True))):
-        assert route(replace(LETTER, extra=LAYOUT_MAGIC), state, down=True) is Route.OWN
+        assert route(replace(LETTER, extra=Origin.LAYOUT), state, down=True) is Route.OWN
         assert route(LETTER, replace(state, busy=True), down=True) is Route.OWN
-    assert route(replace(LETTER, flags=LLKHF_INJECTED, extra=MAGIC), HookState(), down=True) is Route.OWN
+    assert route(replace(LETTER, flags=LLKHF_INJECTED, extra=Origin.DESKTOP), HookState(), down=True) is Route.OWN
 
 
 def test_a_captured_shortcut_key_stays_captured_after_the_charybdis_is_unplugged() -> None:

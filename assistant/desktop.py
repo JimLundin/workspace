@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from winapi import audio, clipboard, inputs
 lazy from contracts.status import Job, State
-lazy from protocol import MAGIC
+lazy from protocol import Origin
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +53,7 @@ class WinDesktop:
     # ---- text in other programs --------------------------------------------------------
 
     def type_text(self, text: str) -> None:
-        inputs.type_text(text, MAGIC)
+        inputs.type_text(text, Origin.DESKTOP)
 
     def set_clipboard(self, text: str) -> None:
         if not clipboard.set_text(self.owner, text):

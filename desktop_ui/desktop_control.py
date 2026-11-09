@@ -143,9 +143,9 @@ type ControlAction = PhysicalKey | FeatureRequest
 
 def control_event(message: int, wparam: int, lparam: int, apps: Sequence[App]) -> ControlAction | None:
     """A key state or request message to the control window, keeping key edges and requests' presses and releases."""
-    if message == protocol.WM_KEY_STATE:
+    if message == protocol.Message.KEY_STATE:
         return PhysicalKey(Scancode(wparam), down=bool(lparam))
-    if message == protocol.WM_REQUEST and (request := protocol.decode(wparam, apps)):
+    if message == protocol.Message.REQUEST and (request := protocol.decode(wparam, apps)):
         return FeatureRequest(request, down=bool(lparam))
     return None
 

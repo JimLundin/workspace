@@ -7,30 +7,10 @@ from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
+from keyboard.bindings import Unmapped, action, actions, slot
 from keyboard.firmware import CHORDS
-from keyboard.layout import (
-    BASE,
-    COPY,
-    CUT,
-    ESCAPE,
-    PASTE,
-    PHYSICAL,
-    REDO,
-    TABLE,
-    UNDO,
-    Action,
-    Chord,
-    Command,
-    Key,
-    Layer,
-    Mod,
-    Scancode,
-    TapHold,
-    Unmapped,
-    action,
-    character,
-    slot,
-)
+from keyboard.layout import Action, Chord, Command, Key, Layer, Mod, Scancode, TapHold, character
+from keyboard.settings import BASE, COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
 
 
@@ -69,7 +49,7 @@ def shortcut(tool: Tool) -> Shortcut | None:
         held = _holding(layer)
         if held is None:
             continue
-        for cell, binding in enumerate(TABLE[layer]):
+        for cell, binding in enumerate(actions(layer)):
             if binding is tool:
                 return Shortcut(PHYSICAL_NAMES[physical[cell]], PHYSICAL_NAMES[physical[held]])
     letter = CHORDS.get(tool)

@@ -453,6 +453,31 @@ def test_state_is_changed_whole_not_one_field_at_a_time(tmp_path: Path) -> None:
     ]
 
 
+def test_constants_cross_modules_only_by_dot_access_from_data_modules(tmp_path: Path) -> None:
+    # Defects: a module imports another's constant by its bare name, so it reads as its own;
+    # or reads a constant out of a module with behaviour, outside the scope or not; or a
+    # data module, a function or an enum read across modules is wrongly flagged.
+    write_tree(
+        tmp_path,
+        {
+            "app/__init__.py": "",
+            "app/settings.py": '"""Data."""\nfrom typing import Final\nDELAY: Final = 5\nNAMES = ("a", "b")\n',
+            "app/logic.py": "LIMIT = 3\n\ndef helper():\n    return LIMIT\n",
+            "app/user.py": (
+                "from app import logic, settings\n"
+                "from app.settings import DELAY\n"
+                "from app.logic import helper\n\n"
+                "def run():\n    return settings.NAMES, logic.LIMIT, helper(), DELAY\n"
+            ),
+            "other/__init__.py": "",
+            "other/reader.py": "from app import logic\n\ndef run():\n    return logic.LIMIT\n",
+        },
+    )
+    (tmp_path / "pyproject.toml").write_text('[tool.workspace.architecture]\nconstants = ["app"]\n', encoding="utf-8")
+    found = [(finding.rule, finding.module, finding.expression) for finding in others(review(tmp_path))]
+    assert found == [("constant-import", "app.user", "app.settings.DELAY"), ("shared-constant", "app.user", "app.logic.LIMIT")]
+
+
 def test_a_record_kind_field_is_only_a_constant_tag(tmp_path: Path) -> None:
     # Defect: a record whose enum, string or multi-valued Literal `kind`
     # decides what the rest of it means passes the review; or the review

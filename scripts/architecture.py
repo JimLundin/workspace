@@ -17,7 +17,7 @@ import re
 import sys
 import tomllib
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import pairwise
@@ -100,6 +100,8 @@ class Configuration:
     """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
 
     exceptions: tuple[ExceptionSpec, ...] = ()
+    constants: tuple[Text, ...] = ()
+    """Packages whose modules read other modules' constants only as `module.NAME`, and only from declarations-only modules."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,6 +199,70 @@ def _configuration(root: Path) -> Configuration:
         if any("*" in value for value in (entry.module, entry.declaration)):
             raise ValueError("Architecture exceptions require a supported rule and an exact declaration.")
     return replace(configuration, exceptions=exceptions)
+
+
+CONSTANT: Final = re.compile(r"[A-Z][A-Z0-9_]*")
+"""A module-level constant's name; a leading underscore keeps one private."""
+
+
+def _constants(tree: ast.Module) -> frozenset[str]:
+    """The constants a module declares at its top level."""
+    targets = (target for statement in tree.body if isinstance(statement, ast.Assign | ast.AnnAssign) for target in _targets(statement))
+    names = (name for target in targets for name in (target.elts if isinstance(target, ast.Tuple) else (target,)) if isinstance(name, ast.Name))
+    return frozenset(name.id for name in names if CONSTANT.fullmatch(name.id))
+
+
+def _declarations_only(tree: ast.Module) -> bool:
+    """A data module: a docstring, imports and declarations, nothing that runs or defines behaviour."""
+    for statement in tree.body:
+        match statement:
+            case ast.Import() | ast.ImportFrom() | ast.Assign() | ast.AnnAssign() | ast.Expr(value=ast.Constant(value=str())):
+                pass
+            case _:
+                return False
+    return True
+
+
+def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterator[Finding]:
+    """Constants cross a module boundary only as `module.NAME`, and only out of a data module.
+
+    A bare name always means the module's own constant; another module's
+    behaviour owns its constants, so it shares them as an enum, a function or a
+    type's property instead."""
+    trees = {module_name(source.name): ast.parse(source.text) for source in sources}
+    constants = {module: _constants(tree) for module, tree in trees.items()}
+    data = frozenset(module for module, tree in trees.items() if _declarations_only(tree))
+    for module, tree in sorted(trees.items()):
+        if any(_within(module, package) for package in scope):
+            yield from _constant_reads(module, tree, trees.keys(), constants, data)
+
+
+def _constant_reads(
+    module: str, tree: ast.Module, modules: Iterable[str], constants: Mapping[str, frozenset[str]], data: frozenset[str]
+) -> Iterator[Finding]:
+    known = frozenset(modules)
+    imports = tuple(node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom))
+    for node in imports:
+        if isinstance(node, ast.ImportFrom) and node.module is not None:
+            for alias in node.names:
+                if alias.name in constants.get(node.module, frozenset()):
+                    detail = f"Import the module and read {node.module.rsplit('.', 1)[-1]}.{alias.name}: a bare name is this module's own."
+                    yield Finding("constant-import", module, "", f"{node.module}.{alias.name}", node.lineno, detail)
+    bound = frozendict(
+        (alias.asname or alias.name, alias.name if isinstance(node, ast.Import) else f"{node.module}.{alias.name}")
+        for node in imports
+        for alias in node.names
+        if isinstance(node, ast.Import) or f"{node.module}.{alias.name}" in known
+    )
+    detail = "Only a declarations-only module shares constants: move it to one, or share it as an enum, a function or a property."
+    for node in ast.walk(tree):
+        match node:
+            case ast.Attribute(value=ast.Name(id=name), attr=attribute) if (
+                (source := bound.get(name)) is not None and source not in data and attribute in constants.get(source, frozenset())
+            ):
+                yield Finding("shared-constant", module, "", f"{source}.{attribute}", node.lineno, detail)
+            case _:
+                pass
 
 
 def _within(module: str, package: str) -> bool:
@@ -1037,6 +1103,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *unused_definitions(observations.values(), production, tested),
         *duplicates(observations.values()),
         *redeclarations(observations.values()),
+        *shared_constants(loaded, configuration.constants),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = (

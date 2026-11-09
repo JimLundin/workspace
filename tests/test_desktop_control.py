@@ -41,7 +41,7 @@ from desktop_ui.desktop_control import (
     transition,
 )
 from keyboard.layout import Scancode
-from protocol import WM_KEY_STATE, WM_REQUEST, LayoutState, Tool
+from protocol import LayoutState, Message, Tool
 
 
 def folded(events: Iterable[Event], state: DesktopState | None = None) -> tuple[DesktopState, tuple[Effect, ...]]:
@@ -127,7 +127,7 @@ def test_the_overlay_menu_choice_toggles_and_saves_the_overlay() -> None:
 
 def test_physical_key_messages_become_key_actions_with_a_reset_marker() -> None:
     """Detect native key messages routed as tools or losing their reset marker."""
-    actions = tuple(control_event(WM_KEY_STATE, key, down, APPS) for key, down in ((0x32, 1), (0x10, 1), (0x10, 0), (0, 0)))
+    actions = tuple(control_event(Message.KEY_STATE, key, down, APPS) for key, down in ((0x32, 1), (0x10, 1), (0x10, 0), (0, 0)))
     assert actions == (
         PhysicalKey(Scancode(0x32), down=True),
         PhysicalKey(Scancode(0x10), down=True),
@@ -172,5 +172,5 @@ def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> N
 
 def test_control_event_preserves_voice_release_and_rejects_unknown_requests() -> None:
     """Detect dropping a capture's key-up or forwarding an invalid wire request."""
-    assert control_event(WM_REQUEST, Tool.DICTATE.value, 0, APPS) == FeatureRequest(Tool.DICTATE, down=False)
-    assert control_event(WM_REQUEST, 999, 1, APPS) is None
+    assert control_event(Message.REQUEST, Tool.DICTATE.value, 0, APPS) == FeatureRequest(Tool.DICTATE, down=False)
+    assert control_event(Message.REQUEST, 999, 1, APPS) is None

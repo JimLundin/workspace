@@ -4,17 +4,30 @@ import ctypes
 from collections.abc import Iterator, Sequence
 from ctypes import wintypes
 from dataclasses import dataclass
+from enum import IntEnum
 from typing import Final, NewType
 
 from winapi._core import ULONG_PTR, CloseHandle, CreateEventW, PostMessageW, fn, kernel32, last_error, user32
 
-WM_CLOSE: Final = 0x0010
-WM_TIMER: Final = 0x0113
-WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 0x0100, 0x0101, 0x0104, 0x0105
-WM_LBUTTONUP, WM_RBUTTONUP = 0x0202, 0x0205
-WM_APP: Final = 0x8000
 
-MB_ICONHAND: Final = 0x10
+class WindowMessage(IntEnum):
+    """The Windows messages Workspace reads by number."""
+
+    CLOSE = 0x0010
+    INPUT = 0x00FF
+    """Raw input arrived (see `keyboard_devices.watch_input`)."""
+    KEYDOWN = 0x0100
+    KEYUP = 0x0101
+    SYSKEYDOWN = 0x0104
+    SYSKEYUP = 0x0105
+    TIMER = 0x0113
+    LBUTTONUP = 0x0202
+    RBUTTONUP = 0x0205
+    APP = 0x8000
+    """The first message number an application may define for itself."""
+
+
+_MB_ICONHAND: Final = 0x10
 
 _ERROR_ALREADY_EXISTS: Final = 183
 _INFINITE: Final = 0xFFFF_FFFF
@@ -105,9 +118,9 @@ def set_window_timer(hwnd: int, ms: int) -> int:
     return timer
 
 
-def message_box(text: str, title: str, style: int) -> int:
-    """Blocks until dismissed; returns the native button identifier."""
-    return int(_MessageBoxW(None, text, title, style))
+def error_box(text: str, title: str) -> None:
+    """An error message box; blocks until dismissed."""
+    _MessageBoxW(None, text, title, _MB_ICONHAND)
 
 
 def create_lock(name: str) -> Lock | None:

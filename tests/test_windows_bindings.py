@@ -27,7 +27,7 @@ def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
     timer = system.set_window_timer(hwnd, 20)
     try:
         message = next(system.messages())
-        while message.message != system.WM_TIMER:
+        while message.message != system.WindowMessage.TIMER:
             message = next(system.messages())
         assert message.hwnd == hwnd and message.wparam == timer
     finally:

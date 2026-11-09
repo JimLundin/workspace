@@ -4,15 +4,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Final
 
-from keyboard.layout import BASE, CELLS, TABLE, Key, Layer, TapHold, character
+from keyboard import settings
+from keyboard.bindings import action
+from keyboard.layout import Board, Key, Layer, TapHold, character
 from protocol import App, Request, Tool
-
-# Charybdis Nano (3x5) Splinky: match its USB identity, independent of port.
-FIRMWARE_KEYBOARD: Final = ("VID_A8F8", "PID_1832")
 
 
 def _base_key(cell: int) -> Key | None:
-    match BASE.cells()[cell]:
+    match action(None, cell):
         case Key() as key:
             return key
         case TapHold(tap=Key() as key):
@@ -23,7 +22,7 @@ def _base_key(cell: int) -> Key | None:
 
 def _chord_keys() -> frozendict[Key, Request]:
     """Each Apps layer request by the base key at its place: one map for both keyboards."""
-    requests = tuple((cell, request) for cell in range(CELLS) if isinstance(request := TABLE[Layer.APPS][cell], Tool | App))
+    requests = tuple((cell, request) for cell in range(Board.SIZE) if isinstance(request := action(Layer.APPS, cell), Tool | App))
     chorded = tuple((key, request) for cell, request in requests if (key := _base_key(cell)))
     if len(chorded) != len(requests):
         raise ImportError("an Apps layer request sits where the base layer has no key to chord")
@@ -72,13 +71,6 @@ class ConsumedKey:
 type CapturedKey = HeldShortcut | ConsumedKey
 
 
-APPS_KEY: Final = 0xA5
-"""Right Alt, which the Charybdis's Tab thumb holds (VIA mod-tap `MT(MOD_RALT, KC_TAB)`).
-
-Its keymap uses no other Right Alt, and with the Charybdis connected Windows runs
-English (US), where Right Alt is a plain Alt rather than AltGr."""
-
-
 def shortcut(vk: int, *, apps_held: bool) -> Request | None:
     """The request a fresh firmware key press makes while the Tab thumb holds Apps; other keys keep their meaning.
 
@@ -93,7 +85,7 @@ def connected(names: Iterable[str]) -> bool:
         match name.upper().split("#"):
             case [r"\\?\HID", identity, *_]:
                 match identity.split("&"):
-                    case [vendor, product, *_] if (vendor, product) == FIRMWARE_KEYBOARD:
+                    case [vendor, product, *_] if (vendor, product) == settings.FIRMWARE_KEYBOARD:
                         return True
                     case _:
                         pass

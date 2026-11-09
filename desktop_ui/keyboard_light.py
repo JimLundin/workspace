@@ -12,7 +12,7 @@ lit as it was set.
 from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
-from keyboard.firmware import FIRMWARE_KEYBOARD
+from keyboard.settings import FIRMWARE_KEYBOARD
 from winapi import via
 
 _VENDOR: Final = int(FIRMWARE_KEYBOARD[0].removeprefix("VID_"), 16)

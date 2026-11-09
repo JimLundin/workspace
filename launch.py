@@ -22,7 +22,8 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import Final
 
-from components import CATALOGUE, STATE_VARIABLE, Component, Entry
+from components import CATALOGUE, STATE_VARIABLE
+from protocol import Component, Entry
 from winapi._core import CloseHandle, FindWindowW, GetWindowThreadProcessId, OpenProcess, PostMessageW, WaitForSingleObject
 
 ROOT: Final = Path(__file__).resolve().parent
