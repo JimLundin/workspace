@@ -33,17 +33,11 @@ def _chord_keys() -> frozendict[Key, Request]:
     return keys
 
 
-def key_name(key: Key) -> str:
-    """The chord key as it is written on the hints and in the README: a capital letter, or its name."""
-    c = key.typed(shifted=False)
-    return "Space" if key is Key.SPACE else c.upper() if c else key.name.title()
-
-
 _IDENTITY: Final = (f"VID_{settings.FIRMWARE_VENDOR:04X}", f"PID_{settings.FIRMWARE_PRODUCT:04X}")
 """The firmware keyboard's USB identity as a HID device path writes it."""
 
 _KEYS: Final = _chord_keys()
-CHORDS: Final[frozendict[Request, str]] = frozendict({request: key_name(key) for key, request in _KEYS.items()})
+CHORDS: Final[frozendict[Request, str]] = frozendict({request: key.legend for key, request in _KEYS.items()})
 """Each request's key under the Apps hold: the laptop's Apps layer (hold the Delete thumb),
 or the Charybdis's held Tab thumb (`APPS_KEY`), with the key its keymap sends there."""
 

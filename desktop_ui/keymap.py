@@ -93,13 +93,7 @@ class Cap:
     role: Role
 
 
-_KEY_NAMES: Final = frozendict({
-    Key.SPACE: "Space", Key.ENTER: "Enter", Key.BACKSPACE: "Bksp", Key.DELETE: "Del", Key.TAB: "Tab", Key.ESC: "Esc",
-    Key.CAPS_LOCK: "Caps", Key.INSERT: "Ins", Key.HOME: "Home", Key.END: "End", Key.PAGE_UP: "PgUp", Key.PAGE_DOWN: "PgDn",
-    Key.LEFT: "←", Key.RIGHT: "→", Key.UP: "↑", Key.DOWN: "↓",
-})  # fmt: skip
 _CHORD_NAMES: Final = frozendict({UNDO: "Undo", REDO: "Redo", COPY: "Copy", PASTE: "Paste", CUT: "Cut"})
-_MOD_NAMES: Final = every_member(Mod, {Mod.GUI: "Win", Mod.ALT: "Alt", Mod.CTRL: "Ctrl", Mod.SHIFT: "Shift"})
 TOOL_NAMES: Final = every_member(Tool, {
     Tool.DICTATE: "Talk",
     Tool.ZOOM: "Zoom",
@@ -112,28 +106,23 @@ TOOL_NAMES: Final = every_member(Tool, {
 })  # fmt: skip
 
 
-def _output(key: Key, label: str | None = None) -> str:
-    c = key.typed(shifted=False)
-    return label or _KEY_NAMES.get(key) or (c.upper() if c else key.name.title())
-
-
 def describe(a: Binding) -> tuple[str, Role]:
     """A key's label and role, as drawn."""
     if a is BLANK:
         return "", Role.BLANK
     match a:
         case Key():
-            return _output(a), Role.KEY
+            return a.legend, Role.KEY
         case Chord(key, mods) if a in _CHORD_NAMES:
             return _CHORD_NAMES[a], Role.KEY
         case Chord(key) if a.only_shifted and (c := key.typed(shifted=True)):
             return c, Role.KEY
         case Chord(key, mods):
-            return "+".join([*(_MOD_NAMES[m] for m in Mod if m in mods), _output(key)]), Role.KEY
+            return "+".join([*(m.legend for m in Mod if m in mods), key.legend]), Role.KEY
         case TapHold(tap):
             return describe(tap)
         case Mod():
-            return _MOD_NAMES[a], Role.MOD
+            return a.legend, Role.MOD
         case Layer():
             return a.name.title(), Role.LAYER
         case Tool():
@@ -147,7 +136,7 @@ def _hold(a: Binding) -> str:
         case Tool() if ROUTES[a] is Route.HOLD:
             return "hold"
         case TapHold(hold=Mod() as modifier):
-            return _MOD_NAMES[modifier]
+            return modifier.legend
         case TapHold(hold=Layer() as layer):
             return layer.name.title()
         case _:
