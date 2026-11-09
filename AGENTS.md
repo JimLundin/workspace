@@ -80,9 +80,11 @@ their tests. Legacy data and backwards compatibility are not requirements.
   plain absence, so a marker never shares its meaning. Import a sentinel by name,
   like a class. In a `match`, another module's sentinel is a dotted value pattern
   (`case hook_watch.ANSWERED:`); a bare `case ANSWERED:` would capture. Pyright
-  1.1.414 (mypy handles all three) rejects `module.SENTINEL` in an annotation,
-  narrows a guard arm (`case _ if watch is ANSWERED:`) only when it comes last,
-  and loses the sentinel in `(*[MARK] * n,)`, so use a generator there.
+  1.1.414 and basedpyright 1.40.2 (mypy handles all three) reject
+  `module.SENTINEL` in an annotation, narrow a guard arm
+  (`case _ if watch is ANSWERED:`) only when it comes last, and lose the
+  sentinel in `(*[MARK] * n,)`, so use a generator there. Pyright's main branch
+  (2026-11-06) fixes only the last; drop that workaround when a release has it.
 - Don't reach into a sequence by position (`row[0]`, `pair[1]`, `items[-1]`):
   that value deserves a name. Unpack it, read a named field, or model the record
   (a typed row adapter instead of SQLite tuples). Looking up a key in a table
