@@ -1,0 +1,9 @@
+# Consumed machine observations. Structures pass by reference; BOOL results are ints.
+import ctypes
+
+class MEMORYSTATUSEX(ctypes.Structure):
+    dwMemoryLoad: int
+    def __init__(self, *, dwLength: int) -> None: ...
+
+def GlobalMemoryStatusEx(status: MEMORYSTATUSEX) -> int: ...
+def GetTickCount64() -> int: ...

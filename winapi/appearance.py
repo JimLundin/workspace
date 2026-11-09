@@ -10,13 +10,16 @@ import threading
 import winreg
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from ctypes import wintypes
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Protocol
 
+lazy from win32more.Windows.Win32.Graphics.Gdi import CLR_INVALID, COLOR_WINDOW, COLOR_WINDOWTEXT, GetDC, GetPixel, GetSysColor, ReleaseDC
+lazy from win32more.Windows.Win32.Media import timeBeginPeriod, timeEndPeriod
+lazy from win32more.Windows.Win32.UI.Accessibility import HCF_HIGHCONTRASTON, HIGHCONTRASTW
+lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import SPI_GETCLIENTAREAANIMATION, SPI_GETHIGHCONTRAST, SystemParametersInfoW
+
 from cell import Cell
-from winapi._core import GetDC, ReleaseDC, fn, gdi32, user32, winmm
 from winapi.shapes import Rect
 
 
@@ -88,20 +91,6 @@ class Contrast:
 type Preference = Material | Contrast
 
 
-class _HighContrast(ctypes.Structure):
-    size: int
-    flags: int
-    scheme: str | None
-    _fields_ = [("size", wintypes.UINT), ("flags", wintypes.DWORD), ("scheme", wintypes.LPWSTR)]
-
-
-_SystemParametersInfoW = fn(user32, "SystemParametersInfoW", wintypes.BOOL, wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT)
-_GetSysColor = fn(user32, "GetSysColor", wintypes.DWORD, ctypes.c_int)
-_GetPixel = fn(gdi32, "GetPixel", wintypes.DWORD, wintypes.HDC, ctypes.c_int, ctypes.c_int)
-_TimeBeginPeriod = fn(winmm, "timeBeginPeriod", wintypes.UINT, wintypes.UINT)
-_TimeEndPeriod = fn(winmm, "timeEndPeriod", wintypes.UINT, wintypes.UINT)
-
-
 class TimerPeriod(Protocol):
     def request(self) -> bool: ...
 
@@ -111,10 +100,10 @@ class TimerPeriod(Protocol):
 @dataclass(frozen=True, slots=True)
 class NativeTimerPeriod:
     def request(self) -> bool:
-        return bool(_TimeBeginPeriod(1) == 0)
+        return bool(timeBeginPeriod(1) == 0)
 
     def release(self) -> None:
-        _TimeEndPeriod(1)
+        timeEndPeriod(1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,16 +133,16 @@ class TimerResolution:
 
 
 def animations_enabled() -> bool:
-    enabled = wintypes.BOOL()
-    return bool(_SystemParametersInfoW(0x1042, 0, ctypes.byref(enabled), 0) and enabled.value)  # SPI_GETCLIENTAREAANIMATION
+    enabled = ctypes.c_int()
+    return bool(SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(enabled), 0) and enabled.value)
 
 
 def preference() -> Preference:
-    contrast = _HighContrast(ctypes.sizeof(_HighContrast), 0, None)
-    if not _SystemParametersInfoW(0x0042, contrast.size, ctypes.byref(contrast), 0):  # SPI_GETHIGHCONTRAST
+    contrast = HIGHCONTRASTW(cbSize=ctypes.sizeof(HIGHCONTRASTW))
+    if not SystemParametersInfoW(SPI_GETHIGHCONTRAST, contrast.cbSize, ctypes.byref(contrast), 0):
         return Material.SOLID
-    if contrast.flags & 1:
-        return Contrast(system_color(5), system_color(8))  # COLOR_WINDOW, COLOR_WINDOWTEXT
+    if contrast.dwFlags & HCF_HIGHCONTRASTON:
+        return Contrast(system_color(COLOR_WINDOW), system_color(COLOR_WINDOWTEXT))
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
             enabled, _kind = winreg.QueryValueEx(key, "EnableTransparency")
@@ -173,7 +162,7 @@ def light_apps() -> bool:
 
 
 def system_color(index: int) -> str:
-    value = int(_GetSysColor(index))
+    value = GetSysColor(index)
     return f"#{value & 255:02x}{value >> 8 & 255:02x}{value >> 16 & 255:02x}"
 
 
@@ -190,7 +179,7 @@ def background_frost(bounds: Rect) -> Frost:
     # Sample the sides: above/below can contain a neighboring conversation bubble.
     points = tuple((x, bounds.top + bounds.height * third // 3) for x in (bounds.left - 12, bounds.right + 12) for third in (1, 2))
     try:
-        colors = tuple(color for px, py in points if (color := int(_GetPixel(dc, px, py))) != 0xFFFF_FFFF)
+        colors = tuple(color for px, py in points if (color := GetPixel(dc, px, py)) != CLR_INVALID)
     finally:
         ReleaseDC(None, dc)
     return frost_for(colors)

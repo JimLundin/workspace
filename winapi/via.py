@@ -10,10 +10,27 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-from winapi._core import GUID, ULONG_PTR, CloseHandle, CreateEventW, fn, kernel32, last_error
+lazy from win32more._win32 import Guid
+lazy from win32more.Windows.Win32.Devices.DeviceAndDriverInstallation import (
+    CM_GET_DEVICE_INTERFACE_LIST_PRESENT,
+    CR_BUFFER_SMALL,
+    CM_Get_Device_Interface_List_SizeW,
+    CM_Get_Device_Interface_ListW,
+)
+lazy from win32more.Windows.Win32.Devices.HumanInterfaceDevice import (
+    HIDP_CAPS,
+    HIDP_STATUS_SUCCESS,
+    PHIDP_PREPARSED_DATA,
+    HidD_FreePreparsedData,
+    HidD_GetHidGuid,
+    HidD_GetPreparsedData,
+    HidP_GetCaps,
+)
+lazy from win32more.Windows.Win32.Foundation import ERROR_IO_PENDING, GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE
+lazy from win32more.Windows.Win32.Storage.FileSystem import FILE_FLAG_OVERLAPPED, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, CreateFileW
+lazy from win32more.Windows.Win32.System.IO import OVERLAPPED, CancelIoEx, GetOverlappedResult, GetOverlappedResultEx
 
-_cfgmgr32 = ctypes.WinDLL("cfgmgr32", use_last_error=True)
-_hid = ctypes.WinDLL("hid", use_last_error=True)
+from winapi._core import CloseHandle, CreateEventW, fn, kernel32, last_error
 
 _REPORT: Final = 32
 """VIA's message size; Windows adds a leading report ID byte, always 0."""
@@ -25,84 +42,9 @@ _GET_VALUE, _SET_VALUE, _UNHANDLED = 0x08, 0x07, 0xFF
 _RGB_MATRIX, _EFFECT = 3, 2
 """VIA's id_qmk_rgb_matrix_channel and its effect value: 0 turns the matrix off without saving."""
 
-
-class Overlapped(ctypes.Structure):
-    _fields_ = (
-        ("Internal", ULONG_PTR),
-        ("InternalHigh", ULONG_PTR),
-        ("Offset", wintypes.DWORD),
-        ("OffsetHigh", wintypes.DWORD),
-        ("hEvent", wintypes.HANDLE),
-    )
-
-
-class HidCaps(ctypes.Structure):
-    """HIDP_CAPS."""
-
-    Usage: int
-    UsagePage: int
-    _fields_ = (
-        ("Usage", wintypes.USHORT),
-        ("UsagePage", wintypes.USHORT),
-        ("InputReportByteLength", wintypes.USHORT),
-        ("OutputReportByteLength", wintypes.USHORT),
-        ("FeatureReportByteLength", wintypes.USHORT),
-        ("Reserved", wintypes.USHORT * 17),
-        ("Counts", wintypes.USHORT * 10),
-    )
-
-
-_HidD_GetHidGuid = fn(_hid, "HidD_GetHidGuid", None, ctypes.POINTER(GUID))
-_HidD_GetPreparsedData = fn(_hid, "HidD_GetPreparsedData", wintypes.BOOLEAN, wintypes.HANDLE, ctypes.POINTER(ctypes.c_void_p))
-_HidD_FreePreparsedData = fn(_hid, "HidD_FreePreparsedData", wintypes.BOOLEAN, ctypes.c_void_p)
-_HidP_GetCaps = fn(_hid, "HidP_GetCaps", wintypes.LONG, ctypes.c_void_p, ctypes.POINTER(HidCaps))
-_CM_Get_Device_Interface_List_SizeW = fn(
-    _cfgmgr32,
-    "CM_Get_Device_Interface_List_SizeW",
-    wintypes.DWORD,
-    ctypes.POINTER(wintypes.ULONG),
-    ctypes.POINTER(GUID),
-    wintypes.LPCWSTR,
-    wintypes.ULONG,
-)
-_CM_Get_Device_Interface_ListW = fn(
-    _cfgmgr32,
-    "CM_Get_Device_Interface_ListW",
-    wintypes.DWORD,
-    ctypes.POINTER(GUID),
-    wintypes.LPCWSTR,
-    wintypes.LPWSTR,
-    wintypes.ULONG,
-    wintypes.ULONG,
-)
-_CreateFileW = fn(
-    kernel32,
-    "CreateFileW",
-    wintypes.HANDLE,
-    wintypes.LPCWSTR,
-    wintypes.DWORD,
-    wintypes.DWORD,
-    wintypes.LPVOID,
-    wintypes.DWORD,
-    wintypes.DWORD,
-    wintypes.HANDLE,
-)
-_WriteFile = fn(kernel32, "WriteFile", wintypes.BOOL, wintypes.HANDLE, wintypes.LPCVOID, wintypes.DWORD, wintypes.LPDWORD, ctypes.POINTER(Overlapped))
-_ReadFile = fn(kernel32, "ReadFile", wintypes.BOOL, wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, wintypes.LPDWORD, ctypes.POINTER(Overlapped))
-_GetOverlappedResultEx = fn(
-    kernel32, "GetOverlappedResultEx", wintypes.BOOL, wintypes.HANDLE, ctypes.POINTER(Overlapped), wintypes.LPDWORD, wintypes.DWORD, wintypes.BOOL
-)
-_GetOverlappedResult = fn(
-    kernel32, "GetOverlappedResult", wintypes.BOOL, wintypes.HANDLE, ctypes.POINTER(Overlapped), wintypes.LPDWORD, wintypes.BOOL
-)
-_CancelIoEx = fn(kernel32, "CancelIoEx", wintypes.BOOL, wintypes.HANDLE, ctypes.POINTER(Overlapped))
-
-_GENERIC_READ_WRITE: Final = 0x8000_0000 | 0x4000_0000
-_SHARE_READ_WRITE: Final = 0x1 | 0x2
-_OPEN_EXISTING, _FILE_FLAG_OVERLAPPED = 3, 0x4000_0000
-_INVALID_HANDLE: Final = ctypes.c_void_p(-1).value
-_ERROR_IO_PENDING: Final = 997
-_HIDP_STATUS_SUCCESS: Final = 0x0011_0000
+# A transfer that is still pending reports it through the thread's last error, which win32more's bindings don't keep.
+_WriteFile = fn(kernel32, "WriteFile", wintypes.BOOL, wintypes.HANDLE, wintypes.LPCVOID, wintypes.DWORD, wintypes.LPDWORD, ctypes.c_void_p)
+_ReadFile = fn(kernel32, "ReadFile", wintypes.BOOL, wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD, wintypes.LPDWORD, ctypes.c_void_p)
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,44 +74,44 @@ def effect_reply(sent: bytes, reply: bytes) -> Effect | Absent:
 
 def _paths(vendor: int, product: int) -> tuple[str, ...]:
     """HID interface paths of this keyboard, from Windows' present device list."""
-    guid = GUID()
-    _HidD_GetHidGuid(ctypes.byref(guid))
+    guid = Guid()
+    HidD_GetHidGuid(guid)
     for _ in range(3):
-        size = wintypes.ULONG()
-        if _CM_Get_Device_Interface_List_SizeW(ctypes.byref(size), ctypes.byref(guid), None, 0) != 0:
+        size = ctypes.c_uint32()
+        if CM_Get_Device_Interface_List_SizeW(ctypes.byref(size), guid, None, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != 0:
             return ()
         buffer = ctypes.create_unicode_buffer(size.value)
-        result = _CM_Get_Device_Interface_ListW(ctypes.byref(guid), None, buffer, size.value, 0)
+        result = CM_Get_Device_Interface_ListW(guid, None, buffer, size.value, CM_GET_DEVICE_INTERFACE_LIST_PRESENT)
         if result == 0:
             identity = f"vid_{vendor:04x}&pid_{product:04x}"
             listed = ctypes.wstring_at(ctypes.addressof(buffer), size.value).split("\0")
             return tuple(path for path in listed if identity in path.lower())
-        if result != 0x1A:  # CR_BUFFER_SMALL: a device arrived between the calls
+        if result != CR_BUFFER_SMALL:  # a device arrived between the calls
             return ()
     return ()
 
 
 def _raw_hid(handle: int) -> bool:
-    data = ctypes.c_void_p()
-    if not _HidD_GetPreparsedData(handle, ctypes.byref(data)):
+    data = PHIDP_PREPARSED_DATA()
+    if not HidD_GetPreparsedData(handle, ctypes.byref(data)):
         return False
     try:
-        caps = HidCaps()
-        return _HidP_GetCaps(data, ctypes.byref(caps)) == _HIDP_STATUS_SUCCESS and (caps.UsagePage, caps.Usage) == _USAGE
+        caps = HIDP_CAPS()
+        return HidP_GetCaps(data.value, caps) == HIDP_STATUS_SUCCESS and (caps.UsagePage, caps.Usage) == _USAGE
     finally:
-        _HidD_FreePreparsedData(data)
+        HidD_FreePreparsedData(data.value)
 
 
-def _wait(handle: int, overlapped: Overlapped, *, started: bool) -> int | None:
+def _wait(handle: int, overlapped: OVERLAPPED, *, started: bool) -> int | None:
     """Bytes moved by the pending transfer, or None after cancelling it at the deadline."""
-    if not started and ctypes.get_last_error() != _ERROR_IO_PENDING:
+    if not started and ctypes.get_last_error() != ERROR_IO_PENDING:
         return None
-    moved = wintypes.DWORD()
-    if _GetOverlappedResultEx(handle, ctypes.byref(overlapped), ctypes.byref(moved), _DEADLINE_MS, False):
+    moved = ctypes.c_uint32()
+    if GetOverlappedResultEx(handle, overlapped, ctypes.byref(moved), _DEADLINE_MS, False):
         return moved.value
-    _CancelIoEx(handle, ctypes.byref(overlapped))
+    CancelIoEx(handle, overlapped)
     # The kernel still owns the buffer until the cancelled transfer completes.
-    _GetOverlappedResult(handle, ctypes.byref(overlapped), ctypes.byref(moved), True)
+    GetOverlappedResult(handle, overlapped, ctypes.byref(moved), True)
     return None
 
 
@@ -180,13 +122,13 @@ def _exchange(handle: int, message: bytes) -> bytes | None:
         raise last_error()
     try:
         sent = ctypes.create_string_buffer(b"\0" + message, 1 + _REPORT)
-        overlapped = Overlapped(hEvent=event)
+        overlapped = OVERLAPPED(hEvent=event)
         if _wait(handle, overlapped, started=bool(_WriteFile(handle, sent, 1 + _REPORT, None, ctypes.byref(overlapped)))) is None:
             return None
         # A report left by another reader's earlier exchange can precede ours.
         for _ in range(4):
             received = ctypes.create_string_buffer(1 + _REPORT)
-            overlapped = Overlapped(hEvent=event)
+            overlapped = OVERLAPPED(hEvent=event)
             moved = _wait(handle, overlapped, started=bool(_ReadFile(handle, received, 1 + _REPORT, None, ctypes.byref(overlapped))))
             if moved is None:
                 return None
@@ -201,8 +143,9 @@ def _exchange(handle: int, message: bytes) -> bytes | None:
 def exchange(vendor: int, product: int, message: bytes) -> bytes | None:
     """Send `message` to the keyboard's VIA interface; None when it isn't attached or doesn't answer."""
     for path in _paths(vendor, product):
-        handle = _CreateFileW(path, _GENERIC_READ_WRITE, _SHARE_READ_WRITE, None, _OPEN_EXISTING, _FILE_FLAG_OVERLAPPED, None)
-        if handle in (None, _INVALID_HANDLE):
+        access, share = GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE
+        handle = CreateFileW(path, access, share, None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, None)
+        if handle in (None, ctypes.c_void_p(INVALID_HANDLE_VALUE).value):
             continue  # The keyboard and mouse collections refuse to open; only the raw interface matters.
         try:
             if _raw_hid(handle):

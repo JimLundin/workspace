@@ -7,139 +7,64 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from typing import Final
 
+lazy from win32more.Windows.Win32.Foundation import RECT
+lazy from win32more.Windows.Win32.Graphics.Gdi import DIB_RGB_COLORS, CreateBitmap, CreateDIBSection
+lazy from win32more.Windows.Win32.UI.Shell import (
+    NIF_ICON,
+    NIF_INFO,
+    NIF_MESSAGE,
+    NIF_TIP,
+    NIM_ADD,
+    NIM_DELETE,
+    NIM_MODIFY,
+    NOTIFYICONDATAW,
+    NOTIFYICONIDENTIFIER,
+    Shell_NotifyIconGetRect,
+    Shell_NotifyIconW,
+)
+lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
+    ICONINFO,
+    MF_CHECKED,
+    MF_GRAYED,
+    MF_SEPARATOR,
+    MF_STRING,
+    TPM_NONOTIFY,
+    TPM_RETURNCMD,
+    TPM_RIGHTBUTTON,
+    WM_NULL,
+    WNDCLASSW,
+    WNDPROC,
+    AppendMenuW,
+    CreatePopupMenu,
+    DefWindowProcW,
+    DestroyIcon,
+    DestroyMenu,
+    RegisterWindowMessageW,
+    TrackPopupMenu,
+    UnregisterClassW,
+)
+
 from winapi._core import (
-    GUID,
-    LRESULT,
-    CreateDIBSection,
     CreateWindowExW,
     DeleteObject,
     DestroyWindow,
     GetCursorPos,
     GetModuleHandleW,
-    NativeFunction,
     PostMessageW,
     SetForegroundWindow,
     fn,
-    gdi32,
     last_error,
-    shell32,
-    top_down,
     user32,
 )
+from winapi.screen import top_down
 from winapi.shapes import Rect
 
-WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+# Failures read the thread's last error, which win32more's bindings don't keep.
+_RegisterClassW = fn(user32, "RegisterClassW", wintypes.ATOM, ctypes.c_void_p)
+_CreateIconIndirect = fn(user32, "CreateIconIndirect", wintypes.HICON, ctypes.c_void_p)
 
-
-class WNDCLASSW(ctypes.Structure):
-    style: int
-    lpfnWndProc: NativeFunction[int]
-    cbClsExtra: int
-    cbWndExtra: int
-    hInstance: int | None
-    hIcon: int | None
-    hCursor: int | None
-    hbrBackground: int | None
-    lpszMenuName: str | None
-    lpszClassName: str | None
-    _fields_ = (
-        ("style", wintypes.UINT),
-        ("lpfnWndProc", WNDPROC),
-        ("cbClsExtra", ctypes.c_int),
-        ("cbWndExtra", ctypes.c_int),
-        ("hInstance", wintypes.HINSTANCE),
-        ("hIcon", wintypes.HICON),
-        ("hCursor", wintypes.HANDLE),
-        ("hbrBackground", wintypes.HBRUSH),
-        ("lpszMenuName", wintypes.LPCWSTR),
-        ("lpszClassName", wintypes.LPCWSTR),
-    )
-
-
-class NOTIFYICONDATAW(ctypes.Structure):
-    cbSize: int
-    hWnd: int | None
-    uID: int
-    uFlags: int
-    uCallbackMessage: int
-    hIcon: int | None
-    szTip: str
-    dwState: int
-    dwStateMask: int
-    szInfo: str
-    uVersion: int
-    szInfoTitle: str
-    dwInfoFlags: int
-    guidItem: GUID
-    hBalloonIcon: int | None
-    _fields_ = (
-        ("cbSize", wintypes.DWORD),
-        ("hWnd", wintypes.HWND),
-        ("uID", wintypes.UINT),
-        ("uFlags", wintypes.UINT),
-        ("uCallbackMessage", wintypes.UINT),
-        ("hIcon", wintypes.HICON),
-        ("szTip", wintypes.WCHAR * 128),
-        ("dwState", wintypes.DWORD),
-        ("dwStateMask", wintypes.DWORD),
-        ("szInfo", wintypes.WCHAR * 256),
-        ("uVersion", wintypes.UINT),
-        ("szInfoTitle", wintypes.WCHAR * 64),
-        ("dwInfoFlags", wintypes.DWORD),
-        ("guidItem", GUID),
-        ("hBalloonIcon", wintypes.HICON),
-    )
-
-
-class ICONINFO(ctypes.Structure):
-    fIcon: int
-    xHotspot: int
-    yHotspot: int
-    hbmMask: int | None
-    hbmColor: int | None
-    _fields_ = (
-        ("fIcon", wintypes.BOOL),
-        ("xHotspot", wintypes.DWORD),
-        ("yHotspot", wintypes.DWORD),
-        ("hbmMask", wintypes.HBITMAP),
-        ("hbmColor", wintypes.HBITMAP),
-    )
-
-
-class NOTIFYICONIDENTIFIER(ctypes.Structure):
-    cbSize: int
-    hWnd: int | None
-    uID: int
-    guidItem: GUID
-    _fields_ = (("cbSize", wintypes.DWORD), ("hWnd", wintypes.HWND), ("uID", wintypes.UINT), ("guidItem", GUID))
-
-
-if ctypes.sizeof(NOTIFYICONDATAW) != (976 if ctypes.sizeof(ctypes.c_void_p) == 8 else 956):
-    raise ImportError(f"NOTIFYICONDATAW is {ctypes.sizeof(NOTIFYICONDATAW)} bytes; Windows expects a different size")
-
-_RegisterClassW = fn(user32, "RegisterClassW", wintypes.ATOM, ctypes.POINTER(WNDCLASSW))
-_RegisterWindowMessage = fn(user32, "RegisterWindowMessageW", wintypes.UINT, wintypes.LPCWSTR)
-TASKBAR_CREATED: Final = _RegisterWindowMessage("TaskbarCreated")
-_UnregisterClassW = fn(user32, "UnregisterClassW", wintypes.BOOL, wintypes.LPCWSTR, wintypes.HINSTANCE)
-_DefWindowProcW = fn(user32, "DefWindowProcW", LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
-_Shell_NotifyIconW = fn(shell32, "Shell_NotifyIconW", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(NOTIFYICONDATAW))
-_Shell_NotifyIconGetRect = fn(shell32, "Shell_NotifyIconGetRect", wintypes.LONG, ctypes.POINTER(NOTIFYICONIDENTIFIER), ctypes.POINTER(wintypes.RECT))
-_CreatePopupMenu = fn(user32, "CreatePopupMenu", wintypes.HMENU)
-_AppendMenuW = fn(user32, "AppendMenuW", wintypes.BOOL, wintypes.HMENU, wintypes.UINT, ctypes.c_size_t, wintypes.LPCWSTR)
-_TrackPopupMenu = fn(
-    user32, "TrackPopupMenu", wintypes.BOOL, wintypes.HMENU, wintypes.UINT, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.HWND, ctypes.c_void_p
-)
-_DestroyMenu = fn(user32, "DestroyMenu", wintypes.BOOL, wintypes.HMENU)
-_CreateIconIndirect = fn(user32, "CreateIconIndirect", wintypes.HICON, ctypes.POINTER(ICONINFO))
-_DestroyIcon = fn(user32, "DestroyIcon", wintypes.BOOL, wintypes.HICON)
-_CreateBitmap = fn(gdi32, "CreateBitmap", wintypes.HBITMAP, ctypes.c_int, ctypes.c_int, wintypes.UINT, wintypes.UINT, ctypes.c_void_p)
-
-_NIM_ADD, _NIM_MODIFY, _NIM_DELETE = 0, 1, 2
-_NIF_MESSAGE, _NIF_ICON, _NIF_TIP, _NIF_INFO = 0x01, 0x02, 0x04, 0x10
+TASKBAR_CREATED: Final = RegisterWindowMessageW("TaskbarCreated")
 NIIF_INFO, NIIF_WARNING = 0x01, 0x02
-_MF_STRING, _MF_GRAYED, _MF_CHECKED, _MF_SEPARATOR = 0x0000, 0x0001, 0x0008, 0x0800
-_TPM_RIGHTBUTTON, _TPM_NONOTIFY, _TPM_RETURNCMD = 0x0002, 0x0080, 0x0100
-_WM_NULL: Final = 0
 
 WindowProc = Callable[[int, int, int, int], "int | None"]
 """(hwnd, message, wparam, lparam) -> result, or None for Windows' default handling."""
@@ -160,11 +85,11 @@ class AppWindow:
     def create(cls, title: str, proc: WindowProc, *, class_name: str | None = None) -> AppWindow:
         def call(hwnd: int, message: int, wparam: int, lparam: int) -> int:
             result = proc(int(hwnd or 0), int(message), int(wparam or 0), int(lparam or 0))
-            return int(_DefWindowProcW(hwnd, message, wparam, lparam)) if result is None else result
+            return DefWindowProcW(hwnd, message, wparam, lparam) if result is None else result
 
         callback = WNDPROC(call)
         instance = GetModuleHandleW(None)
-        window_class = WNDCLASSW(0, callback, 0, 0, instance, None, None, None, None, class_name or f"{title} class")
+        window_class = WNDCLASSW(lpfnWndProc=callback, hInstance=instance, lpszClassName=class_name or f"{title} class")
         if not _RegisterClassW(ctypes.byref(window_class)):
             raise last_error()
         hwnd: int | None = CreateWindowExW(0, window_class.lpszClassName, title, 0, 0, 0, 0, 0, None, None, instance, None)
@@ -174,7 +99,7 @@ class AppWindow:
 
     def destroy(self) -> None:
         DestroyWindow(self.handle)
-        _UnregisterClassW(self._class.lpszClassName, self._class.hInstance)
+        UnregisterClassW(self._class.lpszClassName, self._class.hInstance)
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,10 +112,10 @@ class Icon:
     def draw(cls, size: int, bgra: bytes) -> Icon:
         header = top_down(size, size)
         bits = ctypes.c_void_p()
-        color = CreateDIBSection(None, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
+        color = CreateDIBSection(None, header, DIB_RGB_COLORS, ctypes.byref(bits), None, 0)
         ctypes.memmove(bits, bgra, size * size * 4)
-        mask = _CreateBitmap(size, size, 1, 1, ctypes.create_string_buffer(size * size // 8))
-        info = ICONINFO(True, 0, 0, mask, color)
+        mask = CreateBitmap(size, size, 1, 1, ctypes.create_string_buffer(size * size // 8))
+        info = ICONINFO(fIcon=True, hbmMask=mask, hbmColor=color)
         handle: int | None = _CreateIconIndirect(ctypes.byref(info))
         DeleteObject(mask)
         DeleteObject(color)
@@ -199,7 +124,7 @@ class Icon:
         return cls(int(handle))
 
     def destroy(self) -> None:
-        _DestroyIcon(self.handle)
+        DestroyIcon(self.handle)
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,40 +141,42 @@ class TrayIcon:
         data.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
         data.hWnd = window
         data.uID = 1
-        data.uFlags = _NIF_MESSAGE | _NIF_ICON | _NIF_TIP
+        data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
         data.uCallbackMessage = message
         data.hIcon = icon.handle
         data.szTip = tip[:127]
-        _Shell_NotifyIconW(_NIM_ADD, ctypes.byref(data))
+        Shell_NotifyIconW(NIM_ADD, data)
         return cls(data)
 
     def update(self, icon: Icon, tip: str) -> None:
-        self._data.uFlags = _NIF_ICON | _NIF_TIP
+        self._data.uFlags = NIF_ICON | NIF_TIP
         self._data.hIcon = icon.handle
         self._data.szTip = tip[:127]
-        _Shell_NotifyIconW(_NIM_MODIFY, ctypes.byref(self._data))
+        Shell_NotifyIconW(NIM_MODIFY, self._data)
 
     def notify(self, title: str, text: str, kind: int = NIIF_INFO) -> None:
         """A notification ("balloon") next to the icon."""
-        self._data.uFlags = _NIF_INFO
+        self._data.uFlags = NIF_INFO
         self._data.szInfoTitle = title[:63]
         self._data.szInfo = text[:255]
         self._data.dwInfoFlags = kind
-        _Shell_NotifyIconW(_NIM_MODIFY, ctypes.byref(self._data))
+        Shell_NotifyIconW(NIM_MODIFY, self._data)
 
     def remove(self) -> None:
-        _Shell_NotifyIconW(_NIM_DELETE, ctypes.byref(self._data))
+        Shell_NotifyIconW(NIM_DELETE, self._data)
 
     def restore(self) -> None:
         """Re-register the retained icon after Explorer or the tray host restarts."""
-        self._data.uFlags = _NIF_MESSAGE | _NIF_ICON | _NIF_TIP
-        _Shell_NotifyIconW(_NIM_ADD, ctypes.byref(self._data))
+        self._data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
+        Shell_NotifyIconW(NIM_ADD, self._data)
 
     def bounds(self) -> Rect | None:
         """Observe the host's icon position for native popup anchoring."""
-        identifier = NOTIFYICONIDENTIFIER(ctypes.sizeof(NOTIFYICONIDENTIFIER), self._data.hWnd, self._data.uID, self._data.guidItem)
-        rect = wintypes.RECT()
-        if _Shell_NotifyIconGetRect(ctypes.byref(identifier), ctypes.byref(rect)) < 0:
+        identifier = NOTIFYICONIDENTIFIER(
+            cbSize=ctypes.sizeof(NOTIFYICONIDENTIFIER), hWnd=self._data.hWnd, uID=self._data.uID, guidItem=self._data.guidItem
+        )
+        rect = RECT()
+        if Shell_NotifyIconGetRect(identifier, rect) < 0:
             return None
         return Rect(rect.left, rect.top, rect.right, rect.bottom)
 
@@ -265,19 +192,19 @@ class MenuItem:
 
 def show_menu(window: int, items: Sequence[MenuItem]) -> int:
     """A popup menu at the mouse; the chosen item's id, or 0 if dismissed."""
-    menu = _CreatePopupMenu()
+    menu = CreatePopupMenu()
     try:
         for item in items:
             if item.id == 0:
-                _AppendMenuW(menu, _MF_SEPARATOR, 0, None)
+                AppendMenuW(menu, MF_SEPARATOR, 0, None)
             else:
-                flags = _MF_STRING | (0 if item.enabled else _MF_GRAYED) | (_MF_CHECKED if item.checked else 0)
-                _AppendMenuW(menu, flags, item.id, item.text)
+                flags = MF_STRING | (0 if item.enabled else MF_GRAYED) | (MF_CHECKED if item.checked else 0)
+                AppendMenuW(menu, flags, item.id, item.text)
         point = wintypes.POINT()
         GetCursorPos(ctypes.byref(point))
         SetForegroundWindow(window)  # without this the menu doesn't close when clicking elsewhere
-        chosen = int(_TrackPopupMenu(menu, _TPM_RIGHTBUTTON | _TPM_NONOTIFY | _TPM_RETURNCMD, point.x, point.y, 0, window, None))
-        PostMessageW(window, _WM_NULL, 0, 0)
+        chosen = int(TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_NONOTIFY | TPM_RETURNCMD, point.x, point.y, 0, window, None))
+        PostMessageW(window, WM_NULL, 0, 0)
         return chosen
     finally:
-        _DestroyMenu(menu)
+        DestroyMenu(menu)

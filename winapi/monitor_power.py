@@ -13,25 +13,18 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
+lazy from win32more.Windows.Win32.Devices.Display import (
+    PHYSICAL_MONITOR,
+    DestroyPhysicalMonitors,
+    GetNumberOfPhysicalMonitorsFromHMONITOR,
+    GetPhysicalMonitorsFromHMONITOR,
+)
+
 from cell import Cell
 from winapi._core import dxva2, fn
 from winapi.screen import Monitor, attached
 
-
-class PhysicalMonitor(ctypes.Structure):
-    """PhysicalMonitor."""
-
-    handle: int | None
-    _fields_ = (("handle", wintypes.HANDLE), ("description", wintypes.WCHAR * 128))
-
-
-_GetNumberOfPhysicalMonitorsFromHMONITOR = fn(
-    dxva2, "GetNumberOfPhysicalMonitorsFromHMONITOR", wintypes.BOOL, wintypes.HMONITOR, ctypes.POINTER(wintypes.DWORD)
-)
-_GetPhysicalMonitorsFromHMONITOR = fn(
-    dxva2, "GetPhysicalMonitorsFromHMONITOR", wintypes.BOOL, wintypes.HMONITOR, wintypes.DWORD, ctypes.POINTER(PhysicalMonitor)
-)
-_DestroyPhysicalMonitors = fn(dxva2, "DestroyPhysicalMonitors", wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(PhysicalMonitor))
+# Windows reports a refused DDC/CI request through the thread's last error, which win32more's bindings don't keep.
 _GetVCPFeatureAndVCPFeatureReply = fn(
     dxva2,
     "GetVCPFeatureAndVCPFeatureReply",
@@ -86,23 +79,23 @@ class _Opened:
     """The open physical monitors behind one attached monitor, in the array Windows filled."""
 
     monitor: Monitor
-    array: ctypes.Array[PhysicalMonitor]
+    array: ctypes.Array[PHYSICAL_MONITOR]
 
 
 def _opened() -> Iterator[_Opened]:
     """Open the physical monitors of each attached monitor that has any; the caller owns the arrays."""
     for hmonitor, monitor in attached():
-        count = wintypes.DWORD()
-        if not _GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, ctypes.byref(count)) or count.value == 0:
+        count = ctypes.c_uint32()
+        if not GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, ctypes.byref(count)) or count.value == 0:
             continue
-        array = (PhysicalMonitor * count.value)()
-        if _GetPhysicalMonitorsFromHMONITOR(hmonitor, count.value, array):
+        array = (PHYSICAL_MONITOR * count.value)()
+        if GetPhysicalMonitorsFromHMONITOR(hmonitor, count.value, array):
             yield _Opened(monitor, array)
 
 
 @dataclass(frozen=True, slots=True)
 class _Handles:
-    arrays: tuple[ctypes.Array[PhysicalMonitor], ...]
+    arrays: tuple[ctypes.Array[PHYSICAL_MONITOR], ...]
     handles: frozendict[Monitor, tuple[int, ...]]
 
 
@@ -118,7 +111,7 @@ class PhysicalMonitors:
     def open(cls) -> PhysicalMonitors:
         opened = tuple(_opened())
         arrays = tuple(physical.array for physical in opened)
-        handles = frozendict((physical.monitor, tuple(int(entry.handle or 0) for entry in physical.array)) for physical in opened)
+        handles = frozendict((physical.monitor, tuple(int(entry.hPhysicalMonitor or 0) for entry in physical.array)) for physical in opened)
         return cls(Cell(_Handles(arrays, handles)))
 
     @property
@@ -153,5 +146,5 @@ class PhysicalMonitors:
 
     def close(self) -> None:
         for array in self._opened.get().arrays:
-            _DestroyPhysicalMonitors(len(array), array)
+            DestroyPhysicalMonitors(len(array), array)
         self._opened.set(_Handles((), frozendict()))

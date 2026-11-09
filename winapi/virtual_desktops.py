@@ -14,12 +14,12 @@ import ctypes
 import uuid
 from ctypes import wintypes
 from dataclasses import dataclass
-from typing import Final
 
-from winapi._core import AllowSetForegroundWindow, CoCreateInstance, com_method, guid_buffer
+lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import ASFW_ANY, AllowSetForegroundWindow
+
+from winapi._core import CoCreateInstance, com_method, guid_buffer
 
 _CLSCTX_INPROC_SERVER, _CLSCTX_LOCAL_SERVER = 0x1, 0x4
-_ASFW_ANY: Final = 0xFFFF_FFFF
 _IMMERSIVE_SHELL = guid_buffer("C2F03A33-21F5-47FA-B4BB-156362A2F239")
 _IID_SERVICE_PROVIDER = guid_buffer("6D5140C1-7436-11CE-8034-00AA006009FA")
 _DESKTOP_MANAGER = guid_buffer("AA509086-5CA9-4C25-8F95-589D3C07B48A")
@@ -177,7 +177,7 @@ class VirtualDesktops:
         target = ctypes.c_void_p()
         try:
             self._find(desktop, target)
-            AllowSetForegroundWindow(_ASFW_ANY)
+            AllowSetForegroundWindow(ASFW_ANY)
             _check(com_method("A virtual desktop interface", self.internal, _SWITCH, ctypes.c_void_p)(self.internal, target), "switch desktops")
         finally:
             _release(target)

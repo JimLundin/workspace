@@ -10,25 +10,17 @@ lazy from win32more import FAILED
 lazy from win32more._win32 import Guid
 lazy from win32more.Windows.Win32.Media.Audio import IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender
 lazy from win32more.Windows.Win32.Media.Audio.Endpoints import IAudioEndpointVolume
+lazy from win32more.Windows.Win32.NetworkManagement.WiFi import (
+    WLAN_API_VERSION_2_0,
+    WLAN_INTERFACE_INFO_LIST,
+    WlanCloseHandle,
+    WlanEnumInterfaces,
+    WlanFreeMemory,
+    WlanOpenHandle,
+)
 lazy from win32more.Windows.Win32.System.Com import CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize
 
-from winapi._core import fn
 from winapi.machine_status import Audio, Speakers, Wifi
-
-_wlan = ctypes.WinDLL("wlanapi", use_last_error=True)
-_WlanOpenHandle = fn(
-    _wlan, "WlanOpenHandle", wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.HANDLE)
-)
-_WlanEnumInterfaces = fn(_wlan, "WlanEnumInterfaces", wintypes.DWORD, wintypes.HANDLE, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
-_WlanFreeMemory = fn(_wlan, "WlanFreeMemory", None, ctypes.c_void_p)
-_WlanCloseHandle = fn(_wlan, "WlanCloseHandle", wintypes.DWORD, wintypes.HANDLE, ctypes.c_void_p)
-
-
-class WlanInterface(ctypes.Structure):
-    guid: ctypes.Array[ctypes.c_byte]
-    description: str
-    state: int
-    _fields_ = (("guid", ctypes.c_byte * 16), ("description", ctypes.c_wchar * 256), ("state", wintypes.DWORD))
 
 
 def wifi_state(states: tuple[int, ...]) -> Wifi:
@@ -41,22 +33,20 @@ def wifi_state(states: tuple[int, ...]) -> Wifi:
 
 
 def wifi() -> Wifi:
-    handle, version, data = wintypes.HANDLE(), wintypes.DWORD(), ctypes.c_void_p()
-    if _WlanOpenHandle(2, None, ctypes.byref(version), ctypes.byref(handle)):
+    handle, version, interfaces = ctypes.c_void_p(), ctypes.c_uint32(), ctypes.POINTER(WLAN_INTERFACE_INFO_LIST)()
+    if WlanOpenHandle(WLAN_API_VERSION_2_0, None, ctypes.byref(version), ctypes.byref(handle)):
         return Wifi.UNKNOWN
     try:
-        if _WlanEnumInterfaces(handle, None, ctypes.byref(data)) or not data.value:
+        if WlanEnumInterfaces(handle, None, ctypes.byref(interfaces)) or not interfaces:
             return Wifi.UNKNOWN
-        count = int(ctypes.cast(data, ctypes.POINTER(wintypes.DWORD)).contents.value)
-        if not 0 <= count <= 64:
+        listed = interfaces.contents
+        if not 0 <= listed.dwNumberOfItems <= 64:
             return Wifi.UNKNOWN
-        address = data.value + 8  # count and current-index DWORDs precede the variable interface array.
-        interfaces = (WlanInterface * count).from_address(address)
-        return wifi_state(tuple(int(item.state) for item in interfaces))
+        return wifi_state(tuple(item.isState for item in listed.InterfaceInfo[: listed.dwNumberOfItems]))
     finally:
-        if data.value:
-            _WlanFreeMemory(data)
-        _WlanCloseHandle(handle, None)
+        if interfaces:
+            WlanFreeMemory(interfaces)
+        WlanCloseHandle(handle, None)
 
 
 @contextmanager

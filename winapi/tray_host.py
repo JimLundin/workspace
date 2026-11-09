@@ -6,27 +6,32 @@ cached registry icons. The hidden proxy is removed before Explorer is restored.
 """
 
 import ctypes
-from ctypes import wintypes
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Final
 
+lazy from win32more.Windows.Win32.System.DataExchange import COPYDATASTRUCT
+lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
+    HWND_BROADCAST,
+    HWND_TOPMOST,
+    SMTO_ABORTIFHUNG,
+    SWP_NOACTIVATE,
+    SWP_NOMOVE,
+    SWP_NOSIZE,
+    WM_COPYDATA,
+    WM_USER,
+    AllowSetForegroundWindow,
+    SendMessageTimeoutW,
+    SendNotifyMessageW,
+    SetPropW,
+)
+
 from cell import Cell
 from winapi import desktop_shell, windows
-from winapi._core import ULONG_PTR, AllowSetForegroundWindow, SendMessageTimeoutW, SetWindowPos, fn, user32
+from winapi._core import SetWindowPos
 from winapi.icon_pixels import Pixels, native_pixels
 from winapi.shapes import Point, Rect
 from winapi.shell import TASKBAR_CREATED, AppWindow
-
-_SetProp = fn(user32, "SetPropW", wintypes.BOOL, wintypes.HWND, wintypes.LPCWSTR, wintypes.HANDLE)
-_SendNotifyMessage = fn(user32, "SendNotifyMessageW", wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
-
-
-class CopyData(ctypes.Structure):
-    kind: int
-    size: int
-    data: int | None
-    _fields_ = (("kind", ULONG_PTR), ("size", wintypes.DWORD), ("data", ctypes.c_void_p))
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,26 +187,26 @@ def _proxied(hosted: Cell[_Hosted], message: int, wparam: int, lparam: int) -> i
     # Required Windows WNDPROC ABI; WM_COPYDATA pointers exist only during this callback.
     if hosted.get().closed:
         return None
-    if message == 0x4A and lparam:
-        copy = CopyData.from_address(lparam)
-        if copy.kind == 3 and copy.data and 40 <= copy.size <= 128:
-            reply = position_reply(ctypes.string_at(copy.data, copy.size), hosted.get().locations)
+    if message == WM_COPYDATA and lparam:
+        copy = COPYDATASTRUCT.from_address(lparam)
+        if copy.dwData == 3 and copy.lpData and 40 <= copy.cbData <= 128:
+            reply = position_reply(ctypes.string_at(copy.lpData, copy.cbData), hosted.get().locations)
             if reply is not None:
                 return reply
-        if copy.kind == 1 and copy.data and 296 <= copy.size <= 4096:
-            observed = registration(ctypes.string_at(copy.data, copy.size))
+        if copy.dwData == 1 and copy.lpData and 296 <= copy.cbData <= 4096:
+            observed = registration(ctypes.string_at(copy.lpData, copy.cbData))
             if observed is not None:
                 pixels = native_pixels(observed.icon) if observed.flags & 2 and observed.operation in (0, 1) else None
                 hosted.update(lambda current: replace(current, entries=update(current.entries, observed, pixels)))
     if message == TASKBAR_CREATED:
         return 0
-    if message == 0x4A or message >= 0x400:
+    if message == WM_COPYDATA or message >= WM_USER:
         if not windows.exists(hosted.get().explorer):
             explorer = next(iter(desktop_shell.taskbars()), 0)
             hosted.update(lambda current: replace(current, explorer=explorer))
         if explorer := hosted.get().explorer:
-            result = ULONG_PTR()
-            if SendMessageTimeoutW(explorer, message, wparam, lparam, 2, 100, ctypes.byref(result)):
+            result = ctypes.c_size_t()
+            if SendMessageTimeoutW(explorer, message, wparam, lparam, SMTO_ABORTIFHUNG, 100, ctypes.byref(result)):
                 return ctypes.c_ssize_t(result.value).value
         return 0
     return None
@@ -223,10 +228,10 @@ class TrayHost:
 
         window = AppWindow.create("workspace tray proxy", message, class_name="Shell_TrayWnd")
         host = cls(window, hosted)
-        _SetProp(window.handle, "workspace tray proxy", 1)
-        _SetProp(window.handle, "TaskbandHWND", window.handle)
+        SetPropW(window.handle, "workspace tray proxy", 1)
+        SetPropW(window.handle, "TaskbandHWND", window.handle)
         host.poll()
-        _SendNotifyMessage(0xFFFF, TASKBAR_CREATED, 0, 0)
+        SendNotifyMessageW(HWND_BROADCAST, TASKBAR_CREATED, 0, 0)
         return host
 
     @property
@@ -234,7 +239,7 @@ class TrayHost:
         return self._hosted.get().entries
 
     def poll(self) -> tuple[Entry, ...]:
-        SetWindowPos(self.window.handle, -1, 0, 0, 0, 0, 0x13)
+        SetWindowPos(self.window.handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
         hosted = self._hosted.update(
             lambda current: replace(current, entries=tuple(entry for entry in current.entries if windows.exists(entry.window)))
         )
@@ -248,10 +253,10 @@ class TrayHost:
         if entry in self.entries and windows.exists(entry.window):
             AllowSetForegroundWindow(windows.process_id(entry.window))
             for notify in callbacks(entry, click, point):
-                _SendNotifyMessage(entry.window, entry.callback, notify.wparam, notify.lparam)
+                SendNotifyMessageW(entry.window, entry.callback, notify.wparam, notify.lparam)
 
     def close(self) -> None:
         self._hosted.update(lambda current: replace(current, closed=True))
         self.window.destroy()
         self._hosted.update(lambda current: replace(current, entries=()))
-        _SendNotifyMessage(0xFFFF, TASKBAR_CREATED, 0, 0)
+        SendNotifyMessageW(HWND_BROADCAST, TASKBAR_CREATED, 0, 0)

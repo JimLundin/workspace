@@ -836,7 +836,7 @@ def duplicates(observations: Iterable[Observation]) -> Iterator[Finding]:
             yield replace(shape.finding, detail=f"{shape.finding.detail} First copy: {original.module}.{original.declaration}.")
 
 
-DECLARES: Final = frozenset({"fn", "optional_fn"})
+DECLARES: Final = frozenset({"fn"})
 """winapi._core's foreign-function declarations: `fn(user32, "GetForegroundWindow", HWND)`."""
 
 

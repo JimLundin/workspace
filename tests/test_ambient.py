@@ -2,6 +2,8 @@
 
 import unittest
 
+from win32more.Windows.Win32.System.Power import SYSTEM_POWER_STATUS
+
 from desktop_ui.ambient import Ambient
 from winapi import ambient, system_status
 from winapi.machine_status import Battery, CpuTimes, PowerUnavailable, Wifi, cpu_load
@@ -44,14 +46,14 @@ def test_processor_load_is_the_busy_share_of_time_between_two_samples() -> None:
 
 
 def test_native_power_validates_missing_and_unknown_batteries() -> None:
-    status = ambient.PowerStatus()
-    status.ac, status.flags, status.percent = 1, 8, 73
+    status = SYSTEM_POWER_STATUS()
+    status.ACLineStatus, status.BatteryFlag, status.BatteryLifePercent = 1, 8, 73
     assert ambient.power_from_status(status) == Battery(73, powered=True, charging=True)
-    status.flags = 128
+    status.BatteryFlag = 128
     assert ambient.power_from_status(status) is PowerUnavailable.NO_BATTERY
-    status.flags = 255
+    status.BatteryFlag = 255
     assert ambient.power_from_status(status) is PowerUnavailable.UNKNOWN
-    status.flags, status.percent = 0, 255
+    status.BatteryFlag, status.BatteryLifePercent = 0, 255
     assert ambient.power_from_status(status) is PowerUnavailable.UNKNOWN
     assert ambient.power_from_status(None) is PowerUnavailable.UNKNOWN
 

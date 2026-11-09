@@ -1,0 +1,3 @@
+DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2: int
+
+def SetProcessDpiAwarenessContext(context: int) -> int: ...

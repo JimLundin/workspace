@@ -7,3 +7,21 @@ def DuplicateHandle(
 ) -> int: ...
 
 class PROPERTYKEY(ctypes.Structure): ...
+
+class FILETIME(ctypes.Structure):
+    dwLowDateTime: int
+    dwHighDateTime: int
+
+def GlobalFree(memory: int) -> int | None: ...
+
+ERROR_INSUFFICIENT_BUFFER: int
+ERROR_IO_PENDING: int
+GENERIC_READ: int
+GENERIC_WRITE: int
+INVALID_HANDLE_VALUE: int
+
+class RECT(ctypes.Structure):
+    left: int
+    top: int
+    right: int
+    bottom: int

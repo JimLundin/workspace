@@ -7,22 +7,19 @@ we drain small packets; no microphone stop/start occurs between transcript chunk
 import contextlib
 import ctypes
 import threading
+import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from ctypes import wintypes
 from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
+lazy from win32more.Windows.Win32.System.Com import COINIT_MULTITHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize
+
 from cell import Cell
-from winapi._core import CoCreateInstance, com_method, fn, guid_buffer, kernel32, ole32
+from winapi._core import CoCreateInstance, com_method, guid_buffer
 from winapi.audio import WAVEFORMATEX
 from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, Problem, Stall, dropout
-
-_CoInitializeEx = fn(ole32, "CoInitializeEx", ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)
-_CoUninitialize = fn(ole32, "CoUninitialize", None)
-_CoTaskMemFree = fn(ole32, "CoTaskMemFree", None, ctypes.c_void_p)
-_QueryPerformanceCounter = fn(kernel32, "QueryPerformanceCounter", wintypes.BOOL, ctypes.POINTER(ctypes.c_longlong))
-_QueryPerformanceFrequency = fn(kernel32, "QueryPerformanceFrequency", wintypes.BOOL, ctypes.POINTER(ctypes.c_longlong))
 
 _LOOPBACK: Final = 0x0002_0000
 _DISCONTINUITY: Final = 1
@@ -74,16 +71,16 @@ class WasapiApi(Protocol):
 @dataclass(frozen=True, slots=True)
 class NativeWasapi:
     def initialize(self) -> int:
-        return _CoInitializeEx(None, 0)
+        return CoInitializeEx(None, COINIT_MULTITHREADED)
 
     def uninitialize(self) -> None:
-        _CoUninitialize()
+        CoUninitialize()
 
     def create_enumerator(self, pointer: ctypes.c_void_p) -> int:
         return CoCreateInstance(_ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(pointer))
 
     def free_format(self, pointer: ctypes.c_void_p) -> None:
-        _CoTaskMemFree(pointer)
+        CoTaskMemFree(pointer)
 
     def method(self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType) -> NativeCall:
         # The declared c_long restype supplies an integer HRESULT. Keep that
@@ -91,7 +88,8 @@ class NativeWasapi:
         return com_method("The audio interface", pointer, index, *arguments)
 
     def clock(self) -> float:
-        return _clock()
+        """Seconds on the QueryPerformanceCounter clock that WASAPI timestamps packets with."""
+        return time.perf_counter()
 
     def wait(self, stop: threading.Event, timeout: float) -> bool:
         return stop.wait(timeout)
@@ -101,13 +99,6 @@ def _release(pointer: ctypes.c_void_p, api: WasapiApi) -> None:
     if pointer:
         api.method(pointer, 2)(pointer)
         pointer.value = None
-
-
-def _clock() -> float:
-    counter, frequency = ctypes.c_longlong(), ctypes.c_longlong()
-    if not _QueryPerformanceCounter(ctypes.byref(counter)) or not _QueryPerformanceFrequency(ctypes.byref(frequency)):
-        raise OSError("Windows could not read the audio clock.")
-    return counter.value / frequency.value
 
 
 def _format(pointer: ctypes.c_void_p) -> PcmFormat:

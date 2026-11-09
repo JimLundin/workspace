@@ -5,27 +5,12 @@ power settings, and never simulates input to hold them off.
 """
 
 import ctypes
-from ctypes import wintypes
 from typing import Final
 
-from winapi._core import fn, kernel32, powrprof, user32
+lazy from win32more.Windows.Win32.System.Power import ES_DISPLAY_REQUIRED, CallNtPowerInformation, SystemExecutionState
+lazy from win32more.Windows.Win32.System.SystemInformation import GetTickCount64
+lazy from win32more.Windows.Win32.UI.Input.KeyboardAndMouse import LASTINPUTINFO, GetLastInputInfo
 
-
-class LastInputInfo(ctypes.Structure):
-    """LASTINPUTINFO."""
-
-    time: int
-    _fields_ = (("cbSize", wintypes.UINT), ("time", wintypes.DWORD))
-
-
-_GetLastInputInfo = fn(user32, "GetLastInputInfo", wintypes.BOOL, ctypes.POINTER(LastInputInfo))
-_GetTickCount64 = fn(kernel32, "GetTickCount64", ctypes.c_ulonglong)
-_CallNtPowerInformation = fn(
-    powrprof, "CallNtPowerInformation", wintypes.LONG, ctypes.c_int, ctypes.c_void_p, wintypes.ULONG, ctypes.c_void_p, wintypes.ULONG
-)
-
-_SYSTEM_EXECUTION_STATE: Final = 16
-_ES_DISPLAY_REQUIRED: Final = 0x2
 _TICKS: Final = 1 << 32
 
 
@@ -36,10 +21,10 @@ def elapsed(now: int, then: int) -> int:
 
 def idle_ms() -> int:
     """Milliseconds since this session's last keyboard or mouse input; 0 when Windows doesn't say."""
-    info = LastInputInfo(ctypes.sizeof(LastInputInfo), 0)
-    if not _GetLastInputInfo(ctypes.byref(info)):
+    info = LASTINPUTINFO(cbSize=ctypes.sizeof(LASTINPUTINFO))
+    if not GetLastInputInfo(info):
         return 0
-    return elapsed(_GetTickCount64(), info.time)
+    return elapsed(GetTickCount64(), info.dwTime)
 
 
 def display_required() -> bool:
@@ -49,7 +34,7 @@ def display_required() -> bool:
     ES_DISPLAY_REQUIRED while another process holds SetThreadExecutionState's
     display flag or a PowerSetRequest display request, and clears when it exits.
     A system-only request leaves the display flag clear."""
-    state = wintypes.ULONG()
-    if _CallNtPowerInformation(_SYSTEM_EXECUTION_STATE, None, 0, ctypes.byref(state), ctypes.sizeof(state)) != 0:
+    state = ctypes.c_ulong()
+    if CallNtPowerInformation(SystemExecutionState, None, 0, ctypes.byref(state), ctypes.sizeof(state)) != 0:
         return True
-    return bool(state.value & _ES_DISPLAY_REQUIRED)
+    return bool(state.value & ES_DISPLAY_REQUIRED)

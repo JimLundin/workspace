@@ -259,8 +259,8 @@ ban-relative-imports = "all"
 "miryoku/layout.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
 "winapi/*.py" = ["E501", "N816", "PLR0917"]
-# Dependency stubs preserve the pinned SDK's actual method names.
-"typings/win32more/**/*.pyi" = ["N801", "N802", "N815"]
+# Dependency stubs preserve the pinned SDK's actual method and structure field names.
+"typings/win32more/**/*.pyi" = ["N801", "N802", "N803", "N815"]
 
 [tool.setuptools]
 py-modules = ["cell", "components", "config", "diagnostics", "launch", "protocol", "usage"]
