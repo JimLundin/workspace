@@ -41,41 +41,26 @@ Its keymap uses no other Right Alt, and with the Charybdis connected Windows run
 English (US), where Right Alt is a plain Alt rather than AltGr."""
 
 
-# ---- Short names used in the tables --------------------------------------------
+# ---- Shortcuts the layers send ----------------------------------------------------
 
-# fmt: off
-A, B, C, D, E, F, G, H, I, J, K, L, M = Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M  # noqa: E741 - the letters by name
-N, O, P, Q, R, S, T, U, V, W, X, Y, Z = Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z  # noqa: E741 - the letters by name
-N0, N1, N2, N3, N4, N5, N6, N7, N8, N9 = Key.N0, Key.N1, Key.N2, Key.N3, Key.N4, Key.N5, Key.N6, Key.N7, Key.N8, Key.N9
-GRAVE, MINUS, EQUAL, LBRACKET, RBRACKET, BACKSLASH = Key.GRAVE, Key.MINUS, Key.EQUAL, Key.LBRACKET, Key.RBRACKET, Key.BACKSLASH
-SEMICOLON, QUOTE, COMMA, PERIOD, SLASH = Key.SEMICOLON, Key.QUOTE, Key.COMMA, Key.PERIOD, Key.SLASH
-ESC, SPACE, TAB, ENTER, BACKSPACE, CAPS_LOCK = Key.ESC, Key.SPACE, Key.TAB, Key.ENTER, Key.BACKSPACE, Key.CAPS_LOCK
-DELETE, INSERT, HOME, END, PAGE_UP, PAGE_DOWN = Key.DELETE, Key.INSERT, Key.HOME, Key.END, Key.PAGE_UP, Key.PAGE_DOWN
-LEFT, UP, RIGHT, DOWN = Key.LEFT, Key.UP, Key.RIGHT, Key.DOWN
-GUI, ALT, CTL, SFT = Mod.GUI, Mod.ALT, Mod.CTRL, Mod.SHIFT
-NAV, NUM, SYM = Layer.NAV, Layer.NUM, Layer.SYM
-# fmt: on
-
-XX = BLANK
-ht = TapHold
-
-
-sh, ctl = Chord.shifted, Chord.ctrl
-
-
-UNDO, REDO, COPY, PASTE, CUT = ctl(Z), ctl(Y), ctl(C), ctl(V), ctl(X)
+UNDO, REDO, COPY, PASTE, CUT = Chord.ctrl(Key.Z), Chord.ctrl(Key.Y), Chord.ctrl(Key.C), Chord.ctrl(Key.V), Chord.ctrl(Key.X)
 
 # ---- The layout ----------------------------------------------------------------
-# Rows read across the keyboard: left hand, then right hand. Kept in columns by
-# hand, so the formatter is told to leave this section alone.
+# Each row is written across the keyboard: the left hand's half, then the right
+# hand's on the line below. Kept in columns by hand, so the formatter is told to
+# leave this section alone.
 
 # fmt: off
 PHYSICAL: Final[Board[Laptop]] = Board(
     # The ISO laptop keyboard (Miryoku KMonad mapping: rows moved up one, reverse angle on the left, wide spacing).
-    top=      Row((Laptop.N2,   Laptop.N3, Laptop.N4, Laptop.N5, Laptop.N6), (Laptop.N8, Laptop.N9, Laptop.N0,      Laptop.PLUS,    Laptop.ACUTE     )),
-    home=     Row((Laptop.Q,    Laptop.W,  Laptop.E,  Laptop.R,  Laptop.T ), (Laptop.I,  Laptop.O,  Laptop.P,       Laptop.ARING,   Laptop.DIAERESIS )),
-    bottom=   Row((Laptop.CAPS, Laptop.A,  Laptop.S,  Laptop.D,  Laptop.F ), (Laptop.K,  Laptop.L,  Laptop.OUMLAUT, Laptop.AUMLAUT, Laptop.APOSTROPHE)),
-    thumbs=Thumbs((                        Laptop.X,  Laptop.C,  Laptop.V ), (Laptop.M,  Laptop.COMMA, Laptop.PERIOD)),
+    top=      Row((Laptop.N2,    Laptop.N3,     Laptop.N4,       Laptop.N5,       Laptop.N6),
+                  (Laptop.N8,    Laptop.N9,     Laptop.N0,       Laptop.PLUS,     Laptop.ACUTE)),
+    home=     Row((Laptop.Q,     Laptop.W,      Laptop.E,        Laptop.R,        Laptop.T),
+                  (Laptop.I,     Laptop.O,      Laptop.P,        Laptop.ARING,    Laptop.DIAERESIS)),
+    bottom=   Row((Laptop.CAPS,  Laptop.A,      Laptop.S,        Laptop.D,        Laptop.F),
+                  (Laptop.K,     Laptop.L,      Laptop.OUMLAUT,  Laptop.AUMLAUT,  Laptop.APOSTROPHE)),
+    thumbs=Thumbs((                             Laptop.X,        Laptop.C,        Laptop.V),
+                  (Laptop.M,     Laptop.COMMA,  Laptop.PERIOD)),
 )
 
 UNUSED: Final = frozenset({
@@ -99,51 +84,72 @@ NATIVE_KEYS: Final = frozenset((
 """Virtual keys that stay native whichever physical key sends them: function and
 media keys, arrows, and the physical Shift, Ctrl and Windows keys."""
 
+# ---- The base layer --------------------------------------------------------------
+
 BASE: Final[Board[Binding]] = Board(
-    # Colemak-DH with home row mods (Win Alt Ctrl Shift).
-    top=      Row((Q,          W,          F,          P,              B  ), (J,              L,                  U,          Y,          QUOTE     )),
-    home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(I, ALT), ht(O, GUI))),
-    bottom=   Row((Z,          X,          C,          D,              V  ), (K,              H,                  COMMA,      PERIOD,     SLASH     )),
-    thumbs=Thumbs((                        ht(ESC, Layer.APPS), ht(SPACE, NAV), TAB     ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), DELETE)),
+    # What each key does while no layer is held: Colemak-DH with home row mods (Win Alt Ctrl Shift).
+    top=      Row((Key.Q,                          Key.W,                              Key.F,                         Key.P,                          Key.B),
+                  (Key.J,                          Key.L,                              Key.U,                         Key.Y,                          Key.QUOTE)),
+    home=     Row((TapHold(Key.A, Mod.GUI),        TapHold(Key.R, Mod.ALT),            TapHold(Key.S, Mod.CTRL),      TapHold(Key.T, Mod.SHIFT),      Key.G),
+                  (Key.M,                          TapHold(Key.N, Mod.SHIFT),          TapHold(Key.E, Mod.CTRL),      TapHold(Key.I, Mod.ALT),        TapHold(Key.O, Mod.GUI))),
+    bottom=   Row((Key.Z,                          Key.X,                              Key.C,                         Key.D,                          Key.V),
+                  (Key.K,                          Key.H,                              Key.COMMA,                     Key.PERIOD,                     Key.SLASH)),
+    thumbs=Thumbs((                                                                    TapHold(Key.ESC, Layer.APPS),  TapHold(Key.SPACE, Layer.NAV),  Key.TAB),
+                  (TapHold(Key.ENTER, Layer.SYM),  TapHold(Key.BACKSPACE, Layer.NUM),  Key.DELETE)),
 )
 
+# ---- The held layers -------------------------------------------------------------
+
 # The apps from config, ten slots named by their chord letters; slots past the end do nothing.
-_APPS: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[XX] * (10 - len(config.APPS[:10])))
+_APPS: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[BLANK] * (10 - len(config.APPS[:10])))
 _Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = every_member(Layer, {
     Layer.NAV: Board(
         # Hold the Space thumb.
-        top=      Row((XX,   XX,  XX,  XX,  XX), (REDO,      PASTE,     COPY,      CUT,     UNDO )),
-        home=     Row((GUI,  ALT, CTL, SFT, XX), (CAPS_LOCK, LEFT,      DOWN,      UP,      RIGHT)),
-        bottom=   Row((XX,   XX,  XX,  XX,  XX), (INSERT,    HOME,      PAGE_DOWN, PAGE_UP, END  )),
-        thumbs=Thumbs((           XX,  XX,  XX), (ENTER,     BACKSPACE, DELETE   )),
+        top=      Row((BLANK,          BLANK,          BLANK,          BLANK,        BLANK),
+                      (REDO,           PASTE,          COPY,           CUT,          UNDO)),
+        home=     Row((Mod.GUI,        Mod.ALT,        Mod.CTRL,       Mod.SHIFT,    BLANK),
+                      (Key.CAPS_LOCK,  Key.LEFT,       Key.DOWN,       Key.UP,       Key.RIGHT)),
+        bottom=   Row((BLANK,          BLANK,          BLANK,          BLANK,        BLANK),
+                      (Key.INSERT,     Key.HOME,       Key.PAGE_DOWN,  Key.PAGE_UP,  Key.END)),
+        thumbs=Thumbs((                                BLANK,          BLANK,        BLANK),
+                      (Key.ENTER,      Key.BACKSPACE,  Key.DELETE)),
     ),
     Layer.NUM: Board(
         # Hold the Backspace thumb.
-        top=      Row((LBRACKET,  N7, N8,     N9, RBRACKET ), (XX, XX,  XX,  XX,  XX  )),  # [ 7 8 9 ]
-        home=     Row((SEMICOLON, N4, N5,     N6, EQUAL    ), (XX, SFT, CTL, ALT, GUI )),  # ; 4 5 6 =
-        bottom=   Row((GRAVE,     N1, N2,     N3, BACKSLASH), (XX, XX,  XX,  XX,  XX  )),  # ` 1 2 3 \
-        thumbs=Thumbs((               PERIOD, N0, MINUS    ), (XX, XX,  XX )),             # . 0 -
+        top=      Row((Key.LBRACKET,   Key.N7,     Key.N8,      Key.N9,   Key.RBRACKET),   # [ 7 8 9 ]
+                      (BLANK,          BLANK,      BLANK,       BLANK,    BLANK)),
+        home=     Row((Key.SEMICOLON,  Key.N4,     Key.N5,      Key.N6,   Key.EQUAL),      # ; 4 5 6 =
+                      (BLANK,          Mod.SHIFT,  Mod.CTRL,    Mod.ALT,  Mod.GUI)),
+        bottom=   Row((Key.GRAVE,      Key.N1,     Key.N2,      Key.N3,   Key.BACKSLASH),  # ` 1 2 3 \
+                      (BLANK,          BLANK,      BLANK,       BLANK,    BLANK)),
+        thumbs=Thumbs((                            Key.PERIOD,  Key.N0,   Key.MINUS),      # . 0 -
+                      (BLANK,          BLANK,      BLANK)),
     ),
     Layer.SYM: Board(
         # Hold the Enter thumb.
-        top=      Row((sh(LBRACKET),  sh(N7), sh(N8), sh(N9), sh(RBRACKET) ), (XX, XX,  XX,  XX,  XX  )),  # { & * ( }
-        home=     Row((sh(SEMICOLON), sh(N4), sh(N5), sh(N6), sh(EQUAL)    ), (XX, SFT, CTL, ALT, GUI )),  # : $ % ^ +
-        bottom=   Row((sh(GRAVE),     sh(N1), sh(N2), sh(N3), sh(BACKSLASH)), (XX, XX,  XX,  XX,  XX  )),  # ~ ! @ # |
-        thumbs=Thumbs((                       sh(N9), sh(N0), sh(MINUS)    ), (XX, XX,  XX )),             # ( ) _
+        top=      Row((Chord.shifted(Key.LBRACKET),   Chord.shifted(Key.N7),  Chord.shifted(Key.N8),  Chord.shifted(Key.N9),  Chord.shifted(Key.RBRACKET)),   # { & * ( }
+                      (BLANK,                         BLANK,                  BLANK,                  BLANK,                  BLANK)),
+        home=     Row((Chord.shifted(Key.SEMICOLON),  Chord.shifted(Key.N4),  Chord.shifted(Key.N5),  Chord.shifted(Key.N6),  Chord.shifted(Key.EQUAL)),      # : $ % ^ +
+                      (BLANK,                         Mod.SHIFT,              Mod.CTRL,               Mod.ALT,                Mod.GUI)),
+        bottom=   Row((Chord.shifted(Key.GRAVE),      Chord.shifted(Key.N1),  Chord.shifted(Key.N2),  Chord.shifted(Key.N3),  Chord.shifted(Key.BACKSLASH)),  # ~ ! @ # |
+                      (BLANK,                         BLANK,                  BLANK,                  BLANK,                  BLANK)),
+        thumbs=Thumbs((                                                       Chord.shifted(Key.N9),  Chord.shifted(Key.N0),  Chord.shifted(Key.MINUS)),      # ( ) _
+                      (BLANK,                         BLANK,                  BLANK)),
     ),
     Layer.APPS: Board(
         # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
         # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
-        top=      Row((_Q,              _W,                    _F,                   _P,              _B           ),
-                      (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.DESKTOP_5)),
-        home=     Row((_A,              _R,                    _S,                   _T,              _G           ),
-                      (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
-        bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  XX           ),
-                      (XX,              Tool.DICTATE,          XX,                   Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
-        # The Tab place stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
-        thumbs=Thumbs((XX,              Tool.MEETING_TOGGLE,   XX), (XX,              XX, XX)),
+        # The Tab thumb stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
+        top=      Row((_Q,              _W,                    _F,                    _P,                    _B),
+                      (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,        Tool.DESKTOP_4,        Tool.DESKTOP_5)),
+        home=     Row((_A,              _R,                    _S,                    _T,                    _G),
+                      (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,       Tool.FOCUS_UP,         Tool.FOCUS_RIGHT)),
+        bottom=   Row((BLANK,           Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER,  Tool.PLACE_NOW,        BLANK),
+                      (BLANK,           Tool.DICTATE,          BLANK,                 Tool.COPY_TRANSCRIPT,  Tool.DICTATE_TOGGLE)),
+        thumbs=Thumbs((                                        BLANK,                 Tool.MEETING_TOGGLE,   BLANK),
+                      (BLANK,           BLANK,                 BLANK)),
     ),
 })
 """The board of each held layer; a Layer without one fails the import."""

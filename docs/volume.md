@@ -2,11 +2,11 @@
 
 Written by `python -m scripts.volume --write docs/volume.md` on every commit (`.githooks/pre-commit`);
 CI fails when it is stale. Nodes are syntax nodes (layout, comments and docstrings don't count);
-lines are code lines. Product code averages 6.0 nodes a line.
+lines are code lines. Product code averages 5.9 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 81,805 | 13,724 |
+| **product** | 81,686 | 13,732 |
 | **support** | 53,866 | 7,984 |
 
 | area | nodes | lines |
@@ -15,7 +15,7 @@ lines are code lines. Product code averages 6.0 nodes a line.
 | tests | 38,738 | 5,607 |
 | winapi | 19,634 | 3,301 |
 | scripts | 11,519 | 1,671 |
-| keyboard | 9,224 | 1,460 |
+| keyboard | 9,105 | 1,468 |
 | assistant | 6,982 | 1,198 |
 | typings | 3,609 | 706 |
 | contracts | 1,612 | 306 |
