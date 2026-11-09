@@ -76,10 +76,13 @@ def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors
     assert focused(replace(home, foreground=3), Direction.UP) is None
     assert focused(replace(home, foreground=2), Direction.LEFT) == 1
     work = world(WORK_APPS, work=True)
-    assert focused(work, Direction.RIGHT) == 3
-    assert focused(replace(work, foreground=2), Direction.RIGHT) == 5
-    assert focused(replace(work, foreground=5), Direction.LEFT) == 2
-    assert focused(replace(work, foreground=1), Direction.DOWN) == 2
+    # Teams and Outlook on the laptop, Terminal ⅔ and Edge ⅓ above it, Code on the portrait SIDE.
+    assert focused(work, Direction.RIGHT) == 2
+    assert focused(work, Direction.UP) == 3
+    assert focused(replace(work, foreground=2), Direction.UP) == 5
+    assert focused(replace(work, foreground=5), Direction.DOWN) == 2
+    assert focused(replace(work, foreground=3), Direction.LEFT) == 4
+    assert focused(replace(work, foreground=4), Direction.RIGHT) == 3
     assert focused(replace(home, foreground=99), Direction.LEFT) is None
 
 

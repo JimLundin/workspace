@@ -128,13 +128,15 @@ def test_work_puts_everything_on_one_desktop() -> None:
     # Defect: an app at work lands on the wrong screen or a desktop of its own.
     work = screens((LAPTOP, ABOVE, SIDE))
     assert work is not None
-    apps = (Group(PinnedApp.TEAMS, (1,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(CODE, (4,)), Group(EDGE, (5,)))
+    apps = (Group(PinnedApp.TEAMS, (1,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3, 6)), Group(CODE, (4,)), Group(EDGE, (5,)))
     assert targets(place(work, apps, NOWHERE)) == {
-        1: (1, Rect(-1760, -1360, -320, -80)),
-        2: (1, Rect(-1760, -80, -320, 1200)),
-        3: (1, Rect(-320, -1440, 960, 0)),
-        4: (1, Rect(960, -1440, 2240, 0)),
-        5: (1, Rect(0, 0, 1920, 1200)),
+        1: (1, Rect(0, 0, 960, 1200)),
+        2: (1, Rect(960, 0, 1920, 1200)),
+        # Two terminals and Edge read in thirds across ABOVE; Code fills the portrait SIDE.
+        3: (1, Rect(-320, -1440, 533, 0)),
+        6: (1, Rect(533, -1440, 1387, 0)),
+        4: (1, Rect(-1760, -1360, -320, 1200)),
+        5: (1, Rect(1387, -1440, 2240, 0)),
     }
 
 
@@ -195,8 +197,8 @@ def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() 
     apps = (Group(EDGE, (5,)), Group(CODE, (4,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(PinnedApp.TEAMS, (1,)))
     placement = place(work, apps, NOWHERE)
     windows = frozendict((group.app, group.windows) for group in apps)
-    # SIDE is leftmost (Teams above Outlook), then ABOVE's Terminal, then the laptop's Edge, then ABOVE's Code.
-    assert reading_order(work, windows, placement, 1) == (PinnedApp.TEAMS, PinnedApp.OUTLOOK, TERMINAL, EDGE, CODE)
+    # SIDE's Code is leftmost, then ABOVE's Terminal, then the laptop's Teams and Outlook, then ABOVE's Edge.
+    assert reading_order(work, windows, placement, 1) == (CODE, TERMINAL, PinnedApp.TEAMS, PinnedApp.OUTLOOK, EDGE)
     alone = screens((LAPTOP,))
     assert reading_order(alone, frozendict(), NOWHERE, 3) == (TERMINAL, CODE)
     assert reading_order(alone, frozendict(), NOWHERE, 5) == ()

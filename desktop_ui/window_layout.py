@@ -128,8 +128,6 @@ class Region:
 FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
 LEFT_HALF = Region(Fraction(0), Fraction(0), Fraction(1, 2), Fraction(1))
 RIGHT_HALF = Region(Fraction(1, 2), Fraction(0), Fraction(1, 2), Fraction(1))
-TOP_HALF = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1, 2))
-BOTTOM_HALF = Region(Fraction(0), Fraction(1, 2), Fraction(1), Fraction(1, 2))
 LEFT_TWO_THIRDS = Region(Fraction(0), Fraction(0), Fraction(2, 3), Fraction(1))
 RIGHT_THIRD = Region(Fraction(2, 3), Fraction(0), Fraction(1, 3), Fraction(1))
 
@@ -169,11 +167,12 @@ LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
         ),
         Setup.WORK: frozendict(
             {
-                PinnedApp.TEAMS: (Position(1, Role.SIDE, TOP_HALF),),
-                PinnedApp.OUTLOOK: (Position(1, Role.SIDE, BOTTOM_HALF),),
-                TERMINAL: (Position(1, Role.ABOVE, LEFT_HALF),),
-                CODE: (Position(1, Role.ABOVE, RIGHT_HALF),),
-                EDGE: (Position(1, Role.LAPTOP, FULL),),
+                # Code takes the tall screen; terminals read Terminal | Terminal | Edge across the one above.
+                CODE: (Position(1, Role.SIDE, FULL),),
+                TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
+                EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
+                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
             }
         ),
     }

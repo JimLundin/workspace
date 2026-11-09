@@ -17,7 +17,7 @@ windows fill them in order and any beyond the last share that place.
 | --- | --- | --- | --- | --- | --- | --- |
 | Laptop only | None | | Outlook, Teams | Terminal, Terminal | Terminal, VS Code | Edge |
 | Home | 3840×2160 (MAIN) | | MAIN: Terminal ⅔, VS Code ⅓. Laptop: Teams | MAIN: Edge, Outlook | | |
-| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | | SIDE: Teams, Outlook. ABOVE: Terminal, VS Code. Laptop: Edge | | | |
+| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | | SIDE: VS Code. ABOVE: Terminal ⅔, Edge ⅓. Laptop: Teams, Outlook | | | |
 
 `LAYOUTS` declares these places. Every undeclared app gets its own desktop
 after the declared ones, filling the laptop, and keeps it while other apps come
