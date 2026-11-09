@@ -149,9 +149,9 @@ LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
             {
                 PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, LEFT_HALF),),
                 PinnedApp.TEAMS: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-                # Terminals side by side on desktop 3, and Code's windows the same way on desktop 4.
+                # Terminals side by side on desktop 3; Code's windows share all of desktop 4, so a lone one fills it.
                 TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF), Position(2, Role.LAPTOP, RIGHT_HALF)),
-                CODE: (Position(3, Role.LAPTOP, LEFT_HALF), Position(3, Role.LAPTOP, RIGHT_HALF)),
+                CODE: (Position(3, Role.LAPTOP, FULL),),
                 EDGE: (Position(4, Role.LAPTOP, FULL),),
             }
         ),
