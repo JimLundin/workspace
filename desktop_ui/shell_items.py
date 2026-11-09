@@ -63,14 +63,33 @@ class Shelf:
 EMPTY_SHELF = Shelf(tuple(Pinned(app, ()) for app in PinnedApp), ())
 
 
-def retained(current: Sequence[Window], before: Sequence[Window]) -> tuple[Window, ...]:
-    """Windows seen before keep their places; new ones follow in observed order."""
+@dataclass(frozen=True, slots=True, order=True)
+class Seat:
+    """Where a window sits when first seen: its desktop, then its top-left corner."""
+
+    desktop: int
+    left: int
+    top: int
+
+
+type Seats = Mapping[int, Seat]
+"""Newly seen windows' seats, by handle; a minimized window or one on no known desktop has none."""
+
+
+def retained(current: Sequence[Window], before: Sequence[Window], seats: Seats) -> tuple[Window, ...]:
+    """Windows seen before keep their places; new ones follow in the order they sit, those with no seat last.
+
+    Placement fills an app's places in this order, so windows already placed by an
+    earlier run, or restored where they were by their program, keep their places.
+    """
     by_handle = frozendict((window.handle, window) for window in current)
     kept = tuple(window.handle for window in before if window.handle in by_handle)
-    return (*(by_handle[handle] for handle in kept), *(window for window in current if window.handle not in kept))
+    new = tuple(window for window in current if window.handle not in kept)
+    seated = sorted((window for window in new if window.handle in seats), key=lambda window: seats[window.handle])
+    return (*(by_handle[handle] for handle in kept), *seated, *(window for window in new if window.handle not in seats))
 
 
-def applications(observed: Sequence[Window], previous: tuple[Application, ...]) -> tuple[Application, ...]:
+def applications(observed: Sequence[Window], previous: tuple[Application, ...], seats: Seats) -> tuple[Application, ...]:
     identities = tuple(dict.fromkeys((window.exe or str(window.handle) for window in observed), 0))
     order = tuple(app.identity for app in previous if app.identity in identities)
     order = (*order, *(identity for identity in identities if identity not in order))
@@ -79,8 +98,8 @@ def applications(observed: Sequence[Window], previous: tuple[Application, ...]) 
         current = tuple(window for window in observed if (window.exe or str(window.handle)) == identity)
         before = next((app for app in previous if app.identity == identity), None)
         if before is None:
-            return Application(identity, current)
-        return Application(identity, retained(current, before.windows), before.image)
+            return Application(identity, retained(current, (), seats))
+        return Application(identity, retained(current, before.windows, seats), before.image)
 
     return tuple(grouped(identity) for identity in order)
 
@@ -91,17 +110,17 @@ def pinned_app(app_id: str | None) -> PinnedApp | None:
     return next((app for app, web in WEB_APPS.items() if app_id == web.app_id or app_id.startswith(web.app_id + ".")), None)
 
 
-def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previous: Shelf) -> Shelf:
+def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previous: Shelf, seats: Seats) -> Shelf:
     """Pinned web-app windows fill their slots; every other window joins its running application."""
     owners = tuple(pinned_app(app_ids.get(window.handle)) for window in observed)
 
     def slot(app: PinnedApp) -> Pinned:
         current = tuple(window for window, owner in zip(observed, owners, strict=True) if owner is app)
         before = next((pinned.windows for pinned in previous.pinned if pinned.app is app), ())
-        return Pinned(app, retained(current, before))
+        return Pinned(app, retained(current, before, seats))
 
     others = tuple(window for window, owner in zip(observed, owners, strict=True) if owner is None)
-    return Shelf(tuple(slot(app) for app in PinnedApp), applications(others, previous.running))
+    return Shelf(tuple(slot(app) for app in PinnedApp), applications(others, previous.running, seats))
 
 
 def launch(pending: Launches, app: PinnedApp, now: float) -> Launches | None:

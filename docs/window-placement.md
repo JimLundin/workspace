@@ -32,6 +32,10 @@ and go.
   whichever desktop it belongs, so a change of monitors sorts every window.
   There is no minimize key.
 - Several windows of one app share its region equally.
+- An app's windows keep their order while they stay open. Windows first seen
+  together, as at startup, are ordered by where they sit (desktop, then left,
+  then top). So a restart of Workspace, or of a program that restores its
+  windows where they were, leaves every window in its place.
 - Each poll moves windows that are out of place and leaves the rest alone. When
   the window in front is moved to another desktop (one just opened, such as a
   new Teams window), Workspace switches there with it. A

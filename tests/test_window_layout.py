@@ -173,7 +173,7 @@ def test_pinned_web_apps_are_not_placed_as_ordinary_edge() -> None:
         Window(2, "Chat", "msedge.exe", minimized=False),
         Window(3, "Save", "notepad.exe", minimized=False),
     )
-    observed = shelf((edge, teams, dialog), {1: "MSEdge", 2: "MSEdge.teams.cloud.microsoft_/"}, EMPTY_SHELF)
+    observed = shelf((edge, teams, dialog), {1: "MSEdge", 2: "MSEdge.teams.cloud.microsoft_/"}, EMPTY_SHELF, {})
     assert groups(observed, frozenset({1, 2})) == (Group(PinnedApp.TEAMS, (2,)), Group(EDGE, (1,)))
 
 

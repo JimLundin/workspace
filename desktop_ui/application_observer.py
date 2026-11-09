@@ -20,7 +20,7 @@ from typing import assert_never
 import protocol
 from contracts.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, destination, effect, zoom_after
-from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
+from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Seat, Seats, Shelf, caption_clip, launch, outstanding, shelf
 from desktop_ui.window_layout import (
     NOWHERE,
     App,
@@ -125,6 +125,16 @@ def observe(connection: Connection) -> tuple[Connection, Observed]:
     )
     return connection, Observed(
         tuple(window for window, _ in shown), frozendict((window.handle, index) for window, index in shown if index is not None), state
+    )
+
+
+def seats(observed: Observed, known: Shelf) -> Seats:
+    """Where each window the shelf hasn't seen yet sits; only new windows are read."""
+    seen = frozenset(window.handle for item in (*known.pinned, *known.running) for window in item.windows)
+    return frozendict(
+        (window.handle, Seat(desktop, (drawn := windows.visible_rect(window.handle)).left, drawn.top))
+        for window in observed.windows
+        if window.handle not in seen and not window.minimized and (desktop := observed.desktops.get(window.handle)) is not None
     )
 
 
@@ -274,7 +284,7 @@ class Worker:
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
         own = os.getpid()
-        grouped = shelf(observed.windows, app_ids, watched.previous.shelf)
+        grouped = shelf(observed.windows, app_ids, watched.previous.shelf, seats(observed, watched.previous.shelf))
         slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
         current = frozenset(window.handle for window in slots)
         foreground = windows.foreground()

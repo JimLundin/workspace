@@ -8,12 +8,14 @@ from desktop_ui.shell_items import (
     Launches,
     Pinned,
     PinnedApp,
+    Seat,
     Shelf,
     applications,
     caption_clip,
     launch,
     next_window,
     outstanding,
+    retained,
     shelf,
 )
 from winapi.shapes import Point, Rect, Window
@@ -25,14 +27,22 @@ def test_application_grouping_preserves_icon_order_and_cycles_current_windows() 
     first = Window(11, "One", "editor.exe", minimized=False)
     second = Window(12, "Two", "editor.exe", minimized=True)
     other = Window(20, "Browser", "browser.exe", minimized=False)
-    apps = applications((first, other, second), ())
-    reordered = applications((other, second, first), apps)
+    apps = applications((first, other, second), (), {})
+    reordered = applications((other, second, first), apps, {})
     assert tuple(app.identity for app in reordered) == ("editor.exe", "browser.exe")
     assert tuple(window.handle for window in reordered[0].windows) == (11, 12)
     handles = tuple(window.handle for window in apps[0].windows)
     assert next_window(handles, 11) == 12 and next_window(handles, 12) == 11
     assert next_window(handles, 99) == 11
-    assert applications((other,), reordered) == (Application("browser.exe", (other,)),)
+    assert applications((other,), reordered, {}) == (Application("browser.exe", (other,)),)
+
+
+def test_new_windows_take_the_order_they_sit_in_so_a_restart_keeps_their_places() -> None:
+    # Defect: after a restart, windows already placed are ordered by which was
+    # used last, so placement swaps their places.
+    kept, right, left, below, hidden = (Window(handle, "Shell", "terminal.exe", minimized=handle == 5) for handle in range(1, 6))
+    seats = {2: Seat(1, 960, 0), 3: Seat(1, 0, 0), 4: Seat(2, 0, 0)}
+    assert retained((hidden, below, right, kept, left), (kept,), seats) == (kept, left, right, below, hidden)
 
 
 def test_pinned_web_app_windows_fill_their_slots_and_leave_the_edge_group() -> None:
@@ -51,12 +61,12 @@ def test_pinned_web_app_windows_fill_their_slots_and_leave_the_edge_group() -> N
         4: "MSEdge",
         5: "MSEdge.outlook.cloud.microsoft_/mail/calendar",
     }
-    first = shelf((mail, browser, chat, calendar, lookalike, editor), app_ids, EMPTY_SHELF)
+    first = shelf((mail, browser, chat, calendar, lookalike, editor), app_ids, EMPTY_SHELF, {})
     assert first == Shelf(
         (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, (chat,))),
         (Application("msedge.exe", (browser, lookalike)), Application("editor.exe", (editor,))),
     )
-    again = shelf((calendar, editor, mail), app_ids, first)
+    again = shelf((calendar, editor, mail), app_ids, first, {})
     assert again == Shelf(
         (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, ())),
         (Application("editor.exe", (editor,)),),
