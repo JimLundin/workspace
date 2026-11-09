@@ -23,7 +23,7 @@ from assistant.meeting_store import MeetingArchive, MeetingStore
 from cell import Cell
 from contracts.capture import AudioSource
 from contracts.recording_state import SOURCE_NAMES, Exhausted, Phase, Publication, RecordingState, RetryPolicy, capture_report, published
-from usage import DIRECTORY
+from diagnostics import DIRECTORY
 from winapi.pcm import RATE, Problem
 
 

@@ -147,8 +147,8 @@ Everything is in `%LOCALAPPDATA%\workspace`.
 
 | File | Contents |
 |---|---|
-| `usage.jsonl` | Feature use, timings and failure details, never what you typed or said |
-| `desktop.log` | Problems and crashes, and views that could not open or fell back |
+| `desktop.log` | Problems and crashes, dictation failures with their details (never what you said), and views that could not open or fell back |
+| `keyboard.log` | The keyboard's input recoveries: a lost hook reinstalled, or failing open after an error |
 | `state\*.log` | Each program's output and crashes, written by the launcher |
 | `meetings\` | One folder per recorded meeting, with `transcript.md` |
 

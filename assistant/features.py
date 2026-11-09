@@ -18,9 +18,8 @@ from assistant.text import typed_text
 from cell import Cell
 from contracts.hotkeys import NEEDS_SETTINGS, ROUTES, Route
 from contracts.status import Job, State
-from diagnostics import failure_info
+from diagnostics import Detail, failure_info
 from protocol import Tool
-from usage import Detail
 from winapi.pcm import RATE
 
 
@@ -46,7 +45,7 @@ class Desktop(Protocol):
 
 
 Recorder = Callable[[str, Mapping[str, Detail]], None]
-"""Writes one use of a feature to the usage log."""
+"""Writes a feature's failure and its evidence (never content) to the desktop's log."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,10 +113,10 @@ class _Keys:
 class Assistant:
     """Turns the dictation and transcript keys into actions."""
 
-    # Desktop, settings, scheduling and usage form the key-feature composition seam.
+    # Desktop, settings, scheduling and the failure log form the key-feature composition seam.
     desktop: Desktop
     settings: Settings
-    record: Recorder = field(kw_only=True)
+    failed: Recorder = field(kw_only=True)
     submit: Callable[[Callable[[], None]], None] = field(kw_only=True)
     """Runs a job on the worker thread, after whatever is already queued."""
     missing: Missing | None = field(default=None, kw_only=True)
@@ -181,7 +180,7 @@ class Assistant:
         self.desktop.show_state(State.WORKING)
 
     def timed(self, feature: str, job: Callable[[], Failure | None], *, progress: Progress | None = None) -> None:
-        """Runs a job, reports a failure, and logs the use (never the content), with the details the job noted."""
+        """Runs a job, and reports and logs a failure (never the content) with the details the job noted."""
         started = time.monotonic()
         outcome: Failure | None = Failure("crashed")
         evidence: dict[str, Detail] = {}
@@ -190,7 +189,9 @@ class Assistant:
         except Exception as error:
             evidence = failure_info(error).details()
             phase = progress.details.get("phase", "working") if progress is not None else "working"
-            message = f"{feature.replace('_', ' ').title()} failed while {phase}. Please try again; diagnostic details are in Workspace's usage log."
+            message = (
+                f"{feature.replace('_', ' ').title()} failed while {phase}. Please try again; diagnostic details are in Workspace's desktop log."
+            )
             if phase == "submitting" and self._state.get().latest_transcription is not None:
                 message = (
                     "Text submission failed. Your transcript is saved in Workspace and was copied to the clipboard if available. "
@@ -201,13 +202,12 @@ class Assistant:
             details: dict[str, Detail] = {
                 **(progress.details if progress is not None else {}),
                 **evidence,
-                "ok": not isinstance(outcome, Failure),
                 "seconds": round(time.monotonic() - started, 2),
             }
             if isinstance(outcome, Failure):
                 details["error"] = outcome.message[:120]
                 self.desktop.problem(outcome.message)
-            self.record(feature, details)
+                self.failed(feature, details)
             if self.listening is None:
                 self.idle()
 
@@ -231,26 +231,24 @@ class Assistant:
                 return
             if problem is not None:
                 self.desktop.problem(problem)
-                self.record(capture.tool.name.lower(), {"capture_id": capture.identity, "phase": "starting", "ok": False, "error": problem[:120]})
+                self.failed(capture.tool.name.lower(), {"capture_id": capture.identity, "phase": "starting", "error": problem[:120]})
                 self.idle()
                 return
             self._state.set(replace(self._state.get(), capture=capture))
-            self.record("voice_capture", {"capture_id": capture.identity, "phase": "recording", "source": capture.source.name.lower()})
             self.desktop.show_state(State.LISTENING)
         elif (held := self.capture) is not None and tool is held.source:
             self.stop_capture()
 
     def capture_problem(self, capture: Capture, phase: str, error: Exception) -> None:
-        self.record(
+        self.failed(
             capture.tool.name.lower(),
             {
                 "capture_id": capture.identity,
                 "phase": phase,
-                "ok": False,
                 **failure_info(error).details(),
             },
         )
-        message = str(error) if isinstance(error, OSError) else f"Voice capture failed while {phase}. Please try again; see Workspace's usage log."
+        message = str(error) if isinstance(error, OSError) else f"Voice capture failed while {phase}. Please try again; see Workspace's desktop log."
         self.desktop.problem(message)
 
     def stop_capture(
@@ -279,12 +277,10 @@ class Assistant:
             "audio_seconds": round(len(pcm) / (RATE * 2), 2),
         }
         if discard or not long_enough(pcm):
-            self.record("voice_capture", {**lengths, "phase": "cancelled" if discard else "too_short"})
             self.idle()
             return False
         self.working(Job.TRANSCRIBING)
         tool = capture.tool
-        self.record("voice_capture", {**lengths, "phase": "queued"})
         try:
             progress = Progress.of(lengths)
             self.submit(lambda: self.timed(tool.name.lower(), lambda: self.heard(tool, pcm, progress), progress=progress))

@@ -224,23 +224,6 @@ def character(key: Key, *, shifted: bool) -> str | None:
     return None if typed is None else typed.shifted if shifted else typed.plain
 
 
-def describe(a: Action) -> str:
-    """A short name for an action, as the usage log records it."""
-    match a:
-        case Key():
-            return character(a, shifted=False) or a.name.lower()
-        case Chord(key, mods) if mods == SHIFT_ONLY and (c := character(key, shifted=True)):
-            return c
-        case Chord(key, mods):
-            return "+".join([*(m.name.lower() for m in Mod if m in mods), describe(key)])
-        case TapHold(tap):
-            return describe(tap)
-        case App():
-            return f"app:{a.name}"
-        case Mod() | Layer() | Command() | Tool():
-            return a.name.lower()
-
-
 # ---- Board shape ---------------------------------------------------------------
 
 CELLS: Final = 36

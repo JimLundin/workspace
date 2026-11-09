@@ -36,13 +36,13 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 - Keep the keyboard process isolated: `keyboard/` and everything it imports use
   only the standard library, `winapi` and the stdlib-only top-level modules
-  (`cell`, `config`, `protocol`, `usage`, `components`, `diagnostics`), never
+  (`cell`, `config`, `protocol`, `components`, `diagnostics`), never
   `assistant`, `desktop_ui` or third-party packages. Measure key-event latency, allocation
   and GC with `scripts/benchmark_keyboard.py` before and after changing the
   hook, the engine or their shared dependencies.
 - Validate external data where it enters a typed interface. Use a Pydantic
   `TypeAdapter` over existing typed shapes at IO boundaries instead of
-  `json.loads`/`json.dumps` (the keyboard-side `usage.py` writer is the exception).
+  `json.loads`/`json.dumps`.
 - No `Any`, `typing.cast`, `TypeIs`/`TypeGuard` assertions or type-checker
   suppressions in production code. For a poorly typed dependency, add a stub
   for only the API we use under `typings/`. Tests may cast fixtures narrowly.

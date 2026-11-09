@@ -16,7 +16,7 @@ and work areas stay the same and placement doesn't react. Only monitors this
 owner turned off are turned back on.
 """
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final
@@ -26,7 +26,6 @@ from config import DARK_WHEN_IDLE_MINUTES
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
 from desktop_ui.window_layout import dark_when_away
-from usage import Detail
 from winapi import presence, screen, session
 from winapi.monitor_power import Applied, Detached, PhysicalMonitors, Power
 from winapi.screen import Monitor
@@ -67,15 +66,11 @@ class Setting:
     enabled: bool = field(kw_only=True)
 
 
-@dataclass(frozen=True, slots=True)
-class Darken:
-    reason: Reason
+class Change(Enum):
+    """What the screens should do as the first reason begins or the last one ends."""
 
-
-@dataclass(frozen=True, slots=True)
-class Restore:
-    reason: Reason
-    """The last reason to stop holding."""
+    DARKEN = auto()
+    RESTORE = auto()
 
 
 def reason(observed: Presence, setting: Setting) -> Reason | None:
@@ -89,17 +84,17 @@ def reason(observed: Presence, setting: Setting) -> Reason | None:
     return None
 
 
-def step(held: Reason | None, observed: Presence, setting: Setting) -> tuple[Reason | None, Darken | Restore | None]:
+def step(held: Reason | None, observed: Presence, setting: Setting) -> tuple[Reason | None, Change | None]:
     """The reason that holds now, and the change to make: only when the first reason begins or the last one ends.
 
     A refused request isn't retried each poll, which would cost about 65 ms of the
     bar's thread every 100 ms; it is retried at the next edge."""
     current = reason(observed, setting)
     match held, current:
-        case None, Reason() as begun:
-            return current, Darken(begun)
-        case Reason() as ended, None:
-            return current, Restore(ended)
+        case None, Reason():
+            return current, Change.DARKEN
+        case Reason(), None:
+            return current, Change.RESTORE
         case _:
             return current, None
 
@@ -113,14 +108,14 @@ def dark_after(dark: frozenset[Monitor], applied: Mapping[Monitor, Applied]) -> 
     return (dark | off) - on
 
 
-def set_power(sources: Sequence[PhysicalMonitors], monitor: Monitor, wanted: Power) -> tuple[Applied, int]:
-    """The first source whose handles carry the request, and its index; the last refusal otherwise."""
+def set_power(sources: Sequence[PhysicalMonitors], monitor: Monitor, wanted: Power) -> Applied:
+    """The first source whose handles carry the request; the last refusal otherwise."""
     result: Applied = Detached()
-    for index, source in enumerate(sources):
+    for source in sources:
         result = source.set_power(monitor, wanted)
         if result is wanted:
-            return result, index
-    return result, len(sources)
+            return result
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,20 +144,19 @@ class AwayScreens:
     65 ms on the home 4K screen, so only a darken or restore edge costs one
     request per protected screen on that thread."""
 
-    record: Callable[[str, Mapping[str, Detail]], None]
     _state: Cell[_Away]
     """Replaced whole on the bar's thread."""
 
     @classmethod
-    def start(cls, record: Callable[[str, Mapping[str, Detail]], None]) -> AwayScreens:
+    def start(cls) -> AwayScreens:
         """Started, or restarted after a crash, behind the lock screen as well as in front of it."""
         away = _Away(
-            KeyboardLight(ViaBacklight(), record),
-            LaptopPanel(WmiBrightness(), record),
+            KeyboardLight(ViaBacklight()),
+            LaptopPanel(WmiBrightness()),
             PhysicalMonitors.open(),
             locked=session.locked() is True,
         )
-        screens = cls(record, Cell(away))
+        screens = cls(Cell(away))
         screens.settle()
         return screens
 
@@ -192,8 +186,7 @@ class AwayScreens:
         self.settle()
 
     def toggle(self) -> None:
-        away = self._state.update(lambda away: replace(away, setting=replace(away.setting, enabled=not away.setting.enabled)))
-        self.record("dark_when_away_toggle", {"enabled": away.setting.enabled})
+        self._state.update(lambda away: replace(away, setting=replace(away.setting, enabled=not away.setting.enabled)))
         self.settle()
 
     def settle(self) -> None:
@@ -201,34 +194,29 @@ class AwayScreens:
         observed = Presence(presence.idle_ms(), locked=away.locked, display_required=away.recording or presence.display_required())
         held, change = step(away.held, observed, away.setting)
         self._state.set(replace(away, held=held))
-        idle_seconds = observed.idle_ms // 1000
         match change:
-            case Darken(reason=begun):
+            case Change.DARKEN:
                 protected = dark_when_away(screen.monitors())
-                self.apply(protected - away.dark, Power.OFF, {"reason": begun.name.lower(), "idle_seconds": idle_seconds})
+                self.apply(protected - away.dark, Power.OFF)
                 self._state.update(lambda current: replace(current, light=current.light.darken(), panel=current.panel.darken()))
-            case Restore(reason=ended):
-                self.apply(away.dark, Power.ON, {"reason": ended.name.lower(), "idle_seconds": idle_seconds})
+            case Change.RESTORE:
+                self.apply(away.dark, Power.ON)
                 self._state.update(lambda current: replace(current, light=current.light.restore(), panel=current.panel.restore()))
             case None:
                 pass
 
-    def apply(self, monitors: frozenset[Monitor], wanted: Power, cause: Mapping[str, Detail]) -> None:
+    def apply(self, monitors: frozenset[Monitor], wanted: Power) -> None:
         if not monitors:
             return
         fresh = PhysicalMonitors.open()
         try:
-            results = frozendict((monitor, set_power((fresh, self._state.get().kept), monitor, wanted)) for monitor in monitors)
+            powered = frozendict((monitor, set_power((fresh, self._state.get().kept), monitor, wanted)) for monitor in monitors)
         finally:
             fresh.close()
-        powered = frozendict((monitor, result) for monitor, (result, _) in results.items())
         self._state.update(lambda away: replace(away, dark=dark_after(away.dark, powered)))
-        kept = sum(1 for _, source in results.values() if source == 1)
-        ok = all(result is wanted for result, _ in results.values())
-        self.record("dark_when_away", {"power": wanted.name.lower(), **cause, "screens": len(results), "kept_handles": kept, "ok": ok})
 
     def close(self) -> None:
         """Workspace leaving while away turns the screens back on rather than leaving them dark."""
-        self.apply(self._state.get().dark, Power.ON, {"reason": "close"})
+        self.apply(self._state.get().dark, Power.ON)
         away = self._state.update(lambda current: replace(current, light=current.light.restore(), panel=current.panel.restore()))
         away.kept.close()

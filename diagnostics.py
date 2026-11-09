@@ -1,14 +1,21 @@
 """Bounded failure evidence without exception objects, content or source lines, and the programs' own logs."""
 
 import contextlib
+import os
+import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
+from typing import Final
 
-from usage import Detail
 from winapi.shapes import InputRejectedError
+
+DIRECTORY: Final = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace"
+"""Where the workspace keeps its logs and state."""
+
+type Detail = str | int | float | bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,3 +57,8 @@ def append(log: Path, text: str) -> None:
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as file:
             file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
+
+
+def evidence(event: str, details: Mapping[str, Detail]) -> str:
+    """An event and its scalar details, as one line for a program's own log."""
+    return " ".join((f"{event}:", *(f"{name}={value}" for name, value in details.items())))

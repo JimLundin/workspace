@@ -29,7 +29,6 @@ from keyboard.layout import (
     TapHold,
     Unmapped,
     character,
-    describe,
     is_left_hand,
     slot,
 )
@@ -50,9 +49,6 @@ class Host(Protocol):
 
     def type_text(self, text: str) -> None:
         """Type text as characters, whatever the keyboard layout."""
-
-    def used(self, feature: str) -> None:
-        """Count a use of a feature, for the usage log."""
 
     def indicate(self, indicator: Indicator) -> None:
         """What the layer indicator should show now (it changed)."""
@@ -342,8 +338,6 @@ class Engine:
         """Switch the layout on/off, releasing held input and clearing its indicator."""
         state = self.release_all(replace(state, escape_down_at=None), host)
         state = replace(state, enabled=not state.enabled)
-        if not state.enabled:
-            host.used("switch_off")
         host.signal(Signal.ON if state.enabled else Signal.OFF)
         return self.refresh(state, host)
 
@@ -402,8 +396,6 @@ class Engine:
                         return replace(state, pending=Pending(cell, tap, hold, host.start_timer(), now), buffer=())
                     case other:
                         a = other
-                if layer is not None and a is not Command.NOTHING:
-                    host.used(f"{layer.name.lower()}:{describe(a)}")
                 return self.press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)
             case _:
                 assert_never(e)
@@ -471,7 +463,6 @@ class Engine:
         host.stop_timer(p.timer)
         match decision:
             case Decision.HOLD:
-                host.used(f"hold:{p.hold.name.lower()}" if isinstance(p.hold, Mod) else f"layer:{p.hold.name.lower()}")
                 state = self.press(replace(state, pressed=_put(state.pressed, p.cell, p.hold)), host, p.hold, p.pressed_at)
             case Decision.TAP:
                 state = self.release(self.press(state, host, p.tap, p.pressed_at), host, p.tap)
@@ -545,7 +536,6 @@ class Engine:
             host.send(Key.BACKSPACE, down=True)
             host.send(Key.BACKSPACE, down=False)
         host.type_text(text() if callable(text) else text)
-        host.used(f"snippet:{trigger}")
         return state.without_typed()
 
     def press(self, state: EngineState, host: Host, a: Action, now: int) -> EngineState:
@@ -553,7 +543,6 @@ class Engine:
         if a == Mod.SHIFT and state.pressed.count(Mod.SHIFT) >= 2:
             state = replace(state, caps_word=not state.caps_word)
             if state.caps_word:
-                host.used("caps_word")
                 host.signal(Signal.CAPS_WORD)
         state, a = self.apply_caps_word(state, a)
         match a:
@@ -576,7 +565,6 @@ class Engine:
                     state = replace(state, locked=None)
                 elif state.active_layers:
                     state = replace(state, locked=state.active_layers[-1])
-                    host.used("layer_lock")
             case Tool() | App():
                 state = state.without_typed()
                 if Mod.ALT in state.mods.counts:

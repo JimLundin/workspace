@@ -4,10 +4,10 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
 from components import DESKTOP, Window
+from diagnostics import Detail
 from keyboard.layout import Key, Mod, Scancode
 from keyboard.win import Keyboard
 from protocol import WM_REQUEST
-from usage import Detail
 from winapi import inputs, system
 from winapi.shapes import Point
 
@@ -34,7 +34,6 @@ class KeyboardFixture:
         self.messages: list[tuple[int, int, int]] = []
         self.output: list[tuple[Key | Mod, bool]] = []
         self.recoveries: list[tuple[tuple[str, Detail], ...]] = []
-        self.usage: list[tuple[tuple[str, int], ...]] = []
 
     def send_key(self, key: Key | Mod, *, down: bool) -> None:
         self.output.append((key, down))
@@ -89,9 +88,6 @@ class KeyboardFixture:
 
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
         self.recoveries.append(tuple(details.items()))
-
-    def record_counts(self, counts: Mapping[str, int]) -> None:
-        self.usage.append(tuple(counts.items()))
 
     def post_quit(self) -> None:
         pass

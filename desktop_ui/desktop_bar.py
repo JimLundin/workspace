@@ -14,7 +14,6 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
-from functools import partial
 from typing import assert_never
 lazy import os
 
@@ -23,7 +22,6 @@ lazy from PySide6 import QtCore, QtGui
 from cell import Cell
 from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
-lazy import usage
 lazy import winapi.ambient
 lazy from config import APPS
 lazy from contracts.recording_state import RecordingAction
@@ -479,7 +477,7 @@ class DesktopBar:
 
 def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl) -> _Shell:
     status = StatusObserver.start()
-    away = AwayScreens.start(partial(usage.record_quietly, "assistant"))
+    away = AwayScreens.start()
 
     def message(_hwnd: int, message: int, wparam: int, _lparam: int) -> int | None:
         away.message(message, wparam)

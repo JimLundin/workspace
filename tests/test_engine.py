@@ -55,12 +55,11 @@ def sc(name: str) -> Scancode:
 
 
 class FakeHost:
-    __slots__ = ("indicated", "log", "timer", "used_features")
+    __slots__ = ("indicated", "log", "timer")
 
     def __init__(self) -> None:
         self.log: list[str] = []
         self.timer = 0
-        self.used_features: list[str] = []
         self.indicated: list[str] = []
 
     def send(self, key: Key | Mod, *, down: bool) -> None:
@@ -89,9 +88,6 @@ class FakeHost:
 
     def type_text(self, text: str) -> None:
         self.log.append(f"~{text}")
-
-    def used(self, feature: str) -> None:
-        self.used_features.append(feature)
 
     def indicate(self, indicator: Indicator) -> None:
         parts = [indicator.layer.name.lower()] if indicator.layer else []
@@ -371,7 +367,6 @@ def test_tray_toggle_releases_input_and_clears_the_locked_layer() -> None:
     t.toggle()
     assert t.take() == "-SFT -left !OFF"
     assert t.h.indicated[-1] == "-"
-    assert t.h.used_features[-1] == "switch_off"
     assert t.key(sc("q"), down=True, now=20) is Verdict.PASS
     assert t.key(sc("q"), down=False, now=30) is Verdict.PASS
     t.toggle()
@@ -868,7 +863,6 @@ def test_snippet_replaces_its_trigger() -> None:
     t = Harness()
     type_thx(t)
     assert t.take() == f"+0xbc -0xbc +0xbc -0xbc +t -t +h -h +x {BACKSPACES} ~Thanks! -x"
-    assert "snippet:,,thx" in t.h.used_features
 
 
 def test_snippets_can_include_shifted_characters() -> None:
@@ -877,7 +871,7 @@ def test_snippets_can_include_shifted_characters() -> None:
         chord = Chord(key, frozenset({Mod.SHIFT}))
         t.press(chord, 0)
         t.release(chord)
-    assert "~Expanded." in t.take() and "snippet:ABC" in t.h.used_features
+    assert "~Expanded." in t.take()
 
 
 def test_disabled_snippets_do_not_accumulate_an_unbounded_typing_buffer() -> None:
@@ -910,22 +904,6 @@ def test_snippet_is_forgotten_after_moving_the_cursor() -> None:
     for name in ("r", "l", "a"):
         t.tap(name)
     assert "~" not in t.take()
-
-
-# ---- usage counts ----------------------------------------------------------------------
-
-
-def test_usage_counts_layer_keys_holds_and_features() -> None:
-    t = Harness()
-    t.d("c")
-    t.timeout_last()  # Space held: Nav
-    t.tap("o")  # Left
-    t.u("c")
-    t.d("r")
-    t.timeout_last()  # Shift held
-    t.u("r")
-    both_shifts(t)
-    assert t.h.used_features == ["layer:nav", "nav:left", "hold:shift", "hold:shift", "hold:shift", "caps_word"]
 
 
 # ---- the layer indicator ---------------------------------------------------------------

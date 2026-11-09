@@ -82,8 +82,8 @@ from desktop_ui.qt_runtime import prepare
 from desktop_ui.tray import Tray
 from desktop_ui.view_publication import log
 from desktop_ui.voice import Voice
+from diagnostics import DIRECTORY
 from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_QUERY_LAYOUT_STATE, WM_REQUEST, WM_WINDOWS_KEY_TAP
-from usage import DIRECTORY
 from winapi import screen, shell, system, windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style

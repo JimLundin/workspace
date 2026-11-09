@@ -11,10 +11,9 @@ import threading
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 
-import usage
+import diagnostics
 from assistant.desktop import WinDesktop
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
@@ -23,7 +22,7 @@ from assistant.meetings import Meetings
 from contracts.recording_state import RecordingAction
 from contracts.status import State
 from desktop_ui.desktop_control import Event, JobChanged, Notified, Problem, RecordingChanged, ShowVoice, idle_state
-from usage import DIRECTORY
+from diagnostics import DIRECTORY
 from winapi import audio, recording, system
 from winapi.pcm import RATE
 
@@ -80,7 +79,9 @@ class Voice:
             log=log,
         )
         jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
-        dictation = Assistant(machine, usable, record=partial(usage.record_quietly, "assistant"), submit=jobs.put, missing=missing)
+        dictation = Assistant(
+            machine, usable, failed=lambda feature, details: log(diagnostics.evidence(f"{feature} failed", details)), submit=jobs.put, missing=missing
+        )
         worker = threading.Thread(target=_run_jobs, args=(jobs, report, log), name="worker", daemon=True)
         if missing is not None:
             report(Notified("Workspace", f"Dictation and meeting transcripts need {', '.join(missing.names)}; the layout works without them."))

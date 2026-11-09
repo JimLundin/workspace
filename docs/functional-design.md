@@ -34,7 +34,7 @@ in reverse start order.
 | `protocol.py` | Window messages between the layout and the desktop, and the `Tool` and `App` requests |
 | `config.py` | User settings: apps, snippets, dark-screen delay |
 | `cell.py` | `Cell`, the one class that reassigns: an owner's changing state |
-| `usage.py`, `diagnostics.py` | The usage log and its failure details |
+| `diagnostics.py` | Failure details for the programs' own logs |
 | `winapi/` | Typed Win32 and COM bindings: the only `ctypes` code |
 
 ## `keyboard/`

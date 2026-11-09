@@ -13,11 +13,11 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
-import usage
+import diagnostics
 from cell import Cell
 from components import DESKTOP, LAYOUT, Window
 from config import APPS
-from diagnostics import FailureInfo, failure_info
+from diagnostics import DIRECTORY, Detail, FailureInfo, failure_info
 from keyboard import hook_watch
 from keyboard.engine import QUIET, Engine, EngineState, Indicator, Signal, UnreleasedError, Verdict
 from keyboard.firmware import APPS_KEY, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
@@ -40,14 +40,13 @@ from protocol import (
     encode,
     encode_indicator,
 )
-from usage import Detail
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 from winapi.shapes import Point
 
 LOCK_NAME: Final = "Local\\keyboard"
 """Name of the lock that stops a second copy from running in this Windows session."""
-USAGE_FLUSH_MS: Final = 10 * 60 * 1000
-"""How often usage counts are written to the usage log."""
+LOG: Final = DIRECTORY / "keyboard.log"
+"""The keyboard's own log: its input recoveries."""
 
 
 class KeyboardSystem(Protocol):
@@ -68,7 +67,6 @@ class KeyboardSystem(Protocol):
     def beep(self, sound: int) -> None: ...
     def type_text(self, text: str) -> None: ...
     def record_recovery(self, details: Mapping[str, Detail]) -> None: ...
-    def record_counts(self, counts: Mapping[str, int]) -> None: ...
     def post_quit(self) -> None: ...
 
 
@@ -105,10 +103,7 @@ class NativeKeyboardSystem:
         inputs.type_text(text, LAYOUT_MAGIC)
 
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
-        usage.record("layout", "input_recovery", details)
-
-    def record_counts(self, counts: Mapping[str, int]) -> None:
-        usage.record_counts("layout", counts)
+        diagnostics.append(LOG, diagnostics.evidence("input_recovery", details))
 
     post_quit = staticmethod(system.post_quit)
 
@@ -117,7 +112,6 @@ class NativeKeyboardSystem:
 class _Hosted:
     found: int | None = None
     """The desktop's control window, once found."""
-    counts: frozendict[str, int] = frozendict()
     """Feature uses since the last flush."""
     owned: frozenset[Key | Mod] = frozenset()
     """Attempted Workspace output, retained until Windows accepts its key-up."""
@@ -187,10 +181,6 @@ class WinHost:
     def type_text(self, text: str) -> None:
         self.platform.type_text(text)
 
-    def used(self, feature: str) -> None:
-        counts = self._state.get().counts
-        self._state.set(replace(self._state.get(), counts=counts | {feature: counts.get(feature, 0) + 1}))
-
     def indicate(self, indicator: Indicator) -> None:
         layer: int = indicator.layer.value if indicator.layer else 0
         self.tell(WM_INDICATOR, encode_indicator(layer, locked=indicator.locked, caps_word=indicator.caps_word), 0)
@@ -215,12 +205,6 @@ class WinHost:
     def layout_state(self, state: LayoutState) -> None:
         """The desktop follows the layout: it shows it, and dictation stops capture when it's off."""
         self.tell(WM_LAYOUT_STATE, state.value, 0)
-
-    def flush_usage(self) -> None:
-        counts = self._state.get().counts
-        self._state.set(replace(self._state.get(), counts=frozendict()))
-        with contextlib.suppress(OSError):  # the log is a convenience: never let it stop the keyboard
-            self.platform.record_counts(counts)
 
 
 class Exit(Enum):
@@ -763,7 +747,6 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
     """Run the message loop, then remove whichever hook is installed by then."""
     outcome = Exit.QUIT
     language_timer = system.set_timer(200)
-    flush_timer = system.set_timer(USAGE_FLUSH_MS)
     layout_state: LayoutState = LayoutState.ON if keyboard.engine_state.enabled else LayoutState.OFF
     keyboard.host.layout_state(layout_state)
     # Nothing here creates reference cycles, so the cycle collector has nothing to
@@ -784,8 +767,6 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
                             outcome = Exit.HOOK_REFUSED
                             break
                         hook = replacement
-                elif message.wparam == flush_timer:
-                    keyboard.host.flush_usage()
                 else:
                     try:
                         keyboard.timeout(message.wparam)
@@ -798,7 +779,6 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
     finally:
         inputs.remove_hook(hook)
         system.kill_timer(language_timer)
-        system.kill_timer(flush_timer)
         if languages is not None:
             with contextlib.suppress(OSError):
                 languages.close()
@@ -840,7 +820,6 @@ def release_keyboard(keyboard: Keyboard) -> None:
         keyboard.input_failed(error, phase="shutdown")
     keyboard.host.release_owned()
     keyboard.maintenance()
-    keyboard.host.flush_usage()
     keyboard.host.layout_state(LayoutState.QUIT)
 
 

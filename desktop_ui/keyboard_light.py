@@ -9,12 +9,10 @@ written to the keyboard's EEPROM, so a keyboard unplugged meanwhile comes back
 lit as it was set.
 """
 
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
 from keyboard.firmware import FIRMWARE_KEYBOARD
-from usage import Detail
 from winapi import via
 
 _VENDOR: Final = int(FIRMWARE_KEYBOARD[0].removeprefix("VID_"), 16)
@@ -47,7 +45,6 @@ class KeyboardLight:
     """The lights-off state while away; each change returns the owner's next state."""
 
     backlight: Backlight
-    record: Callable[[str, Mapping[str, Detail]], None]
     restore_to: int | None = None
     """The effect the person set, while Workspace keeps the lights off."""
 
@@ -62,10 +59,8 @@ class KeyboardLight:
             case via.Effect(value=effect):
                 match self.backlight.set_effect(0):
                     case via.Effect():
-                        self.record("keyboard_light", {"lit": False, "ok": True})
                         return replace(self, restore_to=effect)
                     case via.Absent():
-                        self.record("keyboard_light", {"lit": False, "ok": False})
                         return self
             case via.Absent():
                 return self
@@ -74,6 +69,5 @@ class KeyboardLight:
         if self.restore_to is None:
             return self
         # Absent means it was unplugged meanwhile, and it starts lit from its saved setting.
-        ok = self.backlight.set_effect(self.restore_to) != via.Absent()
-        self.record("keyboard_light", {"lit": True, "ok": ok})
+        self.backlight.set_effect(self.restore_to)
         return replace(self, restore_to=None)

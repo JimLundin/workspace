@@ -162,9 +162,6 @@ class Host:
     def type_text(self, text: str) -> None:
         pass
 
-    def used(self, feature: str) -> None:
-        pass
-
     def indicate(self, indicator: Indicator) -> None:
         pass
 

@@ -8,9 +8,9 @@ from typing import cast, override
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from contracts.status import Job, State
+from diagnostics import Detail
 from protocol import Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
-from usage import Detail
 from winapi.pcm import RATE
 from winapi.shapes import InputRejectedError
 
@@ -66,9 +66,9 @@ def run_immediately(job: Callable[[], None]) -> None:
 
 
 class Rig:
-    """An assistant wired to fakes: what it did is in `desktop.log` and `used`."""
+    """An assistant wired to fakes: what it did is in `desktop.log`, and what failed in `failed`."""
 
-    __slots__ = ("assistant", "desktop", "endpoint", "used")
+    __slots__ = ("assistant", "desktop", "endpoint", "failed")
 
     # The fixture composes endpoint, credential gate, desktop effects and worker scheduling.
     def __init__(
@@ -82,12 +82,12 @@ class Rig:
     ) -> None:
         self.endpoint = endpoint
         self.desktop = desktop if desktop is not None else FakeDesktop()
-        self.used: list[tuple[str, Mapping[str, Detail]]] = []
+        self.failed: list[tuple[str, Mapping[str, Detail]]] = []
         settings = Settings(endpoint.url, "k", "transcribe", "")
         self.assistant = Assistant(
             self.desktop,
             settings,
-            record=lambda feature, details: self.used.append((feature, details)),
+            failed=lambda feature, details: self.failed.append((feature, details)),
             submit=submit,
             missing=missing,
             clock=clock,
@@ -112,8 +112,7 @@ class Rig:
         return {str(k): v for k, v in cast("dict[object, object]", data).items()}
 
     def ok(self, feature: str) -> bool:
-        details = dict(self.used)[feature]
-        return details.get("ok") is True
+        return feature not in dict(self.failed)
 
 
 # ---- dictation -------------------------------------------------------------------------
@@ -187,9 +186,9 @@ def test_unexpected_input_error_recovers_and_identifies_the_failed_phase() -> No
         rig.hold(Tool.DICTATE)
         assert rig.assistant.latest_transcription == "A recoverable transcript"
         assert rig.assistant.listening is None
-        details = dict(rig.used)["dictate"]
-        assert details["phase"] == "submitting" and details["error_type"] == "RuntimeError" and not details["ok"]
-        assert "Sensitive transcript" not in str(rig.used)
+        details = dict(rig.failed)["dictate"]
+        assert details["phase"] == "submitting" and details["error_type"] == "RuntimeError"
+        assert "Sensitive transcript" not in str(rig.failed)
         assert "clipboard" in rig.take()[-1].lower()
 
 
@@ -199,12 +198,13 @@ def test_partial_input_is_logged_without_retrying_or_losing_the_transcript() -> 
         desktop = FakeDesktop(input_error=InputRejectedError(3, 32))
         rig = Rig(endpoint, desktop=desktop)
         rig.hold(Tool.DICTATE)
-        details = dict(rig.used)["dictate"]
+        details = dict(rig.failed)["dictate"]
         assert details["input_accepted"] == 3 and details["input_expected"] == 32
-        assert details["phase"] == "submitting" and not details["ok"]
+        assert details["phase"] == "submitting"
         assert "submitted_characters" not in details
         assert rig.assistant.latest_transcription == "Full transcript"
         desktop.input_error = None
+        rig.failed.clear()
         endpoint.replies = [said("Next dictation")]
         rig.hold(Tool.DICTATE)
         assert rig.ok("dictate") and rig.assistant.latest_transcription == "Next dictation"
@@ -221,7 +221,6 @@ def test_lost_voice_release_finishes_at_the_existing_microphone_limit() -> None:
         assert rig.assistant.capture is capture and not endpoint.received
         rig.assistant.expire_capture(capture.started + MAX_SECONDS)
         assert rig.assistant.listening is None
-        assert dict(rig.used)["dictate"]["stop_reason"] == "limit"
         rig.assistant.handle(Tool.DICTATE, down=False)
         assert len(endpoint.received) == 1
 
@@ -252,28 +251,23 @@ def test_unexpected_microphone_stop_error_clears_capture_and_allows_another_reco
         rig = Rig(endpoint, desktop=desktop)
         rig.hold(Tool.DICTATE)
         assert rig.assistant.capture is None and not endpoint.received
-        details = dict(rig.used)["dictate"]
+        details = dict(rig.failed)["dictate"]
         assert details["phase"] == "stopping" and details["error_type"] == "RuntimeError"
         desktop.broken = False
+        rig.failed.clear()
         endpoint.replies = [said("Recovered")]
         rig.hold(Tool.DICTATE)
         assert rig.ok("dictate")
 
 
-def test_voice_diagnostics_keep_the_full_ending_and_record_only_lengths() -> None:
+def test_dictation_keeps_the_full_ending() -> None:
+    # Defect: the transcript is cut off after its first sentence.
     transcript = "It gets neatly cut off after like the first sentence.\nEverything afterwards just kind of disappears."
     with fake_endpoint() as endpoint:
         endpoint.replies = [said(transcript)]
         rig = Rig(endpoint)
         rig.hold(Tool.DICTATE)
-        details = dict(rig.used)["dictate"]
         expected = transcript.replace("\n", " ") + " "
-        assert details["transcript_characters"] == len(transcript)
-        assert details["requested_characters"] == details["submitted_characters"] == len(expected)
-        for name in ("transcribe_seconds", "submit_seconds"):
-            duration = details[name]
-            assert isinstance(duration, float) and duration >= 0
-        assert "Everything afterwards" not in str(rig.used)
         assert len(endpoint.received) == 1  # Dictation sends no cleanup request.
         assert rig.take()[-1] == f"type {expected!r}"
 
@@ -283,42 +277,20 @@ def test_voice_diagnostics_distinguish_a_failed_request_from_failed_input() -> N
         endpoint.replies = [Reply(b'{"error":{"message":"Unavailable"}}', status=503)]
         rig = Rig(endpoint)
         rig.hold(Tool.DICTATE)
-        details = dict(rig.used)["dictate"]
+        details = dict(rig.failed)["dictate"]
         assert "transcribe_seconds" in details and "transcript_characters" not in details
-        assert "requested_characters" not in details and not details["ok"]
+        assert "requested_characters" not in details
 
         transcript = "The first sentence. The missing ending."
         endpoint.replies = [said(transcript)]
         rig = Rig(endpoint, desktop=FakeDesktop(input_error=OSError("Input was not accepted")))
         rig.hold(Tool.DICTATE)
-        details = dict(rig.used)["dictate"]
+        details = dict(rig.failed)["dictate"]
         assert details["transcript_characters"] == len(transcript)
         assert rig.assistant.latest_transcription == transcript
         assert f"clipboard {transcript}" in rig.desktop.log
         assert details["requested_characters"] == len(transcript) + 1
-        assert "submit_seconds" in details and "submitted_characters" not in details and not details["ok"]
-
-
-def test_queued_voice_diagnostics_belong_to_their_own_recording() -> None:
-    with fake_endpoint() as endpoint:
-        transcripts = ("The first recording. Its ending.", "The second recording is longer. It also keeps its last sentence.")
-        endpoint.replies = [said(text) for text in transcripts]
-        jobs: list[Callable[[], None]] = []
-        rig = Rig(endpoint, submit=jobs.append)
-        rig.hold(Tool.DICTATE)
-        rig.desktop.speech = SPEECH * 2
-        rig.hold(Tool.DICTATE)
-        starts = [details["capture_id"] for _, details in rig.used if details["phase"] == "recording"]
-        assert starts == [1, 2]
-        assert all(feature == "voice_capture" for feature, _ in rig.used)
-        for job in jobs:
-            job()
-        completed = [(feature, details) for feature, details in rig.used if feature == "dictate"]
-        for index, (_, details) in enumerate(completed):
-            assert details["capture_id"] == index + 1
-            assert details["audio_seconds"] == index + 1
-            assert details["transcript_characters"] == len(transcripts[index])
-            assert details["submitted_characters"] == len(transcripts[index]) + 1
+        assert "submit_seconds" in details and "submitted_characters" not in details
 
 
 def test_a_tap_of_a_talk_key_sends_nothing() -> None:
@@ -336,7 +308,7 @@ def test_endpoint_failures_are_reported_and_logged() -> None:
         rig = Rig(endpoint)
         rig.hold(Tool.DICTATE)
         assert rig.take()[-1] == "problem HTTP 401: Invalid session key"
-        assert dict(rig.used)["dictate"]["ok"] is False
+        assert not rig.ok("dictate")
 
 
 def test_an_incomplete_recording_is_reported_without_sending_a_partial_prompt() -> None:
@@ -382,4 +354,4 @@ def test_voice_limit_uses_the_deadline_across_a_float_precision_boundary() -> No
         assert capture is not None and capture.started == started
         rig.assistant.expire_capture(started + MAX_SECONDS)
         assert rig.assistant.listening is None
-        assert dict(rig.used)["dictate"]["stop_reason"] == "limit"
+        assert len(endpoint.received) == 1

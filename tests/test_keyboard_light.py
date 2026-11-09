@@ -1,10 +1,8 @@
 """What Workspace puts back when the Charybdis's backlight comes back with the screens."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from desktop_ui.keyboard_light import KeyboardLight
-from usage import Detail
 from winapi import via
 
 
@@ -28,10 +26,7 @@ class Keyboard:
 
 
 def light(keyboard: Keyboard) -> KeyboardLight:
-    def record(feature: str, details: Mapping[str, Detail]) -> None:
-        pass
-
-    return KeyboardLight(keyboard, record)
+    return KeyboardLight(keyboard)
 
 
 def test_darkening_turns_the_lights_off_and_restoring_puts_back_the_effect_the_person_set() -> None:

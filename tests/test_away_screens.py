@@ -3,7 +3,7 @@
 from collections.abc import Iterable, Iterator
 from unittest import TestCase
 
-from desktop_ui.away_screens import Darken, Presence, Reason, Restore, Setting, dark_after, idle_delay, step
+from desktop_ui.away_screens import Change, Presence, Reason, Setting, dark_after, idle_delay, step
 from winapi.monitor_power import Detached, Power, Unanswered
 from winapi.presence import elapsed
 from winapi.screen import Monitor
@@ -18,14 +18,14 @@ def present(idle_ms: int, *, locked: bool = False, display_required: bool = Fals
     return Presence(idle_ms, locked=locked, display_required=display_required)
 
 
-def stepped(readings: Iterable[Presence], setting: Setting) -> Iterator[Darken | Restore | None]:
+def stepped(readings: Iterable[Presence], setting: Setting) -> Iterator[Change | None]:
     held: Reason | None = None
     for reading in readings:
         held, change = step(held, reading, setting)
         yield change
 
 
-def changes(readings: Iterable[Presence], setting: Setting = ON) -> tuple[Darken | Restore | None, ...]:
+def changes(readings: Iterable[Presence], setting: Setting = ON) -> tuple[Change | None, ...]:
     """Each poll's change, as the owner steps through successive readings."""
     return tuple(stepped(readings, setting))
 
@@ -33,27 +33,27 @@ def changes(readings: Iterable[Presence], setting: Setting = ON) -> tuple[Darken
 def test_idle_darkens_after_the_delay_and_the_next_input_wakes() -> None:
     # Defects: darkening before the delay, darkening again on every poll, or waiting for more than one input to wake.
     readings = (present(0), present(119_999), present(120_000), present(150_000), present(40))
-    assert changes(readings) == (None, None, Darken(Reason.IDLE), None, Restore(Reason.IDLE))
+    assert changes(readings) == (None, None, Change.DARKEN, None, Change.RESTORE)
 
 
 def test_a_program_needing_the_display_holds_off_idleness_but_not_the_lock() -> None:
     # Defects: a video or call goes dark mid-watch, a newly started one stays dark, or a requested display survives the lock.
     readings = (present(130_000, display_required=True), present(140_000), present(150_000, display_required=True))
-    assert changes(readings) == (None, Darken(Reason.IDLE), Restore(Reason.IDLE))
-    assert changes((present(0, locked=True, display_required=True),)) == (Darken(Reason.LOCKED),)
+    assert changes(readings) == (None, Change.DARKEN, Change.RESTORE)
+    assert changes((present(0, locked=True, display_required=True),)) == (Change.DARKEN,)
 
 
 def test_lock_and_idleness_overlap_until_neither_holds() -> None:
     # Defects: unlocking restores a screen that has been idle past the delay, or input on the lock screen wakes it.
     idle_then_locked = (present(130_000), present(140_000, locked=True), present(150_000), present(10))
-    assert changes(idle_then_locked) == (Darken(Reason.IDLE), None, None, Restore(Reason.IDLE))
+    assert changes(idle_then_locked) == (Change.DARKEN, None, None, Change.RESTORE)
     typing_while_locked = (present(0, locked=True), present(30, locked=True), present(50))
-    assert changes(typing_while_locked) == (Darken(Reason.LOCKED), None, Restore(Reason.LOCKED))
+    assert changes(typing_while_locked) == (Change.DARKEN, None, Change.RESTORE)
 
 
 def test_turning_it_off_restores_and_keeps_screens_lit() -> None:
     # Defect: the toggle stops new darkening but leaves a dark screen dark, or still darkens on lock.
-    assert step(Reason.IDLE, present(130_000), OFF) == (None, Restore(Reason.IDLE))
+    assert step(Reason.IDLE, present(130_000), OFF) == (None, Change.RESTORE)
     assert changes((present(0, locked=True), present(130_000)), OFF) == (None, None)
 
 

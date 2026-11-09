@@ -1,10 +1,8 @@
 """What Workspace puts back when the laptop's own panel comes back with the screens."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from desktop_ui.laptop_panel import LaptopPanel
-from usage import Detail
 from winapi.panel_brightness import Level, Unavailable
 
 
@@ -28,10 +26,7 @@ class Panel:
 
 
 def owner(panel: Panel) -> LaptopPanel:
-    def record(feature: str, details: Mapping[str, Detail]) -> None:
-        pass
-
-    return LaptopPanel(panel, record)
+    return LaptopPanel(panel)
 
 
 def test_darkening_turns_the_panel_down_to_zero_and_restoring_puts_back_the_persons_level() -> None:
