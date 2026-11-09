@@ -82,6 +82,15 @@ UNUSED: Final = frozenset(
 FUNCTION_KEYS: Final = frozenset(Scancode(code) for code in range(0x3B, 0x45)) | frozenset({Scancode(0x57), Scancode(0x58)})
 """The physical F1-F12 row remains native while the layout is enabled."""
 
+NATIVE_KEYS: Final = frozenset((
+    *range(0x70, 0x88),  # F1-F24
+    *range(0xAD, 0xB4),  # volume and media
+    *range(0x25, 0x29),  # arrows
+    0x10, 0x11, 0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C,  # Shift, Ctrl, Windows
+))  # fmt: skip
+"""Virtual keys that stay native whichever physical key sends them: function and
+media keys, arrows, and the physical Shift, Ctrl and Windows keys."""
+
 BASE: Final[Board[Binding]] = Board(
     # Colemak-DH with home row mods (Win Alt Ctrl Shift).
     top=      Row((Q,          W,          F,          P,              B  ), (J,              L,                  U,          Y,          QUOTE     )),

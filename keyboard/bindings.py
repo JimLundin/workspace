@@ -69,8 +69,3 @@ def slot(scancode: Scancode) -> int | Unmapped:
 def pictured(scancode: Scancode) -> bool:
     """A key the overlay shows: a layout key, or a blocked one (which lights to say so)."""
     return _SLOTS.get(scancode, Unmapped.FREE) is not Unmapped.FREE
-
-
-def native_control(vk: int) -> bool:
-    """Function and media keys, arrows, and the physical Shift, Ctrl and Windows keys stay native."""
-    return 0x70 <= vk <= 0x87 or 0xAD <= vk <= 0xB3 or 0x25 <= vk <= 0x28 or vk in (0x10, 0x11, 0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C)

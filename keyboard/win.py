@@ -18,7 +18,7 @@ import diagnostics
 from cell import Cell
 from diagnostics import Detail, FailureInfo, failure_info
 from keyboard import engine, hook_watch, settings
-from keyboard.bindings import native_control, pictured
+from keyboard.bindings import pictured
 from keyboard.engine import EngineState, Indicator, UnreleasedError, Verdict
 from keyboard.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
 from keyboard.hook_watch import ANSWERED
@@ -223,7 +223,7 @@ def route(key: inputs.KeyEvent, state: HookState, *, down: bool) -> Route:
         return Route.OWED_UP
     if key.extra == Origin.DESKTOP:
         return Route.OWN
-    if (state.switcher and key.vk in SWITCHER_KEYS) or native_control(key.vk):
+    if (state.switcher and key.vk in SWITCHER_KEYS) or key.vk in settings.NATIVE_KEYS:
         return Route.NATIVE
     if key.extended:
         return Route.EXTENDED
