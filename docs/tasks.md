@@ -156,3 +156,37 @@ round-trips the default speaker endpoint's level; the Shure MVX2U shares the
 keyboard's hub) 18:33–18:34, then four editing checks 18:35–18:38. Worth
 testing next: run the native audio tests alone with `via_watch` on, and
 compare load alone (an editing check) against them.
+
+## 4. Keyboard data structure (on hold)
+
+Paused on 2026-11-09 to let the user think it over. Agreed so far:
+
+- **Revert the layers to a name enum plus a table.** `e778db8` made
+  `settings.Layers` an enum whose members are their boards, and it bends to
+  fit: a hold names a board that `bindings` resolves back to its member at
+  import, held layers must come before BASE, `@unique` forbids two identical
+  boards, every member needs `Board[Binding](...)`, and the architecture
+  review was loosened so a class counts as data. A layer is a name that has a
+  board, and boards refer to other layers by name, so go back to
+  `class Layer(Enum)` with names only in `keyboard/actions.py` and
+  `LAYERS = every_member(Layer, {...})` in `settings.py`. This time BASE is a
+  member, and `bindings` rejects a hold of `Layer.BASE` at import. Undo the
+  `_declarations_only` class allowance in `scripts/architecture.py` with it.
+  Keep the enum-with-values pattern where it fits: `Key`, `Mod`, `Laptop`,
+  `Tool`.
+
+Still to decide, raised in the same session:
+
+- **The logic reads `settings` as a global.** The engine, `bindings`,
+  `firmware` and the key map import it, so tests run against the real layout
+  and import `settings` themselves. Proposed: a `keyboard.layout.Layout`
+  protocol that the `settings` module satisfies (mypy accepts a module for a
+  protocol). Only startup code imports `settings`, tests pass their own
+  layout modules, and a review rule rejects a test that imports a data module.
+- **`Scancode` is applied midway, not where scancodes come from.** Either type
+  it at the source (`KeyEvent.scancode`, `Keycap.scancode`) or drop it and use
+  `Laptop` past the hook. Leaning towards dropping it.
+- **Separate Windows' facts, our layout and the Charybdis.** Move `Key` and
+  `Mod` to `winapi` (their keycap names may stay in `keyboard`), and move the
+  Charybdis's USB identity and Apps key out of `settings` into
+  `keyboard/charybdis.py`.
