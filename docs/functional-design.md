@@ -3,7 +3,7 @@
 Domain alternatives are unions of frozen, slotted dataclasses handled with
 `match` and `assert_never`. Decisions are pure functions. Each effect (a
 thread, file, network call or window) has one owner module. Logic reaches
-Windows only through an interface: `miryoku.engine.Host` for the layout and
+Windows only through an interface: `keyboard.engine.Host` for the layout and
 `assistant.features.Desktop` for key actions. Tests pass concrete adapters for
 these.
 
@@ -13,7 +13,7 @@ these.
 | --- | --- | --- |
 | Launcher | `StartWorkspace.cmd`, `launch.py` | Starts, stops and restarts the components from the checkout's `.venv`; it supervises nothing |
 | AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway` and `components` |
-| Layout | `miryoku.pyw`, `miryoku/` | The keyboard hook and remapping. Standard library and `winapi/` only |
+| Layout | `keyboard.pyw`, `keyboard/` | The keyboard hook and remapping. Standard library and `winapi/` only |
 | Desktop | `desktop/__main__.py`, `desktop_ui/`, `assistant/` | The bar, tray, key map, overlay and window placement, dictation and meeting recording, on Qt's event loop, with worker threads for slow jobs |
 
 The layout posts every request, what the desktop shows (layer, chord, pressed
@@ -37,7 +37,7 @@ in reverse start order.
 | `usage.py`, `diagnostics.py` | The usage log and its failure details |
 | `winapi/` | Typed Win32 and COM bindings: the only `ctypes` code |
 
-## `miryoku/`
+## `keyboard/`
 
 `layout.py` holds the layer tables and settings, checked at import.
 `engine.py` turns key events into actions. `win.py` owns the hook and message

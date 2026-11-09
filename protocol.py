@@ -1,4 +1,4 @@
-"""How the workspace's two programs talk. The layout (miryoku) owns the keyboard;
+"""How the workspace's two programs talk. The layout (keyboard) owns the keyboard;
 the desktop does everything else. Keys on the layout send the desktop
 requests, as window messages: they are queued, ordered, cost the layout nothing
 to send, and need no admin rights. Plain Python: importable anywhere.

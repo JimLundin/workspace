@@ -25,7 +25,7 @@ from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, keyed
 from desktop_ui.overlay import OverlayState
-from miryoku.layout import Layer, Scancode
+from keyboard.layout import Layer, Scancode
 from protocol import App, LayoutState, Request, Tool, decode_indicator
 lazy from winapi.shell import MenuItem
 

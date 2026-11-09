@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import protocol
 from desktop_ui.navigation import AppKey, Direction, Focus, SpatialFocus, World, effect, identity, keyed, launcher
-from miryoku.firmware import CHORDS
+from keyboard.firmware import CHORDS
 from protocol import Request, Tool
 from winapi.shapes import Rect
 

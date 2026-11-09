@@ -1,6 +1,6 @@
 """The layout's Windows-key tap recognition, independent of Windows."""
 
-from miryoku.windows_key import WindowsKeyTap
+from keyboard.windows_key import WindowsKeyTap
 
 
 def test_bare_windows_keys_toggle_once_on_release() -> None:

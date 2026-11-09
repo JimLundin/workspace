@@ -952,7 +952,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     )
     tested = frozenset[str]().union(*(cached_references(source, cache) for source in all_source if source.name.startswith("tests/")))
     # Keyboard routes stop at the first application module they reach.
-    keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "miryoku")), _keyboard)
+    keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "keyboard")), _keyboard)
     # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
     written = frozenset[str]().union(*(observed.assigned for observed in observations.values()))
     findings = (

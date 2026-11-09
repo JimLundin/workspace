@@ -5,7 +5,7 @@ import unittest
 from dataclasses import replace
 from typing import override
 
-from miryoku.engine import (
+from keyboard.engine import (
     DEFAULT_CONFIGURATION,
     MAX_BUFFERED,
     Configuration,
@@ -17,7 +17,7 @@ from miryoku.engine import (
     UnreleasedError,
     Verdict,
 )
-from miryoku.layout import (
+from keyboard.layout import (
     ESCAPE,
     FUNCTION_KEYS,
     QUICK_TAP_MS,

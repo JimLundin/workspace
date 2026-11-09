@@ -9,7 +9,7 @@ from typing import Final
 from pydantic import StrictBool, TypeAdapter
 
 from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
-from miryoku.layout import Layer, Scancode
+from keyboard.layout import Layer, Scancode
 from usage import DIRECTORY
 from winapi.shapes import Point, Rect, Size
 

@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Final
 
-from miryoku.layout import BASE, CELLS, TABLE, Key, Layer, TapHold, character
+from keyboard.layout import BASE, CELLS, TABLE, Key, Layer, TapHold, character
 from protocol import App, Request, Tool
 
 # Charybdis Nano (3x5) Splinky: match its USB identity, independent of port.

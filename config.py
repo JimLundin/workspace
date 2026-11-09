@@ -10,7 +10,7 @@ from typing import Final
 from protocol import App, Installed, PinnedWeb
 
 # ---- Apps ------------------------------------------------------------------------------
-# Up to ten, in chord-letter order: Q W F P B, then A R S T G (see `miryoku.firmware.CHORDS`).
+# Up to ten, in chord-letter order: Q W F P B, then A R S T G (see `keyboard.firmware.CHORDS`).
 
 APPS: Final[tuple[App, ...]] = (
     App("terminal", Installed("windowsterminal.exe", "wt.exe")),

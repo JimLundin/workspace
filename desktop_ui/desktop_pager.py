@@ -13,7 +13,7 @@ from typing import Final, assert_never
 
 from desktop_ui.shell_items import WEB_APPS, PinnedApp
 from desktop_ui.window_layout import App, Program
-from miryoku.firmware import CHORDS
+from keyboard.firmware import CHORDS
 from protocol import Tool
 
 JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4, Tool.DESKTOP_5)

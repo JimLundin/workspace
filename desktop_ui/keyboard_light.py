@@ -13,7 +13,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
-from miryoku.firmware import FIRMWARE_KEYBOARD
+from keyboard.firmware import FIRMWARE_KEYBOARD
 from usage import Detail
 from winapi import via
 

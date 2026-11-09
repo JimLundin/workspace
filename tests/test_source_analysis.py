@@ -17,8 +17,8 @@ def test_cached_policy_review_recomputes_changed_imports(tmp_path: Path) -> None
     write_tree(
         root,
         {
-            "miryoku/__init__.py": "",
-            "miryoku/engine.py": "from bridge import value\n",
+            "keyboard/__init__.py": "",
+            "keyboard/engine.py": "from bridge import value\n",
             "bridge.py": "value = 1\n",
             "assistant/__init__.py": "",
             "assistant/model.py": "",

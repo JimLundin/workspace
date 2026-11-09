@@ -7,8 +7,8 @@ from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
-from miryoku.firmware import CHORDS
-from miryoku.layout import (
+from keyboard.firmware import CHORDS
+from keyboard.layout import (
     BASE,
     COPY,
     CUT,

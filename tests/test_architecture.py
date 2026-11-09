@@ -82,8 +82,8 @@ def test_keyboard_rejection_follows_lazy_imports_and_package_initializers(tmp_pa
     write_tree(
         tmp_path,
         {
-            "miryoku/__init__.py": "",
-            "miryoku/engine.py": "lazy from helper.values import value\n",
+            "keyboard/__init__.py": "",
+            "keyboard/engine.py": "lazy from helper.values import value\n",
             "helper/__init__.py": "from desktop_ui import model\n",
             "helper/values.py": "value = 1\n",
             "assistant/__init__.py": "",
@@ -94,7 +94,7 @@ def test_keyboard_rejection_follows_lazy_imports_and_package_initializers(tmp_pa
     )
     report = review(tmp_path)
     assert others(report) and all(finding.rule == "keyboard-isolation" for finding in others(report))
-    assert any("miryoku.engine → helper → desktop_ui" in finding.detail for finding in others(report))
+    assert any("keyboard.engine → helper → desktop_ui" in finding.detail for finding in others(report))
     (tmp_path / "helper/__init__.py").write_text("")
     assert not others(review(tmp_path))
 
@@ -110,8 +110,8 @@ def test_keyboard_cannot_hide_dependencies_in_unresolved_dynamic_imports(tmp_pat
     write_tree(
         tmp_path,
         {
-            "miryoku/__init__.py": "",
-            "miryoku/engine.py": "from importlib import import_module as load\ndef start(target):\n    return load(target)\n",
+            "keyboard/__init__.py": "",
+            "keyboard/engine.py": "from importlib import import_module as load\ndef start(target):\n    return load(target)\n",
         },
     )
     assert [finding.rule for finding in others(review(tmp_path))] == ["keyboard-import"]

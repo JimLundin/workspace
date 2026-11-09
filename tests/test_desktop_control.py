@@ -43,7 +43,7 @@ from desktop_ui.desktop_control import (
     recording_notice,
     transition,
 )
-from miryoku.layout import Scancode
+from keyboard.layout import Scancode
 from protocol import WM_KEY_STATE, WM_REQUEST, LayoutState, Tool
 
 

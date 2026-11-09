@@ -4,8 +4,8 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
 from components import DESKTOP, Window
-from miryoku.layout import Key, Mod, Scancode
-from miryoku.win import Keyboard
+from keyboard.layout import Key, Mod, Scancode
+from keyboard.win import Keyboard
 from protocol import WM_REQUEST
 from usage import Detail
 from winapi import inputs, system

@@ -1,4 +1,4 @@
-"""The layout hook's glue in miryoku.win, driven through the fake keyboard platform."""
+"""The layout hook's glue in keyboard.win, driven through the fake keyboard platform."""
 
 import unittest
 from collections.abc import Callable
@@ -6,10 +6,10 @@ from dataclasses import replace
 
 from config import APPS
 from desktop_ui.desktop_control import FeatureRequest, control_event
-from miryoku import hook_watch
-from miryoku.engine import Indicator
-from miryoku.layout import ESCAPE, Key, Layer, Mod, Scancode
-from miryoku.win import Keyboard, WinHost, release_keyboard
+from keyboard import hook_watch
+from keyboard.engine import Indicator
+from keyboard.layout import ESCAPE, Key, Layer, Mod, Scancode
+from keyboard.win import Keyboard, WinHost, release_keyboard
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,

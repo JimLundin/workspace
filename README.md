@@ -3,7 +3,7 @@
 Workspace is a personal work environment for a Windows laptop. It runs on the
 installed Python 3.15 and needs no admin rights. It runs five processes:
 
-- **The layout** (`miryoku/`) remaps the laptop's ISO keyboard to Colemak Mod-DH
+- **The layout** (`keyboard/`) remaps the laptop's ISO keyboard to Colemak Mod-DH
   in the Miryoku style, with home row mods, layers, caps word and snippets.
 - **The desktop** (`desktop/`, `desktop_ui/`) owns everything you see: the
   floating bar, the tray icon, the key map and overlay, and window placement.
@@ -30,7 +30,7 @@ installed Python 3.15 and needs no admin rights. It runs five processes:
    programs. To start Workspace at login, put a shortcut to it in
    `shell:startup`. `python launch.py restart` restarts them after a change.
 
-`pyw -3.15 miryoku.pyw` runs the layout alone.
+`pyw -3.15 keyboard.pyw` runs the layout alone.
 
 | Variable | Default | Use |
 |---|---|---|

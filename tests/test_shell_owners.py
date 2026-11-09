@@ -3,7 +3,7 @@
 import unittest
 
 from desktop_ui.shell_controls import TaskbarControl
-from miryoku.win import Keyboard, maintain_keyboard
+from keyboard.win import Keyboard, maintain_keyboard
 from protocol import WM_TOGGLE_LAYOUT
 from tests.keyboard_fixture import KeyboardFixture
 from winapi import keyboard_language

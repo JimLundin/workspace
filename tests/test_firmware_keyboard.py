@@ -4,8 +4,8 @@ from pathlib import Path
 
 from config import APPS
 from desktop_ui.keymap import describe
-from miryoku.firmware import CHORDS, connected, shortcut
-from miryoku.layout import TABLE, Layer
+from keyboard.firmware import CHORDS, connected, shortcut
+from keyboard.layout import TABLE, Layer
 from protocol import App, Tool
 
 

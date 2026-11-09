@@ -9,7 +9,7 @@ from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
 from config import SNIPPETS
-from miryoku.layout import (
+from keyboard.layout import (
     CELLS,
     ESCAPE,
     QUICK_TAP_MS,

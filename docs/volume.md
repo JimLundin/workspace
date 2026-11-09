@@ -15,7 +15,7 @@ lines are code lines. Product code averages 6.0 nodes a line.
 | tests | 41,832 | 5,988 |
 | winapi | 19,611 | 3,292 |
 | scripts | 10,694 | 1,585 |
-| miryoku | 10,110 | 1,571 |
+| keyboard | 10,110 | 1,571 |
 | assistant | 7,044 | 1,202 |
 | typings | 3,999 | 752 |
 | (top level) | 1,788 | 319 |
@@ -30,14 +30,14 @@ The 25 largest files:
 | `scripts/architecture.py` | 5,333 | 768 |
 | `desktop_ui/island_surface.py` | 5,325 | 674 |
 | `tests/test_engine.py` | 4,498 | 750 |
-| `miryoku/win.py` | 4,234 | 687 |
+| `keyboard/win.py` | 4,234 | 687 |
 | `tests/test_keyboard_hook.py` | 4,075 | 511 |
 | `tests/test_meetings.py` | 3,106 | 474 |
-| `miryoku/engine.py` | 2,873 | 436 |
+| `keyboard/engine.py` | 2,873 | 436 |
 | `assistant/meetings.py` | 2,738 | 456 |
 | `desktop_ui/desktop_bar.py` | 2,374 | 432 |
 | `desktop_ui/keymap_views.py` | 2,344 | 333 |
-| `miryoku/layout.py` | 2,196 | 299 |
+| `keyboard/layout.py` | 2,196 | 299 |
 | `desktop_ui/island_menu.py` | 2,100 | 350 |
 | `desktop_ui/desktop_control.py` | 2,070 | 440 |
 | `tests/test_features.py` | 2,057 | 304 |

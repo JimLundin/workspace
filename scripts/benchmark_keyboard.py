@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
-lazy from miryoku.engine import Engine, EngineState, Indicator, Signal
-lazy from miryoku.layout import Key, Mod, Scancode
+lazy from keyboard.engine import Engine, EngineState, Indicator, Signal
+lazy from keyboard.layout import Key, Mod, Scancode
 lazy from protocol import Request
 
 
@@ -101,11 +101,11 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
     finally:
         tracemalloc.stop()
     names = (
-        "miryoku/engine.py",
-        "miryoku/layout.py",
-        "miryoku/win.py",
-        "miryoku/__main__.py",
-        "miryoku.pyw",
+        "keyboard/engine.py",
+        "keyboard/layout.py",
+        "keyboard/win.py",
+        "keyboard/__main__.py",
+        "keyboard.pyw",
         "protocol.py",
         "config.py",
         "components.py",

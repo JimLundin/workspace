@@ -34,7 +34,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 # Design
 
-- Keep the keyboard process isolated: `miryoku/` and everything it imports use
+- Keep the keyboard process isolated: `keyboard/` and everything it imports use
   only the standard library, `winapi` and the stdlib-only top-level modules
   (`cell`, `config`, `protocol`, `usage`, `components`, `diagnostics`), never
   `assistant`, `desktop_ui` or third-party packages. Measure key-event latency, allocation

@@ -4,7 +4,7 @@ hooks), missing a dead one, or reinstalling repeatedly after one outage."""
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from miryoku.hook_watch import Answered, Probe, Reinstall, Watch, assess, keyboard_input, probed
+from keyboard.hook_watch import Answered, Probe, Reinstall, Watch, assess, keyboard_input, probed
 
 
 @dataclass(frozen=True, slots=True)

@@ -42,7 +42,7 @@ class Entry:
 # The AI connection holds no state: it creates no window, so the keeper ends it at once.
 GATEWAY: Final = Entry(name="gateway", module="gateway", window=Window("workspace gateway", None), quit_message=WM_CLOSE, shutdown_s=0.0)
 # The keyboard has nothing to drain, so a stuck one is replaced quickly.
-LAYOUT: Final = Entry(name="layout", module="miryoku", window=Window("workspace layout", None), quit_message=WM_QUIT_LAYOUT, shutdown_s=5.0)
+LAYOUT: Final = Entry(name="layout", module="keyboard", window=Window("workspace layout", None), quit_message=WM_QUIT_LAYOUT, shutdown_s=5.0)
 # The desktop closes its windows and the tray icon, finishes a meeting's capture
 # and stops dictation: half a minute at most.
 DESKTOP: Final = Entry(

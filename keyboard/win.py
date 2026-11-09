@@ -18,11 +18,11 @@ from cell import Cell
 from components import DESKTOP, LAYOUT, Window
 from config import APPS
 from diagnostics import FailureInfo, failure_info
-from miryoku import hook_watch
-from miryoku.engine import QUIET, Engine, EngineState, Indicator, Signal, UnreleasedError, Verdict
-from miryoku.firmware import APPS_KEY, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
-from miryoku.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, Key, Mod, Scancode, Unmapped, native_control
-from miryoku.windows_key import WindowsKeyTap
+from keyboard import hook_watch
+from keyboard.engine import QUIET, Engine, EngineState, Indicator, Signal, UnreleasedError, Verdict
+from keyboard.firmware import APPS_KEY, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
+from keyboard.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, Key, Mod, Scancode, Unmapped, native_control
+from keyboard.windows_key import WindowsKeyTap
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
@@ -44,7 +44,7 @@ from usage import Detail
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 from winapi.shapes import Point
 
-LOCK_NAME: Final = "Local\\miryoku"
+LOCK_NAME: Final = "Local\\keyboard"
 """Name of the lock that stops a second copy from running in this Windows session."""
 USAGE_FLUSH_MS: Final = 10 * 60 * 1000
 """How often usage counts are written to the usage log."""
@@ -828,7 +828,7 @@ def maintain_keyboard(keyboard: Keyboard, languages: keyboard_language.KeyboardL
 
 
 def show_error(message: str) -> None:
-    system.message_box(message, "Miryoku", system.MB_ICONHAND)
+    system.message_box(message, "Workspace keyboard", system.MB_ICONHAND)
 
 
 def release_keyboard(keyboard: Keyboard) -> None:

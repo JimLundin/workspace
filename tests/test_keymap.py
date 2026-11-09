@@ -1,8 +1,8 @@
 """The key map: what each physical key does, per layer; and the indicator's words."""
 
 from desktop_ui.keymap import ROWS, Role, Shortcut, indicator_text, keymap, shortcut, shortcut_hint
-from miryoku.firmware import CHORDS
-from miryoku.layout import Layer
+from keyboard.firmware import CHORDS
+from keyboard.layout import Layer
 from protocol import Tool
 lazy from desktop_ui.keymap import TOOL_NAMES
 

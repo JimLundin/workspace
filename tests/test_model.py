@@ -1,6 +1,6 @@
 """The vocabulary the layout is written in: what it can and can't express."""
 
-from miryoku.layout import Key, Layer, Mod
+from keyboard.layout import Key, Layer, Mod
 
 
 def test_layers_have_no_base() -> None:
