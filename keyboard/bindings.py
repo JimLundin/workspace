@@ -14,13 +14,9 @@ class LayoutError(Exception):
     """The layout is inconsistent; raised at import, never at runtime."""
 
 
-_TABLE: Final[frozendict[Layer | None, tuple[Binding, ...]]] = frozendict({
-    None: settings.BASE.cells(),
-    Layer.NAV: settings.NAV_LAYER.cells(),
-    Layer.NUM: settings.NUM_LAYER.cells(),
-    Layer.SYM: settings.SYM_LAYER.cells(),
-    Layer.APPS: settings.APPS_LAYER.cells(),
-})  # fmt: skip
+_TABLE: Final[frozendict[Layer | None, tuple[Binding, ...]]] = frozendict(
+    (layer, board.cells()) for layer, board in ((None, settings.BASE), *settings.LAYERS.items())
+)
 """Every layer flattened, by layer (None: the base layer) then cell."""
 
 

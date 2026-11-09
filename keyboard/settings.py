@@ -6,6 +6,7 @@ and `keyboard.bindings` builds the engine's lookups from these.
 from typing import Final
 
 import config
+from contracts.members import every_member
 from keyboard.layout import BLANK, Binding, Board, Chord, Key, Layer, Mod, Row, Scancode, TapHold, Thumbs
 from protocol import Tool
 
@@ -89,43 +90,43 @@ BASE: Final[Board[Binding]] = Board(
     thumbs=Thumbs((                        ht(ESC, Layer.APPS), ht(SPACE, NAV), TAB     ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), DELETE)),
 )
 
-NAV_LAYER: Final[Board[Binding]] = Board(
-    # Hold the Space thumb.
-    top=      Row((XX,   XX,  XX,  XX,  XX), (REDO,      PASTE,     COPY,      CUT,     UNDO )),
-    home=     Row((GUI,  ALT, CTL, SFT, XX), (CAPS_LOCK, LEFT,      DOWN,      UP,      RIGHT)),
-    bottom=   Row((XX,   XX,  XX,  XX,  XX), (INSERT,    HOME,      PAGE_DOWN, PAGE_UP, END  )),
-    thumbs=Thumbs((           XX,  XX,  XX), (ENTER,     BACKSPACE, DELETE   )),
-)
-
-NUM_LAYER: Final[Board[Binding]] = Board(
-    # Hold the Backspace thumb.
-    top=      Row((LBRACKET,  N7, N8,     N9, RBRACKET ), (XX, XX,  XX,  XX,  XX  )),  # [ 7 8 9 ]
-    home=     Row((SEMICOLON, N4, N5,     N6, EQUAL    ), (XX, SFT, CTL, ALT, GUI )),  # ; 4 5 6 =
-    bottom=   Row((GRAVE,     N1, N2,     N3, BACKSLASH), (XX, XX,  XX,  XX,  XX  )),  # ` 1 2 3 \
-    thumbs=Thumbs((               PERIOD, N0, MINUS    ), (XX, XX,  XX )),             # . 0 -
-)
-
-SYM_LAYER: Final[Board[Binding]] = Board(
-    # Hold the Enter thumb.
-    top=      Row((sh(LBRACKET),  sh(N7), sh(N8), sh(N9), sh(RBRACKET) ), (XX, XX,  XX,  XX,  XX  )),  # { & * ( }
-    home=     Row((sh(SEMICOLON), sh(N4), sh(N5), sh(N6), sh(EQUAL)    ), (XX, SFT, CTL, ALT, GUI )),  # : $ % ^ +
-    bottom=   Row((sh(GRAVE),     sh(N1), sh(N2), sh(N3), sh(BACKSLASH)), (XX, XX,  XX,  XX,  XX  )),  # ~ ! @ # |
-    thumbs=Thumbs((                       sh(N9), sh(N0), sh(MINUS)    ), (XX, XX,  XX )),             # ( ) _
-)
-
 # The apps from config, ten slots in key order; slots past the end do nothing.
 _APP: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[XX] * (10 - len(config.APPS[:10])))
 
-APPS_LAYER: Final[Board[Binding]] = Board(
-    # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
-    # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
-    top=      Row((_APP[0],         _APP[1],               _APP[2],              _APP[3],         _APP[4]      ),
-                  (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.DESKTOP_5)),
-    home=     Row((_APP[5],         _APP[6],               _APP[7],              _APP[8],         _APP[9]      ),
-                  (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
-    bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  XX           ),
-                  (XX,              Tool.DICTATE,          XX,                   Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
-    # The Tab place stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
-    thumbs=Thumbs((XX,              Tool.MEETING_TOGGLE,   XX), (XX,              XX, XX)),
-)
+LAYERS: Final[frozendict[Layer, Board[Binding]]] = every_member(Layer, {
+    Layer.NAV: Board(
+        # Hold the Space thumb.
+        top=      Row((XX,   XX,  XX,  XX,  XX), (REDO,      PASTE,     COPY,      CUT,     UNDO )),
+        home=     Row((GUI,  ALT, CTL, SFT, XX), (CAPS_LOCK, LEFT,      DOWN,      UP,      RIGHT)),
+        bottom=   Row((XX,   XX,  XX,  XX,  XX), (INSERT,    HOME,      PAGE_DOWN, PAGE_UP, END  )),
+        thumbs=Thumbs((           XX,  XX,  XX), (ENTER,     BACKSPACE, DELETE   )),
+    ),
+    Layer.NUM: Board(
+        # Hold the Backspace thumb.
+        top=      Row((LBRACKET,  N7, N8,     N9, RBRACKET ), (XX, XX,  XX,  XX,  XX  )),  # [ 7 8 9 ]
+        home=     Row((SEMICOLON, N4, N5,     N6, EQUAL    ), (XX, SFT, CTL, ALT, GUI )),  # ; 4 5 6 =
+        bottom=   Row((GRAVE,     N1, N2,     N3, BACKSLASH), (XX, XX,  XX,  XX,  XX  )),  # ` 1 2 3 \
+        thumbs=Thumbs((               PERIOD, N0, MINUS    ), (XX, XX,  XX )),             # . 0 -
+    ),
+    Layer.SYM: Board(
+        # Hold the Enter thumb.
+        top=      Row((sh(LBRACKET),  sh(N7), sh(N8), sh(N9), sh(RBRACKET) ), (XX, XX,  XX,  XX,  XX  )),  # { & * ( }
+        home=     Row((sh(SEMICOLON), sh(N4), sh(N5), sh(N6), sh(EQUAL)    ), (XX, SFT, CTL, ALT, GUI )),  # : $ % ^ +
+        bottom=   Row((sh(GRAVE),     sh(N1), sh(N2), sh(N3), sh(BACKSLASH)), (XX, XX,  XX,  XX,  XX  )),  # ~ ! @ # |
+        thumbs=Thumbs((                       sh(N9), sh(N0), sh(MINUS)    ), (XX, XX,  XX )),             # ( ) _
+    ),
+    Layer.APPS: Board(
+        # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
+        # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
+        top=      Row((_APP[0],         _APP[1],               _APP[2],              _APP[3],         _APP[4]      ),
+                      (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.DESKTOP_5)),
+        home=     Row((_APP[5],         _APP[6],               _APP[7],              _APP[8],         _APP[9]      ),
+                      (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
+        bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  XX           ),
+                      (XX,              Tool.DICTATE,          XX,                   Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),
+        # The Tab place stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
+        thumbs=Thumbs((XX,              Tool.MEETING_TOGGLE,   XX), (XX,              XX, XX)),
+    ),
+})
+"""The board of each held layer; a Layer without one fails the import."""
 # fmt: on
