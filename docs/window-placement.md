@@ -15,7 +15,7 @@ windows fill them in order and any beyond the last share that place.
 
 | Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 | Desktop 5 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Laptop only | None | | Outlook, Teams | Terminal, Terminal | Terminal, VS Code | Edge |
+| Laptop only | None | | Outlook, Teams | Terminal, Terminal | VS Code, VS Code | Edge |
 | Home | 3840×2160 (MAIN) | | MAIN: Terminal ⅔, VS Code ⅓. Laptop: Teams | MAIN: Edge, Outlook | | |
 | Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | | SIDE: VS Code. ABOVE: Terminal ⅔, Edge ⅓. Laptop: Teams, Outlook | | | |
 

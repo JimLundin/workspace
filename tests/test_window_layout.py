@@ -59,10 +59,10 @@ def test_windows_beyond_an_apps_places_share_its_last_place_and_fewer_leave_plac
     assert alone is not None
     assert targets(place(alone, (Group(TERMINAL, (3, 6, 7, 8)),), NOWHERE)) == {
         3: (2, Rect(0, 0, 960, 1200)),
-        6: (2, Rect(960, 0, 1920, 1200)),
-        # The half-width laptop place is portrait, so the two stack.
-        7: (3, Rect(0, 0, 960, 600)),
-        8: (3, Rect(0, 600, 960, 1200)),
+        # The half-width laptop place is portrait, so the three stack.
+        6: (2, Rect(960, 0, 1920, 400)),
+        7: (2, Rect(960, 400, 1920, 800)),
+        8: (2, Rect(960, 800, 1920, 1200)),
     }
     assert targets(place(alone, (Group(TERMINAL, (3,)),), NOWHERE)) == {3: (2, Rect(0, 0, 960, 1200))}
 
@@ -127,6 +127,7 @@ def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() 
     # SIDE's Code is leftmost, then ABOVE's Terminal, then the laptop's Teams and Outlook, then ABOVE's Edge.
     assert reading_order(work, windows, placement, 1) == (CODE, TERMINAL, PinnedApp.TEAMS, PinnedApp.OUTLOOK, EDGE)
     alone = screens((LAPTOP,))
-    assert reading_order(alone, frozendict(), NOWHERE, 3) == (TERMINAL, CODE)
+    assert reading_order(alone, frozendict(), NOWHERE, 2) == (TERMINAL,)
+    assert reading_order(alone, frozendict(), NOWHERE, 3) == (CODE,)
     assert reading_order(alone, frozendict(), NOWHERE, 5) == ()
     assert reading_order(None, frozendict(), NOWHERE, 1) == ()
