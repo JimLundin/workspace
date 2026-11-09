@@ -25,7 +25,7 @@ from cell import Cell
 from config import DARK_WHEN_IDLE_MINUTES
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
-from desktop_ui.window_layout import dark_when_away
+from desktop_ui.window_layout import SETUPS, dark_when_away
 from winapi import presence, screen, session
 from winapi.monitor_power import Applied, Detached, PhysicalMonitors, Power
 from winapi.screen import Monitor
@@ -196,7 +196,7 @@ class AwayScreens:
         self._state.set(replace(away, held=held))
         match change:
             case Change.DARKEN:
-                protected = dark_when_away(screen.monitors())
+                protected = dark_when_away(screen.monitors(), SETUPS)
                 self.apply(protected - away.dark, Power.OFF)
                 self._state.update(lambda current: replace(current, light=current.light.darken(), panel=current.panel.darken()))
             case Change.RESTORE:

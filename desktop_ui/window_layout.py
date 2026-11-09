@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
 from itertools import count
+from typing import Final
 
+from contracts.members import every_member
 from desktop_ui.shell_items import PinnedApp, Shelf
 from winapi.screen import Monitor
 from winapi.shapes import Point, Rect, Size, Window
@@ -39,35 +41,11 @@ class Setup(Enum):
     WORK = auto()
 
 
-NO_EXTERNALS: frozendict[Size, Role] = frozendict()
-EXTERNALS: frozendict[Setup, frozendict[Size, Role]] = frozendict(
-    {
-        Setup.LAPTOP_ONLY: NO_EXTERNALS,
-        Setup.HOME: frozendict({Size(3840, 2160): Role.MAIN}),
-        # Orientation, not arrangement, tells the two work screens apart.
-        Setup.WORK: frozendict({Size(2560, 1440): Role.ABOVE, Size(1440, 2560): Role.SIDE}),
-    }
-)
-"""Each setup's external screens beside the laptop's own panel, by physical size."""
-
-
-DARK_WHEN_AWAY: frozendict[Setup, frozenset[Role]] = frozendict({Setup.HOME: frozenset({Role.MAIN})})
-"""Each setup's external screens that turn dark while nobody is at the machine: the home 4K screen is an OLED."""
-
-
-@dataclass(frozen=True, slots=True)
-class Screens:
-    """The recognized setup and the work area of each of its roles' monitors."""
-
-    setup: Setup
-    roles: frozendict[Role, Rect]
-
-
 def _ordered(sizes: Iterable[Size]) -> tuple[Size, ...]:
     return tuple(sorted(sizes, key=lambda size: (size.width, size.height)))
 
 
-def assigned(monitors: Sequence[Monitor]) -> tuple[Setup, frozendict[Role, Monitor]] | None:
+def assigned(monitors: Sequence[Monitor], setups: Setups) -> tuple[Setup, frozendict[Role, Monitor]] | None:
     """Match the connected monitors to a setup; any other set is the laptop alone, on its panel or the primary monitor."""
     if not monitors:
         return None
@@ -78,26 +56,26 @@ def assigned(monitors: Sequence[Monitor]) -> tuple[Setup, frozendict[Role, Monit
     alone = (Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: monitors[laptop]}))
     if len(panels) != 1:
         return alone
-    setup = next((setup for setup, wanted in EXTERNALS.items() if sizes == _ordered(wanted)), None)
+    setup = next((setup for setup, wanted in setups.externals.items() if sizes == _ordered(wanted)), None)
     if setup is None:
         return alone
-    roles = {EXTERNALS[setup][monitor.area.size]: monitor for monitor in externals}
+    roles = {setups.externals[setup][monitor.area.size]: monitor for monitor in externals}
     return setup, frozendict({Role.LAPTOP: monitors[laptop], **roles})
 
 
-def screens(monitors: Sequence[Monitor]) -> Screens | None:
-    match assigned(monitors):
+def screens(monitors: Sequence[Monitor], setups: Setups) -> Screens | None:
+    match assigned(monitors, setups):
         case (setup, roles):
-            return Screens(setup, frozendict((role, monitor.work) for role, monitor in roles.items()))
+            return Screens(setup, frozendict((role, monitor.work) for role, monitor in roles.items()), setups.layouts[setup])
         case None:
             return None
 
 
-def dark_when_away(monitors: Sequence[Monitor]) -> frozenset[Monitor]:
+def dark_when_away(monitors: Sequence[Monitor], setups: Setups) -> frozenset[Monitor]:
     """The recognized setup's protected external screens; an unrecognized set protects none."""
-    match assigned(monitors):
+    match assigned(monitors, setups):
         case (setup, roles):
-            return frozenset(monitor for role, monitor in roles.items() if role in DARK_WHEN_AWAY.get(setup, frozenset()))
+            return frozenset(monitor for role, monitor in roles.items() if role in setups.dark_when_away.get(setup, frozenset()))
         case None:
             return frozenset()
 
@@ -143,45 +121,87 @@ class Position:
 type Places = tuple[Position, ...]
 """An application's places in order; its windows beyond the last share that one."""
 
-LAYOUTS: frozendict[Setup, frozendict[App, Places]] = frozendict(
-    {
-        Setup.LAPTOP_ONLY: frozendict(
-            {
-                PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-                # Terminals side by side on desktop 3; Code's windows share all of desktop 4, so a lone one fills it.
-                TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF), Position(2, Role.LAPTOP, RIGHT_HALF)),
-                CODE: (Position(3, Role.LAPTOP, FULL),),
-                EDGE: (Position(4, Role.LAPTOP, FULL),),
-            }
-        ),
-        Setup.HOME: frozendict(
-            {
-                # Two terminals read Terminal | Terminal | Code across the 4K screen.
-                TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
-                CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
-                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
-                EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
-                PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
-            }
-        ),
-        Setup.WORK: frozendict(
-            {
-                # Code takes the tall screen; terminals read Terminal | Terminal | Edge across the one above.
-                CODE: (Position(1, Role.SIDE, FULL),),
-                TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
-                EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
-                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-            }
-        ),
-    }
+type Layout = frozendict[App, Places]
+"""One setup's applications and their places."""
+
+
+@dataclass(frozen=True, slots=True)
+class Setups:
+    """The monitor setups Workspace recognizes and what each does with its screens."""
+
+    externals: frozendict[Setup, frozendict[Size, Role]]
+    """Each setup's external screens beside the laptop's own panel, by physical size."""
+    layouts: frozendict[Setup, Layout]
+    """Each application's places per setup, so no application is declared twice."""
+    dark_when_away: frozendict[Setup, frozenset[Role]]
+    """Each setup's external screens that turn dark while nobody is at the machine."""
+
+    def __post_init__(self) -> None:
+        """Every setup has its screens and its layout, so recognizing one always finds both."""
+        every_member(Setup, self.externals)
+        every_member(Setup, self.layouts)
+
+
+@dataclass(frozen=True, slots=True)
+class Screens:
+    """The recognized setup, the work area of each of its roles' monitors, and its layout."""
+
+    setup: Setup
+    roles: frozendict[Role, Rect]
+    layout: Layout
+
+
+SETUPS: Final = Setups(
+    externals=frozendict(
+        {
+            Setup.LAPTOP_ONLY: frozendict(),
+            Setup.HOME: frozendict({Size(3840, 2160): Role.MAIN}),
+            # Orientation, not arrangement, tells the two work screens apart.
+            Setup.WORK: frozendict({Size(2560, 1440): Role.ABOVE, Size(1440, 2560): Role.SIDE}),
+        }
+    ),
+    layouts=frozendict(
+        {
+            Setup.LAPTOP_ONLY: frozendict(
+                {
+                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, RIGHT_HALF),),
+                    # Terminals side by side on desktop 3; Code's windows share all of desktop 4, so a lone one fills it.
+                    TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF), Position(2, Role.LAPTOP, RIGHT_HALF)),
+                    CODE: (Position(3, Role.LAPTOP, FULL),),
+                    EDGE: (Position(4, Role.LAPTOP, FULL),),
+                }
+            ),
+            Setup.HOME: frozendict(
+                {
+                    # Two terminals read Terminal | Terminal | Code across the 4K screen.
+                    TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
+                    CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
+                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
+                    EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
+                    PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
+                }
+            ),
+            Setup.WORK: frozendict(
+                {
+                    # Code takes the tall screen; terminals read Terminal | Terminal | Edge across the one above.
+                    CODE: (Position(1, Role.SIDE, FULL),),
+                    TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
+                    EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
+                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
+                }
+            ),
+        }
+    ),
+    # The home 4K screen is an OLED.
+    dark_when_away=frozendict({Setup.HOME: frozenset({Role.MAIN})}),
 )
-"""Each application's places per setup, so no application is declared twice."""
+"""Workspace's own setups; startup code passes them in, tests pass their own."""
 
 
-def declared_desktops(setup: Setup) -> int:
-    return 1 + max((position.desktop for places in LAYOUTS[setup].values() for position in places), default=-1)
+def declared_desktops(layout: Layout) -> int:
+    return 1 + max((position.desktop for places in layout.values() for position in places), default=-1)
 
 
 def managed(window: Window, *, resizable: bool, own: bool) -> bool:
@@ -220,8 +240,8 @@ NOWHERE: Placement = frozendict()
 
 def place(where: Screens, apps: Sequence[Group], previous: Placement) -> Placement:
     """Each managed window's desktop and rectangle; the previous placement keeps undeclared applications on their desktops."""
-    declared = LAYOUTS[where.setup]
-    extra = overflow(tuple(group for group in apps if group.app not in declared), previous, declared_desktops(where.setup))
+    declared = where.layout
+    extra = overflow(tuple(group for group in apps if group.app not in declared), previous, declared_desktops(declared))
 
     def targets(group: Group) -> Iterator[tuple[int, Target]]:
         places = declared.get(group.app) or (Position(extra[group.app], Role.LAPTOP, FULL),)
@@ -244,7 +264,7 @@ def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
     """Where each app the setup declares on this desktop first sits."""
     return frozendict(
         (app, corner)
-        for app, places in LAYOUTS[where.setup].items()
+        for app, places in where.layout.items()
         if (corner := _corner(pixels(where.roles[place.role], place.region) for place in places if place.desktop == desktop))
     )
 

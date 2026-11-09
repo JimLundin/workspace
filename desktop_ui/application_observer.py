@@ -23,6 +23,7 @@ from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch,
 from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Seat, Seats, Shelf, caption_clip, launch, outstanding, shelf
 from desktop_ui.window_layout import (
     NOWHERE,
+    SETUPS,
     App,
     Placement,
     Screens,
@@ -293,7 +294,7 @@ class Worker:
         foreground = windows.foreground()
         zoomed = zoom_after(watched.zoomed, foreground)
         state = observed.state
-        where = screens(screen.monitors())
+        where = screens(screen.monitors(), SETUPS)
         placement = watched.placement
         if where is not None and state is not None:
             eligible = frozenset(

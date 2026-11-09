@@ -19,14 +19,64 @@ from desktop_ui.navigation import (
     zoom_after,
 )
 from desktop_ui.shell_items import PinnedApp
-from desktop_ui.window_layout import CODE, EDGE, NOWHERE, TERMINAL, Group, Screens, place, screens
+from desktop_ui.window_layout import (
+    CODE,
+    EDGE,
+    FULL,
+    LEFT_HALF,
+    LEFT_TWO_THIRDS,
+    NOWHERE,
+    RIGHT_HALF,
+    RIGHT_THIRD,
+    TERMINAL,
+    Group,
+    Position,
+    Role,
+    Screens,
+    Setup,
+    Setups,
+    place,
+    screens,
+)
 from protocol import App, Installed, PinnedWeb
+from tests import test_window_layout
 from tests.test_window_layout import ABOVE, FOUR_K, LAPTOP, SIDE
 from winapi.screen import Monitor
 
+# The test's own arrangement: at home, terminals two thirds and Code a third across
+# the 4K screen with Teams on the laptop, then Edge and Outlook on the next desktop;
+# at work, Teams and Outlook on the laptop, Terminal and Edge above it, Code on the side.
+SETUPS = Setups(
+    externals=test_window_layout.SETUPS.externals,
+    layouts=frozendict(
+        {
+            Setup.LAPTOP_ONLY: frozendict(),
+            Setup.HOME: frozendict(
+                {
+                    TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
+                    CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
+                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
+                    EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
+                    PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
+                }
+            ),
+            Setup.WORK: frozendict(
+                {
+                    CODE: (Position(1, Role.SIDE, FULL),),
+                    TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
+                    EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
+                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
+                }
+            ),
+        }
+    ),
+    dark_when_away=frozendict(),
+)
+
 
 def matched(monitors: tuple[Monitor, ...]) -> Screens:
-    found = screens(monitors)
+    found = screens(monitors, SETUPS)
     assert found is not None
     return found
 

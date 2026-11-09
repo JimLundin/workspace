@@ -5,16 +5,16 @@ from itertools import combinations
 
 from hypothesis import strategies
 
-from desktop_ui.shell_items import PinnedApp
-from desktop_ui.window_layout import CODE, EDGE, NOWHERE, TERMINAL, Group, Placement, Program, Screens, place, screens
+from desktop_ui.window_layout import NOWHERE, Group, Placement, Program, Screens, place, screens
 from tests.properties.generation import cases, property_test
+from tests.test_window_layout import SETUPS
 from winapi.screen import Monitor
 from winapi.shapes import Rect
 
-DECLARED = (PinnedApp.OUTLOOK, PinnedApp.TEAMS, TERMINAL, CODE, EDGE)
+DECLARED = tuple(dict.fromkeys(app for layout in SETUPS.layouts.values() for app in layout))
 OTHERS = (Program("python.exe"), Program("notepad.exe"), Program("mspaint.exe"))
-SIZES = ((), ((3840, 2160),), ((2560, 1440), (1440, 2560)), ((1920, 1080),))
-"""The laptop alone, home, work, and an unrecognized screen."""
+SIZES = (*((tuple((size.width, size.height) for size in sizes)) for sizes in SETUPS.externals.values()), ((1920, 1080),))
+"""Every setup the test's own setups recognize, and an unrecognized screen."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +48,7 @@ def placement_cases(draw: strategies.DrawFn) -> PlacementCase:
     sizes = draw(strategies.sampled_from(SIZES))
     lefts = tuple(size[0] + sum(width for width, _ in sizes[:index]) for index in range(len(sizes)))
     externals = tuple(monitor(draw, beside(draw, external, left), internal=False) for external, left in zip(sizes, lefts, strict=True))
-    where = screens((laptop, *externals))
+    where = screens((laptop, *externals), SETUPS)
     assert where is not None
     first = apps(draw, range(1, 100))
     # Later, some applications stay with their windows while others close and new ones open.
