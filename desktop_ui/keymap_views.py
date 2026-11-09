@@ -267,7 +267,7 @@ class KeymapOverlay:
         if view == self._state.get().view:
             self.set_pressed(pressed)
             return
-        if (placed := self._position) is not None:
+        if placed := self._position:
             work = nearest_work_area(placed, areas)
         density = self._window.devicePixelRatioF()
         scale = max(0.2, min(0.85, (work.width / density - 32) / (14 * _UNIT), (work.height / density - 180) / (4 * (_HEIGHT + _GAP))))
@@ -317,14 +317,14 @@ class KeymapOverlay:
             self._state.set(replace(overlaid, drag=point - overlaid.position))
 
     def _drag_to(self, point: Point) -> None:
-        if (offset := self._state.get().drag) is not None:
+        if offset := self._state.get().drag:
             self._move(point - offset)
 
     def _finish_drag(self) -> None:
         if self._state.get().drag is None:
             return
         self._state.set(replace(self._state.get(), drag=None))
-        if (placed := self._position) is not None:
+        if placed := self._position:
             areas = self._desktop.work_areas()
             if areas:
                 scale = self._window.devicePixelRatioF()

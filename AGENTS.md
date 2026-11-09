@@ -53,6 +53,10 @@ their tests. Legacy data and backwards compatibility are not requirements.
   stored union apart in JSON is fine. A record's `kind` field is only ever that
   tag (the review's `kind-field` rule); an attribute every value of which is
   valid gets a name for what it is (`role`, `approach`, `channel`).
+- Bind an optional with a plain walrus, `if bar := self._bar:` (and
+  `if not (x := ...)` for the absent case), when its value can never be falsy:
+  records, enums, callables and handles to objects. Keep `is not None` where a
+  falsy value is a real value: numbers, strings and collections.
 - Translate an enum or a `Literal` alias to values with a
   `Final[frozendict[Enum, Value]]` or a value on its members (see
   `desktop_ui.icons.COLOURS`), not a `match` that only returns one constant per

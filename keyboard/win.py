@@ -634,12 +634,7 @@ class Keyboard:
                 return True
         # A native key already held stays native even if the Apps thumb arrives
         # during its repeat. Only a fresh configured key starts capture.
-        if (
-            self.firmware is not None
-            and down
-            and identity not in self.native_releases
-            and (chosen := shortcut(key.vk, apps_held=self.apps_held)) is not None
-        ):
+        if self.firmware is not None and down and identity not in self.native_releases and (chosen := shortcut(key.vk, apps_held=self.apps_held)):
             new_shortcuts = (*self.shortcuts, HeldShortcut(identity, chosen))
             self._state.set(replace(self._state.get(), shortcuts=new_shortcuts))
             self.host.request(chosen, down=True)
@@ -762,8 +757,8 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
             elif message.message == system.WM_TIMER:
                 if message.wparam == language_timer:
                     maintain_keyboard(keyboard, languages)
-                    if (outage := keyboard.watch_hook(system.tick_count())) is not None:
-                        if (replacement := replace_hook(keyboard, hook, outage)) is None:
+                    if outage := keyboard.watch_hook(system.tick_count()):
+                        if not (replacement := replace_hook(keyboard, hook, outage)):
                             outcome = Exit.HOOK_REFUSED
                             break
                         hook = replacement

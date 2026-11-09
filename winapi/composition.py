@@ -372,7 +372,7 @@ class GlassScene:
                 group.release()
 
     def published(self) -> tuple[Pane, ...]:
-        return tuple(published for group in self.groups.values() if (published := group.published) is not None)
+        return tuple(published for group in self.groups.values() if (published := group.published))
 
     def show(self, foreground: int) -> None:
         if not self._composed.get().visible:

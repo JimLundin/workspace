@@ -687,7 +687,7 @@ def _static_import(call: ast.Call) -> bool:
 
 def observation(source: Source, cache: Cache | None) -> Observation:
     key = cache.key("architecture", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, OBSERVATION)) is not None:
+    if cache is not None and (saved := cache.read(key, OBSERVATION)):
         return saved
     tree = parse(source)
     module = module_name(source.name)

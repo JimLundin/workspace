@@ -43,7 +43,7 @@ class Measure:
 
 def docstrings(tree: ast.Module) -> frozenset[ast.Expr]:
     owners = (tree, *(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef)))
-    return frozenset(first for owner in owners if (first := _docstring(owner.body)) is not None)
+    return frozenset(first for owner in owners if (first := _docstring(owner.body)))
 
 
 def _docstring(body: Sequence[ast.stmt]) -> ast.Expr | None:

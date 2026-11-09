@@ -105,7 +105,7 @@ def retarget(motion: IslandMotion, shown: Iterable[Shown], *, animate: bool) -> 
             case _:
                 return None
 
-    return IslandMotion(tuple(moving for key in Key if (moving := moved(key)) is not None and not gone(moving)))
+    return IslandMotion(tuple(moving for key in Key if (moving := moved(key)) and not gone(moving)))
 
 
 def gone(moving: Moving) -> bool:

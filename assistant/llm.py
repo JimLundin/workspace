@@ -106,7 +106,7 @@ _ERROR_DETAIL = TypeAdapter(_ErrorDetail)
 def route(settings: Settings) -> tuple[str, str]:
     """The base URL and key a client uses: the AI connection's, read afresh so a
     restarted gateway is reached on the next request, else the provider's own."""
-    if settings.gateway is not None and (endpoint := read(settings.gateway)) is not None:
+    if settings.gateway is not None and (endpoint := read(settings.gateway)):
         return endpoint.base_url, endpoint.token
     return settings.base_url, settings.api_key
 

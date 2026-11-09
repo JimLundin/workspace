@@ -24,7 +24,7 @@ def _base_key(cell: int) -> Key | None:
 def _chord_keys() -> frozendict[Key, Request]:
     """Each Apps layer request by the base key at its place: one map for both keyboards."""
     requests = tuple((cell, request) for cell in range(CELLS) if isinstance(request := TABLE[Layer.APPS][cell], Tool | App))
-    chorded = tuple((key, request) for cell, request in requests if (key := _base_key(cell)) is not None)
+    chorded = tuple((key, request) for cell, request in requests if (key := _base_key(cell)))
     if len(chorded) != len(requests):
         raise ImportError("an Apps layer request sits where the base layer has no key to chord")
     keys = frozendict(chorded)

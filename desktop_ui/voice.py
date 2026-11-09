@@ -38,7 +38,7 @@ def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
 
 def _run_jobs(jobs: queue.Queue[Callable[[], None] | None], report: Callable[[Event], None], log: Callable[[str], None]) -> None:
     """The worker thread: slow jobs, one at a time."""
-    while (job := jobs.get()) is not None:
+    while job := jobs.get():
         try:
             job()
         except Exception:

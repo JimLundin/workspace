@@ -47,7 +47,7 @@ RECENT = 32
 def frame(window: int) -> None:
     """Converge a slot window's region on hiding its caption; Edge keeps an applied region across resizes."""
     caption = windows.caption_buttons(window)
-    if caption is not None and (clip := caption_clip(windows.outer_rect(window), caption, windows.region(window))) is not None:
+    if caption is not None and (clip := caption_clip(windows.outer_rect(window), caption, windows.region(window))):
         windows.set_region(window, clip)
 
 
@@ -261,7 +261,7 @@ class Worker:
             while not self.observer.stop.is_set():
                 watched = self.poll(watched)
                 with suppress(queue.Empty):
-                    while (order := self.observer.requests.get(timeout=1)) is not None:
+                    while order := self.observer.requests.get(timeout=1):
                         watched, more = self.carry(watched, order)
                         if not more:
                             break
@@ -327,7 +327,7 @@ class Worker:
 
     @staticmethod
     def placed(watched: _Watched, desktops: int) -> tuple[tuple[App, ...], ...]:
-        if (world := watched.world) is None:
+        if not (world := watched.world):
             return tuple(() for _ in range(desktops))
         return tuple(reading_order(watched.where, world.windows, watched.placement, index) for index in range(desktops))
 
@@ -357,7 +357,7 @@ class Worker:
             case Placing.NOW:
                 return replace(watched, paused=False, zoomed=None), False
             case _:
-                if (world := watched.world) is None:
+                if not (world := watched.world):
                     return watched, False
                 fresh = replace(world, foreground=windows.foreground())
                 chosen = effect(order, fresh)
@@ -377,11 +377,11 @@ class Worker:
             case Launch(app=app):
                 return self.start(watched, app)
             case ZoomIn(window=window):
-                if (target := watched.placement.get(window)) is not None:
+                if target := watched.placement.get(window):
                     resize(window, Target(target.desktop, screen.monitor_of(window).work), slot=window in watched.framed)
                 return replace(watched, zoomed=window)
             case ZoomOut(window=window):
-                if (target := watched.placement.get(window)) is not None:
+                if target := watched.placement.get(window):
                     resize(window, target, slot=window in watched.framed)
                 return replace(watched, zoomed=None)
             case None:

@@ -145,7 +145,7 @@ class Assistant:
 
     @property
     def listening(self) -> Tool | None:
-        return capture.tool if (capture := self.capture) is not None else None
+        return capture.tool if (capture := self.capture) else None
 
     def handle(self, tool: Tool, *, down: bool) -> None:
         """Dispatch a key edge or menu press."""
@@ -236,7 +236,7 @@ class Assistant:
                 return
             self._state.set(replace(self._state.get(), capture=capture))
             self.desktop.show_state(State.LISTENING)
-        elif (held := self.capture) is not None and tool is held.source:
+        elif (held := self.capture) and tool is held.source:
             self.stop_capture()
 
     def capture_problem(self, capture: Capture, phase: str, error: Exception) -> None:
@@ -292,7 +292,7 @@ class Assistant:
 
     def expire_capture(self, now: float) -> None:
         """Recover a lost release/toggle at the microphone's existing buffer limit."""
-        if (held := self.capture) is not None and now >= held.started + MAX_SECONDS and self.stop_capture(reason="limit", now=now):
+        if (held := self.capture) and now >= held.started + MAX_SECONDS and self.stop_capture(reason="limit", now=now):
             self.desktop.notify("Recording finished", "The five-minute voice limit was reached; your recording was queued for transcription.")
 
     # ---- the tools ---------------------------------------------------------------------

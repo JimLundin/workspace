@@ -77,7 +77,7 @@ class FrostSampler:
         return sampling.pending.result()
 
     def close(self) -> None:
-        if (worker := self._sampling.get().worker) is not None:
+        if worker := self._sampling.get().worker:
             worker.shutdown(wait=False, cancel_futures=True)
         self._sampling.set(_Sampling())
 

@@ -744,7 +744,7 @@ class BarWindow(QtWidgets.QWidget):
         pager.place(12, math.floor(min((each.framed.box.x for each in presented.drawn), default=area.width / 2)) - 12)
         pager.apply_look(presented.shell_look)
         self.glass = presented.glass
-        self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented)) is not None)
+        self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented)))
         scale = presented.scale
         match presented.shell_look:
             case GlassLook() as shell_look if pager.isVisibleTo(self):

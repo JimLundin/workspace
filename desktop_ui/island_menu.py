@@ -304,7 +304,7 @@ def activities(controls: Controls) -> tuple[Live, ...]:
 
 def present_cells(controls: Controls, specs: tuple[CellSpec, ...]) -> tuple[tuple[CellSpec, Entry], ...]:
     """A row's cells that show now, in order: a cell whose entry is absent leaves no gap."""
-    return tuple((each, present) for each in specs if (present := entry(each, controls)) is not None)
+    return tuple((each, present) for each in specs if (present := entry(each, controls)))
 
 
 def height(row: RowSpec, controls: Controls) -> int:

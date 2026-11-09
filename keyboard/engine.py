@@ -375,15 +375,15 @@ class Engine:
         return last is not None and last.cell == cell and elapsed(now, last.at) < self.configuration.quick_tap_ms
 
     def event(self, state: EngineState, host: Host, e: Event) -> EngineState:
-        if (p := state.pending) is not None:
+        if p := state.pending:
             return self.event_while_pending(state, host, p, e)
         match e:
             case KeyUp(cell):
-                if (current := state.pressed[cell]) is not None:
+                if current := state.pressed[cell]:
                     return self.release(replace(state, pressed=_put(state.pressed, cell, None)), host, current)
                 return state
             case KeyDown(cell, now):
-                if (current := state.pressed[cell]) is not None:
+                if current := state.pressed[cell]:
                     # Auto-repeat: repeat the output already chosen on the first press.
                     return self.press(state, host, current, now) if isinstance(current, (Key, Chord)) else state
                 layer = state.layer()
@@ -415,7 +415,7 @@ class Engine:
                 released_meanwhile = any(isinstance(waiting, KeyUp) and waiting.cell == cell for waiting in buffer)
                 if not released_meanwhile:
                     # A key held since before is already decided: repeat it now.
-                    if (current := state.pressed[cell]) is not None:
+                    if current := state.pressed[cell]:
                         return self.press(state, host, current, now) if isinstance(current, (Key, Chord)) else state
                     # A buffered key's repeated down adds nothing; reuse the queued event.
                     for waiting in reversed(buffer):
@@ -450,7 +450,7 @@ class Engine:
         return state
 
     def timeout(self, state: EngineState, host: Host, timer: int) -> EngineState:
-        if (p := state.pending) is not None and p.timer == timer:
+        if (p := state.pending) and p.timer == timer:
             return self.refresh(self.resolve(state, host, Decision.HOLD, now=p.pressed_at), host)
         return state
 

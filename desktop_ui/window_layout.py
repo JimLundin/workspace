@@ -246,7 +246,7 @@ def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
     return frozendict(
         (app, corner)
         for app, places in LAYOUTS[where.setup].items()
-        if (corner := _corner(pixels(where.roles[place.role], place.region) for place in places if place.desktop == desktop)) is not None
+        if (corner := _corner(pixels(where.roles[place.role], place.region) for place in places if place.desktop == desktop))
     )
 
 
@@ -259,7 +259,7 @@ def reading_order(where: Screens | None, windows: Mapping[App, Sequence[int]], p
     placed: frozendict[App, Point] = frozendict(
         (app, corner)
         for app, handles in windows.items()
-        if (corner := _corner(t.rect for h in handles if (t := placement.get(h)) is not None and t.desktop == desktop)) is not None
+        if (corner := _corner(t.rect for h in handles if (t := placement.get(h)) and t.desktop == desktop))
     )
     declared = _declared_corners(where, desktop) if where is not None else frozendict[App, Point]()
     corners = frozendict({**placed, **{app: corner for app, corner in declared.items() if app not in placed}})

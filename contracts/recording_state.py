@@ -207,7 +207,7 @@ def _gap(problem: Problem) -> _Gap | None:
 
 def capture_report(problems: Sequence[Problem]) -> CaptureReport:
     stalls = tuple(problem.seconds for problem in problems if isinstance(problem, Stall))
-    found = tuple(gap for problem in problems if (gap := _gap(problem)) is not None)
+    found = tuple(gap for problem in problems if (gap := _gap(problem)))
     gaps = {label: tuple(gap.frames for gap in found if gap.label == label) for label in dict.fromkeys(gap.label for gap in found)}
     stalled = (f"capture loop stalled {len(stalls)}x, longest {max(stalls):.1f} s",) if stalls else ()
     parts = (*stalled, *(f"{label} {len(frames)}x, {sum(frames) * 1000 // RATE} ms" for label, frames in gaps.items()))

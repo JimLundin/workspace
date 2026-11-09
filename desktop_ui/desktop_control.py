@@ -147,7 +147,7 @@ def control_event(message: int, wparam: int, lparam: int, apps: Sequence[App]) -
     """A key state or request message to the control window, keeping key edges and requests' presses and releases."""
     if message == protocol.WM_KEY_STATE:
         return PhysicalKey(Scancode(wparam), down=bool(lparam))
-    if message == protocol.WM_REQUEST and (request := protocol.decode(wparam, apps)) is not None:
+    if message == protocol.WM_REQUEST and (request := protocol.decode(wparam, apps)):
         return FeatureRequest(request, down=bool(lparam))
     return None
 
@@ -497,7 +497,7 @@ def _requested(request: Request, *, down: bool) -> Iterator[Effect]:
                 case _ if not down:
                     pass
                 case Route.NAVIGATE:
-                    if (order := keyed(request)) is not None:
+                    if order := keyed(request):
                         yield Navigate(order)
                 case Route.SWITCHER:
                     yield SwitchWindows()
@@ -589,7 +589,7 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
         case RecordingChanged(recording):
             yield ShowActivity(RecordingShown(recording))
             yield TrayShow(tray_state(after.shown))
-            if (notice := recording_notice(state.shown.recording, recording)) is not None:
+            if notice := recording_notice(state.shown.recording, recording):
                 yield Beep()
                 yield TrayNotify(notice.title, notice.text, warning=True)
             yield ShowIdle()

@@ -156,7 +156,7 @@ class Inbox:
             if message == WM_EVENTS:
                 _drain(pending, handler)
                 return 0
-            if (event := window_event(message, wparam, lparam)) is None:
+            if not (event := window_event(message, wparam, lparam)):
                 return None
             pending.put(event)
             system.post_message(hwnd, WM_EVENTS, 0, 0)
@@ -176,7 +176,7 @@ class Inbox:
 
 
 def _drain(pending: queue.SimpleQueue[Event], handler: Cell[Callable[[Event], None] | None]) -> None:
-    if (handle := handler.get()) is None:
+    if not (handle := handler.get()):
         return
     while True:
         try:
@@ -256,7 +256,7 @@ class DesktopApp:
         state, effects = transition(self.state.get(), event)
         self.state.set(state)
         for effect in effects:
-            if (reported := self.perform(effect)) is not None:
+            if reported := self.perform(effect):
                 self.handle(reported)
 
     def perform(self, effect: Effect) -> Event | None:
@@ -267,7 +267,7 @@ class DesktopApp:
             case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep() | Launch() | OpenLogs():
                 self._shell(effect)
             case ShowActivity() | Navigate() | Chord() | ToggleTaskbar() | LayoutShown():
-                if (bar := self._bar) is not None:
+                if bar := self._bar:
                     self._on_bar(bar, effect)
             case SwitchWindows():
                 self._list_windows()
@@ -278,7 +278,7 @@ class DesktopApp:
             case ShowOverlay(overlay):
                 self._show_overlay(overlay)
             case OverlayEnabled(enabled):
-                if (bar := self._bar) is not None:
+                if bar := self._bar:
                     bar.handle(bar_events.OverlayShown(enabled))
                 try:
                     save_enabled(enabled=enabled)
@@ -287,7 +287,7 @@ class DesktopApp:
             case Flash(text):
                 self._indicator().flash(text, indicator_area(), 1.2)
             case PressedKeys(pressed, reset):
-                if (overlay := self.views.get().overlay) is not None:
+                if overlay := self.views.get().overlay:
                     overlay.set_pressed(pressed, reset=reset)
             case Indicate(text):
                 self._indicator().set(text, indicator_area())
@@ -384,7 +384,7 @@ class DesktopApp:
         shown.show(overlay.layer, overlay.title, indicator_area(), visible=overlay.visible, pressed=overlay.pressed)
 
     def _indicator(self) -> Indicator:
-        if (indicator := self.views.get().indicator) is None:
+        if not (indicator := self.views.get().indicator):
             indicator = Indicator.build()
             built = indicator
             self.views.update(lambda views: replace(views, indicator=built))
@@ -406,7 +406,7 @@ class DesktopApp:
             return
 
         def focus(handle: int) -> None:
-            if (bar := self._bar) is not None:
+            if bar := self._bar:
                 bar.navigate(ShowWindow(handle))
 
         current = WindowSwitcher(choices, focus)
@@ -423,7 +423,7 @@ class DesktopApp:
     # ---- quitting ----------------------------------------------------------------------
 
     def close_bar(self) -> None:
-        if (bar := self._bar) is not None:
+        if bar := self._bar:
             try:
                 bar.close()
             except Exception as error:
