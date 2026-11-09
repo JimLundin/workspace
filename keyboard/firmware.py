@@ -6,7 +6,7 @@ from typing import Final
 
 from keyboard import settings
 from keyboard.bindings import action
-from keyboard.layout import Board, Key, Layer, TapHold, character
+from keyboard.layout import Board, Key, Layer, TapHold
 from protocol import App, Request, Tool
 
 
@@ -35,7 +35,7 @@ def _chord_keys() -> frozendict[Key, Request]:
 
 def key_name(key: Key) -> str:
     """The chord key as it is written on the hints and in the README: a capital letter, or its name."""
-    c = character(key, shifted=False)
+    c = key.typed(shifted=False)
     return "Space" if key is Key.SPACE else c.upper() if c else key.name.title()
 
 

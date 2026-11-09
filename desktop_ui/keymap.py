@@ -9,7 +9,7 @@ from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
 from keyboard.bindings import Unmapped, action, actions, slot
 from keyboard.firmware import CHORDS
-from keyboard.layout import Action, Chord, Command, Key, Layer, Mod, Scancode, TapHold, character
+from keyboard.layout import Action, Chord, Key, Layer, Mod, Scancode, TapHold
 from keyboard.settings import BASE, COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
 
@@ -113,18 +113,18 @@ TOOL_NAMES: Final = every_member(Tool, {
 
 
 def _output(key: Key, label: str | None = None) -> str:
-    c = character(key, shifted=False)
+    c = key.typed(shifted=False)
     return label or _KEY_NAMES.get(key) or (c.upper() if c else key.name.title())
 
 
-def describe(a: Action) -> tuple[str, Role]:
+def describe(a: Action | None) -> tuple[str, Role]:
     """A key's label and role, as drawn."""
     match a:
         case Key():
             return _output(a), Role.KEY
         case Chord(key, mods) if a in _CHORD_NAMES:
             return _CHORD_NAMES[a], Role.KEY
-        case Chord(key, mods) if mods == frozenset({Mod.SHIFT}) and (c := character(key, shifted=True)):
+        case Chord(key) if a.only_shifted and (c := key.typed(shifted=True)):
             return c, Role.KEY
         case Chord(key, mods):
             return "+".join([*(_MOD_NAMES[m] for m in Mod if m in mods), _output(key)]), Role.KEY
@@ -134,7 +134,7 @@ def describe(a: Action) -> tuple[str, Role]:
             return _MOD_NAMES[a], Role.MOD
         case Layer():
             return a.name.title(), Role.LAYER
-        case Command.NOTHING:
+        case None:
             return "", Role.BLANK
         case Tool():
             return TOOL_NAMES[a], Role.TOOL
@@ -142,7 +142,7 @@ def describe(a: Action) -> tuple[str, Role]:
             return a.name[:1].upper() + a.name[1:], Role.APP
 
 
-def _hold(a: Action) -> str:
+def _hold(a: Action | None) -> str:
     match a:
         case Tool() if ROUTES[a] is Route.HOLD:
             return "hold"

@@ -6,7 +6,7 @@ and `keyboard.bindings` builds the engine's lookups from these.
 from typing import Final
 
 import config
-from keyboard.layout import Action, Board, Chord, Command, Key, Layer, Mod, Row, Scancode, TapHold, Thumbs
+from keyboard.layout import Action, Board, Chord, Key, Layer, Mod, Row, Scancode, TapHold, Thumbs
 from protocol import Tool
 
 # ---- Timings ---------------------------------------------------------------------
@@ -50,7 +50,7 @@ GUI, ALT, CTL, SFT = Mod.GUI, Mod.ALT, Mod.CTRL, Mod.SHIFT
 NAV, NUM, SYM = Layer.NAV, Layer.NUM, Layer.SYM
 # fmt: on
 
-XX = Command.NOTHING
+XX = None
 ht, sc = TapHold, Scancode
 
 
@@ -81,7 +81,7 @@ UNUSED: Final = frozenset(
 FUNCTION_KEYS: Final = frozenset(Scancode(code) for code in range(0x3B, 0x45)) | frozenset({Scancode(0x57), Scancode(0x58)})
 """The physical F1-F12 row remains native while the layout is enabled."""
 
-BASE: Final[Board[Action]] = Board(
+BASE: Final[Board[Action | None]] = Board(
     # Colemak-DH with home row mods (Win Alt Ctrl Shift).
     top=      Row((Q,          W,          F,          P,              B  ), (J,              L,                  U,          Y,          QUOTE     )),
     home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(LETTER_I, ALT), ht(LETTER_O, GUI))),
@@ -89,7 +89,7 @@ BASE: Final[Board[Action]] = Board(
     thumbs=Thumbs((                        ht(ESC, Layer.APPS), ht(SPACE, NAV), TAB     ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), DELETE)),
 )
 
-NAV_LAYER: Final[Board[Action]] = Board(
+NAV_LAYER: Final[Board[Action | None]] = Board(
     # Hold the Space thumb.
     top=      Row((XX,   XX,  XX,  XX,  XX), (REDO,      PASTE,     COPY,      CUT,     UNDO )),
     home=     Row((GUI,  ALT, CTL, SFT, XX), (CAPS_LOCK, LEFT,      DOWN,      UP,      RIGHT)),
@@ -97,7 +97,7 @@ NAV_LAYER: Final[Board[Action]] = Board(
     thumbs=Thumbs((           XX,  XX,  XX), (ENTER,     BACKSPACE, DELETE   )),
 )
 
-NUM_LAYER: Final[Board[Action]] = Board(
+NUM_LAYER: Final[Board[Action | None]] = Board(
     # Hold the Backspace thumb.
     top=      Row((LBRACKET,  N7, N8,     N9, RBRACKET ), (XX, XX,  XX,  XX,  XX  )),  # [ 7 8 9 ]
     home=     Row((SEMICOLON, N4, N5,     N6, EQUAL    ), (XX, SFT, CTL, ALT, GUI )),  # ; 4 5 6 =
@@ -105,7 +105,7 @@ NUM_LAYER: Final[Board[Action]] = Board(
     thumbs=Thumbs((               PERIOD, N0, MINUS    ), (XX, XX,  XX )),             # . 0 -
 )
 
-SYM_LAYER: Final[Board[Action]] = Board(
+SYM_LAYER: Final[Board[Action | None]] = Board(
     # Hold the Enter thumb.
     top=      Row((sh(LBRACKET),  sh(N7), sh(N8), sh(N9), sh(RBRACKET) ), (XX, XX,  XX,  XX,  XX  )),  # { & * ( }
     home=     Row((sh(SEMICOLON), sh(N4), sh(N5), sh(N6), sh(EQUAL)    ), (XX, SFT, CTL, ALT, GUI )),  # : $ % ^ +
@@ -114,9 +114,9 @@ SYM_LAYER: Final[Board[Action]] = Board(
 )
 
 # The apps from config, ten slots in key order; slots past the end do nothing.
-_APP: Final[tuple[Action, ...]] = (*config.APPS[:10], *[XX] * (10 - len(config.APPS[:10])))
+_APP: Final[tuple[Action | None, ...]] = (*config.APPS[:10], *[XX] * (10 - len(config.APPS[:10])))
 
-APPS_LAYER: Final[Board[Action]] = Board(
+APPS_LAYER: Final[Board[Action | None]] = Board(
     # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
     # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
     top=      Row((_APP[0],         _APP[1],               _APP[2],              _APP[3],         _APP[4]      ),

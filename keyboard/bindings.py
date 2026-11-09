@@ -14,7 +14,7 @@ class LayoutError(Exception):
     """The layout is inconsistent; raised at import, never at runtime."""
 
 
-_TABLE: Final[frozendict[Layer | None, tuple[Action, ...]]] = frozendict({
+_TABLE: Final[frozendict[Layer | None, tuple[Action | None, ...]]] = frozendict({
     None: settings.BASE.cells(),
     Layer.NAV: settings.NAV_LAYER.cells(),
     Layer.NUM: settings.NUM_LAYER.cells(),
@@ -24,12 +24,12 @@ _TABLE: Final[frozendict[Layer | None, tuple[Action, ...]]] = frozendict({
 """Every layer flattened, by layer (None: the base layer) then cell."""
 
 
-def action(layer: Layer | None, cell: int) -> Action:
-    """What key `cell` does on `layer`."""
+def action(layer: Layer | None, cell: int) -> Action | None:
+    """What key `cell` does on `layer`; None for nothing."""
     return _TABLE[layer][cell]
 
 
-def actions(layer: Layer | None) -> tuple[Action, ...]:
+def actions(layer: Layer | None) -> tuple[Action | None, ...]:
     """What every key does on `layer`, by cell."""
     return _TABLE[layer]
 

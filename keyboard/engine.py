@@ -34,7 +34,7 @@ from typing import Final, Protocol, assert_never
 
 from keyboard import settings
 from keyboard.bindings import Unmapped, action, slot
-from keyboard.layout import Action, Board, Chord, Command, Hold, Key, Layer, Mod, Output, Scancode, TapHold, is_left_hand
+from keyboard.layout import Action, Board, Chord, Hold, Key, Layer, Mod, Output, Scancode, TapHold, is_left_hand
 from protocol import App, LayoutState, Request, Tool
 
 
@@ -296,6 +296,8 @@ def event(state: EngineState, host: Host, e: Event) -> EngineState:
                     a = tap
                 case TapHold(tap, hold):
                     return replace(state, pending=Pending(cell, tap, hold, host.start_timer(), now), buffer=())
+                case None:
+                    return state  # No action on this layer: nothing pressed, so its release has nothing to end.
                 case other:
                     a = other
             return press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)
@@ -426,7 +428,7 @@ def apply_caps_word(state: EngineState, a: Action) -> tuple[EngineState, Action]
             return state, a
         case Key() | Chord():
             return replace(state, caps_word=False), a
-        case Mod() | Layer() | TapHold() | Command() | Tool() | App():
+        case Mod() | Layer() | TapHold() | Tool() | App():
             return state, a
 
 
@@ -455,7 +457,7 @@ def press(state: EngineState, host: Host, a: Action, now: int) -> EngineState:
                 host.send(Key.MENU_MASK, down=True)
                 host.send(Key.MENU_MASK, down=False)
             host.request(a, down=True)
-        case Command() | TapHold():
+        case TapHold():
             pass
         case _:
             assert_never(a)
@@ -481,7 +483,7 @@ def release(state: EngineState, host: Host, a: Action) -> EngineState:
                 return replace(state, active_layers=layers[:index] + layers[index + 1 :])
         case Tool() | App():
             host.request(a, down=False)
-        case TapHold() | Command():
+        case TapHold():
             pass
         case _:
             assert_never(a)
