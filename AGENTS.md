@@ -77,11 +77,12 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - A marker with no data is a sentinel, not a one-member enum
   (`single-member-enum`): `ANSWERED = sentinel("ANSWERED")`, used as a type
   (`type Watch = ANSWERED | Unanswered`) and compared with `is`. Keep `None` for
-  plain absence, so a marker never shares its meaning. Pyright 1.1.414 accepts a
-  sentinel in a type only by name (import it like a class, never
-  `module.SENTINEL`), narrows a `match` on it only in a guard arm placed last
-  (`case _ if watch is ANSWERED:`), and loses it in `[MARK] * n` (use a
-  generator).
+  plain absence, so a marker never shares its meaning. Import a sentinel by name,
+  like a class. In a `match`, another module's sentinel is a dotted value pattern
+  (`case hook_watch.ANSWERED:`); a bare `case ANSWERED:` would capture. Pyright
+  1.1.414 (mypy handles all three) rejects `module.SENTINEL` in an annotation,
+  narrows a guard arm (`case _ if watch is ANSWERED:`) only when it comes last,
+  and loses the sentinel in `(*[MARK] * n,)`, so use a generator there.
 - Don't reach into a sequence by position (`row[0]`, `pair[1]`, `items[-1]`):
   that value deserves a name. Unpack it, read a named field, or model the record
   (a typed row adapter instead of SQLite tuples). Looking up a key in a table
