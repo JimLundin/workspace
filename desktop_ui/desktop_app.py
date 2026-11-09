@@ -241,10 +241,6 @@ class DesktopApp:
             system.post_message(layout, WM_QUERY_LAYOUT_STATE, 0, 0)
         self.handle(ShowIdle())
 
-    @property
-    def _bar(self) -> DesktopBar | None:
-        return self.views.get().bar
-
     # ---- the fold ----------------------------------------------------------------------
 
     def handle(self, event: Event) -> None:
@@ -263,7 +259,7 @@ class DesktopApp:
             case RestoreTray() | TrayNotify() | TrayShow() | Log() | Launch() | OpenLogs():
                 self._shell(effect)
             case ShowActivity() | Navigate() | Chord() | LayoutShown():
-                if bar := self._bar:
+                if bar := self.views.get().bar:
                     self._on_bar(bar, effect)
             case SwitchWindows():
                 self._list_windows()
@@ -274,7 +270,7 @@ class DesktopApp:
             case ShowOverlay(overlay):
                 self._show_overlay(overlay)
             case OverlayEnabled(enabled):
-                if bar := self._bar:
+                if bar := self.views.get().bar:
                     bar.handle(bar_events.OverlayShown(enabled))
                 try:
                     save_enabled(enabled=enabled)
@@ -398,7 +394,7 @@ class DesktopApp:
             return
 
         def focus(handle: int) -> None:
-            if bar := self._bar:
+            if bar := self.views.get().bar:
                 bar.navigate(ShowWindow(handle))
 
         current = WindowSwitcher(choices, focus)
@@ -415,7 +411,7 @@ class DesktopApp:
     # ---- quitting ----------------------------------------------------------------------
 
     def close_bar(self) -> None:
-        if bar := self._bar:
+        if bar := self.views.get().bar:
             try:
                 bar.close()
             except Exception as error:

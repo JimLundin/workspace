@@ -115,16 +115,12 @@ class PhysicalMonitors:
         return cls(Cell(_Handles(arrays, handles)))
 
     @property
-    def _handles(self) -> frozendict[Monitor, tuple[int, ...]]:
-        return self._opened.get().handles
-
-    @property
     def monitors(self) -> frozenset[Monitor]:
-        return frozenset(self._handles)
+        return frozenset(self._opened.get().handles)
 
     def power(self, monitor: Monitor) -> Reading:
         """The first physical monitor's power mode."""
-        handles = self._handles.get(monitor, ())
+        handles = self._opened.get().handles.get(monitor, ())
         if not handles:
             return Detached()
         current, maximum = wintypes.DWORD(), wintypes.DWORD()
@@ -138,7 +134,7 @@ class PhysicalMonitors:
 
     def set_power(self, monitor: Monitor, power: Power) -> Applied:
         """Every physical monitor behind `monitor` takes `power`; the first refusal is reported."""
-        handles = self._handles.get(monitor, ())
+        handles = self._opened.get().handles.get(monitor, ())
         if not handles:
             return Detached()
         refused = tuple(ctypes.get_last_error() for handle in handles if not _SetVCPFeature(handle, _POWER_MODE, power.value))

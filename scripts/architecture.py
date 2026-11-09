@@ -20,6 +20,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import reduce
+from itertools import pairwise
 from pathlib import Path
 from typing import Annotated, Final, Literal, override
 
@@ -467,6 +468,7 @@ def value_shapes(
             case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
                 inner = ".".join(part for part in (declaration, name) if part)
                 yield from loop_accumulations(child, module, inner)
+                yield from state_writes(child, module, inner)
                 yield from value_shapes(child, module, inner, child)
                 continue
             case ast.ClassDef(name=name):
@@ -570,6 +572,69 @@ def loop_accumulations(function: ast.FunctionDef | ast.AsyncFunctionDef, module:
     )
     detail = "Build the collection with a comprehension, generator or generator function; a loop is for a side effect."
     yield from (Finding("loop-accumulation", module, declaration, name, line, detail) for name, line in sorted(filled.items(), key=_finding_line))
+
+
+STATE_WRITES: Final = frozenset({"set", "update"})
+"""A `Cell`'s two ways to replace its value."""
+
+
+def _written(statement: ast.stmt) -> str | None:
+    """The state a statement replaces, written as its owner reaches it (`self._state`), if it replaces one."""
+    match statement:
+        case ast.Expr(value=ast.Call(func=ast.Attribute(value=ast.Attribute() as cell, attr=method))) if method in STATE_WRITES:
+            return ast.unparse(cell)
+        case _:
+            return None
+
+
+def _blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
+    """The statement sequences a node holds, each run in order: a branch never continues another."""
+    match node:
+        case ast.FunctionDef(body=body) | ast.AsyncFunctionDef(body=body) | ast.With(body=body) | ast.AsyncWith(body=body):
+            yield body
+        case ast.ExceptHandler(body=body) | ast.match_case(body=body):
+            yield body
+        case (
+            ast.If(body=body, orelse=orelse)
+            | ast.For(body=body, orelse=orelse)
+            | ast.AsyncFor(body=body, orelse=orelse)
+            | ast.While(body=body, orelse=orelse)
+        ):
+            yield body
+            yield orelse
+        case ast.Try(body=body, orelse=orelse, finalbody=finalbody) | ast.TryStar(body=body, orelse=orelse, finalbody=finalbody):
+            yield body
+            yield orelse
+            yield finalbody
+        case _:
+            pass
+
+
+def _field_read(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """A property whose whole body returns one field of a held value: `return self._state.get().field`."""
+    body = [statement for statement in function.body if not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))]
+    match body:
+        case [ast.Return(value=ast.Attribute(value=ast.Call(func=ast.Attribute(value=ast.Attribute(), attr="get"), args=[])))]:
+            return True
+        case _:
+            return False
+
+
+def state_writes(function: ast.FunctionDef | ast.AsyncFunctionDef, module: str, declaration: str) -> Iterator[Finding]:
+    """State written one field at a time: a mutable object behind a frozen record.
+
+    Two writes in a row to the same state belong in one `replace`; a private property
+    that returns one field of the state is an old attribute kept alive, so read the
+    record once instead."""
+    detail = "Change several fields in one replace(...), reading the state once; a frozen record is not a set of attributes."
+    for statements in (block for node in (function, *_own_nodes(function)) for block in _blocks(node)):
+        for first, second in pairwise(statements):
+            if (written := _written(second)) is not None and written == _written(first):
+                yield Finding("piecemeal-state", module, declaration, written, second.lineno, detail)
+    decorated = any(isinstance(decorator, ast.Name) and decorator.id == "property" for decorator in function.decorator_list)
+    if decorated and function.name.startswith("_") and _field_read(function):
+        detail = "Read the state once (state = self._state.get()) where it is needed, rather than through a private property per field."
+        yield Finding("mirrored-state", module, declaration, function.name, function.lineno, detail)
 
 
 def _finding_line(entry: tuple[str, int]) -> int:

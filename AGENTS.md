@@ -118,6 +118,15 @@ their tests. Legacy data and backwards compatibility are not requirements.
   structures) are exempt from these rules. A mapping that leaves its owner
   is a `frozendict`, replaced rather than mutated. Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
+- Satisfy a rule by changing the design, never by its letter. A frozen record
+  in a `Cell` is not a set of attributes: decide from one snapshot
+  (`state = self._state.get()`), and change related fields in one
+  `update(lambda state: replace(state, a=..., b=...))`, not one write per field
+  (`piecemeal-state`). Don't keep an old attribute alive as a private property
+  over the state (`mirrored-state`). A comment explains behaviour to a reader;
+  never write one to defend a signature or to answer a reviewer, and never
+  claim a performance reason without the measurement in the commit. When a rule
+  doesn't fit, restructure, or record an exact exception with its reason.
 - Use direct typed attributes, not `getattr`/`hasattr`.
 - Write JavaScript as a real `.js` file beside the module that runs it, not in
   a Python string; pass values as arguments, not by interpolation.
@@ -151,8 +160,10 @@ desktop. CI runs `python -m scripts.check` on Ubuntu, where native tests skip
 themselves, and Windows.
 Besides the rules named above, the architecture review rejects JavaScript in
 Python strings (`inline-script`), a definition no production code uses
-(`unused-definition`), two functions of the same structure (`duplicate-code`)
-and a Win32 function declared in more than one module (`native-redeclaration`).
+(`unused-definition`), two functions of the same structure (`duplicate-code`),
+a Win32 function declared in more than one module (`native-redeclaration`),
+two writes in a row to the same state (`piecemeal-state`) and a private
+property that only returns one field of an owner's state (`mirrored-state`).
 
 # Committing and running
 

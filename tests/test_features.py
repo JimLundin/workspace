@@ -70,7 +70,6 @@ class Rig:
 
     __slots__ = ("assistant", "desktop", "endpoint", "failed")
 
-    # The fixture composes endpoint, credential gate, desktop effects and worker scheduling.
     def __init__(
         self,
         endpoint: FakeEndpoint,

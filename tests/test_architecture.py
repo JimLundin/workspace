@@ -412,6 +412,47 @@ def built(items):
     ]
 
 
+def test_state_is_changed_whole_not_one_field_at_a_time(tmp_path: Path) -> None:
+    # Defects: a mutable object survives behind a frozen record, written one field per
+    # statement and read through private per-field properties; or writes in separate
+    # branches, a single grouped write, or a public read are wrongly flagged.
+    source = """class Owner:
+    @property
+    def _busy(self):
+        return self._state.get().busy
+
+    @property
+    def busy(self):
+        return self._state.get().busy
+
+    def fail(self):
+        self._state.set(replace(self._state.get(), busy=True))
+        self._state.set(replace(self._state.get(), ticks=5))
+
+    def nested(self):
+        if self.ready:
+            self._state.update(first)
+            self._state.update(second)
+
+    def grouped(self):
+        self._state.update(lambda state: replace(state, busy=True, ticks=5))
+        self._other.set(1)
+
+    def branches(self, down):
+        if down:
+            self._state.update(pressed)
+        else:
+            self._state.update(released)
+"""
+    write_tree(tmp_path, {"owner.py": source})
+    found = [(finding.rule, finding.declaration, finding.expression) for finding in others(review(tmp_path))]
+    assert found == [
+        ("mirrored-state", "Owner._busy", "_busy"),
+        ("piecemeal-state", "Owner.fail", "self._state"),
+        ("piecemeal-state", "Owner.nested", "self._state"),
+    ]
+
+
 def test_a_record_kind_field_is_only_a_constant_tag(tmp_path: Path) -> None:
     # Defect: a record whose enum, string or multi-valued Literal `kind`
     # decides what the rest of it means passes the review; or the review

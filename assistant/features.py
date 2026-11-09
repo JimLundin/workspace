@@ -113,7 +113,6 @@ class _Keys:
 class Assistant:
     """Turns the dictation and transcript keys into actions."""
 
-    # Desktop, settings, scheduling and the failure log form the key-feature composition seam.
     desktop: Desktop
     settings: Settings
     failed: Recorder = field(kw_only=True)
