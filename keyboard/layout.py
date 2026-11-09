@@ -11,7 +11,7 @@ A physical key (`Laptop`) carries the scancode it sends and its Nordic keycap.
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import ClassVar, NewType
+from typing import ClassVar, Final, NewType
 
 from protocol import App, Tool
 
@@ -340,6 +340,20 @@ class Board[CellT]:
         )
 
 
-def is_left_hand(cell: int) -> bool:
+class Hand(Enum):
+    LEFT = auto()
+    RIGHT = auto()
+
+
+_HANDS: Final = Board(
+    top=Row((Hand.LEFT,) * 5, (Hand.RIGHT,) * 5),
+    home=Row((Hand.LEFT,) * 5, (Hand.RIGHT,) * 5),
+    bottom=Row((Hand.LEFT,) * 5, (Hand.RIGHT,) * 5),
+    thumbs=Thumbs((Hand.LEFT,) * 3, (Hand.RIGHT,) * 3),
+).cells()
+"""Each cell's hand, read off the board's own shape."""
+
+
+def hand(cell: int) -> Hand:
     """Which hand key number `cell` belongs to (the numbering `Board.cells` uses)."""
-    return cell % 10 < 5 if cell < 30 else cell < 33
+    return _HANDS[cell]

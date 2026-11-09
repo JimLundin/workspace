@@ -34,7 +34,7 @@ from typing import Final, Protocol, assert_never
 
 from keyboard import settings
 from keyboard.bindings import Unmapped, action, slot
-from keyboard.layout import BLANK, Action, Board, Chord, Hold, Key, Layer, Mod, Output, Scancode, TapHold, is_left_hand
+from keyboard.layout import BLANK, Action, Board, Chord, Hold, Key, Layer, Mod, Output, Scancode, TapHold, hand
 from protocol import App, LayoutState, Request, Tool
 
 
@@ -335,7 +335,7 @@ def event_while_pending(state: EngineState, host: Host, p: Pending, e: Event) ->
             # The first press on the modifier's own hand is a roll, unless it is
             # another home row mod: same-hand mods combine, as QMK's Chordal Hold.
             first_press = not any(isinstance(waiting, KeyDown) for waiting in buffer)
-            if first_press and isinstance(p.hold, Mod) and is_left_hand(cell) == is_left_hand(p.cell):
+            if first_press and isinstance(p.hold, Mod) and hand(cell) is hand(p.cell):
                 match action(state.layer(), cell):
                     case TapHold(hold=Mod()):
                         pass
@@ -352,9 +352,7 @@ def event_while_pending(state: EngineState, host: Host, p: Pending, e: Event) ->
     state = replace(state, buffer=buffer)
     if isinstance(e, KeyUp) and any(isinstance(waiting, KeyDown) and waiting.cell == e.cell for waiting in buffer):
         # A home row mod holds only for a key on the other hand; a same-hand tap inside it is a roll.
-        across = isinstance(p.hold, Layer) or any(
-            isinstance(waiting, KeyDown) and is_left_hand(waiting.cell) != is_left_hand(p.cell) for waiting in buffer
-        )
+        across = isinstance(p.hold, Layer) or any(isinstance(waiting, KeyDown) and hand(waiting.cell) is not hand(p.cell) for waiting in buffer)
         return resolve(state, host, Decision.HOLD if across else Decision.TAP, now=e.at)
     return state
 
