@@ -20,6 +20,10 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - A test must catch a plausible defect in Workspace code. Name that defect in a
   comment before writing the test; if there is none, do not write it.
 - Do not test Python, the standard library or a dependency's documented behavior.
+- Do not test display text (labels, captions, titles, menu wording, formatted
+  readings): asserting a literal string only writes it twice. Test what the UI
+  decides instead (roles, state flags, commands, which layer shows), and check
+  text only where a condition decides whether information appears at all.
 - Patches and mocks are banned everywhere, tests included. Pass typed
   dependencies into effect owners and test with pure inputs, real local
   resources or concrete adapters. The architecture review enforces the ban.

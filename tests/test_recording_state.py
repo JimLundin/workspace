@@ -88,7 +88,6 @@ def test_capture_reservation_and_pause_take_precedence_over_worker_updates() -> 
     final = replace(incoming, saved=replace(incoming.saved, finished=True))
     paused = published(stopping, final, stopping=True, paused="Close the transcript to retry", phase="saved")
     assert paused is not None and paused.phase == "paused"
-    assert paused.detail == "Close the transcript to retry"
 
 
 def test_recording_capture_and_elapsed_labels_follow_capture_progress() -> None:

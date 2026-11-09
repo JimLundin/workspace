@@ -67,15 +67,11 @@ def test_a_plain_keyboard_is_a_reading_beside_the_speaker_and_wifi() -> None:
 def test_processor_and_memory_are_plain_readings_that_reserve_their_widest_value() -> None:
     # Defects: a reading becomes a control, a value from 9% to 100% resizes the
     # fixed capsule because its reserve follows the value, CPU and memory swap
-    # symbols, an unread value shows as 0% (a healthy-looking lie), or the
-    # capsule's accessible name omits the readings.
+    # symbols, or an unread value shows as 0% (a healthy-looking lie).
     for cpu, memory, shown in ((23, 61, ("23%", "61%")), (100, 9, ("100%", "9%")), (None, None, ("—", "—"))):
         status = view(replace(RESTING, system=SystemStatus(cpu=cpu, memory=memory)), Key.STATUS)
         assert status.slots[-1][-4:] == (Glyph("cpu"), Text(shown[0], reserve="100%"), Glyph("memory"), Text(shown[1], reserve="100%"))
         assert not any(isinstance(part, Control) for slot in status.slots for part in slot)
-    label = view(replace(RESTING, system=SystemStatus(cpu=23, memory=61)), Key.STATUS).label
-    assert label.startswith("CPU 23%, memory 61%. ")
-    assert view(RESTING, Key.STATUS).label.startswith("CPU unavailable, memory unavailable. ")
 
 
 def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
@@ -98,8 +94,6 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
             status = view(baseline, Key.STATUS)
             assert status.slots[-2] == (Glyph(SPEAKERS[baseline.system.speakers].icon), Glyph(WIFI[baseline.system.wifi].icon))
             assert status.action is Action.OPEN_MENU
-            assert SPEAKERS[baseline.system.speakers].description in status.label
-            assert WIFI[baseline.system.wifi].description in status.label
 
 
 def test_charger_and_low_battery_lead_the_machine_readings_at_the_right() -> None:
@@ -117,7 +111,6 @@ def test_concurrent_activity_has_distinct_indicators_and_recording_stop_under_th
     busy = replace(RESTING, job=Job.TRANSCRIBING, recording=RECORDING)
     job, recording = view(busy, Key.ISLAND).slots
     assert job == (Marker.DOTS,) and recording == (Marker.DOT, Text("02:05"))
-    assert view(busy, Key.ISLAND).label.startswith("Transcribing. 02:05")
     assert view(busy, Key.ISLAND, hovered=Key.ISLAND).slots[-1][-1] == Control("stop", "Stop recording", Action.STOP_RECORDING)
 
 

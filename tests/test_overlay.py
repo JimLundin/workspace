@@ -107,26 +107,23 @@ def test_overlay_stays_visible_on_the_base_and_held_layers() -> None:
     assert not bool(overlay.visible)
     overlay = overlay.set_layout(on=True)
     assert bool(overlay.visible)
-    assert overlay.title == "BASE"
     overlay = overlay.indicate(Layer.APPS, caps_word=False)
     assert bool(overlay.visible)
     assert overlay.layer is Layer.APPS
-    assert overlay.title == "APPS"
     overlay = overlay.indicate(None, caps_word=False)
     assert bool(overlay.visible)
-    assert overlay.title == "BASE"
+    assert overlay.layer is None
 
 
 def test_overlay_tracks_layers_and_clears_them_when_layout_turns_off() -> None:
     overlay = OverlayState(layout_on=True)
     overlay = overlay.indicate(Layer.NAV, caps_word=True)
-    assert overlay.title == "NAV · CAPS WORD"
+    assert overlay.layer is Layer.NAV and overlay.caps_word
     overlay = overlay.set_layout(on=False)
     assert not bool(overlay.visible)
     overlay = overlay.set_layout(on=True)
     assert bool(overlay.visible)
-    assert overlay.layer is None
-    assert overlay.title == "BASE"
+    assert overlay.layer is None and not overlay.caps_word
 
 
 def test_hiding_overlay_survives_layer_changes_and_switching_layout_on() -> None:

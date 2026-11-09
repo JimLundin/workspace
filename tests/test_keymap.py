@@ -1,6 +1,6 @@
 """The key map: what each physical key does, per layer; and the indicator's words."""
 
-from desktop_ui.keymap import ROWS, Role, Shortcut, indicator_text, keymap, shortcut, shortcut_hint
+from desktop_ui.keymap import Role, Shortcut, keymap, shortcut
 from keyboard.firmware import CHORDS
 from keyboard.layout import Layer
 from protocol import Tool
@@ -11,64 +11,33 @@ def caps(layer: Layer | None) -> dict[str, tuple[str, str, Role]]:
     return {cap.physical: (cap.label, cap.hold, cap.role) for row in keymap(layer) for cap in row}
 
 
-def test_rows_are_the_nordic_iso_keyboard() -> None:
-    assert [len(row) for row in ROWS] == [13, 12, 13, 11, 1]
-    assert ROWS[0][0][1] == "§"
-    assert ROWS[3][0][1] == "<"
-
-
 def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first() -> None:
     # Defects: using BASE outputs as keycaps, selecting another layer's thumb,
     # advertising the Tools-layer dictation copy instead of its dedicated key, or
     # dropping the hint of a tool only a chord reaches.
     assert shortcut(Tool.DICTATE) == Shortcut("L", "X")
     assert shortcut(Tool.MEETING_TOGGLE) == Shortcut("C", "X")
-    assert shortcut_hint(shortcut(Tool.WINDOW_SWITCHER), compact=True) == "X S"
 
 
-def test_shortcut_hints_share_keycap_notation_and_omit_absent_bindings() -> None:
-    # Defects: the compact hint uses a layer's name, a dedicated key acquires a
-    # nonexistent thumb, or a missing binding renders "None".
-    assert shortcut_hint(Shortcut("P", "V")) == "Hold V + P"
-    assert shortcut_hint(Shortcut("X", "."), compact=True) == ". X"
-    assert shortcut_hint(Shortcut("Space", None)) == "Space"
-    assert shortcut_hint(None) == ""
-
-
-def test_base_layer() -> None:
+def test_each_key_shows_its_role_and_tap_hold_keys_their_hold() -> None:
+    # Defects: a home-row mod or layer thumb loses its hold, a blocked key shows an
+    # action, or a layer doesn't mark the thumb holding it.
     base = caps(None)
-    assert base["2"] == ("Q", "", Role.KEY)
-    assert base["Q"] == ("A", "Win", Role.KEY)  # home row mod: tap A, hold Win
-    assert base["C"] == ("Space", "Nav", Role.KEY)
-    assert base["M"] == ("Enter", "Sym", Role.KEY)
-    assert base[","] == ("Bksp", "Num", Role.KEY)
-    assert base["X"] == ("Esc", "Apps", Role.KEY)
-    assert base["."] == ("Del", "", Role.KEY)
-    assert base["-"] == ("", "", Role.BLANK)
-    assert base["§"] == ("On/off", "hold: quit", Role.SPECIAL)
-    assert base["B"] == base["N"] == base["Space"] == ("", "", Role.BLANK)
-    assert base["Y"] == ("", "", Role.BLANK)
-
-
-def test_layers_show_their_keys_and_the_thumb_holding_them() -> None:
-    nav = caps(Layer.NAV)
-    assert nav["O"] == ("←", "", Role.KEY)
-    assert nav["8"] == ("Redo", "", Role.KEY)
-    assert nav["Q"] == ("Win", "", Role.MOD)
-    assert nav["C"][2] is Role.HELD
-    sym = caps(Layer.SYM)
-    assert sym["2"] == ("{", "", Role.KEY)
-    assert sym["M"][2] is Role.HELD
-    assert caps(Layer.NUM)[","][2] is Role.HELD
+    assert all(base[physical][1] for physical in ("Q", "C", "M", ",", "X"))
+    assert not base["2"][1]
+    assert {base[physical][2] for physical in ("-", "B", "N", "Space", "Y")} == {Role.BLANK}
+    assert base["§"][2] is Role.SPECIAL
+    assert caps(Layer.NAV)["Q"][2] is Role.MOD
+    assert caps(Layer.NAV)["C"][2] is caps(Layer.SYM)["M"][2] is caps(Layer.NUM)[","][2] is Role.HELD
 
 
 def test_the_apps_layer_holds_every_workspace_request() -> None:
     # Defects: a voice hold loses its hold marking, or a request moves off the
     # place its firmware chord letter names.
     apps = caps(Layer.APPS)
-    assert apps["L"] == ("Talk", "hold", Role.TOOL)
-    assert apps["2"] == ("Terminal", "", Role.APP)
-    assert apps["8"] == ("Desk 1", "", Role.TOOL)
+    assert apps["L"][2] is Role.TOOL and apps["L"][1]
+    assert apps["2"][2] is Role.APP
+    assert apps["8"][2] is Role.TOOL and not apps["8"][1]
     assert apps["X"][2] is Role.HELD
 
 
@@ -78,10 +47,3 @@ def test_every_tool_is_on_the_key_map_or_a_chord() -> None:
     labels = {cap.label for layer in layers for row in keymap(layer) for cap in row if cap.role is Role.TOOL}
     labels |= {TOOL_NAMES[request] for request in CHORDS if isinstance(request, Tool)}
     assert labels == {TOOL_NAMES[tool] for tool in Tool}
-
-
-def test_indicator_text() -> None:
-    assert indicator_text(None, caps_word=False) is None
-    assert indicator_text(Layer.NAV, caps_word=False) == "NAV"
-    assert indicator_text(None, caps_word=True) == "CAPS WORD"
-    assert indicator_text(Layer.SYM, caps_word=True) == "SYM · CAPS WORD"

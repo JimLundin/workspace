@@ -58,9 +58,9 @@ def opened(outcome: Outcome) -> Menu:
 def test_a_running_recording_leads_as_a_card_and_replaces_its_start() -> None:
     # Defects: a running recording still offers "Record a meeting", or has no Stop in the menu.
     cells = entries(Controls("02:05"), SPEC)
-    assert (cells[0].entry, cells[0].face) == (Live("Recording", "02:05", Command.STOP_RECORDING), Face.CARD)
-    assert all(label(cell.entry) != "Record a meeting" for cell in cells)
-    assert any(label(cell.entry) == "Record a meeting" for cell in entries(RESTING, SPEC))
+    assert cells[0].face is Face.CARD and isinstance(cells[0].entry, Live) and cells[0].entry.stop is Command.STOP_RECORDING
+    assert not any(isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD for cell in cells)
+    assert any(isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD for cell in entries(RESTING, SPEC))
 
 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
@@ -86,11 +86,13 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
     # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
     cells = entries(Controls(None, overlay=True, dark_when_away=2), SPEC)
     toggles = [cell.entry for cell in cells if cell.face is Face.TOGGLE]
-    assert toggles == [
-        Toggle("Keyboard overlay", "On", "layers", Command.OVERLAY, on=True),
-        Toggle("Placement", "On", "grid", Command.PLACEMENT, on=True),
-        Toggle("Dark when away", "External · 2 min idle", "lock", Command.DARK_WHEN_AWAY, on=True),
+    assert [(toggle.choice, toggle.on) for toggle in toggles if isinstance(toggle, Toggle)] == [
+        (Command.OVERLAY, True),
+        (Command.PLACEMENT, True),
+        (Command.DARK_WHEN_AWAY, True),
     ]
+    resting = [cell.entry for cell in entries(Controls(None, overlay=False), SPEC) if cell.face is Face.TOGGLE]
+    assert [toggle.on for toggle in resting if isinstance(toggle, Toggle)] == [False, True, False]
     menu = Menu(cells)
     assert press(at(menu, "Keyboard overlay"), Key.ENTER) == Applied(Command.OVERLAY)
     assert press(at(menu, "Keyboard map"), Key.ENTER) == Chosen(Command.KEYMAP)
@@ -134,14 +136,6 @@ def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -
     first = opened(press(menu, Letter("k")))
     assert selected(first) == "Keyboard overlay"
     assert selected(press(first, Letter("K"))) == "Keyboard map"
-
-
-def test_tool_cells_derive_hints_and_short_captions() -> None:
-    # Defects: the switcher advertises layer/tap labels instead of physical keys, or a
-    # small tile shows a caption that doesn't name its tool.
-    tools = [(cell.entry, cell.caption) for cell in entries(RESTING, SPEC) if cell.face is Face.TOOL]
-    assert tools[0] == (Item("Switch windows", "search", ToolChoice(Tool.WINDOW_SWITCHER), "X S"), "Switch")
-    assert [caption for _, caption in tools] == ["Switch", "Transcript", "Key map"]
 
 
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:

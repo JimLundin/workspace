@@ -140,12 +140,11 @@ def test_physical_key_messages_become_key_actions_with_a_reset_marker() -> None:
     assert tuple(action.reset for action in actions if isinstance(action, PhysicalKey)) == (False, False, False, True)
 
 
-def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:
+def test_layout_status_is_the_toggle_and_is_checked_while_on() -> None:
     for layout in (LayoutState.ON, LayoutState.OFF):
         state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
         item = next(menu_items(state))
         assert item.id == Menu.TOGGLE_LAYOUT.value
-        assert item.text == f"Layout: {layout.name.lower()}\tTap §"
         assert item.enabled and item.checked == (layout is LayoutState.ON)
 
 
@@ -153,9 +152,8 @@ def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None
     for layout in (None, LayoutState.QUIT):
         state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
         items = tuple(menu_items(state))
-        assert items[0].text == "Layout: not running"
         assert not items[0].enabled and not items[0].checked
-        assert items[1].id == Menu.RESTART_LAYOUT.value and items[1].text == "Start layout" and items[1].enabled
+        assert items[1].id == Menu.RESTART_LAYOUT.value and items[1].enabled
 
 
 def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle() -> None:
@@ -164,7 +162,7 @@ def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle(
     for capturing in (False, True):
         state = MenuState(layout=LayoutState.ON, overlay_enabled=True, capturing=capturing)
         item = next(item for item in menu_items(state) if item.id == Menu.TRANSCRIPTS.value)
-        assert (item.text, item.enabled) == ("Open meeting transcripts", True)
+        assert item.enabled
 
 
 def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> None:
