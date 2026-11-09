@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import override
 
 from keyboard import engine
+from keyboard.actions import Action, Chord, Layer
 from keyboard.engine import (
     MAX_BUFFERED,
     EngineState,
@@ -14,14 +15,8 @@ from keyboard.engine import (
     UnreleasedError,
     Verdict,
 )
-from keyboard.layout import (
-    Action,
-    Chord,
-    Key,
-    Layer,
-    Mod,
-    Scancode,
-)
+from keyboard.keys import Key, Mod
+from keyboard.physical import Scancode
 from keyboard.settings import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS
 from protocol import LayoutState, Request, Tool
 

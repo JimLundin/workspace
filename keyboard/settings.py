@@ -1,13 +1,17 @@
 """The keyboard's chosen values: its timings, the physical keys it uses, and the
-layout written on them. Only declarations: the vocabulary is `keyboard.layout`,
-and `keyboard.bindings` builds the engine's lookups from these.
+layout written on them. Only declarations, in the vocabulary of `keyboard.physical`,
+`keyboard.keys`, `keyboard.actions` and `keyboard.board`; `keyboard.bindings`
+builds the engine's lookups from these.
 """
 
 from typing import Final
 
 import config
 from contracts.members import every_member
-from keyboard.layout import BLANK, Binding, Board, Chord, Key, Laptop, Layer, Mod, Row, TapHold, Thumbs
+from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
+from keyboard.board import Board, Row, Thumbs
+from keyboard.keys import Key, Mod
+from keyboard.physical import Laptop
 from protocol import Tool
 
 # ---- Timings ---------------------------------------------------------------------

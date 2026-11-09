@@ -5,8 +5,10 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from keyboard import settings
+from keyboard.actions import Layer, TapHold
 from keyboard.bindings import action
-from keyboard.layout import Board, Key, Layer, TapHold
+from keyboard.board import Board
+from keyboard.keys import Key
 from protocol import App, Request, Tool
 
 

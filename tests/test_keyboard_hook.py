@@ -8,8 +8,10 @@ from components import SWITCHER_TITLE
 from config import APPS
 from desktop_ui.desktop_control import FeatureRequest, control_event
 from keyboard import hook_watch
+from keyboard.actions import Layer
 from keyboard.engine import Indicator
-from keyboard.layout import Key, Layer, Mod, Scancode
+from keyboard.keys import Key, Mod
+from keyboard.physical import Scancode
 from keyboard.settings import ESCAPE
 from keyboard.win import Keyboard, WinHost, release_keyboard
 from protocol import LayoutState, Message, Origin, Tool, decode_indicator

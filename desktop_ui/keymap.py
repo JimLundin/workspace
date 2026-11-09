@@ -7,9 +7,11 @@ from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
+from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
 from keyboard.bindings import Unmapped, action, actions, slot
 from keyboard.firmware import CHORDS
-from keyboard.layout import BLANK, Binding, Chord, Key, Laptop, Layer, Mod, TapHold
+from keyboard.keys import Key, Mod
+from keyboard.physical import Laptop
 from keyboard.settings import BASE, COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
 

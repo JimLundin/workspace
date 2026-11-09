@@ -10,7 +10,8 @@ from pydantic import StrictBool, TypeAdapter
 
 from components import DIRECTORY
 from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
-from keyboard.layout import Layer, Scancode
+from keyboard.actions import Layer
+from keyboard.physical import Scancode
 from winapi.shapes import Point, Rect, Size
 
 PREFERENCE: Final = DIRECTORY / "overlay.json"

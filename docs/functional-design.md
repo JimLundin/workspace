@@ -39,8 +39,12 @@ in reverse start order.
 
 ## `keyboard/`
 
-`layout.py` holds the layer tables and settings, checked at import.
-`engine.py` turns key events into actions. `win.py` owns the hook and message
+The vocabulary is four modules: `physical.py` (the laptop's keys, their
+scancodes and keycaps), `keys.py` (the keys and modifiers sent to Windows),
+`actions.py` (what a key does on a layer) and `board.py` (the rows and thumbs
+layers are written in). `settings.py` declares the timings, the physical board
+and every layer in that vocabulary; `bindings.py` builds the engine's lookups
+from it and checks them at import. `engine.py` turns key events into actions. `win.py` owns the hook and message
 loop. `firmware.py` recognizes the Charybdis keyboard and maps the
 Ctrl+Alt+Shift chords (`CHORDS`). `hook_watch.py` detects when Windows silently
 removes the hook and reinstalls it. Measure latency with

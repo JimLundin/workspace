@@ -22,7 +22,8 @@ from keyboard.bindings import pictured
 from keyboard.engine import EngineState, Indicator, UnreleasedError, Verdict
 from keyboard.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
 from keyboard.hook_watch import ANSWERED
-from keyboard.layout import Key, Mod, Scancode
+from keyboard.keys import Key, Mod
+from keyboard.physical import Scancode
 from protocol import LayoutState, Message, Origin, Request, Window, encode, encode_indicator
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 

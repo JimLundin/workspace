@@ -32,7 +32,8 @@ lazy from desktop_ui.components.widgets import (
 lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
-lazy from keyboard.layout import Layer, Scancode
+lazy from keyboard.actions import Layer
+lazy from keyboard.physical import Scancode
 
 prepare()
 

@@ -21,7 +21,8 @@ from time import perf_counter_ns
 
 lazy from keyboard import engine
 lazy from keyboard.engine import EngineState, Indicator
-lazy from keyboard.layout import Key, Mod, Scancode
+lazy from keyboard.keys import Key, Mod
+lazy from keyboard.physical import Scancode
 lazy from protocol import LayoutState, Request
 
 
@@ -102,7 +103,12 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         tracemalloc.stop()
     names = (
         "keyboard/engine.py",
-        "keyboard/layout.py",
+        "keyboard/physical.py",
+        "keyboard/keys.py",
+        "keyboard/actions.py",
+        "keyboard/board.py",
+        "keyboard/bindings.py",
+        "keyboard/settings.py",
         "keyboard/win.py",
         "keyboard/__main__.py",
         "keyboard.pyw",

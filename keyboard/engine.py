@@ -33,8 +33,11 @@ from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
 from keyboard import settings
+from keyboard.actions import BLANK, Action, Chord, Hold, Layer, Output, TapHold
 from keyboard.bindings import Unmapped, action, hand, slot
-from keyboard.layout import BLANK, Action, Board, Chord, Hold, Key, Layer, Mod, Output, Scancode, TapHold
+from keyboard.board import Board
+from keyboard.keys import Key, Mod
+from keyboard.physical import Scancode
 from protocol import App, LayoutState, Request, Tool
 
 

@@ -7,7 +7,9 @@ from enum import Enum, auto
 from typing import Final
 
 from keyboard import settings
-from keyboard.layout import Binding, Hand, Layer, Scancode
+from keyboard.actions import Binding, Layer
+from keyboard.board import Hand
+from keyboard.physical import Scancode
 
 
 class LayoutError(Exception):

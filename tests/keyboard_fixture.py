@@ -5,7 +5,8 @@ from contextlib import contextmanager
 
 from components import DESKTOP
 from diagnostics import Detail
-from keyboard.layout import Key, Mod, Scancode
+from keyboard.keys import Key, Mod
+from keyboard.physical import Scancode
 from keyboard.win import Keyboard
 from protocol import Message, Window
 from winapi import inputs, system

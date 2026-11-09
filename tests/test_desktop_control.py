@@ -40,7 +40,7 @@ from desktop_ui.desktop_control import (
     recording_notice,
     transition,
 )
-from keyboard.layout import Scancode
+from keyboard.physical import Scancode
 from protocol import LayoutState, Message, Tool
 
 
