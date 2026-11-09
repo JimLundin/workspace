@@ -7,7 +7,7 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Activities run concurrently and each keeps one identity wherever it shows:
   a quick job such as transcription (pulsing dots), and a meeting recording
   (a red dot and timer).
-- Activities alone join the centre; at idle it is empty. While you dictate
+- Activities alone join the island, just left of the fixed capsule; at idle it is empty. While you dictate
   they detach beside it as compact capsules.
 - The pinned web apps sit at the far left (the shell sections own that capsule).
   One fixed capsule anchors right: CPU and memory use, the keyboard while it types plainly,
@@ -194,7 +194,7 @@ ISLAND: Final = IslandSpec(
             (Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY, Reading.CLOCK),
         )
     ),
-    # Where activities sit beside the centre island, left to right. A transcription
+    # Where activities sit beside the island, left to right. A transcription
     # and a recording step out of the island while you dictate. Each activity is
     # placed exactly once.
     activities=ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),

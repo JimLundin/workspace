@@ -1,7 +1,7 @@
 """Where the island bar's capsules sit: a pure frame from measured sizes and presence.
 
-Activity stays centred where space permits; permanent controls anchor right.
-Lead capsules grow leftwards from activity and trail capsules rightwards.
+Permanent controls anchor right, and activity sits directly left of them.
+Lead capsules sit left of the island and trail capsules right of it.
 The gap between two neighbours belongs to the pair: the full gap scaled by
 the less present of the two, so a capsule entering or leaving
 opens and closes the space beside it smoothly. Each capsule's widget also spans the
@@ -328,24 +328,9 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
         right = (boxed(capsule, edge), *right)
         edge = max(0.0, edge - metrics.gap)
     boundary = edge if right else metrics.width
-    islands = zone(Zone.ISLAND)
-    if not islands:
-        dynamic: tuple[Framed, ...] = ()
-        edge = min(metrics.width / 2, boundary)
-        for capsule in zone(Zone.TRAIL):
-            width = min(shown(capsule), max(0.0, boundary - edge))
-            if width > 0:
-                box = Box(edge, metrics.top, width, capsule.height)
-                dynamic += (Framed(capsule.key, box, present(capsule.presence)),)
-                edge += width + metrics.gap
-        return (*dynamic, *right)
-    island = islands[0]
-    left = (metrics.width - shown(island)) / 2
-    centre = boxed(island, left)
 
-    def outward(capsules: tuple[Placed, ...], edge: float, *, leading: bool) -> tuple[Framed, ...]:
+    def outward(capsules: tuple[Placed, ...], edge: float, before: float, *, leading: bool) -> tuple[Framed, ...]:
         framed: tuple[Framed, ...] = ()
-        before = present(island.presence)
         for capsule in capsules:
             space = metrics.gap * min(before, present(capsule.presence))
             x = edge - space - shown(capsule) if leading else edge + space
@@ -354,12 +339,20 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
             before = present(capsule.presence)
         return framed
 
-    lead = outward(tuple(reversed(zone(Zone.LEAD))), left, leading=True)
-    trail = outward(zone(Zone.TRAIL), left + shown(island), leading=False)
-    dynamic = (*lead, centre, *trail)
+    match zone(Zone.ISLAND):
+        case (island, *_):
+            presence = present(island.presence)
+            lead = outward(tuple(reversed(zone(Zone.LEAD))), 0.0, presence, leading=True)
+            trail = outward(zone(Zone.TRAIL), shown(island), presence, leading=False)
+            dynamic = (*lead, boxed(island, 0.0), *trail)
+        case _:
+            dynamic = outward(zone(Zone.TRAIL), 0.0, 0.0, leading=False)
+    if not dynamic:
+        return right
     start = min(each.box.x for each in dynamic)
     end = max(each.box.x + each.box.width for each in dynamic)
-    shift = max(-start, min(0.0, boundary - end))
+    # Activity ends one gap before the right capsule; if it cannot fit, its start stays on screen.
+    shift = max(-start, boundary - end)
 
     def bounded(each: Framed) -> Framed:
         x = max(0.0, each.box.x + shift)

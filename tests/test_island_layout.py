@@ -1,36 +1,60 @@
-"""Where the island bar's capsules sit, and where parts sit inside them."""
+"""Where the island bar's capsules sit, and where parts sit inside them.
 
-from desktop_ui.island_layout import SIZES, Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
+The sizes here are the test's own, so each test checks how the layout places
+capsules and parts relative to the sizes it is given, never the bar's real positions.
+"""
+
+from itertools import pairwise
+
+from desktop_ui.island_layout import Bar, Capsule, Content, Framed, MenuGrid, Metrics, Placed, Sizes, Spot, arrange, frame, snap
 from desktop_ui.island_model import ISLAND, Action, Control, Glyph, Key, Marker, Text, Zone, order
 
 ORDER = order(ISLAND)
 
+SIZES = Sizes(
+    Bar(top=5, edge=20, gap=10, radius=1, shadow=0),
+    Capsule(height=40, control=30, icon=16, dot=8, dots=18, wave_bars=3, part_gap=4, slot_gap=9, text_pad=11, icon_pad=7),
+    MenuGrid(width=100, radius=1, pad=1, head=1, track=1, gutter=1),
+)
+BAR = SIZES.bar
+CAPSULE = SIZES.capsule
+
 
 def metrics(width: float) -> Metrics:
-    return Metrics(width, SIZES.bar.top, SIZES.bar.gap, SIZES.bar.edge)
+    return Metrics(width, BAR.top, BAR.gap, BAR.edge)
 
 
-def test_the_island_alone_is_centred() -> None:
-    # Defect: the island drifts off centre or off the bar's top margin.
-    assert frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34)], metrics(1000), ORDER) == (Framed(Key.ISLAND, Box(444, 8, 112, 34), 1.0),)
+def end(framed: Framed) -> float:
+    return framed.box.x + framed.box.width
 
 
-def test_neighbours_sit_one_gap_apart_and_grow_outward_in_order() -> None:
-    # Defect: zones overlap the island, the gap differs between neighbours, or the order flips.
-    placed = [Placed(Key.RECORDING, Zone.TRAIL, 86, 34), Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.JOB, Zone.LEAD, 70, 34)]
-    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000), ORDER)] == [
-        (Key.JOB, 368, 70),
-        (Key.ISLAND, 444, 112),
-        (Key.RECORDING, 562, 86),
-    ]
+def gaps(framed: tuple[Framed, ...]) -> list[float]:
+    return [right.box.x - end(left) for left, right in pairwise(framed)]
+
+
+def test_activity_sits_one_gap_left_of_the_right_capsule_in_order() -> None:
+    # Defect: activity drifts away from the status capsule, touches it, flips its order,
+    # or the gap differs between neighbours.
+    status = Placed(Key.STATUS, Zone.RIGHT, 216, 34)
+    placed = [Placed(Key.RECORDING, Zone.TRAIL, 86, 34), status, Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.JOB, Zone.LEAD, 70, 34)]
+    framed = frame(placed, metrics(1000), ORDER)
+    assert [(f.key, f.box.width) for f in framed] == [(Key.JOB, 70), (Key.ISLAND, 112), (Key.RECORDING, 86), (Key.STATUS, 216)]
+    assert end(framed[-1]) == 1000 - BAR.edge
+    assert gaps(framed) == [BAR.gap] * 3
+    assert all(f.box.y == BAR.top for f in framed)
+    alone = frame([Placed(Key.RECORDING, Zone.TRAIL, 86, 34), status], metrics(1000), ORDER)
+    assert gaps(alone) == [BAR.gap]
 
 
 def test_a_capsule_part_way_in_opens_a_gap_scaled_by_its_presence() -> None:
     # Defect: an entering capsule opens a full gap at once, or an absent one still takes space.
-    placed = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0.5)]
-    assert [(f.key, f.box.x, f.box.width) for f in frame(placed, metrics(1000), ORDER)] == [(Key.ISLAND, 444, 112), (Key.RECORDING, 559, 43)]
-    absent = [Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0)]
-    assert [(f.key, f.box.x) for f in frame(absent, metrics(1000), ORDER)] == [(Key.ISLAND, 444)]
+    status = Placed(Key.STATUS, Zone.RIGHT, 216, 34)
+    entering = frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0.5), status], metrics(1000), ORDER)
+    assert [f.box.width for f in entering] == [112, 43, 216]
+    assert gaps(entering) == [BAR.gap / 2, BAR.gap]
+    absent = frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0), status], metrics(1000), ORDER)
+    assert [f.key for f in absent] == [Key.ISLAND, Key.STATUS]
+    assert gaps(absent) == [BAR.gap]
 
 
 def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
@@ -47,33 +71,36 @@ def test_the_fixed_right_cluster_survives_activity_changes() -> None:
     for screen in (480, 1000):
         baseline = frame(fixed, metrics(screen), ORDER)
         assert tuple(each.key for each in baseline) == (Key.STATUS,)
-        assert baseline[-1].box.x + baseline[-1].box.width == screen - 12
+        assert end(baseline[-1]) == screen - BAR.edge
         framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), metrics(screen), ORDER)
         assert tuple(each for each in framed if each.key is not Key.ISLAND) == baseline
-        assert all(0 <= each.box.x <= each.box.x + each.box.width <= screen for each in framed)
+        assert all(0 <= each.box.x <= end(each) <= screen for each in framed)
         activity = next((each for each in framed if each.key is Key.ISLAND), None)
         if activity is not None:
-            assert activity.box.x + activity.box.width <= baseline[0].box.x - 6
+            assert end(activity) <= baseline[0].box.x - BAR.gap
 
 
 def width_of(text: Text) -> float:
     return len(text.text) * 7
 
 
-def test_text_content_pads_twelve_and_separates_slots_and_readings_further_than_parts() -> None:
+def test_text_content_pads_its_ends_and_separates_slots_and_readings_further_than_parts() -> None:
     # Defects: readings crowd the capsule edge, two slots read as one, or two
     # readings run together while a symbol drifts from the text it labels.
     content = arrange(((Marker.DOTS,), (Text("10:22"), Text("73%"))), width_of, SIZES)
-    assert [spot.x for spot in content.spots] == [12, 42, 89]
-    assert content.width == 12 + 18 + 12 + 35 + 12 + 21 + 12
-    assert [spot.x for spot in arrange(((Text("Recording"), Glyph("stop")),), width_of, SIZES).spots] == [12, 81]
+    pad, slot = CAPSULE.text_pad, CAPSULE.slot_gap
+    assert [spot.x for spot in content.spots] == [pad, pad + CAPSULE.dots + slot, pad + CAPSULE.dots + slot + 35 + slot]
+    assert content.width == content.spots[-1].x + 21 + pad
+    labelled = arrange(((Text("Recording"), Glyph("stop")),), width_of, SIZES)
+    assert [spot.x for spot in labelled.spots] == [pad, pad + 63 + CAPSULE.part_gap]
 
 
 def test_a_control_at_the_edge_sits_concentric() -> None:
-    # Defect: Stop keeps the text padding and breaks the 3 px concentric inset.
+    # Defect: Stop keeps the text padding and breaks the concentric inset.
     stop = Control("stop", "Stop recording", Action.STOP_RECORDING)
     content = arrange(((Marker.DOT, Text("02:05"), stop),), width_of, SIZES)
-    assert content.spots[-1] == Spot(stop, 67, 28) and content.width == 98
+    last = content.spots[-1]
+    assert last.width == CAPSULE.control and content.width - (last.x + last.width) == CAPSULE.inset
 
 
 def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> None:
@@ -93,4 +120,4 @@ def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> No
 def test_content_narrower_than_a_circle_centres_in_one() -> None:
     # Defect: a lone marker collapses the capsule below its height, losing its round shape.
     content = arrange(((Marker.DOT,),), width_of, SIZES)
-    assert content.width == 34 and content.spots == (Spot(Marker.DOT, 13, 8),)
+    assert content.width == CAPSULE.height and content.spots == (Spot(Marker.DOT, (CAPSULE.height - CAPSULE.dot) / 2, CAPSULE.dot),)
