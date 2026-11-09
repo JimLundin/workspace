@@ -17,7 +17,7 @@ from desktop_ui.bar_control import KeyboardFocus, font
 from desktop_ui.components.appearance import Look
 from desktop_ui.components.text import color, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
-from desktop_ui.island_layout import SIZES, Capsule, on_pixels
+from desktop_ui.island_layout import Capsule, Sizes, on_pixels
 from desktop_ui.navigation import JumpDesktop, Navigation
 from desktop_ui.shell_items import PinnedApp, Shelf
 from desktop_ui.vector_icons import paint_icon
@@ -81,7 +81,7 @@ class ShellButton(KeyboardFocus):
         self.pager = pager
         self.target = target
         self.pictures: tuple[QtGui.QPixmap | None, ...] = ()
-        capsule = SIZES.capsule
+        capsule = pager.sizes.capsule
         control = round(capsule.control)
         match target.face:
             case Stack(icons=icons):
@@ -139,7 +139,7 @@ class ShellButton(KeyboardFocus):
 
     def snapped(self) -> QtCore.QPointF:
         """The face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
-        capsule = SIZES.capsule
+        capsule = self.pager.sizes.capsule
         scale = self.devicePixelRatioF()
         origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
         corner = origin + QtCore.QPointF((self.width() - capsule.icon) / 2, face_inset(capsule))
@@ -154,7 +154,7 @@ class ShellButton(KeyboardFocus):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         self.paint_round(painter, lettering, selected=self.target.active)
-        side = SIZES.capsule.icon
+        side = self.pager.sizes.capsule.icon
         face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(side, side))
         match self.target.face:
             case Stack(icons=icons):
@@ -235,8 +235,9 @@ class Pager(QtWidgets.QWidget):
     scrolling horizontally, so no icons are silently dropped. Native buttons exist only for the current snapshot.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, sizes: Sizes) -> None:
         super().__init__(parent)
+        self.sizes = sizes
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.overflow = HorizontalScroll(self)
         self.body = QtWidgets.QWidget()
@@ -259,7 +260,7 @@ class Pager(QtWidgets.QWidget):
             button.hide()
             button.deleteLater()
         self.buttons = tuple(ShellButton(self, target) for target in targets)
-        capsule = SIZES.capsule
+        capsule = self.sizes.capsule
         gap = round(capsule.part_gap)
         x = 0
         for button in self.buttons:
@@ -316,7 +317,8 @@ class Pager(QtWidgets.QWidget):
         self.update()
 
     def place(self, left: int, right: int) -> None:
-        top, height, inset = round(SIZES.bar.top), round(SIZES.capsule.height), round(SIZES.capsule.inset)
+        sizes = self.sizes
+        top, height, inset = round(sizes.bar.top), round(sizes.capsule.height), round(sizes.capsule.inset)
         self.setGeometry(left, top, max(0, min(right - left, self.body.width() + 2 * inset)), height)
         self.overflow.setGeometry(inset, 0, max(0, self.width() - 2 * inset), height)
         self.setVisible(bool(self.buttons) and right - left >= height)

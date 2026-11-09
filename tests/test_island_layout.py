@@ -6,17 +6,13 @@ capsules and parts relative to the sizes it is given, never the bar's real posit
 
 from itertools import pairwise
 
-from desktop_ui.island_layout import Bar, Capsule, Content, Framed, MenuGrid, Metrics, Placed, Sizes, Spot, arrange, frame, snap
+from desktop_ui.island_layout import Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
-from tests import test_island_model
+from tests import test_bar_specs, test_island_model
 
 ORDER = order(test_island_model.SPEC)
 
-SIZES = Sizes(
-    Bar(top=5, edge=20, gap=10, radius=1, shadow=0),
-    Capsule(height=40, control=30, icon=16, dot=8, dots=18, wave_bars=3, part_gap=4, slot_gap=9, text_pad=11, icon_pad=7),
-    MenuGrid(width=100, radius=1, pad=1, head=1, track=1, gutter=1),
-)
+SIZES = test_bar_specs.BASE
 BAR = SIZES.bar
 CAPSULE = SIZES.capsule
 

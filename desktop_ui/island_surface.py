@@ -27,7 +27,7 @@ from desktop_ui.components.appearance import GLASS_ACCENT, RED, GlassLook, Look,
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
-from desktop_ui.island_layout import SIZES, Box, Content, Framed, Spot, Tile, arrange, on_pixels, tiles
+from desktop_ui.island_layout import Box, Cells, Content, Framed, Sizes, Spot, Tile, arrange, on_pixels, tiles
 from desktop_ui.island_menu import Face, Item, Live, Menu, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.qt_runtime import prepare
@@ -73,14 +73,14 @@ class Presented:
     shell_look: Look = field(kw_only=True)
 
 
-def radius(height: float) -> float:
+def radius(height: float, sizes: Sizes) -> float:
     """The menu keeps a larger radius, concentric with its rows."""
-    return SIZES.menu.radius if expanded(height) else SIZES.bar.radius
+    return sizes.menu.radius if expanded(height, sizes) else sizes.bar.radius
 
 
-def expanded(height: float) -> bool:
+def expanded(height: float, sizes: Sizes) -> bool:
     """Taller than a capsule's row: the capsule shows the menu."""
-    return height > SIZES.capsule.height + 0.5
+    return height > sizes.capsule.height + 0.5
 
 
 def visibility(presence: float) -> float:
@@ -120,14 +120,14 @@ def _veil(look: GlassLook, frost: Frost) -> Veil:
     return Veil(look.veil.color, look.veil.opacity, rim_stops(look.rim), appearance.FROSTS[frost].shadow)
 
 
-def pane(drawn: Drawn, presented: Presented) -> Pane | None:
+def pane(drawn: Drawn, presented: Presented, sizes: Sizes) -> Pane | None:
     match drawn.look:
         case GlassLook() as look:
             box = drawn.framed.box
             return Pane(
                 drawn.view.key.name,
                 box.on_device(presented.scale),
-                radius(box.height) * presented.scale,
+                radius(box.height, sizes) * presented.scale,
                 visibility(drawn.framed.presence),
                 _veil(look, presented.frost),
             )
@@ -144,7 +144,7 @@ class ControlButton(KeyboardFocus):
         super().__init__(capsule)
         self.capsule = capsule
         self.control = control
-        side = round(SIZES.capsule.control)
+        side = round(capsule.window_.sizes.capsule.control)
         self.setFixedSize(side, side)
         self.setToolTip(control.label)
         self.setAccessibleName(control.label)
@@ -169,14 +169,14 @@ class ControlButton(KeyboardFocus):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         lettering = self.capsule.drawn.look.lettering
         self.paint_round(painter, lettering, selected=False)
-        symbol = round(SIZES.capsule.icon)
+        symbol = round(self.capsule.window_.sizes.capsule.icon)
         inset = (self.width() - symbol) // 2
         paint_icon(painter, self.control.icon, lettering.ink, QtCore.QRect(inset, inset, symbol, symbol))
 
 
-def track(bounds: QtCore.QRectF) -> QtCore.QRectF:
+def track(bounds: QtCore.QRectF, cells: Cells) -> QtCore.QRectF:
     """The sound slider's bar: beside its speaker symbol, under its label."""
-    return QtCore.QRectF(38, bounds.height() - 20, bounds.width() - 52, 6)
+    return QtCore.QRectF(cells.text_x, bounds.height() - cells.track_bottom, bounds.width() - cells.text_x - cells.track_right, cells.track)
 
 
 def sound_reading(slider: Slider) -> str:
@@ -232,8 +232,13 @@ class MenuCell(QtWidgets.QAbstractButton):
     def picked(self) -> None:
         self.capsule.window_.report(Picked(self.tile.index))
 
+    @property
+    def sizes(self) -> Sizes:
+        return self.capsule.window_.sizes
+
     def stop_circle(self) -> QtCore.QRectF:
-        return QtCore.QRectF(self.width() - 34, (self.height() - 28) / 2, 28, 28)
+        control = self.sizes.capsule.control
+        return QtCore.QRectF(self.width() - control - self.sizes.cells.stop_right, (self.height() - control) / 2, control, control)
 
     @override
     def hitButton(self, pos: QtCore.QPoint) -> bool:
@@ -250,7 +255,7 @@ class MenuCell(QtWidgets.QAbstractButton):
     def slide(self, pos: QtCore.QPointF) -> None:
         match self.tile.cell.entry:
             case Slider(level=float()):
-                bar = track(QtCore.QRectF(self.rect()))
+                bar = track(QtCore.QRectF(self.rect()), self.sizes.cells)
                 self.capsule.window_.report(VolumeSet(round(min(1.0, max(0.0, (pos.x() - bar.left()) / bar.width())), 2)))
             case _:
                 pass
@@ -291,7 +296,8 @@ class MenuCell(QtWidgets.QAbstractButton):
         menu = self.capsule.window_.menu
         chosen = menu is not None and menu.selected == self.tile.index
         bounds = QtCore.QRectF(self.rect())
-        corner = bounds.height() / 2 if cell.face is Face.LINK else 12.0
+        cells, icon = self.sizes.cells, self.sizes.capsule.icon
+        corner = bounds.height() / 2 if cell.face is Face.LINK else cells.corner
         painter.setPen(Qt.PenStyle.NoPen)
         if cell.face is not Face.LINK:
             painter.setBrush(color(Shade(lettering.ink.color, 0.07)))
@@ -305,18 +311,20 @@ class MenuCell(QtWidgets.QAbstractButton):
             case Slider() as slider:
                 self.paint_slider(painter, slider)
             case Item(icon=name) if cell.face is Face.TOOL:
-                self.paint_icon(painter, name, lettering.ink, QtCore.QPointF(bounds.width() / 2 - 8, 12))
+                self.paint_icon(painter, name, lettering.ink, QtCore.QPointF((bounds.width() - icon) / 2, cells.tool_top))
                 painter.setPen(color(lettering.quiet))
                 painter.setFont(inter(11, QtGui.QFont.Weight.Normal))
-                painter.drawText(bounds.adjusted(2, 0, -2, -9), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, cell.caption)
+                caption = bounds.adjusted(cells.caption_side, 0, -cells.caption_side, -cells.caption_bottom)
+                painter.drawText(caption, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, cell.caption)
             case Item(label=label, icon=name, key=key):
-                self.paint_icon(painter, name, lettering.quiet, QtCore.QPointF(12, (bounds.height() - 16) / 2))
+                self.paint_icon(painter, name, lettering.quiet, QtCore.QPointF(cells.lead, (bounds.height() - icon) / 2))
                 painter.setFont(font(strong=False))
                 painter.setPen(color(lettering.ink))
-                painter.drawText(bounds.adjusted(36, 0, -10, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
+                labelled = bounds.adjusted(cells.label_x, 0, -cells.label_right, 0)
+                painter.drawText(labelled, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
                 if key:
                     painter.setPen(color(lettering.quiet))
-                    painter.drawText(bounds.adjusted(0, 0, -12, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
+                    painter.drawText(bounds.adjusted(0, 0, -cells.trail, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
             case TrayIcon(slot=slot):
                 self.paint_tray(painter, slot, bounds)
             case _:
@@ -326,16 +334,20 @@ class MenuCell(QtWidgets.QAbstractButton):
         """A symbol in its own circle at the cell's leading edge, filled with the accent while its setting is on."""
         lettering = self.capsule.drawn.look.lettering
         # Tiles and toggles share one leading edge, so their symbols line up down the grid.
-        at = QtCore.QPointF(4, (self.height() - 28) / 2)
+        capsule = self.sizes.capsule
+        at = QtCore.QPointF(self.sizes.cells.symbol_x, (self.height() - capsule.control) / 2)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color(self.capsule.signal(GLASS_ACCENT, lettering.ink) if on else Shade(lettering.ink.color, 0.12)))
-        painter.drawEllipse(QtCore.QRectF(at.x(), at.y(), 28, 28))
+        painter.drawEllipse(QtCore.QRectF(at.x(), at.y(), capsule.control, capsule.control))
         ink = self.capsule.signal("#ffffff", lettering.press) if on else lettering.ink
-        self.paint_icon(painter, name, ink, QtCore.QPointF(at.x() + 6, at.y() + 6))
+        inset = (capsule.control - capsule.icon) / 2
+        self.paint_icon(painter, name, ink, QtCore.QPointF(at.x() + inset, at.y() + inset))
 
     def paint_toggle(self, painter: QtGui.QPainter, toggle: Toggle) -> None:
         self.paint_symbol(painter, toggle.icon, on=toggle.on)
-        self.paint_lines(painter, QtCore.QRectF(38, 0, self.width() - 42, self.height()), toggle.label, toggle.detail, strong=False)
+        cells = self.sizes.cells
+        area = QtCore.QRectF(cells.text_x, 0, self.width() - cells.text_x - cells.text_right, self.height())
+        self.paint_lines(painter, area, toggle.label, toggle.detail, strong=False)
 
     def paint_lines(self, painter: QtGui.QPainter, area: QtCore.QRectF, title: str, detail: str, *, strong: bool) -> None:
         """A title in ink over a quieter detail line, meeting at the cell's middle."""
@@ -348,40 +360,43 @@ class MenuCell(QtWidgets.QAbstractButton):
         painter.drawText(QtCore.QRectF(area.left(), middle, area.width(), middle), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft, detail)
 
     def paint_slider(self, painter: QtGui.QPainter, slider: Slider) -> None:
-        lettering, bounds = self.capsule.drawn.look.lettering, QtCore.QRectF(self.rect())
+        lettering, bounds, cells = self.capsule.drawn.look.lettering, QtCore.QRectF(self.rect()), self.sizes.cells
         painter.setFont(font(strong=True))
         painter.setPen(color(lettering.ink))
-        painter.drawText(QtCore.QRectF(12, 8, bounds.width() - 24, 16), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, slider.label)
-        bar = track(bounds)
+        heading = QtCore.QRectF(cells.lead, cells.slider_label_top, bounds.width() - 2 * cells.lead, cells.slider_label)
+        painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, slider.label)
+        bar = track(bounds, cells)
         symbol = "speaker-muted" if slider.muted else "speaker-on"
-        self.paint_icon(painter, symbol, lettering.quiet, QtCore.QPointF(12, bar.center().y() - 8))
+        self.paint_icon(painter, symbol, lettering.quiet, QtCore.QPointF(cells.lead, bar.center().y() - self.sizes.capsule.icon / 2))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color(Shade(lettering.ink.color, 0.16)))
-        painter.drawRoundedRect(bar, 3, 3)
+        painter.drawRoundedRect(bar, cells.track_corner, cells.track_corner)
         if slider.level is None:
             return
         filled = QtCore.QRectF(bar.left(), bar.top(), bar.width() * slider.level, bar.height())
         painter.setBrush(color(lettering.quiet if slider.muted else self.capsule.signal(GLASS_ACCENT, lettering.ink)))
-        painter.drawRoundedRect(filled, 3, 3)
+        painter.drawRoundedRect(filled, cells.track_corner, cells.track_corner)
         painter.setBrush(color(self.capsule.signal("#ffffff", lettering.ink)))
-        painter.drawEllipse(QtCore.QPointF(filled.right(), bar.center().y()), 7, 7)
+        painter.drawEllipse(QtCore.QPointF(filled.right(), bar.center().y()), cells.knob, cells.knob)
 
     def paint_live(self, painter: QtGui.QPainter, activity: Live) -> None:
         """An activity card: its glyph, its reading, and its Stop circle."""
-        lettering, bounds = self.capsule.drawn.look.lettering, QtCore.QRectF(self.rect())
-        paint_dot(painter, color(self.capsule.signal(RED, lettering.ink)), QtCore.QPointF(20, bounds.height() / 2), 5)
+        lettering, bounds, cells = self.capsule.drawn.look.lettering, QtCore.QRectF(self.rect()), self.sizes.cells
+        paint_dot(painter, color(self.capsule.signal(RED, lettering.ink)), QtCore.QPointF(cells.live_dot_x, bounds.height() / 2), cells.live_dot)
         detail = QtGui.QFontMetricsF(inter(11, QtGui.QFont.Weight.Normal)).elidedText(
-            activity.detail, Qt.TextElideMode.ElideRight, bounds.width() - 84
+            activity.detail, Qt.TextElideMode.ElideRight, bounds.width() - cells.live_elide
         )
-        self.paint_lines(painter, QtCore.QRectF(40, 0, bounds.width() - 80, bounds.height()), activity.label, detail, strong=True)
+        area = QtCore.QRectF(cells.live_text_x, 0, bounds.width() - cells.live_text_x - cells.live_text_right, bounds.height())
+        self.paint_lines(painter, area, activity.label, detail, strong=True)
         circle = self.stop_circle()
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color(lettering.press if self.isDown() else lettering.hover))
         painter.drawEllipse(circle)
-        paint_icon(painter, "stop", lettering.ink, circle.adjusted(6, 6, -6, -6).toRect())
+        inset = (self.sizes.capsule.control - self.sizes.capsule.icon) / 2
+        paint_icon(painter, "stop", lettering.ink, circle.adjusted(inset, inset, -inset, -inset).toRect())
 
     def paint_tray(self, painter: QtGui.QPainter, slot: int, bounds: QtCore.QRectF) -> None:
-        """The application's own image, one image pixel per screen pixel up to 22 px, on whole device pixels.
+        """The application's own image, one image pixel per screen pixel up to `tray_image`, on whole device pixels.
 
         Windows asks applications for tray icons at its small-icon size for the
         screen's scale, so drawing them unscaled keeps them as sharp as the taskbar.
@@ -390,16 +405,18 @@ class MenuCell(QtWidgets.QAbstractButton):
         images = self.capsule.window_.tray_images
         image = images[slot] if slot < len(images) else None
         if image is None:
-            self.paint_icon(painter, "window", self.capsule.drawn.look.lettering.ink, bounds.center() - QtCore.QPointF(8, 8))
+            half = self.sizes.capsule.icon / 2
+            self.paint_icon(painter, "window", self.capsule.drawn.look.lettering.ink, bounds.center() - QtCore.QPointF(half, half))
             return
         scale = self.devicePixelRatioF()
-        side = min(22.0, image.width() / scale)
+        side = min(self.sizes.cells.tray_image, image.width() / scale)
         left, top = on_pixels(bounds.center().x() - side / 2, scale), on_pixels(bounds.center().y() - side / 2, scale)
         painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
         painter.drawPixmap(QtCore.QRectF(left, top, side, side), image, QtCore.QRectF(image.rect()))
 
     def paint_icon(self, painter: QtGui.QPainter, name: str, ink: Shade, at: QtCore.QPointF) -> None:
-        paint_icon(painter, name, ink, QtCore.QRect(round(at.x()), round(at.y()), 16, 16))
+        side = round(self.sizes.capsule.icon)
+        paint_icon(painter, name, ink, QtCore.QRect(round(at.x()), round(at.y()), side, side))
 
 
 class Capsule(KeyboardFocus):
@@ -460,7 +477,7 @@ class Capsule(KeyboardFocus):
 
     def show_menu(self, menu: Menu | None) -> None:
         """The expanded capsule's cells, pooled for as long as the menu shows the same grid."""
-        laid = tiles(menu, SIZES.menu) if menu is not None else ()
+        laid = tiles(menu, self.window_.sizes.menu) if menu is not None else ()
         if len(laid) != len(self.cells) or any(cell.tile.cell.entry != tile.cell.entry for cell, tile in zip(self.cells, laid, strict=False)):
             for cell in self.cells:
                 cell.hide()
@@ -471,8 +488,9 @@ class Capsule(KeyboardFocus):
             cell.update()
 
     def place_cells(self) -> None:
-        top = round(SIZES.bar.top)
-        left = (self.width() - SIZES.menu.width) / 2
+        sizes = self.window_.sizes
+        top = round(sizes.bar.top)
+        left = (self.width() - sizes.menu.width) / 2
         for cell in self.cells:
             tile = cell.tile
             cell.setGeometry(round(left + tile.x), top + round(tile.y), round(tile.width), round(tile.height))
@@ -481,7 +499,7 @@ class Capsule(KeyboardFocus):
     def place_controls(self) -> None:
         shift = self.shift(self.drawn.content)
         for button, (_, x) in zip(self.controls, controls(self.drawn.content), strict=True):
-            button.move(round(shift + x), round(SIZES.bar.top + SIZES.capsule.inset))
+            button.move(round(shift + x), round(self.window_.sizes.bar.top + self.window_.sizes.capsule.inset))
             button.setVisible(self.drawn.fade > 0.5 and visibility(self.drawn.framed.presence) == 1)
 
     def shift(self, content: Content) -> float:
@@ -490,7 +508,7 @@ class Capsule(KeyboardFocus):
 
     def frame(self, framed: Framed) -> None:
         """The widget spans the edge strip and the capsule below it."""
-        top = round(SIZES.bar.top)
+        top = round(self.window_.sizes.bar.top)
         geometry = QtCore.QRect(round(framed.box.x), 0, max(1, round(framed.box.width)), top + round(framed.box.height))
         placed = (geometry, self.drawn.fade, self.drawn.framed.presence, self.drawn.content, tuple(cell.tile for cell in self.cells))
         if placed == self.placed:
@@ -502,11 +520,11 @@ class Capsule(KeyboardFocus):
 
     def update_indicators(self) -> None:
         """Repaint only the live indicators (dots, trace); the rest of the capsule is unchanged."""
-        shift = self.shift(self.drawn.content)
+        shift, sizes = self.shift(self.drawn.content), self.window_.sizes
         for spot in self.drawn.content.spots:
             if animated(spot.part):
                 self.update(
-                    QtCore.QRect(math.floor(shift + spot.x) - 2, round(SIZES.bar.top), math.ceil(spot.width) + 4, round(SIZES.capsule.height))
+                    QtCore.QRect(math.floor(shift + spot.x) - 2, round(sizes.bar.top), math.ceil(spot.width) + 4, round(sizes.capsule.height))
                 )
 
     @override
@@ -525,9 +543,10 @@ class Capsule(KeyboardFocus):
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        top, middle = SIZES.bar.top, SIZES.bar.top + SIZES.capsule.height / 2
+        sizes = self.window_.sizes
+        top, middle = sizes.bar.top, sizes.bar.top + sizes.capsule.height / 2
         shape = QtCore.QRectF(0, top, self.width(), self.height() - top)
-        corner = min(radius(shape.height()), shape.height() / 2)
+        corner = min(radius(shape.height(), sizes), shape.height() / 2)
         path = outline(shape, corner)
         strip = QtGui.QPainterPath()
         strip.addRect(QtCore.QRectF(0, 0, self.width(), top))
@@ -535,7 +554,7 @@ class Capsule(KeyboardFocus):
         alpha = visibility(self.drawn.framed.presence)
         paint_capsule(painter, path, self.drawn.look, alpha)
         drawn = self.drawn
-        flat = not expanded(drawn.content.height)
+        flat = not expanded(drawn.content.height, sizes)
         paint_feedback(
             painter,
             drawn.look.lettering,
@@ -544,7 +563,7 @@ class Capsule(KeyboardFocus):
             pressed=self.isDown() and flat,
             hovered=self.underMouse() and flat,
             ringed=self.focus_ringed,
-            inset=1.5,
+            inset=sizes.capsule.ring_inset,
         )
         painter.setClipPath(path)
         layers: tuple[tuple[Content, float], ...] = (
@@ -571,7 +590,7 @@ class Capsule(KeyboardFocus):
         if cached is not None:
             return cached
         scale = self.devicePixelRatioF()
-        top, row = SIZES.bar.top, SIZES.capsule.height
+        top, row = self.window_.sizes.bar.top, self.window_.sizes.capsule.height
         image = QtGui.QPixmap(max(1, math.ceil(content.width * scale)), math.ceil((top + max(row, content.height)) * scale))
         image.setDevicePixelRatio(scale)
         image.fill(Qt.GlobalColor.transparent)
@@ -587,15 +606,16 @@ class Capsule(KeyboardFocus):
         return image
 
     def paint_part(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
-        lettering = self.drawn.look.lettering
+        lettering, sizes = self.drawn.look.lettering, self.window_.sizes
+        capsule, markers = sizes.capsule, sizes.markers
         match spot.part:
             case Text(text=text, tone=tone):
                 painter.setFont(font(strong=False))
                 painter.setPen(color(reading(lettering, tone, contrast=self.contrast)))
-                row = QtCore.QRectF(spot.x, SIZES.bar.top, spot.width + 1, SIZES.capsule.height)
+                row = QtCore.QRectF(spot.x, sizes.bar.top, spot.width + 1, capsule.height)
                 painter.drawText(row, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
             case Glyph(name=name, tone=tone):
-                side = round(SIZES.capsule.icon)
+                side = round(capsule.icon)
                 paint_icon(
                     painter, name, reading(lettering, tone, contrast=self.contrast), QtCore.QRect(round(spot.x), round(middle - side / 2), side, side)
                 )
@@ -605,37 +625,41 @@ class Capsule(KeyboardFocus):
                 trace = color(reading(lettering, Tone.INK, contrast=self.contrast))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(trace)
+                pitch, corner = capsule.wave_bar + capsule.wave_gap, markers.wave_corner
                 for index, sample in enumerate(self.window_.trace()):
-                    height = 3 + sample * 13
-                    painter.drawRoundedRect(QtCore.QRectF(spot.x + index * 4, middle - height / 2, 2, height), 1, 1)
+                    height = markers.wave_floor + sample * markers.wave_reach
+                    painter.drawRoundedRect(QtCore.QRectF(spot.x + index * pitch, middle - height / 2, capsule.wave_bar, height), corner, corner)
             case Marker.DOTS:
                 self.paint_dots(painter, spot, middle)
             case Marker.DOT:
                 red = color(self.signal(RED, lettering.ink))
                 halo = QtGui.QColor(red)
                 halo.setAlphaF(0.25)
-                centre = QtCore.QPointF(spot.x + 4, middle)
-                paint_dot(painter, halo, centre, 7)
-                paint_dot(painter, red, centre, 4)
+                centre = QtCore.QPointF(spot.x + spot.width / 2, middle)
+                paint_dot(painter, halo, centre, markers.halo)
+                paint_dot(painter, red, centre, spot.width / 2)
             case _:
                 assert_never(spot.part)
 
     def paint_dots(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
-        """A quick job: three dots pulsing in turn."""
-        ink = self.drawn.look.lettering.ink
+        """A quick job: dots pulsing in turn, each centred in an equal share of its room."""
+        ink, markers = self.drawn.look.lettering.ink, self.window_.sizes.markers
         cycle = (90 - self.window_.spin_angle) % 360 / 360  # One turn of the frame clock per pulse cycle.
+        pitch, radius = spot.width / markers.dot_count, markers.dots_radius
         painter.setPen(Qt.PenStyle.NoPen)
-        for index in range(3):
+        for index in range(markers.dot_count):
             lift = max(0.0, math.sin((cycle - index / 6) * 2 * math.pi))
             painter.setBrush(color(Shade(ink.color, ink.opacity * (0.35 + 0.65 * lift))))
-            painter.drawEllipse(QtCore.QPointF(spot.x + 3 + index * 6, middle - lift * 1.5), 2.2, 2.2)
+            painter.drawEllipse(QtCore.QPointF(spot.x + pitch * (index + 0.5), middle - lift * markers.dots_lift), radius, radius)
 
 
 class BarWindow(QtWidgets.QWidget):
     """The bar's one window: the full width of the primary screen, as tall as the capsules."""
 
-    def __init__(self, report: Callable[[Event], None], composition: DesktopComposition | None) -> None:
+    def __init__(self, report: Callable[[Event], None], composition: DesktopComposition | None, sizes: Sizes) -> None:
         super().__init__()
+        self.sizes = sizes
+        """Every size the bar paints, as its owner declared them."""
         self.report = report
         """Everything the person does in the bar, as the bar's events."""
         self.composition = composition
@@ -643,7 +667,7 @@ class BarWindow(QtWidgets.QWidget):
         self.capsules: Mapping[Key, Capsule] = frozendict()
         self.spin_angle = 90.0
         # Qt owns the painted trace; samples arrive from the bar's audio meter.
-        self.samples: deque[float] = deque([0.0] * SIZES.capsule.wave_bars, maxlen=SIZES.capsule.wave_bars)
+        self.samples: deque[float] = deque([0.0] * sizes.capsule.wave_bars, maxlen=sizes.capsule.wave_bars)
         self.wave_from: tuple[float, ...] = tuple(self.samples)
         self.wave_progress = 1.0
         # This UI owner retains the immutable last application frame to avoid
@@ -651,7 +675,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: Presented | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
-        self.pager = Pager(self)
+        self.pager = Pager(self, sizes)
         # The bar's latest tray snapshot and Qt copies of its images, for the menu's tray cells.
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()
@@ -708,7 +732,7 @@ class BarWindow(QtWidgets.QWidget):
         def width(text: Text) -> float:
             return math.ceil(QtGui.QFontMetricsF(font(strong=False)).horizontalAdvance(text.text))
 
-        return arrange(view.slots, width, SIZES)
+        return arrange(view.slots, width, self.sizes)
 
     def capsule(self, drawn: Drawn, *, contrast: bool) -> Capsule:
         """The pooled capsule for `drawn`'s key, showing it."""
@@ -725,7 +749,8 @@ class BarWindow(QtWidgets.QWidget):
         if presented == self.presentation:
             return
         area = presented.screen
-        height = round(SIZES.bar.top) + math.ceil(presented.height)
+        sizes = self.sizes
+        height = round(sizes.bar.top) + math.ceil(presented.height)
         if self.geometry() != QtCore.QRect(area.left, area.top, area.width, height):
             self.setGeometry(area.left, area.top, area.width, height)
         self.menu = presented.opened
@@ -733,7 +758,7 @@ class BarWindow(QtWidgets.QWidget):
         for each in presented.drawn:
             capsule = self.capsule(each, contrast=presented.contrast)
             if each.view.key is Key.STATUS:
-                capsule.show_menu(self.menu if expanded(each.content.height) else None)
+                capsule.show_menu(self.menu if expanded(each.content.height, sizes) else None)
             capsule.frame(each.framed)
             capsule.show()
         for key, capsule in self.capsules.items():
@@ -741,15 +766,16 @@ class BarWindow(QtWidgets.QWidget):
                 capsule.hide()
         pager = self.pager
         # The pager runs from the screen's edge, stopping before the leftmost capsule.
-        pager.place(12, math.floor(min((each.framed.box.x for each in presented.drawn), default=area.width / 2)) - 12)
+        leftmost = math.floor(min((each.framed.box.x for each in presented.drawn), default=area.width / 2))
+        pager.place(round(sizes.bar.edge), leftmost - round(sizes.bar.pager_gap))
         pager.apply_look(presented.shell_look)
         self.glass = presented.glass
-        self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented)))
+        self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented, sizes)))
         scale = presented.scale
         match presented.shell_look:
             case GlassLook() as shell_look if pager.isVisibleTo(self):
                 bounds = Box(pager.x(), pager.y(), pager.width(), pager.height()).on_device(scale)
-                self.panes = (*self.panes, Pane("desktops", bounds, SIZES.bar.radius * scale, 1, _veil(shell_look, presented.frost)))
+                self.panes = (*self.panes, Pane("desktops", bounds, sizes.bar.radius * scale, 1, _veil(shell_look, presented.frost)))
             case GlassLook() | SolidLook():
                 pass
         if not self.glass_timer.isActive():
@@ -803,7 +829,7 @@ class BarWindow(QtWidgets.QWidget):
         capsule = self.capsules.get(key)
         if capsule is None or not capsule.isVisible() or not self.isVisible():
             return None
-        shape, strip = capsule.geometry(), SIZES.bar.top
+        shape, strip = capsule.geometry(), self.sizes.bar.top
         area = Box(shape.x(), shape.y() + strip, shape.width(), shape.height() - strip)
         return area.on_screen(windows.outer_rect(int(self.winId())), self.devicePixelRatioF())
 
@@ -820,7 +846,7 @@ class BarWindow(QtWidgets.QWidget):
         if self.scene is None:
             return
         outer = windows.outer_rect(int(self.winId()))
-        margin = round(SIZES.bar.shadow * self.devicePixelRatioF())
+        margin = round(self.sizes.bar.shadow * self.devicePixelRatioF())
         self.scene.place(Rect(outer.left - margin, outer.top, outer.right + margin, outer.bottom + margin), self.devicePixelRatioF())
         self.scene.publish(tuple(Pane(pane.key, shifted(pane.bounds, margin), pane.radius, pane.opacity, pane.veil) for pane in self.panes))
         self.scene.show(int(self.winId()))

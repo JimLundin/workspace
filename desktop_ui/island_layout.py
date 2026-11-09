@@ -35,6 +35,8 @@ class Bar:
     radius: float
     shadow: float
     """Room below and beside the capsules for their shadow."""
+    pager_gap: float
+    """From the pager to the leftmost capsule; the pager starts `edge` from the screen's left edge."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -48,6 +50,10 @@ class Capsule:
     dots: float
     """Transcription's three dots."""
     wave_bars: int
+    wave_bar: float
+    """One bar of the microphone trace..."""
+    wave_gap: float
+    """...and the space between two."""
     part_gap: float
     """Between the parts of one fact, such as a symbol and its reading."""
     slot_gap: float
@@ -56,6 +62,8 @@ class Capsule:
     """A capsule's ends when it holds text..."""
     icon_pad: float
     """...and when it holds only symbols."""
+    ring_inset: float
+    """The keyboard focus ring, inside the capsule's edge."""
 
     @property
     def inset(self) -> float:
@@ -64,8 +72,8 @@ class Capsule:
 
     @property
     def wave(self) -> float:
-        """The microphone trace: two-pixel bars, two pixels apart."""
-        return self.wave_bars * 4 - 2
+        """The microphone trace: its bars and the gaps between them."""
+        return self.wave_bars * (self.wave_bar + self.wave_gap) - self.wave_gap
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -83,17 +91,85 @@ class MenuGrid:
     """Between tiles; each tile keeps half on every side."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Markers:
+    """How the live indicators draw inside the room `Capsule` gives them."""
+
+    wave_floor: float
+    """A silent bar's height..."""
+    wave_reach: float
+    """...and how much taller the loudest grows."""
+    wave_corner: float
+    halo: float
+    """The radius of the glow around the recording dot."""
+    dot_count: int
+    """Transcription's dots, spread evenly across their room."""
+    dots_radius: float
+    dots_lift: float
+    """How far a pulsing dot rises."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Cells:
+    """The inside of the controls menu's tiles, from the tile's own edges."""
+
+    corner: float
+    lead: float
+    """A row's symbol or label from the tile's leading edge."""
+    trail: float
+    """A shortcut key from the trailing edge."""
+    symbol_x: float
+    """A toggle's symbol circle, which is a control's size."""
+    text_x: float
+    """Where a toggle's text and the slider's bar start, past the symbol."""
+    text_right: float
+    """A toggle's text from the trailing edge."""
+    label_x: float
+    """Where a row's label starts, past its symbol."""
+    label_right: float
+    tool_top: float
+    """A tool's symbol from the tile's top..."""
+    caption_side: float
+    caption_bottom: float
+    """...and its caption from the sides and bottom."""
+    slider_label_top: float
+    slider_label: float
+    """The slider label's line height."""
+    track_bottom: float
+    """The slider's bar from the tile's bottom..."""
+    track_right: float
+    track: float
+    """...its thickness..."""
+    track_corner: float
+    knob: float
+    """...and its knob's radius."""
+    live_dot_x: float
+    """An activity card's dot centre..."""
+    live_dot: float
+    """...and radius."""
+    live_text_x: float
+    live_text_right: float
+    live_elide: float
+    """The detail line's width, short of the tile's own."""
+    stop_right: float
+    """The card's Stop circle from the trailing edge."""
+    tray_image: float
+    """The largest a tray application's image draws, in DIPs: Windows' small-icon size."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Sizes:
     """Every size the island bar lays out and paints."""
 
     bar: Bar
     capsule: Capsule
     menu: MenuGrid
+    markers: Markers
+    cells: Cells
 
 
 SIZES: Final = Sizes(
-    bar=Bar(top=8, edge=12, gap=6, radius=17, shadow=40),
+    bar=Bar(top=8, edge=12, gap=6, radius=17, shadow=40, pager_gap=12),
     capsule=Capsule(
         height=34,
         control=28,
@@ -101,12 +177,43 @@ SIZES: Final = Sizes(
         dot=8,
         dots=18,
         wave_bars=18,
+        wave_bar=2,
+        wave_gap=2,
         part_gap=6,
         slot_gap=12,
         text_pad=12,
         icon_pad=10,
+        ring_inset=1.5,
     ),
     menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
+    markers=Markers(wave_floor=3, wave_reach=13, wave_corner=1, halo=7, dot_count=3, dots_radius=2.2, dots_lift=1.5),
+    cells=Cells(
+        corner=12,
+        lead=12,
+        trail=12,
+        symbol_x=4,
+        text_x=38,
+        text_right=4,
+        label_x=36,
+        label_right=10,
+        tool_top=12,
+        caption_side=2,
+        caption_bottom=9,
+        slider_label_top=8,
+        slider_label=16,
+        track_bottom=20,
+        track_right=14,
+        track=6,
+        track_corner=3,
+        knob=7,
+        live_dot_x=20,
+        live_dot=5,
+        live_text_x=40,
+        live_text_right=40,
+        live_elide=84,
+        stop_right=6,
+        tray_image=22,
+    ),
 )
 
 

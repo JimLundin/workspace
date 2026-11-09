@@ -7,28 +7,74 @@ coordinate, whatever the bar's real sizes are.
 from dataclasses import asdict
 
 from desktop_ui.bar_events import BarSpec
-from desktop_ui.island_layout import Bar, Capsule, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
+from desktop_ui.island_layout import Bar, Capsule, Cells, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
 from desktop_ui.island_menu import Menu, entries
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_island_menu, test_island_model, test_island_motion
 
 BASE = Sizes(
-    Bar(top=5, edge=20, gap=10, radius=3, shadow=7),
-    Capsule(height=40, control=30, icon=16, dot=8, dots=18, wave_bars=3, part_gap=4, slot_gap=9, text_pad=11, icon_pad=7),
-    MenuGrid(width=200, radius=9, pad=5, head=40, track=4, gutter=2),
+    bar=Bar(top=5, edge=20, gap=10, radius=3, shadow=7, pager_gap=11),
+    capsule=Capsule(
+        height=40,
+        control=30,
+        icon=16,
+        dot=8,
+        dots=18,
+        wave_bars=3,
+        wave_bar=2,
+        wave_gap=3,
+        part_gap=4,
+        slot_gap=9,
+        text_pad=11,
+        icon_pad=7,
+        ring_inset=1,
+    ),
+    menu=MenuGrid(width=200, radius=9, pad=5, head=40, track=4, gutter=2),
+    markers=Markers(wave_floor=2, wave_reach=9, wave_corner=1, halo=5, dot_count=4, dots_radius=2, dots_lift=1),
+    cells=Cells(
+        corner=9,
+        lead=10,
+        trail=11,
+        symbol_x=3,
+        text_x=36,
+        text_right=5,
+        label_x=33,
+        label_right=7,
+        tool_top=9,
+        caption_side=1,
+        caption_bottom=8,
+        slider_label_top=6,
+        slider_label=14,
+        track_bottom=18,
+        track_right=12,
+        track=5,
+        track_corner=2,
+        knob=6,
+        live_dot_x=17,
+        live_dot=4,
+        live_text_x=37,
+        live_text_right=35,
+        live_elide=80,
+        stop_right=5,
+        tray_image=20,
+    ),
 )
+"""The test's own sizes, unlike the bar's so a test can't pass on its values."""
 
 SPEC = BarSpec(test_island_model.SPEC, test_island_menu.SPEC, test_island_motion.SPRINGS, BASE)
 """The test's own bar, for tests of the bar's decisions."""
 
 
 def doubled(sizes: Sizes) -> Sizes:
-    """Every size twice as large; the trace's bar count is a count, not a size."""
+    """Every size twice as large; the trace's bars and the job's dots are counts, not sizes."""
     capsule = {name: value * 2 for name, value in asdict(sizes.capsule).items()}
+    markers = {name: value * 2 for name, value in asdict(sizes.markers).items()}
     return Sizes(
-        Bar(**{name: value * 2 for name, value in asdict(sizes.bar).items()}),
-        Capsule(**{**capsule, "wave_bars": sizes.capsule.wave_bars}),
-        MenuGrid(**{name: value * 2 for name, value in asdict(sizes.menu).items()}),
+        bar=Bar(**{name: value * 2 for name, value in asdict(sizes.bar).items()}),
+        capsule=Capsule(**{**capsule, "wave_bars": sizes.capsule.wave_bars}),
+        menu=MenuGrid(**{name: value * 2 for name, value in asdict(sizes.menu).items()}),
+        markers=Markers(**{**markers, "dot_count": sizes.markers.dot_count}),
+        cells=Cells(**{name: value * 2 for name, value in asdict(sizes.cells).items()}),
     )
 
 
