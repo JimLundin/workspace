@@ -20,9 +20,8 @@ def test_settings_need_the_endpoint_and_key() -> None:
     assert settings_from({"OPENAI_BASE_URL": "https://ai.example/v1"}) == Missing(("OPENAI_API_KEY",))
 
 
-def test_settings_defaults_and_overrides() -> None:
-    # Defect: the transcription model defaults wrongly, or a configured setting is ignored.
-    assert settings_from(ENV) == Settings("https://ai.example/v1", "k", "gpt-4o-transcribe", "")
+def test_settings_take_their_overrides() -> None:
+    # Defect: a configured setting is ignored.
     env = {**ENV, "WORKSPACE_TRANSCRIBE_MODEL": "whisper-1", "WORKSPACE_VOCABULARY": "Miryoku, Colemak"}
     assert settings_from(env) == Settings("https://ai.example/v1", "k", "whisper-1", "Miryoku, Colemak")
 

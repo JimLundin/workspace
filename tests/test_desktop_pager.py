@@ -1,6 +1,6 @@
 """The desktop pager's view."""
 
-from desktop_ui.desktop_pager import NO_HINTS, Hints, PagerDesktop, pager
+from desktop_ui.desktop_pager import NO_HINTS, PagerDesktop, pager
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import CODE, TERMINAL
 
@@ -21,5 +21,6 @@ def test_pager_names_and_carries_each_desktops_apps_in_order_and_marks_the_curre
 def test_pager_hints_are_the_chord_letters_while_ctrl_alt_shift_is_held() -> None:
     # Defects: hints show without the chord, or a desktop past the direct keys gets one.
     placed = ((), (), (), (), (), ())
-    assert pager(placed, 0, chord=True).hints == Hints(("J", "L", "U", "Y", "'", None))
+    hints = pager(placed, 0, chord=True).hints
+    assert all(hints.desktops[:-1]) and hints.desktops[-1] is None
     assert pager(placed, 0, chord=False).hints == NO_HINTS

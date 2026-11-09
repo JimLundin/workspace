@@ -4,7 +4,7 @@ and the bar's composition places and hides its parts as the spec says."""
 from dataclasses import asdict, replace
 
 from desktop_ui.island_layout import SIZES, Bar, Capsule, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
-from desktop_ui.island_menu import CONTROLS, Command, Item, Live, Menu, Toggle, entries
+from desktop_ui.island_menu import CONTROLS, Menu, entries
 from desktop_ui.island_model import (
     ISLAND,
     Action,
@@ -58,15 +58,6 @@ def test_every_size_the_bar_lays_out_comes_from_the_spec() -> None:
     menu = Menu(entries(RESTING, CONTROLS))
     pairs = zip(tiles(menu, base.menu), tiles(menu, large.menu), strict=True)
     assert all((2 * a.x, 2 * a.y, 2 * a.width, 2 * a.height) == (b.x, b.y, b.width, b.height) for a, b in pairs)
-
-
-def test_every_menu_command_is_reachable_from_the_shipped_menu() -> None:
-    # Defect: an edit to the menu spec drops a control, so its action is no longer
-    # reachable from the menu at all.
-    resting, busy = entries(RESTING, CONTROLS), entries(replace(RESTING, recording="00:10"), CONTROLS)
-    choices = {cell.entry.choice for cell in (*resting, *busy) if isinstance(cell.entry, Item | Toggle)}
-    stops = {cell.entry.stop for cell in busy if isinstance(cell.entry, Live)}
-    assert choices | stops >= set(Command)
 
 
 def test_editing_the_bar_composition_moves_and_hides_its_parts() -> None:

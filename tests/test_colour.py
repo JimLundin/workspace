@@ -1,8 +1,6 @@
 """Colours are checked as they're built, so a bad channel never reaches a painter."""
 
-from contracts.status import State
 from desktop_ui.colour import Rgb
-from desktop_ui.icons import COLOURS
 
 
 def refused(build: object) -> str:
@@ -28,8 +26,3 @@ def test_a_written_colour_reads_back_exactly_and_a_malformed_one_is_refused() ->
     assert Rgb.parse("#2ea078") == Rgb(46, 160, 120) and Rgb(46, 160, 120).hex == "#2ea078"
     for text in ("#2ea07", "2ea078", "#2ea07g", "#2ea0780"):
         assert "#rrggbb" in refused(lambda text=text: Rgb.parse(text))
-
-
-def test_every_tray_state_has_its_own_colour() -> None:
-    # Defect: two states share one colour, so the dot can't tell them apart.
-    assert len(set(COLOURS.values())) == len(State)

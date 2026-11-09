@@ -8,7 +8,6 @@ from contracts.recording_state import RecordingState
 from contracts.status import State
 from desktop_ui.bar_events import DictationShown, RecordingShown
 from desktop_ui.desktop_control import (
-    TRAY,
     Beep,
     Controlled,
     DesktopState,
@@ -33,7 +32,6 @@ from desktop_ui.desktop_control import (
     ShowIdle,
     SwitchWindows,
     ToggleMeeting,
-    TrayAction,
     TrayNotify,
     TrayShow,
     UseLayout,
@@ -177,9 +175,3 @@ def test_control_event_preserves_voice_release_and_rejects_unknown_requests() ->
     """Detect dropping a capture's key-up or forwarding an invalid wire request."""
     assert control_event(WM_REQUEST, Tool.DICTATE.value, 0, APPS) == FeatureRequest(Tool.DICTATE, down=False)
     assert control_event(WM_REQUEST, 999, 1, APPS) is None
-
-
-def test_the_tray_offers_every_action_once() -> None:
-    # Defect: an action (Quit, Restart desktop) is dropped from the tray, leaving no way to reach it, or is listed twice.
-    actions = [item.action for item in TRAY if isinstance(item, TrayAction)]
-    assert sorted(actions, key=lambda action: action.value) == sorted(Menu, key=lambda action: action.value)

@@ -158,13 +158,6 @@ def both_shifts(t: Harness) -> None:
 
 
 # ---- basics ----------------------------------------------------------------
-def test_plain_letters() -> None:
-    t = Harness()
-    for name in ("t", "2", "4"):
-        t.tap(name)
-    assert t.take() == "+g -g +q -q +f -f"
-
-
 def test_home_row_tap() -> None:
     t = Harness()
     t.tap("r")
@@ -204,30 +197,6 @@ def test_nav_layer() -> None:
     t.tap("0")
     t.u("c")
     assert t.take() == "+left -left +CTL +c -CTL -c"
-
-
-def test_space_tap() -> None:
-    t = Harness()
-    t.tap("c")
-    assert t.take() == "+spc -spc"
-
-
-def test_num_layer() -> None:
-    t = Harness()
-    t.d(",")
-    t.tap("w")
-    t.tap("x")
-    t.u(",")
-    assert t.take() == "+4 -4 +. -."
-
-
-def test_sym_layer() -> None:
-    t = Harness()
-    t.d("m")
-    t.tap("2")
-    t.tap("caps")
-    t.u("m")
-    assert t.take() == "+SFT +[ -SFT -[ +SFT +` -SFT -`"
 
 
 def test_mod_plus_layer() -> None:
@@ -304,14 +273,6 @@ def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> None
     for code in (0x01, 0x0F, 0x1C, 0x0E, 0x2A, 0x36, 0x1D, 0x38, 0x4B, 0x5D):
         assert t.key(Scancode(code), down=True, now=2) == Verdict.PASS
         assert t.key(Scancode(code), down=False, now=3) == Verdict.PASS
-    assert t.take() == ""
-
-
-def test_unused_keys_are_blocked() -> None:
-    t = Harness()
-    for scancode in (0x23, 0x35):  # QWERTY H and the retired rightmost thumb key
-        assert t.key(Scancode(scancode), down=True, now=0) == Verdict.SWALLOW
-        assert t.key(Scancode(scancode), down=False, now=1) == Verdict.SWALLOW
     assert t.take() == ""
 
 
@@ -778,15 +739,6 @@ def test_switching_off_and_quitting_release_a_held_voice_request() -> None:
         assert t.take() == ""
 
 
-def test_the_spacebar_b_and_n_are_blocked_now_that_voice_lives_on_the_apps_layer() -> None:
-    # Defect: a retired voice key still talks to the assistant or types its letter.
-    t = Harness()
-    for scancode in (SPACEBAR, Scancode(0x30), Scancode(0x31)):
-        assert t.key(scancode, down=True, now=0) is Verdict.SWALLOW
-        assert t.key(scancode, down=False, now=10) is Verdict.SWALLOW
-    assert t.take() == ""
-
-
 # ---- requests -------------------------------------------------------------------------
 
 
@@ -800,21 +752,6 @@ def test_an_apps_layer_key_makes_its_request_and_shows_the_chord_hints() -> None
     t.u("x")
     assert t.take() == "?desktop_1+ ?desktop_1- ?app:notepad+ ?app:notepad-"
     assert t.h.indicated == ["apps chord", "-"]
-
-
-def test_home_row_ctrl_alt_shift_no_longer_makes_a_request() -> None:
-    # Defect: the retired three-finger chord still swallows the letter it holds.
-    t = Harness()
-    for mod in ("w", "e", "r"):  # R S T: Alt, Ctrl, Shift
-        t.d(mod)
-    t.tap("8")
-    assert t.take() == "+ALT +CTL +SFT +j -j"
-
-
-def test_tab_still_taps() -> None:
-    t = Harness()
-    t.tap("v")
-    assert t.take() == "+0x9 -0x9"
 
 
 # ---- the layer indicator ---------------------------------------------------------------

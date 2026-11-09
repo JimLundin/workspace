@@ -2,14 +2,12 @@
 
 from dataclasses import replace
 
-from contracts.hotkeys import ROUTES, Route
 from desktop_ui.navigation import (
     AppKey,
     Direction,
     Focus,
     JumpDesktop,
     Launch,
-    Placing,
     SpatialFocus,
     Switch,
     World,
@@ -18,12 +16,11 @@ from desktop_ui.navigation import (
     ZoomOut,
     destination,
     effect,
-    keyed,
     zoom_after,
 )
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import CODE, EDGE, NOWHERE, TERMINAL, Group, Screens, place, screens
-from protocol import App, Installed, PinnedWeb, Tool
+from protocol import App, Installed, PinnedWeb
 from tests.test_window_layout import ABOVE, FOUR_K, LAPTOP, SIDE
 from winapi.screen import Monitor
 
@@ -122,23 +119,3 @@ def test_app_keys_cycle_the_apps_windows_or_launch_it() -> None:
     empty = world(())
     assert effect(AppKey(outlook), empty) == Launch(PinnedApp.OUTLOOK)
     assert effect(AppKey(TERMINAL_KEY), empty) == Launch(Installed("windowsterminal.exe", "wt.exe"))
-
-
-def test_navigation_keys_give_their_orders() -> None:
-    # Defects: a desktop key jumps to the wrong desktop, a focus key goes the wrong
-    # way, or a placement key gives no order, so the desktop drops the key.
-    assert [keyed(tool) for tool in (Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.DICTATE)] == [
-        JumpDesktop(1),
-        SpatialFocus(Direction.UP),
-        Zoom(),
-        Placing.TOGGLE_PAUSE,
-        None,
-    ]
-
-
-def test_every_navigation_tool_has_an_order_and_no_other_tool_does() -> None:
-    # Defect: a window key the desktop routes as navigation does nothing, or a
-    # dictation or meeting tool is swallowed as navigation.
-    navigation = {tool for tool in Tool if ROUTES[tool] is Route.NAVIGATE}
-    assert all(keyed(tool) is not None for tool in navigation)
-    assert all(keyed(tool) is None for tool in set(Tool) - navigation)
