@@ -50,19 +50,15 @@ Pressing the clock or battery opens the menu in place. It holds a card per
 running activity, toggles (keyboard overlay, Windows taskbar, window
 placement, dark when away), **Record a meeting**, a volume slider, small tools (switch windows, copy transcript, key
 map), the system tray icons, and links to Windows notification settings and the
-tray menu. `desktop_ui/spec/controls.py` is the source of truth: its rows, their order, each cell's span, label and symbol. It reloads live like the other specs. Arrows move between
+tray menu. `CONTROLS` in `desktop_ui/island_menu.py` is the source of truth: its rows, their order, each cell's span, label and symbol. Arrows move between
 cells, Enter chooses, and Escape closes.
 
 ## Code
 
 What the status capsule shows and in what order, and which side of the
-island each activity steps aside to, are in `desktop_ui/spec/island.py`.
-Every size the bar lays out and paints is in `desktop_ui/spec/sizes.py`.
-Each spec is one frozen value that Pyright checks; the types in `ui_spec` and
-beside their users check ranges and rules. The running bar re-imports its specs
-when their files change (`ui_spec_watch`) and re-lays itself out, without a
-restart. A spec that doesn't import or check is reported and the bar keeps its
-last good one.
+island each activity steps aside to, are `ISLAND` in `desktop_ui/island_model.py`.
+Every size the bar lays out and paints is `SIZES` in `desktop_ui/island_layout.py`.
+Each is one frozen constant that Pyright checks, beside the code that reads it.
 
 `island_model`, `island_menu`, `island_layout`, `island_motion` and
 `bar_events` in `desktop_ui/` are pure decisions. `DesktopBar` owns

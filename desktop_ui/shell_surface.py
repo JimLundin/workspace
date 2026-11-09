@@ -1,33 +1,32 @@
-"""The desktop bar's compact sections: the pinned slots, the desktop pager and the scrollable running applications.
+"""The desktop bar's pager: every desktop with its applications, each a round control in a scrollable capsule.
 
 Each target is a round control the bar paints itself, as the island's own
 controls are, so no stylesheet can pad, re-font or restyle it.
 """
 
 import math
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui import ui_spec
-from desktop_ui.bar_control import KeyboardFocus
+from desktop_ui.bar_control import KeyboardFocus, font
 from desktop_ui.components.appearance import Look
-from desktop_ui.components.text import color, inter, outline, paint_capsule
+from desktop_ui.components.text import color, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
-from desktop_ui.island_layout import on_pixels
-from desktop_ui.navigation import Navigation, PagerClick, Source
+from desktop_ui.island_layout import SIZES, Capsule, on_pixels
+from desktop_ui.navigation import JumpDesktop, Navigation
 from desktop_ui.shell_items import WEB_APPS, PinnedApp, Shelf
-from desktop_ui.vector_icons import icon
+from desktop_ui.vector_icons import paint_icon
 from desktop_ui.window_layout import App, Program
 from winapi.icon_pixels import Pixels
 from winapi.tray_host import Click
 
 
-def face_inset(capsule: ui_spec.Capsule) -> int:
+def face_inset(capsule: Capsule) -> int:
     """A symbol's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
     return round(capsule.control - capsule.icon) // 2
 
@@ -58,8 +57,8 @@ class Stack:
 STACK_STEP: Final = 12
 """Pixels between stacked icons' left edges; each 16 px icon overlaps the next by a quarter."""
 
-type Face = Icon | Stack | str
-"""A Fluent symbol in the bar's ink, an application's own icon, a stack of them, or text such as a desktop number or keycap."""
+type Face = Stack | str
+"""A stack of icons (a desktop's applications), or text such as a desktop number or keycap."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,29 +76,19 @@ class Target:
 class ShellButton(KeyboardFocus):
     """One accessible target: a control's circle, or a pill for text wider than one, painting its face at icon size."""
 
-    def __init__(self, section: Section, target: Target) -> None:
-        super().__init__(section.body)
-        self.section = section
+    def __init__(self, pager: Pager, target: Target) -> None:
+        super().__init__(pager.body)
+        self.pager = pager
         self.target = target
-        self.picture: QtGui.QPixmap | None = None
         self.pictures: tuple[QtGui.QPixmap | None, ...] = ()
-        capsule = section.sizes.capsule
+        capsule = SIZES.capsule
         control = round(capsule.control)
-        width = control
         match target.face:
-            case Glyph():
-                pass
-            case Pixels() as image:
-                self.picture = pixmap(image)
             case Stack(icons=icons):
                 self.pictures = tuple(pixmap(each) if isinstance(each, Pixels) else None for each in icons)
                 width = control + STACK_STEP * (len(icons) - 1)
             case str() as text:
-                width = max(
-                    control,
-                    math.ceil(QtGui.QFontMetricsF(inter(12, QtGui.QFont.Weight.Medium, tabular=True)).horizontalAdvance(text))
-                    + 2 * face_inset(capsule),
-                )
+                width = max(control, math.ceil(QtGui.QFontMetricsF(font(strong=False)).horizontalAdvance(text)) + 2 * face_inset(capsule))
             case _:
                 assert_never(target.face)
         self.setFixedSize(width, control)
@@ -148,19 +137,9 @@ class ShellButton(KeyboardFocus):
         else:
             otherwise(event)
 
-    def paint_glyph(self, painter: QtGui.QPainter, name: str, face: QtCore.QRectF) -> None:
-        appearance = self.section.appearance
-        if appearance is None:
-            return
-        ink = appearance.lettering.ink
-        painter.setOpacity(ink.opacity)
-        side = round(self.section.sizes.capsule.icon)
-        symbol = icon(name, ink.color).pixmap(QtCore.QSize(side, side), self.devicePixelRatioF())
-        painter.drawPixmap(face, symbol, QtCore.QRectF(symbol.rect()))
-
     def snapped(self) -> QtCore.QPointF:
         """The face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
-        capsule = self.section.sizes.capsule
+        capsule = SIZES.capsule
         scale = self.devicePixelRatioF()
         origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
         corner = origin + QtCore.QPointF((self.width() - capsule.icon) / 2, face_inset(capsule))
@@ -168,23 +147,16 @@ class ShellButton(KeyboardFocus):
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        appearance = self.section.appearance
+        appearance = self.pager.appearance
         if appearance is None:
             return
         lettering = appearance.lettering
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        self.paint_feedback(painter, lettering, selected=self.target.active)
-        ink = lettering.ink
-        side = self.section.sizes.capsule.icon
+        self.paint_round(painter, lettering, selected=self.target.active)
+        side = SIZES.capsule.icon
         face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(side, side))
         match self.target.face:
-            case Glyph(name=name):
-                self.paint_glyph(painter, name, face)
-            case Pixels():
-                if self.picture is not None:
-                    painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
-                    painter.drawPixmap(face, self.picture, QtCore.QRectF(self.picture.rect()))
             case Stack(icons=icons):
                 painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
                 first = face.translated(-STACK_STEP * (len(icons) - 1) / 2, 0)
@@ -193,7 +165,7 @@ class ShellButton(KeyboardFocus):
                     spot = first.translated(STACK_STEP * index, 0)
                     match each:
                         case Glyph(name=name):
-                            self.paint_glyph(painter, name, spot)
+                            paint_icon(painter, name, lettering.ink, spot)
                         case Pixels():
                             if picture is not None:
                                 painter.setOpacity(1)
@@ -201,8 +173,8 @@ class ShellButton(KeyboardFocus):
                         case _:
                             assert_never(each)
             case str() as text:
-                painter.setFont(inter(12, QtGui.QFont.Weight.Medium, tabular=True))
-                painter.setPen(color(ink))
+                painter.setFont(font(strong=False))
+                painter.setPen(color(lettering.ink))
                 painter.drawText(QtCore.QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, text)
             case _:
                 assert_never(self.target.face)
@@ -219,75 +191,6 @@ class HorizontalScroll(QtWidgets.QScrollArea):
             return
         self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.y())
         event.accept()
-
-
-class Section(QtWidgets.QWidget):
-    """A capsule of round controls, concentric at its ends and one part gap apart.
-
-    Overflow stays reachable by scrolling horizontally; no icons are silently dropped.
-    """
-
-    def __init__(self, parent: QtWidgets.QWidget, sizes: ui_spec.Sizes) -> None:
-        super().__init__(parent)
-        self.sizes = sizes
-        self.targets: tuple[Target, ...] = ()
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.overflow = HorizontalScroll(self)
-        self.body = QtWidgets.QWidget()
-        self.overflow.setWidget(self.body)
-        self.overflow.setWidgetResizable(False)
-        self.overflow.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        self.overflow.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.overflow.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        for widget in (self.overflow, self.overflow.viewport(), self.body):
-            widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            widget.setAutoFillBackground(False)
-        self.buttons: tuple[ShellButton, ...] = ()
-        self.appearance: Look | None = None
-        self.hide()
-
-    def show_targets(self, targets: Sequence[Target]) -> None:
-        """Replace the controls; only this section builds them, so none outlives its snapshot."""
-        for button in self.buttons:
-            button.hide()
-            button.deleteLater()
-        self.targets = tuple(targets)
-        self.buttons = tuple(ShellButton(self, target) for target in self.targets)
-        capsule = self.sizes.capsule
-        gap = round(capsule.part_gap)
-        x = 0
-        for button in self.buttons:
-            button.move(x, round(capsule.inset))
-            button.show()
-            x += button.width() + gap
-        self.body.setFixedSize(max(0, x - gap), round(capsule.height))
-
-    def use(self, sizes: ui_spec.Sizes) -> None:
-        """Rebuild the controls at new sizes; the next `place` positions the capsule."""
-        if sizes != self.sizes:
-            self.sizes = sizes
-            self.show_targets(self.targets)
-
-    def apply_look(self, appearance: Look) -> None:
-        if appearance == self.appearance:
-            return
-        self.appearance = appearance
-        for button in self.buttons:
-            button.update()
-        self.update()
-
-    def place(self, left: int, right: int) -> None:
-        top, height, inset = round(self.sizes.bar.top), round(self.sizes.capsule.height), round(self.sizes.capsule.inset)
-        self.setGeometry(left, top, max(0, min(right - left, self.body.width() + 2 * inset)), height)
-        self.overflow.setGeometry(inset, 0, max(0, self.width() - 2 * inset), height)
-        self.setVisible(bool(self.buttons) and right - left >= height)
-
-    @override
-    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        if self.appearance is not None:
-            painter = QtGui.QPainter(self)
-            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-            paint_capsule(painter, outline(QtCore.QRectF(self.rect()), self.height() / 2), self.appearance)
 
 
 def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
@@ -318,26 +221,57 @@ def app_icon(app: App, images: Mapping[str, Pixels | None]) -> Icon:
 
 
 @dataclass(frozen=True, slots=True)
-class _Shelved:
-    app_snapshot: tuple[Shelf, int] | None = None
-    pager_view: tuple[PagerView, Mapping[str, Pixels | None]] | None = None
+class _Paged:
+    view: tuple[PagerView, Mapping[str, Pixels | None]] | None = None
+    """What the controls show now, with the icons they were drawn from."""
     icons: frozendict[str, Pixels] = frozendict()
     """Each program's icon as last read, so an app that isn't running keeps its own face."""
 
 
-@dataclass(frozen=True, slots=True)
-class ShellSections:
-    """The surface keeps native buttons only for the current immutable snapshot.
+class Pager(QtWidgets.QWidget):
+    """The bar's only toolbar: every desktop with its apps, each app a click target, in a capsule of round controls.
 
-    The pager is the bar's only toolbar: every desktop with its apps, each app a click target.
+    The controls are concentric at the capsule's ends and one part gap apart; overflow stays reachable by
+    scrolling horizontally, so no icons are silently dropped. Native buttons exist only for the current snapshot.
     """
 
-    pager: Section
-    _state: Cell[_Shelved] = field(default_factory=lambda: Cell(_Shelved()), init=False, repr=False)
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.overflow = HorizontalScroll(self)
+        self.body = QtWidgets.QWidget()
+        self.overflow.setWidget(self.body)
+        self.overflow.setWidgetResizable(False)
+        self.overflow.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.overflow.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.overflow.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        for widget in (self.overflow, self.overflow.viewport(), self.body):
+            widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            widget.setAutoFillBackground(False)
+        self.buttons: tuple[ShellButton, ...] = ()
+        self.appearance: Look | None = None
+        self.paged = Cell(_Paged())
+        self.hide()
 
-    @classmethod
-    def build(cls, parent: QtWidgets.QWidget, sizes: ui_spec.Sizes) -> ShellSections:
-        return cls(Section(parent, sizes))
+    def show_targets(self, targets: tuple[Target, ...]) -> None:
+        """Replace the controls; only the pager builds them, so none outlives its snapshot."""
+        for button in self.buttons:
+            button.hide()
+            button.deleteLater()
+        self.buttons = tuple(ShellButton(self, target) for target in targets)
+        capsule = SIZES.capsule
+        gap = round(capsule.part_gap)
+        x = 0
+        for button in self.buttons:
+            button.move(x, round(capsule.inset))
+            button.show()
+            x += button.width() + gap
+        self.body.setFixedSize(max(0, x - gap), round(capsule.height))
+
+    def remember_icons(self, shelf: Shelf) -> None:
+        """The running apps' icons, which the pager draws its programs by."""
+        read = frozendict((app.identity, app.image) for app in shelf.running if app.image is not None)
+        self.paged.update(lambda paged: _Paged(paged.view, paged.icons | read))
 
     def desktops(self, view: PagerView, invoke: Callable[[Navigation], None], on_app: Callable[[App, Click], None]) -> bool:
         """Each desktop with its apps, a click on an app going to it (and so to its desktop); whether the pager changed.
@@ -345,13 +279,13 @@ class ShellSections:
         An empty desktop other than the current one is left out. Programs' icons come from
         the running apps, so a newly read icon redraws the pager too.
         """
-        images: Mapping[str, Pixels | None] = self._state.get().icons
-        if (view, images) == self._state.get().pager_view:
+        images: Mapping[str, Pixels | None] = self.paged.get().icons
+        if (view, images) == self.paged.get().view:
             return False
         hints = view.hints
 
         def jump(index: int) -> Callable[[Click], None]:
-            return pager_click(lambda: invoke(PagerClick(index, Source.PAGER)))
+            return pager_click(lambda: invoke(JumpDesktop(index)))
 
         def face(index: int, desktop: PagerDesktop) -> Face:
             """The held chord's letter, else the desktop's apps, else its number."""
@@ -364,26 +298,32 @@ class ShellSections:
                 return None
             return lambda index, click: on_app(apps[index], click)
 
-        def pages() -> tuple[Target, ...]:
-            return tuple(
-                Target(desktop.name, face(index, desktop), jump(index), active=desktop.current, pick=pick(desktop.apps))
-                for index, desktop in enumerate(view.desktops)
-                if desktop.apps or desktop.current
-            )
-
-        self.pager.show_targets(pages() if len(view.desktops) > 1 else ())
-        self._state.set(replace(self._state.get(), pager_view=(view, images)))
+        pages = tuple(
+            Target(desktop.name, face(index, desktop), jump(index), active=desktop.current, pick=pick(desktop.apps))
+            for index, desktop in enumerate(view.desktops)
+            if desktop.apps or desktop.current
+        )
+        self.show_targets(pages if len(view.desktops) > 1 else ())
+        self.paged.update(lambda paged: _Paged((view, images), paged.icons))
         return True
 
-    def applications(self, snapshot: tuple[Shelf, int]) -> bool:
-        """Remember the running apps' windows and icons, which the pager draws; whether they changed."""
-        if snapshot == self._state.get().app_snapshot:
-            return False
-        shelved = self._state.get()
-        read = frozendict((app.identity, app.image) for app in snapshot[0].running if app.image is not None)
-        self._state.set(replace(shelved, app_snapshot=snapshot, icons=shelved.icons | read))
-        return True
+    def apply_look(self, appearance: Look) -> None:
+        if appearance == self.appearance:
+            return
+        self.appearance = appearance
+        for button in self.buttons:
+            button.update()
+        self.update()
 
-    def place(self, left: int, width: int) -> None:
-        """The pager from the screen's edge, stopping before the leftmost capsule at `left`."""
-        self.pager.place(12, left - 12)
+    def place(self, left: int, right: int) -> None:
+        top, height, inset = round(SIZES.bar.top), round(SIZES.capsule.height), round(SIZES.capsule.inset)
+        self.setGeometry(left, top, max(0, min(right - left, self.body.width() + 2 * inset)), height)
+        self.overflow.setGeometry(inset, 0, max(0, self.width() - 2 * inset), height)
+        self.setVisible(bool(self.buttons) and right - left >= height)
+
+    @override
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        if self.appearance is not None:
+            painter = QtGui.QPainter(self)
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+            paint_capsule(painter, outline(QtCore.QRectF(self.rect()), self.height() / 2), self.appearance)

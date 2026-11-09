@@ -7,7 +7,7 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens, control_style, scheme, tokens
+from desktop_ui.components.appearance import Shade, Tokens, control_style, scheme, tokens
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
 from winapi import windows
@@ -17,23 +17,16 @@ prepare()
 
 
 def window_style(theme: Tokens) -> str:
-    """The shared controls on the kit's solid window: reading on a solid card, filled buttons, the default action in the accent, segmented choices."""
-    thumb = theme.scheme.value.thumb
+    """The shared controls on the kit's solid window, and its segmented choices."""
+    segment = theme.scheme.value.segment
     return (
         control_style(theme)
         + f"""
 QWidget#workspaceWindow {{ background: {theme.window}; }}
-QPushButton:default {{ background: {GLASS_ACCENT}; color: #ffffff; font-weight: 600; }}
-QPushButton:default:hover {{ background: #6aa2ec; }}
-QDialogButtonBox QPushButton, QToolButton#filled, QPushButton#filled {{ background: {theme.hover.css}; }}
-QDialogButtonBox QPushButton:hover, QToolButton#filled:hover, QPushButton#filled:hover {{ background: {theme.press.css}; }}
-QWidget#workspaceWindow QPlainTextEdit:read-only {{
- background: {theme.solid}; border: 1px solid {theme.solid_edge.css}; border-radius: 14px; padding: 10px 12px;
-}}
 QFrame#segmented {{ background: {theme.hover.css}; border-radius: 10px; }}
 QFrame#segmented QToolButton {{ border-radius: 8px; padding: 4px 12px; min-height: 18px; font-size: 12px; }}
 QFrame#segmented QToolButton:focus {{ padding: 2px 10px; }}
-QFrame#segmented QToolButton:checked {{ background: {thumb}; }}
+QFrame#segmented QToolButton:checked {{ background: {segment}; }}
 """
     )
 
@@ -93,8 +86,6 @@ def glyph(name: str, ink: Shade, size: int = 16) -> QtGui.QPixmap:
 
 
 class Window(QtWidgets.QWidget):
-    geometry_changed = QtCore.Signal()
-
     def __init__(self, title: str, close: Callable[[], None], *, width: int = 900, height: int = 640) -> None:
         super().__init__()
         self.on_close = close
@@ -116,19 +107,14 @@ class Window(QtWidgets.QWidget):
         event.ignore()
         self.on_close()
 
-    @override
-    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
-        super().resizeEvent(event)
-        self.geometry_changed.emit()
 
-
-def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWidget | None = None, topmost: bool = False) -> None:
+def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWidget | None = None) -> None:
     handle = int(window.winId())
     windows.allow_activation(handle, allowed=False)
     try:
         window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         window.show()
-        windows.show_quietly(handle, visible=True, topmost=topmost)
+        windows.show_quietly(handle, visible=True, topmost=False)
         # Qt's first quiet show can leave a maximized widget at normal native
         # geometry. Apply its requested state while activation is still blocked.
         if window.isMaximized() and not windows.is_maximized(handle):
@@ -138,6 +124,17 @@ def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWi
     if focus:
         threading.Thread(target=lambda: windows.focus(handle), name="focus workspace", daemon=True).start()
         (target or window).setFocus(Qt.FocusReason.OtherFocusReason)
+
+
+def near_pointer(window: QtWidgets.QWidget, width: int, height: int) -> None:
+    """Size `window` and put it under the pointer, inside the pointer's screen."""
+    point = QtGui.QCursor.pos()
+    display = QtWidgets.QApplication.screenAt(point) or window.screen()
+    area = display.availableGeometry()
+    window.resize(width, height)
+    window.move(
+        max(area.left(), min(point.x() - width // 2, area.right() - width)), max(area.top(), min(point.y() - height // 3, area.bottom() - height))
+    )
 
 
 def _spaced[L: QtWidgets.QBoxLayout](layout: L, spacing: int) -> L:

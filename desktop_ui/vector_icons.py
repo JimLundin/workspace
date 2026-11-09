@@ -64,9 +64,14 @@ def icon(name: str, color: str, size: int = 16) -> QtGui.QIcon:
     return QtGui.QIcon(pixmap)
 
 
-def paint_icon(painter: QtGui.QPainter, name: str, ink: Shade, bounds: QtCore.QRect) -> None:
-    """A symbol in translucent ink: SVG fills take no alpha, so the painter's opacity carries it."""
+def paint_icon(painter: QtGui.QPainter, name: str, ink: Shade, bounds: QtCore.QRect | QtCore.QRectF) -> None:
+    """A symbol in translucent ink, rendered for the device's pixels at `bounds`, which may sit between logical pixels.
+
+    SVG fills take no alpha, so the painter's opacity carries it.
+    """
+    area = QtCore.QRectF(bounds)
+    symbol = icon(name, ink.color).pixmap(QtCore.QSize(round(area.width()), round(area.height())), painter.device().devicePixelRatioF())
     painter.save()
     painter.setOpacity(ink.opacity)
-    icon(name, ink.color).paint(painter, bounds)
+    painter.drawPixmap(area, symbol, QtCore.QRectF(symbol.rect()))
     painter.restore()

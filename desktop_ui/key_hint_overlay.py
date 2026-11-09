@@ -8,7 +8,7 @@ they're hidden.
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import Final, Protocol, assert_never, override
+from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -20,6 +20,7 @@ from desktop_ui.components.text import color, face, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.key_hints import ActionCap, AppCap, Badge, DirectionCap, Keycap
 from desktop_ui.navigation import Direction
+from desktop_ui.overlay_desktop import NativeOverlayDesktop
 from desktop_ui.qt_runtime import prepare
 from winapi.appearance import Contrast, Material, Preference
 
@@ -46,13 +47,6 @@ def rim_gradient(bounds: QtCore.QRectF, rim: Rim) -> QtGui.QLinearGradient:
     for stop in rim_stops(rim):
         gradient.setColorAt(stop.offset, color(Shade(stop.color, stop.opacity)))
     return gradient
-
-
-class HintSurface(Protocol):
-    """The native window effects the overlay needs; `overlay_desktop.NativeOverlayDesktop` provides them."""
-
-    def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int: ...
-    def present(self, window: QtWidgets.QWidget) -> None: ...
 
 
 def keycap_text(keycap: Keycap) -> str:
@@ -207,7 +201,7 @@ class _Badges:
 class KeyHintOverlay:
     """Shows the badges the bar decides; unchanged badges repaint nothing."""
 
-    surface: HintSurface
+    surface: NativeOverlayDesktop = field(default_factory=NativeOverlayDesktop)
     _state: Cell[_Badges] = field(default_factory=lambda: Cell(_Badges()), init=False, repr=False)
 
     def _prepared(self) -> BadgeWindow:

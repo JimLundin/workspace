@@ -6,6 +6,7 @@ from contracts.recording_state import RecordingState
 from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
 from desktop_ui.components.meaning import Tone
 from desktop_ui.island_model import (
+    ISLAND,
     Action,
     CapsuleView,
     Capture,
@@ -20,7 +21,6 @@ from desktop_ui.island_model import (
     capture,
     island,
 )
-from desktop_ui.spec.island import ISLAND
 from winapi.machine_status import Battery, Speakers, Wifi
 
 SPEC = ISLAND

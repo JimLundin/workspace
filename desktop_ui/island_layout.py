@@ -4,9 +4,9 @@ Activity stays centred where space permits; permanent controls anchor right.
 Lead capsules grow leftwards from activity and trail capsules rightwards.
 The gap between two neighbours belongs to the pair: the full gap scaled by
 the less present of the two, so a capsule entering or leaving
-opens and closes the space beside it smoothly. Each capsule also owns an edge strip
-from the top of the screen down to its glass, so a pointer thrown against the edge
-still lands on it.
+opens and closes the space beside it smoothly. Each capsule's widget also spans the
+strip from the top of the screen down to its glass, so a pointer thrown against the
+edge still lands on it.
 """
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -14,15 +14,100 @@ from dataclasses import dataclass
 from functools import reduce
 from itertools import chain
 from operator import add
-from typing import assert_never
+from typing import Final, assert_never
 
-from desktop_ui import ui_spec
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
 from desktop_ui.island_model import Control, Glyph, Key, Marker, Part, Slot, Text, Zone
 from winapi.shapes import Rect
 
-# Every size comes from `ui_spec.Sizes` (`desktop_ui/spec/sizes.py`), which the
-# desktop reloads while it runs; nothing here keeps a size of its own.
+# ---- the bar's sizes, in device-independent pixels (DIPs) -----------------------------
+# Every size the bar lays out and paints is here, so a change applies everywhere it is used.
+
+
+@dataclass(frozen=True, slots=True)
+class Bar:
+    top: float
+    """From the screen's top edge to the capsules."""
+    edge: float
+    """From the screen's right edge to the right capsule."""
+    gap: float
+    """Between neighbouring capsules."""
+    radius: float
+    shadow: float
+    """Room below and beside the capsules for their shadow."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Capsule:
+    height: float
+    control: float
+    """A concentric control: (height - control) / 2 from the capsule's edge."""
+    icon: float
+    dot: float
+    """The recording dot."""
+    dots: float
+    """Transcription's three dots."""
+    wave_bars: int
+    part_gap: float
+    """Between the parts of one fact, such as a symbol and its reading."""
+    slot_gap: float
+    """Between separate facts."""
+    text_pad: float
+    """A capsule's ends when it holds text..."""
+    icon_pad: float
+    """...and when it holds only symbols."""
+
+    @property
+    def inset(self) -> float:
+        """A control at either end sits concentric with the capsule."""
+        return (self.height - self.control) / 2
+
+    @property
+    def wave(self) -> float:
+        """The microphone trace: two-pixel bars, two pixels apart."""
+        return self.wave_bars * 4 - 2
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MenuGrid:
+    """The controls menu: a grid of tiles below the capsule's own row."""
+
+    width: float
+    radius: float
+    pad: float
+    head: float
+    """The capsule's own row, above the grid."""
+    track: float
+    """One grid row; a tile spans whole tracks."""
+    gutter: float
+    """Between tiles; each tile keeps half on every side."""
+
+
+@dataclass(frozen=True, slots=True)
+class Sizes:
+    """Every size the island bar lays out and paints."""
+
+    bar: Bar
+    capsule: Capsule
+    menu: MenuGrid
+
+
+SIZES: Final = Sizes(
+    bar=Bar(top=8, edge=12, gap=6, radius=17, shadow=40),
+    capsule=Capsule(
+        height=34,
+        control=28,
+        icon=16,
+        dot=8,
+        dots=18,
+        wave_bars=18,
+        part_gap=6,
+        slot_gap=12,
+        text_pad=12,
+        icon_pad=10,
+    ),
+    menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +138,7 @@ class Tile:
     height: float
 
 
-def tiles(menu: Menu, grid: ui_spec.MenuGrid) -> tuple[Tile, ...]:
+def tiles(menu: Menu, grid: MenuGrid) -> tuple[Tile, ...]:
     """Tracks include the gutter, which each cell splits around itself."""
     column = (grid.width - 2 * grid.pad) / COLUMNS
     return tuple(
@@ -69,15 +154,17 @@ def tiles(menu: Menu, grid: ui_spec.MenuGrid) -> tuple[Tile, ...]:
     )
 
 
-def expansion(menu: Menu, row: Content, grid: ui_spec.MenuGrid) -> Content:
+def expansion(menu: Menu, row: Content, grid: MenuGrid) -> Content:
     """A capsule expanded into the menu: its own row on top, right-aligned so it stays put as the capsule widens."""
-    bottom = max((tile.y + tile.height + grid.gutter / 2 for tile in tiles(menu, grid)), default=grid.pad + grid.head)
+    # A tile's gutters cancel at the grid's last track.
+    tracks = max((cell.track + cell.tracks for cell in menu.cells), default=0)
+    bottom = grid.pad + grid.head + tracks * grid.track
     width = max(float(grid.width), row.width)
     spots = tuple(Spot(spot.part, spot.x + width - row.width, spot.width) for spot in row.spots)
     return Content(width, spots, bottom + grid.pad)
 
 
-def extent(part: Part, measure: Callable[[Text], float], capsule: ui_spec.Capsule) -> float:
+def extent(part: Part, measure: Callable[[Text], float], capsule: Capsule) -> float:
     match part:
         case Text(tone=tone, reserve=reserve):
             return max(measure(part), measure(Text(reserve, tone))) if reserve else measure(part)
@@ -112,7 +199,7 @@ class _Step:
     width: float
 
 
-def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], capsule: ui_spec.Capsule) -> Iterator[_Step]:
+def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], capsule: Capsule) -> Iterator[_Step]:
     for index, slot in enumerate(slots):
         for position, part in enumerate(slot):
             width = extent(part, measure, capsule)
@@ -134,7 +221,7 @@ def _placed(steps: Iterable[_Step], start: float) -> Iterator[Spot]:
         x += step.width
 
 
-def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: ui_spec.Sizes) -> Content:
+def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes) -> Content:
     """Parts left to right with their gaps. A control at either end sits concentric with the capsule;
     content without text pads like an icon and is never narrower than a circle.
     """
@@ -198,13 +285,12 @@ def on_pixels(value: float, scale: float) -> float:
 class Framed:
     key: Key
     box: Box
-    strip: Box
     presence: float
 
 
 @dataclass(frozen=True, slots=True)
 class Metrics:
-    """The screen's width and the bar's own spacing (`ui_spec.Bar`)."""
+    """The screen's width and the bar's own spacing (`Bar`)."""
 
     width: float
     top: float
@@ -224,7 +310,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
 
     def boxed(capsule: Placed, x: float) -> Framed:
         box = Box(x, metrics.top, shown(capsule), capsule.height)
-        return Framed(capsule.key, box, Box(x, 0, box.width, metrics.top), present(capsule.presence))
+        return Framed(capsule.key, box, present(capsule.presence))
 
     def position(capsule: Placed) -> int:
         return order.index(capsule.key)
@@ -250,7 +336,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
             width = min(shown(capsule), max(0.0, boundary - edge))
             if width > 0:
                 box = Box(edge, metrics.top, width, capsule.height)
-                dynamic += (Framed(capsule.key, box, Box(edge, 0, width, metrics.top), present(capsule.presence)),)
+                dynamic += (Framed(capsule.key, box, present(capsule.presence)),)
                 edge += width + metrics.gap
         return (*dynamic, *right)
     island = islands[0]
@@ -278,7 +364,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
     def bounded(each: Framed) -> Framed:
         x = max(0.0, each.box.x + shift)
         width = max(0.0, min(each.box.width, boundary - x))
-        return Framed(each.key, Box(x, each.box.y, width, each.box.height), Box(x, 0, width, metrics.top), each.presence)
+        return Framed(each.key, Box(x, each.box.y, width, each.box.height), each.presence)
 
     return (*(bounded(each) for each in dynamic if each.box.x + shift < boundary), *right)
 
@@ -290,4 +376,4 @@ def snap(framed: Sequence[Framed], scale: float) -> tuple[Framed, ...]:
         x, y = on_pixels(box.x, scale), on_pixels(box.y, scale)
         return Box(x, y, on_pixels(box.x + box.width, scale) - x, on_pixels(box.y + box.height, scale) - y)
 
-    return tuple(Framed(f.key, device(f.box), device(f.strip), f.presence) for f in framed)
+    return tuple(Framed(f.key, device(f.box), f.presence) for f in framed)

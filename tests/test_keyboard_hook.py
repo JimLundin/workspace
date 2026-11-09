@@ -5,11 +5,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from config import APPS
-from desktop_ui.desktop_controls import (
-    FeatureRequest,
-    WindowInput,
-    control_event,
-)
+from desktop_ui.desktop_control import FeatureRequest, control_event
 from miryoku import hook_watch
 from miryoku.engine import Indicator
 from miryoku.layout import ESCAPE, Key, Layer, Mod, Scancode
@@ -452,7 +448,7 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
     assert keyboard.swallow(letter, down=True)
     assert keyboard.swallow(letter, down=False)
     assert keyboard.swallow(APPS_KEY, down=False)
-    requests = [control_event(WindowInput(*message), APPS) for message in driver.messages if message[0] == WM_REQUEST]
+    requests = [control_event(*message, APPS) for message in driver.messages if message[0] == WM_REQUEST]
     assert requests == [FeatureRequest(Tool.DESKTOP_1, down=True), FeatureRequest(Tool.DESKTOP_1, down=False)]
     assert [message for message in driver.messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
     assert not keyboard.shortcuts and not keyboard.native_releases and not driver.output
@@ -463,7 +459,7 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
     keyboard.update_devices()
     shortcuts = [message for message in driver.messages if message[0] in (WM_REQUEST, WM_CHORD)]
     assert shortcuts[-3:] == [(WM_REQUEST, 1000, 1), (WM_CHORD, 0, 0), (WM_REQUEST, 1000, 0)]
-    assert control_event(WindowInput(*shortcuts[-3]), APPS) == FeatureRequest(APPS[0], down=True)
+    assert control_event(*shortcuts[-3], APPS) == FeatureRequest(APPS[0], down=True)
     assert keyboard.swallow(app, down=False)
 
 
@@ -476,7 +472,7 @@ def test_laptop_apps_layer_reaches_navigation_and_publishes_the_chord_like_firmw
         assert keyboard.swallow(letter, down=True)
         assert keyboard.swallow(letter, down=False)
         assert keyboard.swallow(inputs.KeyEvent(0, APPS_THUMB, 0, 30, 0), down=False)
-        requests = [control_event(WindowInput(*message), APPS) for message in messages if message[0] == WM_REQUEST]
+        requests = [control_event(*message, APPS) for message in messages if message[0] == WM_REQUEST]
         assert requests == [FeatureRequest(Tool.DESKTOP_1, down=True), FeatureRequest(Tool.DESKTOP_1, down=False)]
         assert [message for message in messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
         assert not driver.output

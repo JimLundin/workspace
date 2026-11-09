@@ -1,13 +1,12 @@
 """Every way the user moves between windows and desktops, as one union decided purely.
 
 Keys, the pager, toolbar clicks and the window switcher
-each produce a navigation. `decide` turns it and the current world into one
-effect for the application observer to carry out, and into the record of what
-happened: which desktop and application the user came from and went to, and
-whether something had to be launched.
+each produce a navigation. `effect` turns it and the current world into one
+effect for the application observer to carry out, and `destination` names the
+desktop it leads to.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final, assert_never
 
@@ -15,12 +14,6 @@ import protocol
 from desktop_ui.shell_items import PinnedApp, next_window
 from desktop_ui.window_layout import App, Placement, Program
 from winapi.shapes import Rect
-
-
-class Source(Enum):
-    KEY = auto()
-    PAGER = auto()
-    TOOLBAR = auto()
 
 
 class Direction(Enum):
@@ -35,7 +28,6 @@ class AppKey:
     """An app key: go to the app's window, cycling while it's already in front, or start it."""
 
     app: protocol.App
-    source: Source
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,49 +35,33 @@ class CycleApp:
     """A toolbar application or slot: its next window, or launching a slot's web app that isn't open."""
 
     app: App
-    source: Source
 
 
 @dataclass(frozen=True, slots=True)
 class ShowWindow:
-    """One particular window, chosen from the toolbar's window list."""
+    """One particular window, chosen from the toolbar's window list or the window switcher."""
 
     window: int
-    source: Source
-
-
-@dataclass(frozen=True, slots=True)
-class SwitcherPick:
-    window: int
-    source: Source
 
 
 @dataclass(frozen=True, slots=True)
 class SpatialFocus:
     direction: Direction
-    source: Source
 
 
 @dataclass(frozen=True, slots=True)
 class JumpDesktop:
-    desktop: int
-    source: Source
+    """A desktop key or a click on the pager."""
 
-
-@dataclass(frozen=True, slots=True)
-class PagerClick:
     desktop: int
-    source: Source
 
 
 @dataclass(frozen=True, slots=True)
 class Zoom:
     """Fill the focused window's monitor until pressed again or focus leaves it."""
 
-    source: Source
 
-
-type Navigation = AppKey | CycleApp | ShowWindow | SwitcherPick | SpatialFocus | JumpDesktop | PagerClick | Zoom
+type Navigation = AppKey | CycleApp | ShowWindow | SpatialFocus | JumpDesktop | Zoom
 
 
 class Placing(Enum):
@@ -99,16 +75,16 @@ type Order = Navigation | Placing
 
 KEYED: Final[frozendict[protocol.Tool, Order]] = frozendict(
     {
-        protocol.Tool.FOCUS_LEFT: SpatialFocus(Direction.LEFT, Source.KEY),
-        protocol.Tool.FOCUS_RIGHT: SpatialFocus(Direction.RIGHT, Source.KEY),
-        protocol.Tool.FOCUS_UP: SpatialFocus(Direction.UP, Source.KEY),
-        protocol.Tool.FOCUS_DOWN: SpatialFocus(Direction.DOWN, Source.KEY),
-        protocol.Tool.DESKTOP_1: JumpDesktop(0, Source.KEY),
-        protocol.Tool.DESKTOP_2: JumpDesktop(1, Source.KEY),
-        protocol.Tool.DESKTOP_3: JumpDesktop(2, Source.KEY),
-        protocol.Tool.DESKTOP_4: JumpDesktop(3, Source.KEY),
-        protocol.Tool.DESKTOP_5: JumpDesktop(4, Source.KEY),
-        protocol.Tool.ZOOM: Zoom(Source.KEY),
+        protocol.Tool.FOCUS_LEFT: SpatialFocus(Direction.LEFT),
+        protocol.Tool.FOCUS_RIGHT: SpatialFocus(Direction.RIGHT),
+        protocol.Tool.FOCUS_UP: SpatialFocus(Direction.UP),
+        protocol.Tool.FOCUS_DOWN: SpatialFocus(Direction.DOWN),
+        protocol.Tool.DESKTOP_1: JumpDesktop(0),
+        protocol.Tool.DESKTOP_2: JumpDesktop(1),
+        protocol.Tool.DESKTOP_3: JumpDesktop(2),
+        protocol.Tool.DESKTOP_4: JumpDesktop(3),
+        protocol.Tool.DESKTOP_5: JumpDesktop(4),
+        protocol.Tool.ZOOM: Zoom(),
         protocol.Tool.PLACEMENT_PAUSE: Placing.TOGGLE_PAUSE,
         protocol.Tool.PLACE_NOW: Placing.NOW,
     }
@@ -167,18 +143,6 @@ class ZoomOut:
 type Effect = Focus | Switch | Launch | ZoomIn | ZoomOut | None
 
 
-@dataclass(frozen=True, slots=True)
-class Navigated:
-    """What a navigation did, for the navigation log."""
-
-    navigation: Navigation
-    from_desktop: int
-    to_desktop: int
-    from_app: App | None
-    to_app: App | None
-    launched: bool = field(default=False, kw_only=True)
-
-
 def launcher(target: protocol.Installed | protocol.PinnedWeb) -> protocol.Installed | PinnedApp:
     match target:
         case protocol.Installed():
@@ -208,10 +172,6 @@ def slot_launcher(app: App) -> PinnedApp | None:
             return None
         case _:
             assert_never(app)
-
-
-def owner(world: World, window: int) -> App | None:
-    return next((app for app, handles in world.windows.items() if window in handles), None)
 
 
 def cycle(app: App, world: World, start: protocol.Installed | PinnedApp | None) -> Effect:
@@ -275,12 +235,12 @@ def effect(navigation: Navigation, world: World) -> Effect:
             return cycle(identity(start), world, start)
         case CycleApp(app=app):
             return cycle(app, world, slot_launcher(app))
-        case ShowWindow(window=window) | SwitcherPick(window=window):
+        case ShowWindow(window=window):
             return Focus(window)
         case SpatialFocus(direction=direction):
             target = nearest(world, direction)
             return Focus(target) if target is not None else None
-        case JumpDesktop(desktop=desktop) | PagerClick(desktop=desktop):
+        case JumpDesktop(desktop=desktop):
             return arrive(world, desktop)
         case Zoom():
             if world.zoomed is not None and world.zoomed == world.foreground:
@@ -290,22 +250,17 @@ def effect(navigation: Navigation, world: World) -> Effect:
             assert_never(navigation)
 
 
-def decide(navigation: Navigation, world: World) -> tuple[Effect, Navigated]:
-    """The effect to carry out and the record of where it leads."""
-    chosen = effect(navigation, world)
-    launched = False
+def destination(chosen: Effect, world: World) -> int:
+    """The desktop `chosen` leads to: a focused window's own, a switch's, else the current one."""
     match chosen:
         case Focus(window=window) | ZoomIn(window=window) | ZoomOut(window=window):
-            to_desktop, to_app = world.located.get(window, world.current), owner(world, window)
-        case Switch(desktop=desktop, then=then):
-            to_desktop, to_app = desktop, owner(world, then) if then is not None else None
-        case Launch(app=app):
-            to_desktop, to_app, launched = world.current, identity(app), True
-        case None:
-            to_desktop, to_app = world.current, owner(world, world.foreground)
+            return world.located.get(window, world.current)
+        case Switch(desktop=desktop):
+            return desktop
+        case Launch() | None:
+            return world.current
         case _:
             assert_never(chosen)
-    return chosen, Navigated(navigation, world.current, to_desktop, owner(world, world.foreground), to_app, launched=launched)
 
 
 def zoom_after(zoomed: int | None, foreground: int) -> int | None:

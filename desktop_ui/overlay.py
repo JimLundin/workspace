@@ -8,7 +8,7 @@ from typing import Final
 
 from pydantic import StrictBool, TypeAdapter
 
-from desktop_ui.keymap import PHYSICAL_NAMES
+from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
 from miryoku.layout import Layer, Scancode
 from usage import DIRECTORY
 from winapi.shapes import Point, Rect, Size
@@ -121,12 +121,11 @@ class OverlayState:
 
     @property
     def title(self) -> str:
-        parts = [self.layer.name if self.layer else "BASE"]
-        if self.layer is not None and self.locked:
-            parts.append("locked")
-        if self.caps_word:
-            parts.append("CAPS WORD")
-        return " · ".join(parts)
+        """The layer indicator's words, led by BASE while no layer is held."""
+        words = indicator_text(self.layer, locked=self.locked, caps_word=self.caps_word)
+        if self.layer is not None and words is not None:
+            return words
+        return " · ".join(("BASE", *((words,) if words else ())))
 
     def set_layout(self, *, on: bool) -> OverlayState:
         return (

@@ -11,7 +11,7 @@ from typing import Final
 lazy from PySide6 import QtGui
 
 from desktop_ui.qt_runtime import prepare
-lazy from desktop_ui.view_publication import log_view
+lazy from desktop_ui.view_publication import log
 
 prepare()
 
@@ -26,4 +26,4 @@ def load() -> None:
         return
     for cut in CUTS:
         if QtGui.QFontDatabase.addApplicationFont(str(FONTS / cut)) < 0:
-            log_view(f"Typeface {cut} unavailable; using the system font.")
+            log(f"Typeface {cut} unavailable; using the system font.")

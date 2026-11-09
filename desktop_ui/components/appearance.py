@@ -55,20 +55,20 @@ class Palette:
 
     canvas_bar_veil: Shade
     rim: Rim
-    thumb: str
-    """A solid window's scroll bar thumb."""
+    segment: str
+    """The checked choice in a segmented control."""
 
 
 class Scheme(Enum):
     DARK = Palette(
         canvas_bar_veil=Shade("#1e1e22", 0.84),
         rim=Rim(0.55, 0.06, 0.22),
-        thumb="rgba(255,255,255,56)",
+        segment="rgba(255,255,255,56)",
     )
     LIGHT = Palette(
         canvas_bar_veil=Shade("#fbfbfd", 0.86),
         rim=Rim(0.95, 0.16, 0.42),
-        thumb="#ffffff",
+        segment="#ffffff",
     )
 
 
@@ -108,9 +108,6 @@ def tokens(scheme: Scheme) -> Tokens:
             assert_never(scheme)
 
 
-DARK: Final = tokens(Scheme.DARK)
-
-
 def scheme() -> Scheme:
     """Large glass and content windows follow Windows' app mode."""
     return Scheme.LIGHT if appearance.light_apps() else Scheme.DARK
@@ -128,40 +125,27 @@ def control_style(theme: Tokens) -> str:
     fill, hover, press, line = theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
     return f"""
 QWidget {{ color: {ink}; font-family: '{typeface.FAMILY}'; font-size: 13px; }}
-QDialog, QMainWindow {{ background: {theme.window}; }}
+QDialog {{ background: {theme.window}; }}
 QLabel {{ background: transparent; border: none; }}
 QLabel#muted {{ color: {ink2}; font-size: 11px; }}
-QLabel#title {{ font-size: 15px; font-weight: 600; }}
-QLabel#status {{ color: {ATTENTION}; font-size: 11px; }}
-QToolButton, QPushButton {{ border: none; border-radius: 14px; background: transparent; padding: 5px 11px; font-weight: 500; min-height: 18px; }}
-QToolButton:hover, QPushButton:hover {{ background: {hover}; }}
-QToolButton:pressed, QPushButton:pressed {{ background: {press}; }}
-QToolButton:focus, QPushButton:focus {{ outline: none; border: 2px solid {GLASS_ACCENT}; padding: 3px 9px; }}
-QToolButton:disabled, QPushButton:disabled {{ color: {ink3}; }}
+QToolButton {{ border: none; border-radius: 14px; background: transparent; padding: 5px 11px; font-weight: 500; min-height: 18px; }}
+QToolButton:hover {{ background: {hover}; }}
+QToolButton:pressed {{ background: {press}; }}
+QToolButton:focus {{ outline: none; border: 2px solid {GLASS_ACCENT}; padding: 3px 9px; }}
+QToolButton:disabled {{ color: {ink3}; }}
 QToolButton:checked {{ background: {hover}; }}
-QToolButton#primary, QPushButton#primary {{ background: {GLASS_ACCENT}; color: #ffffff; font-weight: 600; }}
-QToolButton#primary:hover, QPushButton#primary:hover {{ background: #6aa2ec; }}
-QToolButton#chip {{ background: {fill}; border-radius: 10px; padding: 2px 8px; font-size: 11px; }}
-QLineEdit, QPlainTextEdit, QTextBrowser, QComboBox {{
+QLineEdit {{
  background: {fill}; border: none; border-radius: 10px; padding: 7px 10px; selection-background-color: {GLASS_ACCENT}; selection-color: #ffffff;
 }}
-QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 5px 8px; }}
-QComboBox QAbstractItemView {{ background: {theme.solid}; border: none; selection-background-color: {GLASS_ACCENT}; selection-color: #ffffff; }}
-QTableWidget {{ background: transparent; border: none; gridline-color: {line}; selection-background-color: {fill}; }}
-QTableWidget::item {{ padding: 7px; border-bottom: 1px solid {line}; }}
-QHeaderView::section {{ background: transparent; color: {ink2}; padding: 7px; border: none; font-size: 11px; font-weight: 600; }}
-QListWidget, QTreeWidget {{ background: transparent; border: none; outline: none; }}
-QListWidget::item, QTreeWidget::item {{ padding: 8px 12px; border-radius: 15px; }}
-QListWidget::item:hover, QTreeWidget::item:hover {{ background: {hover}; }}
-QListWidget::item:selected, QTreeWidget::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
+QLineEdit:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 5px 8px; }}
+QListWidget {{ background: transparent; border: none; outline: none; }}
+QListWidget::item {{ padding: 8px 12px; border-radius: 15px; }}
+QListWidget::item:hover {{ background: {hover}; }}
+QListWidget::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
 QMenu {{ background: {theme.solid}; border: 1px solid {line}; border-radius: 12px; padding: 6px; }}
 QMenu::item {{ padding: 6px 14px; border-radius: 15px; }}
 QMenu::item:selected {{ background: {GLASS_ACCENT}; color: #ffffff; }}
 QMenu::separator {{ height: 1px; background: {line}; margin: 5px 10px; }}
-QCheckBox {{ spacing: 8px; }}
-QTabWidget::pane {{ border: none; }}
-QTabBar::tab {{ background: transparent; color: {ink2}; padding: 6px 14px; border-radius: 14px; margin: 2px; }}
-QTabBar::tab:selected {{ background: {hover}; color: {ink}; }}
 QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
 QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: 3px; min-height: 24px; }}
 QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px 4px; }}
@@ -340,8 +324,6 @@ def reading(lettering: Lettering, tone: Tone, *, contrast: bool) -> Shade:
     match tone:
         case Tone.INK:
             return lettering.ink
-        case Tone.QUIET:
-            return lettering.quiet
         case Tone.MICROPHONE:
             return Shade(MICROPHONE)
         case Tone.LOW:

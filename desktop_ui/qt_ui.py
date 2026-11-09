@@ -1,22 +1,18 @@
-"""One Qt event loop and Windows composition lifetime for all assistant views."""
+"""The desktop's Qt application, its one-shot timers, and the bar's frame loop with its composition."""
 
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
-from typing import Final
+from dataclasses import dataclass, field
 
 lazy import shiboken6
 lazy from PySide6 import QtCore
 lazy from PySide6.QtCore import QCoreApplication, QEvent
 lazy from PySide6.QtWidgets import QApplication
 
-from cell import Cell
 from desktop_ui.qt_runtime import prepare
 lazy from desktop_ui.components import typeface
-lazy from desktop_ui.view_publication import log_view
-lazy from winapi import screen
+lazy from desktop_ui.view_publication import log
 lazy from winapi.composition import DesktopComposition
-lazy from winapi.shapes import Rect
 
 prepare()
 
@@ -51,61 +47,30 @@ def cancel(timer: QtCore.QTimer | None) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class _Shared:
-    """The desktop composition every event loop shares, and how many loops use it."""
-
-    users: int = 0
-    composition: DesktopComposition | None = None
-
-
-_SHARED: Final = Cell(_Shared())
-"""Replaced as loops start and close, on the Qt thread."""
-
-
-@dataclass(frozen=True, slots=True)
 class EventLoop:
+    """The bar's frame timer and the desktop composition its glass draws in."""
+
     app: QApplication
-    painted: Callable[[], None]
     timer: QtCore.QTimer
+    """Every 16 ms while something moves; the bar connects its painting."""
     composition: DesktopComposition | None
     _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
-    def start(cls, app: QApplication, painted: Callable[[], None]) -> EventLoop:
+    def start(cls, app: QApplication) -> EventLoop:
         timer = QtCore.QTimer(app)
         timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         timer.setInterval(16)
-        timer.timeout.connect(painted)
-        shared = _SHARED.get()
-        if shared.users == 0:
-            try:
-                shared = replace(shared, composition=DesktopComposition.start())
-            except OSError as error:
-                log_view(f"Desktop glass unavailable; using the solid material: {error}")
-        _SHARED.set(replace(shared, users=shared.users + 1))
-        return cls(app, painted, timer, shared.composition)
+        try:
+            composition = DesktopComposition.start()
+        except OSError as error:
+            log(f"Desktop glass unavailable; using the solid material: {error}")
+            composition = None
+        return cls(app, timer, composition)
 
     @property
     def closed(self) -> bool:
         return self._closed.is_set()
-
-    def pump(self) -> None:
-        self.app.processEvents()
-        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-        if not self.closed:
-            self.painted()
-
-    def scale(self, work: Rect) -> float:
-        area = next((monitor.area for monitor in screen.monitors() if work.top_left in monitor.area), None)
-        target = next(
-            (
-                display
-                for display in self.app.screens()
-                if area is not None and (display.geometry().left(), display.geometry().top()) == (area.left, area.top)
-            ),
-            self.app.primaryScreen(),
-        )
-        return target.devicePixelRatio()
 
     def watch(self, *, visible: bool) -> None:
         if not self.closed:
@@ -122,10 +87,6 @@ class EventLoop:
         self._closed.set()
         self.timer.stop()
         self.timer.deleteLater()
-        shared = _SHARED.get()
-        users = shared.users - 1
-        if users == 0 and shared.composition is not None:
-            shared.composition.close(self.app.processEvents)
-            shared = replace(shared, composition=None)
-        _SHARED.set(replace(shared, users=users))
+        if self.composition is not None:
+            self.composition.close(self.app.processEvents)
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

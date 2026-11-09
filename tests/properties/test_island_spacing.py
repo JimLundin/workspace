@@ -6,9 +6,8 @@ from itertools import pairwise
 from hypothesis import strategies
 
 from desktop_ui.island_layout import Content, Metrics, frame
-from desktop_ui.island_model import Action, CapsuleView, Key, Zone, order
+from desktop_ui.island_model import ISLAND, Action, CapsuleView, Key, Zone, order
 from desktop_ui.island_motion import IslandMotion, Shown, advance, placed, retarget, settled
-from desktop_ui.spec.island import ISLAND
 from tests.properties.generation import cases, property_test
 
 ORDER = order(ISLAND)

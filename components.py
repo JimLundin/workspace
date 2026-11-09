@@ -37,8 +37,6 @@ class Entry:
     """Posted to `window` to ask for a clean exit; the layout lets go of held keys first."""
     shutdown_s: float
     """How long the keeper waits for a clean exit before ending the process."""
-    live_assets: tuple[str, ...] = ()
-    """Folders of data files the running program reloads itself; changing one restarts nothing."""
 
 
 # The AI connection holds no state: it creates no window, so the keeper ends it at once.
@@ -53,7 +51,6 @@ DESKTOP: Final = Entry(
     window=Window("workspace desktop", "workspace desktop class"),
     quit_message=WM_CLOSE,
     shutdown_s=30.0,
-    live_assets=("desktop_ui/spec/",),
 )
 
 CATALOGUE: Final[frozendict[Component, Entry]] = frozendict({entry.name: entry for entry in (GATEWAY, LAYOUT, DESKTOP)})

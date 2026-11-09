@@ -27,7 +27,6 @@ MORPH: Final = Spring(0.86, 0.42)  # A capsule changing shape.
 APPEAR: Final = Spring(0.78, 0.42)  # A capsule arriving, with a little overshoot.
 LEAVE: Final = Spring(1.0, 0.3)  # A capsule leaving: critically damped, never past zero.
 FADE: Final = Spring(1.0, 0.2)  # Content crossing over at its measured size.
-CARD: Final = Spring(1.0, 0.32)  # A floating card's synchronized frame, without bounce.
 
 
 @dataclass(frozen=True, slots=True)

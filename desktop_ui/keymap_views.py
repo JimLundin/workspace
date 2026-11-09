@@ -16,10 +16,21 @@ from winapi.shapes import Offset, Point, Rect, Size
 lazy from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.text import inter
-lazy from desktop_ui.components.widgets import Window, column, device_size, glyph, row, segmented, show_window, surface, tool_window, window_style
-lazy from desktop_ui.dialogs import near_pointer
+lazy from desktop_ui.components.widgets import (
+    Window,
+    column,
+    device_size,
+    glyph,
+    near_pointer,
+    row,
+    segmented,
+    show_window,
+    surface,
+    tool_window,
+    window_style,
+)
 lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
-lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop, OverlayDesktop
+lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
 lazy from miryoku.layout import Layer, Scancode
 
@@ -196,7 +207,7 @@ class _Overlaid:
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class KeymapOverlay:
-    _desktop: OverlayDesktop
+    _desktop: NativeOverlayDesktop
     _window: QtWidgets.QWidget
     _heading: QtWidgets.QLabel
     _canvas: KeymapCanvas
@@ -206,8 +217,8 @@ class KeymapOverlay:
     _state: Cell[_Overlaid]
 
     @classmethod
-    def open(cls, _root: QtWidgets.QApplication, desktop: OverlayDesktop | None = None) -> KeymapOverlay:
-        shown = desktop if desktop is not None else NativeOverlayDesktop()
+    def open(cls) -> KeymapOverlay:
+        shown = NativeOverlayDesktop()
         theme = tokens(scheme())
         window = QtWidgets.QWidget()
         tool_window(window, "Workspace keyboard overlay", on_top=False)
@@ -337,7 +348,7 @@ class KeymapWindow:
     shortcuts: tuple[QtGui.QShortcut, ...]
 
     @classmethod
-    def open(cls, _root: QtWidgets.QApplication) -> KeymapWindow:
+    def open(cls) -> KeymapWindow:
         # The buttons and shortcuts act on the window record made just after them.
         def close() -> None:
             window.hide()

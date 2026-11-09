@@ -138,7 +138,7 @@ def capture(recording: RecordingState) -> Capture | None:
             assert_never(recording.phase)
 
 
-# ---- the bar's composition as data: `desktop_ui/spec/island.py` -----------------------
+# ---- the bar's composition as data: `ISLAND` ---------------------------------------------
 
 
 class Reading(StrEnum):
@@ -177,20 +177,29 @@ class ActivitiesSpec:
 
 @dataclass(frozen=True, slots=True)
 class IslandSpec:
-    """`spec/island.py`: what the status capsule shows and where activities step aside to."""
+    """What the status capsule shows and where activities step aside to."""
 
     status: StatusSpec
     activities: ActivitiesSpec
 
 
-def island_problems(spec: IslandSpec) -> tuple[str, ...]:
-    placed = [*spec.activities.lead, *spec.activities.trail]
-    readings = [reading for group in spec.status.groups for reading in group]
-    return (
-        *(f"activities: {activity} is placed {placed.count(activity)} times" for activity in Activity if placed.count(activity) != 1),
-        *(f"status: {reading} appears more than once" for reading in sorted(set(readings)) if readings.count(reading) > 1),
-        *(("status: a group is empty",) if any(not group for group in spec.status.groups) else ()),
-    )
+ISLAND: Final = IslandSpec(
+    # The fixed capsule at the screen's right edge, which opens the controls menu:
+    # its readings left to right, in groups. Readings in a group sit close together;
+    # groups sit further apart. Leave a reading out to hide it. The keyboard shows
+    # only while it types plainly.
+    status=StatusSpec(
+        (
+            (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI),
+            (Reading.CLOCK, Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY),
+        )
+    ),
+    # Where activities sit beside the centre island, left to right. A transcription
+    # and a recording step out of the island while you dictate. Each activity is
+    # placed exactly once.
+    activities=ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
+)
+"""The island bar's composition."""
 
 
 ACTIVITY_KEYS: Final = every_member(Activity, {Activity.JOB: Key.JOB, Activity.RECORDING: Key.RECORDING})
@@ -310,15 +319,15 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
         ),
     )
     active = observed.dictating or job is not None or recorded is not None
-    middle = (centre(observed, hovered=hovered),) if active and not expanded else ()
+    middle = (centre(observed, recorded, hovered=hovered),) if active and not expanded else ()
     ranks = order(spec)
     return tuple(sorted((*lead, *middle, *trail, *persistent), key=lambda view: ranks.index(view.key)))
 
 
-def centre(observed: Observed, *, hovered: Key | None) -> CapsuleView:
-    """Only live activity belongs here; persistent readings have fixed right anchors."""
+def centre(observed: Observed, recorded: Capture | None, *, hovered: Key | None) -> CapsuleView:
+    """Only live activity belongs here; persistent readings have fixed right anchors. `recorded` is the recording as captured."""
     revealed = hovered is Key.ISLAND
-    job, recorded = observed.job, capture(observed.recording)
+    job = observed.job
     if observed.dictating:
         stop: Slot = (Control("stop", "Stop dictation", Action.STOP_DICTATION),) if revealed else ()
         slots: tuple[Slot, ...] = ((Glyph("mic.fill", meaning.Tone.MICROPHONE), Marker.WAVE, *stop),)

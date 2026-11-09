@@ -2,8 +2,9 @@
 
 from dataclasses import replace
 
-from desktop_ui.island_layout import tiles
+from desktop_ui.island_layout import SIZES, tiles
 from desktop_ui.island_menu import (
+    CONTROLS,
     Applied,
     Chosen,
     Command,
@@ -27,8 +28,6 @@ from desktop_ui.island_menu import (
     press,
     restores_focus,
 )
-from desktop_ui.spec.controls import CONTROLS
-from desktop_ui.spec.sizes import SIZES
 from protocol import Tool
 
 SPEC = CONTROLS

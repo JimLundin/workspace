@@ -9,16 +9,15 @@ from desktop_ui.navigation import (
     Focus,
     JumpDesktop,
     Launch,
-    Navigated,
     Placing,
-    Source,
     SpatialFocus,
     Switch,
     World,
     Zoom,
     ZoomIn,
     ZoomOut,
-    decide,
+    destination,
+    effect,
     keyed,
     zoom_after,
 )
@@ -58,7 +57,7 @@ def world(apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1) -
 
 
 def focused(at: World, direction: Direction) -> int | None:
-    match decide(SpatialFocus(direction, Source.KEY), at)[0]:
+    match effect(SpatialFocus(direction), at):
         case Focus(window=window):
             return window
         case None:
@@ -88,19 +87,22 @@ def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_use
     # Defects: a jump leaves the existing desktops, a jump to the current
     # desktop switches anyway, or arriving ignores the last window used.
     home = world(HOME_APPS)
-    assert decide(JumpDesktop(4, Source.KEY), home)[0] is None
-    assert decide(JumpDesktop(1, Source.KEY), home)[0] is None
-    assert decide(JumpDesktop(2, Source.KEY), home)[0] == Switch(2, 5)
-    assert decide(JumpDesktop(2, Source.KEY), replace(home, recent=(1, 6, 5)))[0] == Switch(2, 6)
-    assert decide(JumpDesktop(3, Source.KEY), home)[0] == Switch(3, None)
-    assert decide(JumpDesktop(2, Source.KEY), home)[1] == Navigated(JumpDesktop(2, Source.KEY), 1, 2, TERMINAL, EDGE)
+    assert effect(JumpDesktop(4), home) is None
+    assert effect(JumpDesktop(1), home) is None
+    assert effect(JumpDesktop(2), home) == Switch(2, 5)
+    assert effect(JumpDesktop(2), replace(home, recent=(1, 6, 5))) == Switch(2, 6)
+    assert effect(JumpDesktop(3), home) == Switch(3, None)
+    # Defect: the observer keeps the old desktop as current after a switch, or after focusing a window on another desktop.
+    assert destination(effect(JumpDesktop(2), home), home) == 2
+    assert destination(Focus(5), home) == home.located[5]
+    assert destination(None, home) == home.current
 
 
 def test_zoom_exempts_the_window_in_front_until_pressed_again_or_focus_leaves() -> None:
     home = world(HOME_APPS, foreground=3)
-    assert decide(Zoom(Source.KEY), home)[0] == ZoomIn(3)
-    assert decide(Zoom(Source.KEY), replace(home, zoomed=3))[0] == ZoomOut(3)
-    assert decide(Zoom(Source.KEY), replace(home, foreground=99))[0] is None
+    assert effect(Zoom(), home) == ZoomIn(3)
+    assert effect(Zoom(), replace(home, zoomed=3)) == ZoomOut(3)
+    assert effect(Zoom(), replace(home, foreground=99)) is None
     assert zoom_after(3, 3) == 3
     assert zoom_after(3, 4) is None
 
@@ -109,24 +111,23 @@ def test_app_keys_cycle_the_apps_windows_or_launch_it() -> None:
     # Defects: a repeated tap stays on the same window, a missing app isn't
     # started, or a web-app key launches desktop Outlook instead of its slot.
     home = world(HOME_APPS)
-    assert decide(AppKey(TERMINAL_KEY, Source.KEY), replace(home, foreground=3))[0] == Focus(1)
-    assert decide(AppKey(TERMINAL_KEY, Source.KEY), home)[0] == Focus(2)
-    assert decide(AppKey(TERMINAL_KEY, Source.KEY), replace(home, foreground=2))[0] == Focus(1)
+    assert effect(AppKey(TERMINAL_KEY), replace(home, foreground=3)) == Focus(1)
+    assert effect(AppKey(TERMINAL_KEY), home) == Focus(2)
+    assert effect(AppKey(TERMINAL_KEY), replace(home, foreground=2)) == Focus(1)
     outlook = App("outlook", PinnedWeb("outlook"))
-    assert decide(AppKey(outlook, Source.KEY), home)[0] == Focus(6)
+    assert effect(AppKey(outlook), home) == Focus(6)
     empty = world(())
-    effect, record = decide(AppKey(outlook, Source.KEY), empty)
-    assert effect == Launch(PinnedApp.OUTLOOK) and record.launched and record.to_app is PinnedApp.OUTLOOK
-    assert decide(AppKey(TERMINAL_KEY, Source.KEY), empty)[0] == Launch(Installed("windowsterminal.exe", "wt.exe"))
+    assert effect(AppKey(outlook), empty) == Launch(PinnedApp.OUTLOOK)
+    assert effect(AppKey(TERMINAL_KEY), empty) == Launch(Installed("windowsterminal.exe", "wt.exe"))
 
 
 def test_navigation_keys_give_their_orders() -> None:
     # Defects: a desktop key jumps to the wrong desktop, a focus key goes the wrong
     # way, or a placement key gives no order, so the desktop drops the key.
     assert [keyed(tool) for tool in (Tool.DESKTOP_2, Tool.FOCUS_UP, Tool.ZOOM, Tool.PLACEMENT_PAUSE, Tool.DICTATE)] == [
-        JumpDesktop(1, Source.KEY),
-        SpatialFocus(Direction.UP, Source.KEY),
-        Zoom(Source.KEY),
+        JumpDesktop(1),
+        SpatialFocus(Direction.UP),
+        Zoom(),
         Placing.TOGGLE_PAUSE,
         None,
     ]

@@ -133,10 +133,9 @@ battery, and CPU and memory use. Click the clock or battery to open the controls
 The tray dot is green when the layout is on, grey when it is off, red while
 listening or recording, and amber while working. Its menu switches or restarts
 the layout, opens the keyboard overlay and key map, toggles the Windows taskbar,
-starts or stops a meeting recording, opens the meeting transcripts, the usage
-report and the logs folder, restarts the assistant or the desktop, and quits
-Workspace. The tray menu's items and their order are in `desktop_ui/spec/tray.py`;
-an edit shows the next time the menu opens.
+starts or stops a meeting recording, opens the meeting transcripts and the logs
+folder, restarts the layout or the desktop, and quits Workspace. The tray menu's
+items and their order are `TRAY` in `desktop_ui/desktop_control.py`.
 
 Workspace places each app's windows without overlap for the connected monitors
 and creates virtual desktops as needed. See
@@ -148,10 +147,9 @@ Everything is in `%LOCALAPPDATA%\workspace`.
 
 | File | Contents |
 |---|---|
-| `usage.jsonl` | Feature use and timings, never what you typed or said |
-| `desktop.log` | Problems and crashes |
+| `usage.jsonl` | Feature use, timings and failure details, never what you typed or said |
+| `desktop.log` | Problems and crashes, and views that could not open or fell back |
 | `state\*.log` | Each program's output and crashes, written by the launcher |
-| `agent-ui.log` | View startup and errors |
 | `meetings\` | One folder per recorded meeting, with `transcript.md` |
 
 Recordings and dictated speech go to your endpoint.

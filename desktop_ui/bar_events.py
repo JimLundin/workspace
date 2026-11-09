@@ -2,9 +2,9 @@
 
 The bar window, the views' publisher and the bar's own timers report what
 happened as an `Event`; `transition` returns the next `BarModel` and the `Effect`s
-to perform, lazily and in order. Measuring and painting stay with the window: the
-bar performs them and reports what they computed (`Retargeted`, `Framed`) as
-facts, so even the motion it draws changes only through the fold.
+to perform, lazily and in order. Measuring and painting stay with the bar: it
+performs them and reports what they computed (`Retargeted`, `Framed`) as facts,
+so even the motion it draws changes only through the fold.
 """
 
 from collections.abc import Iterator
@@ -14,10 +14,11 @@ from typing import Final, assert_never
 from config import DARK_WHEN_IDLE_MINUTES
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job
-from desktop_ui import island_menu, ui_spec
+from desktop_ui import island_menu
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.application_observer import EMPTY_ARRANGEMENT, Arrangement
 from desktop_ui.island_menu import (
+    CONTROLS,
     Applied,
     Chosen,
     Command,
@@ -34,19 +35,39 @@ from desktop_ui.island_menu import (
 from desktop_ui.island_model import Action, CapsuleView, Key, Marker, capture
 from desktop_ui.island_motion import IslandMotion, advance, finish, settled
 from desktop_ui.navigation import Order, Placing
-from desktop_ui.shell_items import EMPTY_SHELF, Shelf
 from protocol import Tool
 from winapi import appearance
-from winapi.machine_status import Power, PowerUnavailable, Speakers
+from winapi.machine_status import PowerUnavailable, Speakers
 from winapi.shapes import Rect
 from winapi.tray_host import Click
+
+NO_SCREEN: Final = Rect(0, 0, 0, 0)
+"""Before the first tick reads the primary screen."""
+
+
+@dataclass(frozen=True, slots=True)
+class Surroundings:
+    """What the tick observed of the desktop, the shell and the system, as the bar shows it."""
+
+    system: SystemStatus = field(default_factory=SystemStatus)
+    ambient: Ambient = field(default_factory=lambda: Ambient("", PowerUnavailable.UNKNOWN))
+    preference: appearance.Preference = appearance.Material.SOLID
+    frost: appearance.Frost = appearance.Frost.SMOKED
+    arrangement: Arrangement = EMPTY_ARRANGEMENT
+    taskbar_revealed: bool = False
+    dark_when_away: bool | None = None
+    """Whether screens go dark while away; None without the native shell."""
+    tray_tips: tuple[str, ...] = ()
+    screen: Rect = NO_SCREEN
+    """The primary screen, which the bar spans."""
+    scale: float = 1.0
+    """The bar window's device pixels per DIP."""
 
 
 @dataclass(frozen=True, slots=True)
 class BarModel:
     """Everything the bar shows and decides from; replaced whole on the Qt thread."""
 
-    specs: ui_spec.Specs
     closed: bool = False
     opened: Menu | None = None
     """The controls menu, while it is open."""
@@ -62,19 +83,8 @@ class BarModel:
     chord_held: bool = False
     """Either keyboard is holding its Apps key."""
     layout_enabled: bool = True
-    # What the tick observes.
-    system: SystemStatus = field(default_factory=SystemStatus)
-    power: Power = PowerUnavailable.UNKNOWN
-    ambient: Ambient = field(default_factory=lambda: Ambient("", PowerUnavailable.UNKNOWN))
-    preference: appearance.Preference = appearance.Material.SOLID
-    frost: appearance.Frost = appearance.Frost.SMOKED
-    applications: Shelf = EMPTY_SHELF
-    arrangement: Arrangement = EMPTY_ARRANGEMENT
-    taskbar_revealed: bool = False
-    dark_when_away: bool | None = None
-    """Whether screens go dark while away; None without the native shell."""
-    tray_tips: tuple[str, ...] = ()
-    sample_bounds: Rect | None = None
+    seen: Surroundings = field(default_factory=Surroundings)
+    """What the tick last observed."""
     next_material: float = 0.0
     next_power: float = 0.0
     # What the window last computed.
@@ -88,19 +98,20 @@ class BarModel:
 def menu(model: BarModel) -> Menu:
     """The menu for what's happening now, keeping the current selection."""
     recorded = capture(model.recording) if model.recording.capturing else None
-    sound = Slider("Sound", model.system.volume, muted=model.system.speakers is Speakers.MUTED)
+    seen = model.seen
+    sound = Slider("Sound", seen.system.volume, muted=seen.system.speakers is Speakers.MUTED)
     built = Menu(
         entries(
             Controls(
                 recorded.title if recorded is not None else None,
                 overlay=model.overlay_enabled,
-                taskbar=model.taskbar_revealed,
-                placement_paused=model.arrangement.paused,
-                dark_when_away=DARK_WHEN_IDLE_MINUTES if model.dark_when_away else None,
+                taskbar=seen.taskbar_revealed,
+                placement_paused=seen.arrangement.paused,
+                dark_when_away=DARK_WHEN_IDLE_MINUTES if seen.dark_when_away else None,
                 sound=sound,
-                tray=model.tray_tips,
+                tray=seen.tray_tips,
             ),
-            model.specs.controls,
+            CONTROLS,
         )
     )
     return replace(built, selected=model.opened.selected) if model.opened is not None else built
@@ -151,11 +162,6 @@ class TrayClicked:
 
 
 @dataclass(frozen=True, slots=True)
-class Rerender:
-    """The window asks to be laid out again."""
-
-
-@dataclass(frozen=True, slots=True)
 class OverlayShown:
     enabled: bool
 
@@ -199,26 +205,11 @@ class Opening:
 
 @dataclass(frozen=True, slots=True)
 class Ticked:
-    """What the tick observed of the desktop, the shell and the system."""
+    """What the tick observed, and when it next reads power and the material."""
 
-    system: SystemStatus
-    power: Power
+    seen: Surroundings
     next_power: float
-    ambient: Ambient
-    preference: appearance.Preference
-    frost: appearance.Frost
     next_material: float
-    sample_bounds: Rect | None
-    applications: Shelf
-    arrangement: Arrangement
-    taskbar_revealed: bool
-    dark_when_away: bool | None
-    tray_tips: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class Respecced:
-    specs: ui_spec.Specs
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,32 +237,6 @@ class Closing:
     pass
 
 
-# ---- requests: their own effect -----------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class PaintDue:
-    """Paint the next frame."""
-
-
-@dataclass(frozen=True, slots=True)
-class TickDue:
-    """Observe the desktop, the shell and the system."""
-
-
-@dataclass(frozen=True, slots=True)
-class SampleDue:
-    """Sample the microphone for the dictation trace."""
-
-
-@dataclass(frozen=True, slots=True)
-class Navigate:
-    order: Order
-
-
-type Instruction = PaintDue | TickDue | SampleDue | Navigate
-
-
 type Event = (
     Pressed
     | Hovered
@@ -281,17 +246,14 @@ type Event = (
     | Deactivated
     | VolumeSet
     | TrayClicked
-    | Rerender
     | ActivityChange
     | ChordHeld
     | Opening
     | Ticked
-    | Respecced
     | Retargeted
     | Framed
     | Sampled
     | Closing
-    | Instruction
 )
 
 # ---- effects ------------------------------------------------------------------------
@@ -315,13 +277,6 @@ class Release:
     """Give the keyboard back to `target` (0: to no one) as the menu closes."""
 
     target: int
-
-
-@dataclass(frozen=True, slots=True)
-class Act:
-    """One of the bar's actions."""
-
-    action: BarAction
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,7 +304,9 @@ class UseTool:
     tool: Tool
 
 
-type BarAction = Record | Keyboard | Overlay | AllControls | UseTool
+@dataclass(frozen=True, slots=True)
+class Navigate:
+    order: Order
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,13 +340,22 @@ class ShowHints:
     pass
 
 
-@dataclass(frozen=True, slots=True)
-class UseSizes:
-    sizes: ui_spec.Sizes
-
-
 type Effect = (
-    Instruction | Render | Expand | Release | Act | ToggleTaskbar | ToggleAway | NotificationSettings | SetVolume | ClickTray | ShowHints | UseSizes
+    Render
+    | Expand
+    | Release
+    | Record
+    | Keyboard
+    | Overlay
+    | AllControls
+    | UseTool
+    | Navigate
+    | ToggleTaskbar
+    | ToggleAway
+    | NotificationSettings
+    | SetVolume
+    | ClickTray
+    | ShowHints
 )
 
 
@@ -400,23 +366,19 @@ def _closed(model: BarModel, *, restore: bool) -> tuple[BarModel, tuple[Effect, 
     return replace(model, opened=None), (Release(model.menu_target if restore else 0), Render())
 
 
-def _expanded(model: BarModel, opened: Menu) -> tuple[BarModel, tuple[Effect, ...]]:
-    return model, (Expand(opened, remember=model.opened is None),)
-
-
 def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[Effect, ...]]:
     """What a menu choice does."""
     match choice:
         case ToolChoice(tool=tool):
-            return model, (Act(UseTool(tool)),)
+            return model, (UseTool(tool),)
         case Command.RECORD:
-            return model, (Act(Record("start")),)
+            return model, (Record("start"),)
         case Command.STOP_RECORDING:
-            return model, (Act(Record("stop")),)
+            return model, (Record("stop"),)
         case Command.KEYMAP:
-            return model, (Act(Keyboard()),)
+            return model, (Keyboard(),)
         case Command.OVERLAY:
-            return model, (Act(Overlay()),)
+            return model, (Overlay(),)
         case Command.TASKBAR:
             return model, (ToggleTaskbar(),)
         case Command.PLACEMENT:
@@ -426,7 +388,7 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
         case Command.NOTIFICATIONS:
             return model, (NotificationSettings(),)
         case Command.ALL_CONTROLS:
-            return model, (Act(AllControls()),)
+            return model, (AllControls(),)
         case Volume(level=level):
             return _volume(model, level)
         case TrayChoice(slot=slot):
@@ -437,7 +399,8 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
 
 def _volume(model: BarModel, level: float) -> tuple[BarModel, tuple[Effect, ...]]:
     """The status observer applies it; the slider follows at once rather than at the next reading."""
-    return replace(model, system=replace(model.system, volume=level)), (SetVolume(level), Render())
+    seen = replace(model.seen, system=replace(model.seen.system, volume=level))
+    return replace(model, seen=seen), (SetVolume(level), Render())
 
 
 def _tray(model: BarModel, slot: int, click: Click) -> tuple[BarModel, tuple[Effect, ...]]:
@@ -468,14 +431,14 @@ def _pressed(model: BarModel, action: Action) -> tuple[BarModel, tuple[Effect, .
         case Action.OPEN_MENU:
             if model.closed:
                 return model, ()
-            return _expanded(model, menu(replace(model, opened=None)))
+            return model, (Expand(menu(replace(model, opened=None)), remember=model.opened is None),)
         case Action.CLOSE_MENU:
             return _closed(model, restore=True)
         case Action.STOP_DICTATION:
             # The dictation toggle stops a capture that is listening.
-            return model, (Act(UseTool(Tool.DICTATE_TOGGLE)),)
+            return model, (UseTool(Tool.DICTATE_TOGGLE),)
         case Action.STOP_RECORDING:
-            return model, (Act(Record("stop")),)
+            return _ran(model, Command.STOP_RECORDING)
         case _:
             assert_never(action)
 
@@ -496,23 +459,21 @@ def _shown(model: BarModel, change: ActivityChange) -> BarModel:
             assert_never(change)
 
 
-type Interaction = Pressed | Hovered | Selected | Picked | MenuKey | Deactivated | VolumeSet | TrayClicked | Rerender
-type Observation = ActivityChange | ChordHeld | Opening | Ticked | Respecced | Retargeted | Framed | Sampled | Closing
+def _changed(before: BarModel, after: BarModel) -> tuple[BarModel, tuple[Effect, ...]]:
+    """`after`, rendered only when it differs from `before`."""
+    return after, ((Render(),) if after != before else ())
 
 
-def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Effect, ...]]:
-    """What the person did in the bar window."""
+def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]]:
     match event:
         case Pressed(action):
             return _pressed(model, action)
         case Hovered(key):
-            if model.hovered is key:
-                return model, ()
-            return replace(model, hovered=key), (Render(),)
+            return _changed(model, replace(model, hovered=key))
         case Selected(index):
-            if model.opened is None or model.opened.selected == index:
+            if model.opened is None:
                 return model, ()
-            return replace(model, opened=replace(model.opened, selected=index)), (Render(),)
+            return _changed(model, replace(model, opened=replace(model.opened, selected=index)))
         case Picked(index):
             if model.opened is None:
                 return model, ()
@@ -527,26 +488,16 @@ def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Ef
             return _volume(model, level)
         case TrayClicked(slot, click):
             return _tray(model, slot, click)
-        case Rerender():
-            return model, (Render(),)
-        case _:
-            assert_never(event)
-
-
-def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effect, ...]]:
-    """What was published to the bar, or what its own timers and window computed."""
-    match event:
         case OverlayShown() | DictationShown() | JobShown() | RecordingShown() | LayoutShown():
-            changed = _shown(model, event)
-            return changed, ((Render(),) if changed != model else ())
+            return _changed(model, _shown(model, event))
         case ChordHeld(held):
             return replace(model, chord_held=held), (ShowHints(),)
         case Opening(opened, target):
             return replace(model, opened=opened, menu_target=target if target is not None else model.menu_target), (Render(),)
-        case Ticked():
-            return _ticked(model, event), (Render(),)
-        case Respecced(specs):
-            return replace(model, specs=specs), (UseSizes(specs.sizes), Render())
+        case Ticked(seen, next_power, next_material):
+            # A changed reading re-measures, so a growing timer pushes its neighbours out.
+            rendered = (Render(),) if seen != model.seen else ()
+            return replace(model, seen=seen, next_power=next_power, next_material=next_material), rendered
         case Retargeted(views, motion, opened):
             return replace(model, views=views, motion=motion, opened=opened), ()
         case Framed(motion, last_frame):
@@ -561,33 +512,8 @@ def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effe
 
 def transition(model: BarModel, event: Event) -> tuple[BarModel, Iterator[Effect]]:
     """The model after `event` and the effects it calls for, in order."""
-    match event:
-        case Pressed() | Hovered() | Selected() | Picked() | MenuKey() | Deactivated() | VolumeSet() | TrayClicked() | Rerender():
-            model, effects = _interacted(model, event)
-        case PaintDue() | TickDue() | SampleDue() | Navigate():
-            effects = (event,)
-        case _:
-            model, effects = _observed(model, event)
+    model, effects = _folded(model, event)
     return model, iter(effects)
-
-
-def _ticked(model: BarModel, ticked: Ticked) -> BarModel:
-    return replace(
-        model,
-        system=ticked.system,
-        power=ticked.power,
-        next_power=ticked.next_power,
-        ambient=ticked.ambient,
-        preference=ticked.preference,
-        frost=ticked.frost,
-        next_material=ticked.next_material,
-        sample_bounds=ticked.sample_bounds,
-        applications=ticked.applications,
-        arrangement=ticked.arrangement,
-        taskbar_revealed=ticked.taskbar_revealed,
-        dark_when_away=ticked.dark_when_away,
-        tray_tips=ticked.tray_tips,
-    )
 
 
 # ---- frames -------------------------------------------------------------------------

@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from desktop_ui.key_hints import ActionCap, AppCap, DirectionCap, Keycap, hints
-from desktop_ui.navigation import Direction, Focus, Source, SpatialFocus, World, decide
+from desktop_ui.navigation import Direction, Focus, SpatialFocus, World, effect
 from desktop_ui.window_layout import CODE, EDGE, TERMINAL, Target
 from winapi.shapes import Rect
 
@@ -52,7 +52,7 @@ def test_direction_letters_name_the_window_spatial_focus_reaches() -> None:
         shown = badges(world)
         for direction in Direction:
             expected: frozenset[int]
-            match decide(SpatialFocus(direction, Source.KEY), world)[0]:
+            match effect(SpatialFocus(direction), world):
                 case Focus(window=window):
                     expected = frozenset({window})
                 case None:

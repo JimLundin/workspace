@@ -11,20 +11,148 @@ An event is either a fact whose reaction depends on the state, or a request that
 is its own effect and passes straight through.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
-from typing import assert_never
+from enum import Enum
+from typing import Final, assert_never
 
+import protocol
+import winapi.shapes
 from contracts.hotkeys import ROUTES, Route
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job, State
 from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
-from desktop_ui.desktop_controls import ChosenTool, ControlAction, FeatureRequest, Menu, MenuState, PhysicalKey, TraySpec
 from desktop_ui.keymap import indicator_text
-from desktop_ui.navigation import AppKey, Order, Source, keyed
+from desktop_ui.navigation import AppKey, Order, keyed
 from desktop_ui.overlay import OverlayState
 from miryoku.layout import Layer, Scancode
 from protocol import App, LayoutState, Request, Tool, decode_indicator
+lazy from winapi.shell import MenuItem
+
+# ---- the tray menu ------------------------------------------------------------------
+
+
+class Menu(Enum):
+    KEYMAP = 9
+    TOGGLE_LAYOUT = 1
+    RESTART_LAYOUT = 2
+    LOGS = 7
+    QUIT = 8
+    OVERLAY = 11
+    MEETING = 12
+    TRANSCRIPTS = 13
+    TASKBAR = 15
+    RESTART_DESKTOP = 19
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MenuState:
+    """The three observations that decide the tray's choices and labels."""
+
+    layout: LayoutState | None
+    overlay_enabled: bool
+    capturing: bool
+
+
+@dataclass(frozen=True, slots=True)
+class TrayAction:
+    action: Menu
+    label: str = ""
+    """Its words; the layout and meeting items word their state themselves."""
+    key: str = ""
+    """A key hint at the trailing edge."""
+
+
+@dataclass(frozen=True, slots=True)
+class Separator:
+    pass
+
+
+TRAY: Final[tuple[TrayAction | Separator, ...]] = (
+    TrayAction(Menu.TOGGLE_LAYOUT),
+    TrayAction(Menu.RESTART_LAYOUT),
+    TrayAction(Menu.OVERLAY, "Keyboard overlay"),
+    TrayAction(Menu.KEYMAP, "Key map"),
+    Separator(),
+    TrayAction(Menu.TASKBAR, "Toggle Windows taskbar", "Windows key"),
+    TrayAction(Menu.MEETING),
+    TrayAction(Menu.TRANSCRIPTS, "Open meeting transcripts"),
+    Separator(),
+    TrayAction(Menu.LOGS, "Open logs folder"),
+    Separator(),
+    TrayAction(Menu.RESTART_DESKTOP, "Restart desktop"),
+    TrayAction(Menu.QUIT, "Quit Workspace"),
+)
+"""The tray icon's menu, top to bottom. The layout and meeting items word their own state."""
+
+
+def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
+    """One item as it reads in `state`: its words, hint, and whether it's enabled or checked."""
+    running = state.layout in (LayoutState.ON, LayoutState.OFF)
+    hint = f"\t{item.key}" if item.key else ""
+    match item.action:
+        case Menu.TOGGLE_LAYOUT:
+            status = "on" if state.layout is LayoutState.ON else "off" if state.layout is LayoutState.OFF else "not running"
+            text = f"Layout: {status}" + ("\tTap §" if running else "")
+            return MenuItem(item.action.value, text, enabled=running, checked=state.layout is LayoutState.ON)
+        case Menu.RESTART_LAYOUT:
+            return MenuItem(item.action.value, "Restart layout" if running else "Start layout")
+        case Menu.MEETING:
+            return MenuItem(item.action.value, "Stop recording" if state.capturing else "Record a meeting")
+        case Menu.OVERLAY:
+            return MenuItem(item.action.value, item.label + hint, checked=state.overlay_enabled)
+        case Menu.KEYMAP | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.LOGS | Menu.RESTART_DESKTOP | Menu.QUIT:
+            return MenuItem(item.action.value, item.label + hint)
+        case _:
+            assert_never(item.action)
+
+
+def menu_items(state: MenuState) -> Iterator[MenuItem]:
+    """The tray menu as it reads in `state`; a separator is item 0."""
+    for item in TRAY:
+        match item:
+            case TrayAction():
+                yield tray_item(item, state)
+            case Separator():
+                yield MenuItem(0)
+            case _:
+                assert_never(item)
+
+
+# ---- the control window's messages --------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class PhysicalKey:
+    scancode: Scancode
+    down: bool = field(kw_only=True)
+
+    @property
+    def reset(self) -> bool:
+        return self.scancode == 0
+
+
+@dataclass(frozen=True, slots=True)
+class FeatureRequest:
+    """A key edge from the layout, or a press (`down`) from a Workspace menu."""
+
+    request: Request
+    down: bool = field(kw_only=True)
+
+
+type ControlAction = PhysicalKey | FeatureRequest
+
+
+def control_event(message: int, wparam: int, lparam: int, apps: Sequence[App]) -> ControlAction | None:
+    """A key state or request message to the control window, keeping key edges and requests' presses and releases."""
+    if message == protocol.WM_KEY_STATE:
+        return PhysicalKey(Scancode(wparam), down=bool(lparam))
+    if message == protocol.WM_REQUEST and (request := protocol.decode(wparam, apps)) is not None:
+        return FeatureRequest(request, down=bool(lparam))
+    return None
+
+
+# ---- the fold -----------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,8 +170,6 @@ class DesktopState:
     overlay: OverlayState = field(default_factory=OverlayState)
     layout: LayoutState | None = None
     """What the layout last reported; None until it does."""
-    tray_spec: TraySpec | None = None
-    """The tray menu's last good spec; None until the menu first opens."""
 
 
 # ---- facts --------------------------------------------------------------------------
@@ -86,11 +212,6 @@ class MenuChosen:
 
 
 @dataclass(frozen=True, slots=True)
-class SpecLoaded:
-    spec: TraySpec
-
-
-@dataclass(frozen=True, slots=True)
 class Controlled:
     """A key edge, a feature request or a menu choice from the control window."""
 
@@ -128,7 +249,6 @@ type Fact = (
     | RecordingChanged
     | MenuRequested
     | MenuChosen
-    | SpecLoaded
     | Controlled
     | Indicated
     | LayoutReported
@@ -183,7 +303,14 @@ class Quit:
     pass
 
 
-type Instruction = ShowVoice | ShowIdle | Record | ExpireCapture | RestoreTray | Chord | ToggleTaskbar | Quit
+@dataclass(frozen=True, slots=True)
+class ShowSwitcher:
+    """The window list was read off the Qt thread: show the switcher over it."""
+
+    choices: tuple[winapi.shapes.Window, ...]
+
+
+type Instruction = ShowVoice | ShowIdle | Record | ExpireCapture | RestoreTray | Chord | ToggleTaskbar | Quit | ShowSwitcher
 
 type Event = Fact | Instruction
 
@@ -241,20 +368,14 @@ class UseLayout:
 
 @dataclass(frozen=True, slots=True)
 class ShowMenu:
-    """Load the tray spec (keeping the last good one), then show the menu and report the choice."""
+    """Show the tray menu and report the choice."""
 
     state: MenuState
-    spec: TraySpec | None
 
 
 @dataclass(frozen=True, slots=True)
 class Navigate:
     order: Order
-
-
-@dataclass(frozen=True, slots=True)
-class RecordUse:
-    feature: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,11 +436,6 @@ class ShowKeymap:
 
 
 @dataclass(frozen=True, slots=True)
-class OpenUsage:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class OpenLogs:
     pass
 
@@ -336,7 +452,6 @@ type Effect = (
     | UseLayout
     | ShowMenu
     | Navigate
-    | RecordUse
     | SwitchWindows
     | ShowOverlay
     | OverlayEnabled
@@ -347,7 +462,6 @@ type Effect = (
     | ToggleLayout
     | Launch
     | ShowKeymap
-    | OpenUsage
     | OpenLogs
 )
 
@@ -374,8 +488,7 @@ def _requested(request: Request, *, down: bool) -> Iterator[Effect]:
     match request:
         case App():
             if down:
-                yield Navigate(AppKey(request, Source.KEY))
-                yield RecordUse(f"app:{request.name}")
+                yield Navigate(AppKey(request))
         case Tool():
             route = ROUTES[request]
             match route:
@@ -386,7 +499,6 @@ def _requested(request: Request, *, down: bool) -> Iterator[Effect]:
                 case Route.NAVIGATE:
                     if (order := keyed(request)) is not None:
                         yield Navigate(order)
-                    yield RecordUse(request.name.lower())
                 case Route.SWITCHER:
                     yield SwitchWindows()
                 case Route.MEETING:
@@ -403,8 +515,6 @@ def _controlled(action: ControlAction | None, overlay: OverlayState) -> Iterator
             yield PressedKeys(overlay.pressed, reset=action.reset)
         case FeatureRequest(request=request, down=down):
             yield from _requested(request, down=down)
-        case ChosenTool(tool=tool):
-            yield from _requested(tool, down=True)
         case None:
             pass
         case _:
@@ -457,8 +567,6 @@ def _chosen(choice: int) -> Iterator[Effect]:
             yield ToggleMeeting()
         case Menu.TRANSCRIPTS:
             yield Record("folder")
-        case Menu.USAGE:
-            yield OpenUsage()
         case Menu.LOGS:
             yield OpenLogs()
         case Menu.QUIT:
@@ -487,11 +595,9 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
             yield ShowIdle()
         case MenuRequested():
             menu = MenuState(layout=state.layout, overlay_enabled=state.overlay.enabled, capturing=state.shown.recording.capturing)
-            yield ShowMenu(menu, state.tray_spec)
+            yield ShowMenu(menu)
         case MenuChosen(choice):
             yield from _chosen(choice)
-        case SpecLoaded():
-            pass
         case Controlled(action):
             yield from _controlled(action, after.overlay)
         case Indicated(code):
@@ -522,8 +628,6 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
             return replace(state, shown=replace(state.shown, state=shown))
         case RecordingChanged(recording):
             return replace(state, shown=replace(state.shown, recording=recording))
-        case SpecLoaded(spec):
-            return replace(state, tray_spec=spec)
         case Controlled(action):
             return replace(state, overlay=_overlay_after(action, state.overlay))
         case Indicated(code):
@@ -542,7 +646,7 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
 def transition(state: DesktopState, event: Event) -> tuple[DesktopState, Iterator[Effect]]:
     """The state after `event` and the effects it calls for, in order, produced lazily."""
     match event:
-        case ShowVoice() | ShowIdle() | Record() | ExpireCapture() | RestoreTray() | Chord() | ToggleTaskbar() | Quit():
+        case ShowVoice() | ShowIdle() | Record() | ExpireCapture() | RestoreTray() | Chord() | ToggleTaskbar() | Quit() | ShowSwitcher():
             return state, iter((event,))
         case MenuChosen(Menu.OVERLAY.value):
             return transition(state, OverlayToggled())

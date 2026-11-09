@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 
-from desktop_ui import ui_spec
 from desktop_ui.bar_events import (
     BarModel,
     Deactivated,
@@ -19,7 +18,7 @@ from desktop_ui.island_model import Action
 
 
 def model() -> BarModel:
-    return BarModel(ui_spec.bar_specs(reload=False))
+    return BarModel()
 
 
 def test_opening_the_menu_remembers_the_keyboard_only_when_the_island_was_closed() -> None:

@@ -154,16 +154,11 @@ class AwayScreens:
     """Replaced whole on the bar's thread."""
 
     @classmethod
-    def start(
-        cls,
-        record: Callable[[str, Mapping[str, Detail]], None],
-        light: KeyboardLight | None = None,
-        panel: LaptopPanel | None = None,
-    ) -> AwayScreens:
+    def start(cls, record: Callable[[str, Mapping[str, Detail]], None]) -> AwayScreens:
         """Started, or restarted after a crash, behind the lock screen as well as in front of it."""
         away = _Away(
-            light if light is not None else KeyboardLight(ViaBacklight(), record),
-            panel if panel is not None else LaptopPanel(WmiBrightness(), record),
+            KeyboardLight(ViaBacklight(), record),
+            LaptopPanel(WmiBrightness(), record),
             PhysicalMonitors.open(),
             locked=session.locked() is True,
         )

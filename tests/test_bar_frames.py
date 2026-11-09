@@ -3,15 +3,13 @@
 from dataclasses import replace
 
 from contracts.status import Job
-from desktop_ui import ui_spec
 from desktop_ui.bar_events import BarModel, menu, next_frame
-from desktop_ui.island_model import island
-from desktop_ui.spec.island import ISLAND
+from desktop_ui.island_model import ISLAND, island
 from tests.test_island_model import RESTING
 
 
 def model() -> BarModel:
-    return BarModel(ui_spec.bar_specs(reload=False))
+    return BarModel()
 
 
 def working() -> BarModel:

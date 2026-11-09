@@ -14,6 +14,5 @@ class Tone(Enum):
     """Which ink a bar part reads in."""
 
     INK = auto()
-    QUIET = auto()
     MICROPHONE = auto()
     LOW = auto()

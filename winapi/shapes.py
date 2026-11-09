@@ -70,10 +70,6 @@ class Rect:
     def size(self) -> Size:
         return Size(self.width, self.height)
 
-    @property
-    def top_left(self) -> Point:
-        return Point(self.left, self.top)
-
     def __contains__(self, point: Point) -> bool:
         return self.left <= point.x < self.right and self.top <= point.y < self.bottom
 

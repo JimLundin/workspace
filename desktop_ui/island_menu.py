@@ -114,7 +114,6 @@ class Face(StrEnum):
 
     CARD = auto()  # An ongoing activity across the grid, with its Stop.
     TOGGLE = auto()  # A round switch with the setting and its state.
-    TILE = auto()  # A large square with its symbol above its label.
     WIDE = auto()  # A full-width tile with its symbol beside its label.
     SLIDER = auto()
     TOOL = auto()  # A small square with its symbol above a caption.
@@ -153,7 +152,7 @@ class Controls:
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
 
-# ---- the menu as data: `desktop_ui/spec/controls.py` ------------------------------------
+# ---- the menu as data: `CONTROLS` -------------------------------------------------------
 
 
 class EntryId(StrEnum):
@@ -173,11 +172,6 @@ class EntryId(StrEnum):
     ALL_CONTROLS = auto()
 
 
-def tall(tracks: int) -> None:
-    if not 1 <= tracks <= 64:
-        raise ValueError(f"a row is 1 to 64 tracks tall, not {tracks}")
-
-
 @dataclass(frozen=True, slots=True)
 class CellSpec:
     entry: EntryId
@@ -189,10 +183,6 @@ class CellSpec:
     caption: str = ""
     """A tile's short name under its symbol."""
 
-    def __post_init__(self) -> None:
-        if not 1 <= self.span <= COLUMNS:
-            raise ValueError(f"{self.entry}: a cell spans 1 to {COLUMNS} columns, not {self.span}")
-
 
 @dataclass(frozen=True, slots=True)
 class CellsRow:
@@ -202,18 +192,12 @@ class CellsRow:
     tracks: int
     cells: tuple[CellSpec, ...]
 
-    def __post_init__(self) -> None:
-        tall(self.tracks)
-
 
 @dataclass(frozen=True, slots=True)
 class ActivitiesRow:
     """A full-width card for each running activity, `tracks` tall each."""
 
     tracks: int
-
-    def __post_init__(self) -> None:
-        tall(self.tracks)
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,55 +206,62 @@ class TrayRow:
 
     tracks: int
 
-    def __post_init__(self) -> None:
-        tall(self.tracks)
-
 
 type RowSpec = CellsRow | ActivitiesRow | TrayRow
 
 
 @dataclass(frozen=True, slots=True)
 class ControlsSpec:
-    """`spec/controls.py`: the menu's rows, top to bottom."""
+    """The menu's rows, top to bottom."""
 
     rows: tuple[RowSpec, ...]
 
 
-def faces(entry: EntryId) -> frozenset[Face]:
-    """How each entry may present itself; cards and tray icons come only from their rows."""
-    match entry:
-        case EntryId.OVERLAY | EntryId.TASKBAR | EntryId.PLACEMENT | EntryId.DARK_WHEN_AWAY:
-            return frozenset({Face.TOGGLE})
-        case EntryId.SOUND:
-            return frozenset({Face.SLIDER})
-        case EntryId.RECORD | EntryId.SWITCH_WINDOWS | EntryId.COPY_TRANSCRIPT | EntryId.KEYMAP | EntryId.NOTIFICATIONS | EntryId.ALL_CONTROLS:
-            return frozenset({Face.TILE, Face.WIDE, Face.TOOL, Face.LINK})
-        case _:
-            assert_never(entry)
-
-
-def problems(spec: ControlsSpec) -> tuple[str, ...]:
-    """What makes a spec unusable, beyond its shape: each named by its row."""
-    placed = tuple((index, cell) for index, row in enumerate(spec.rows) if isinstance(row, CellsRow) for cell in row.cells)
-    return (
-        *(f"rows: more than one {kind.__name__}" for kind in (ActivitiesRow, TrayRow) if sum(isinstance(row, kind) for row in spec.rows) > 1),
-        *(
-            f"rows.{index}: its cells span {width} of the menu's {COLUMNS} columns"
-            for index, row in enumerate(spec.rows)
-            if isinstance(row, CellsRow) and (width := sum(cell.span for cell in row.cells)) > COLUMNS
+CONTROLS: Final = ControlsSpec(
+    (
+        ActivitiesRow(5),
+        CellsRow(
+            4,
+            (
+                CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
+                CellSpec(EntryId.TASKBAR, Face.TOGGLE, 4, "Windows taskbar", "table"),
+            ),
         ),
-        *(
-            f"rows.{index}: {cell.entry} is already placed"
-            for place, (index, cell) in enumerate(placed)
-            if any(earlier.entry is cell.entry for _, earlier in placed[:place])
+        CellsRow(
+            4,
+            (
+                CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
+                CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 4, "Dark when away", "lock"),
+            ),
         ),
-        *(f"rows.{index}: {cell.entry} can't show as {cell.face}" for index, cell in placed if cell.face not in faces(cell.entry)),
-        *(
-            f"rows.{index}: {cell.entry} needs a label and an icon"
-            for index, cell in placed
-            if cell.entry is not EntryId.SOUND and not (cell.label and cell.icon)
+        CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
+        CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+        CellsRow(
+            7,
+            (
+                CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
+                CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
+                CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
+            ),
         ),
+        TrayRow(4),
+        CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
+        CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
     )
+)
+"""The controls menu (press the clock or battery), top to bottom.
+
+The menu is a grid of 8 columns. Each row is a band `tracks` tall (a track is
+`menu.track` in `SIZES`, gutter included):
+
+- `CellsRow`: entries placed left to right; `span` is their width in columns. An
+  entry that doesn't apply now (Record a meeting while one records) gives its
+  place to the next; an empty row takes no space.
+- `ActivitiesRow`: a full-width card with its Stop for each running activity.
+- `TrayRow`: the system tray's icons, a column each, wrapping onto new lines.
+
+Each entry is placed once; the sound slider takes Windows' own name.
+"""
 
 
 def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:

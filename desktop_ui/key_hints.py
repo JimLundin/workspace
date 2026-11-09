@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import protocol
-from desktop_ui.navigation import AppKey, Direction, Focus, Source, SpatialFocus, World, effect, identity, keyed, launcher
+from desktop_ui.navigation import AppKey, Direction, Focus, SpatialFocus, World, effect, identity, keyed, launcher
 from miryoku.firmware import CHORDS
 from protocol import Request, Tool
 from winapi.shapes import Rect
@@ -54,7 +54,7 @@ def reached(world: World, request: Request) -> int | None:
     """The window this chord focuses now, as the navigation decision carries it out."""
     match request:
         case protocol.App():
-            navigation: AppKey | SpatialFocus = AppKey(request, Source.KEY)
+            navigation: AppKey | SpatialFocus = AppKey(request)
         case Tool():
             match keyed(request):
                 case SpatialFocus() as spatial:

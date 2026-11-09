@@ -33,7 +33,7 @@ class Indicator:
     _shown: Cell[_Shown] = field(default_factory=lambda: Cell(_Shown()), init=False, repr=False)
 
     @classmethod
-    def build(cls, _root: QtWidgets.QApplication) -> Indicator:
+    def build(cls) -> Indicator:
         theme = tokens(scheme())
         window = QtWidgets.QWidget()
         tool_window(window, None, on_top=False)

@@ -10,15 +10,12 @@ from desktop_ui.qt_runtime import prepare
 prepare()
 
 
-def button(text: str, callback: Callable[[], None], *, tip: str = "", name: str = "") -> QtWidgets.QToolButton:
+def button(text: str, callback: Callable[[], None]) -> QtWidgets.QToolButton:
     widget = QtWidgets.QToolButton()
     widget.setText(text)
-    widget.setAccessibleName(tip or text)
-    widget.setToolTip(tip)
+    widget.setAccessibleName(text)
     widget.setCursor(Qt.CursorShape.PointingHandCursor)
     widget.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-    if name:
-        widget.setObjectName(name)
 
     # Plain slotted controllers need not support weak references just because a
     # Qt signal owns a callback. Qt retains this small closure with the button.

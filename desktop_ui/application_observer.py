@@ -19,14 +19,13 @@ from typing import assert_never
 
 import protocol
 from contracts.geometry import framed
-from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, decide, zoom_after
+from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, destination, effect, zoom_after
 from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Shelf, caption_clip, launch, outstanding, shelf
 from desktop_ui.window_layout import (
     NOWHERE,
     App,
     Placement,
     Screens,
-    Setup,
     Target,
     groups,
     managed,
@@ -243,7 +242,6 @@ class _Watched:
     recent: tuple[int, ...] = ()
     launches: Launches = frozendict()
     world: World | None = None
-    setup: Setup | None = None
     where: Screens | None = None
     connection: Connection = None
 
@@ -317,7 +315,6 @@ class Worker:
                 connection=connection,
                 launches=outstanding(watched.launches, grouped),
                 zoomed=zoomed,
-                setup=where.setup if where is not None else None,
                 where=where,
                 placement=placement,
                 framed=current,
@@ -363,9 +360,9 @@ class Worker:
                 if (world := watched.world) is None:
                     return watched, False
                 fresh = replace(world, foreground=windows.foreground())
-                chosen, record = decide(order, fresh)
+                chosen = effect(order, fresh)
                 watched = self.effect(watched, chosen)
-                return replace(watched, world=replace(fresh, current=record.to_desktop)), True
+                return replace(watched, world=replace(fresh, current=destination(chosen, fresh))), True
 
     def effect(self, watched: _Watched, chosen: Effect) -> _Watched:
         match chosen:

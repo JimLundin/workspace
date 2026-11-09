@@ -73,17 +73,16 @@ architecture review's `contract-isolation` rule enforces it.
 
 | Modules | Role |
 | --- | --- |
-| `desktop_app.py`, `desktop_control.py`, `desktop_controls.py`, `voice.py` | Composition, the desktop's control decisions, the tray menu, and dictation, meetings and the microphone |
-| `ui.py`, `qt_ui.py`, `qt_runtime.py`, `job_queue.py`, `dialogs.py` | Qt dispatch, event-loop ownership and what views built later replay |
+| `desktop_app.py`, `desktop_control.py`, `voice.py` | Composition and the views, the desktop's control decisions and tray menu, and dictation, meetings and the microphone |
+| `qt_ui.py`, `qt_runtime.py` | The Qt application, one-shot timers and the bar's frame loop |
 | `desktop_bar.py`, `bar_*.py`, `island_*.py`, `ambient.py`, `audio_meter.py` | The bar ([policy](toolbar-design.md)) and the readings it shows |
 | `shell_*.py`, `desktop_pager.py`, `taskbar_guard.py` | The pager and app shelf, and the Windows taskbar |
 | `application_observer.py`, `window_layout.py`, `navigation.py`, `window_switcher.py` | [Window placement](window-placement.md) and navigation |
 | `key_hints.py`, `key_hint_overlay.py` | The letters drawn while an Apps key is held |
 | `away_screens.py`, `keyboard_light.py`, `laptop_panel.py` | Dark screens, keyboard light and laptop panel while nobody is looking |
 | `keymap*.py`, `overlay*.py`, `layer_indicator.py` | The key map, keyboard overlay and layer indicator |
-| `tray.py`, `icons.py`, `report.py`, `view_publication.py` | The tray icon, the usage report and the view log |
+| `tray.py`, `icons.py`, `view_publication.py` | The tray icon and the desktop's log |
 | `components/`, `fonts/`, `colour.py`, `motion.py`, `*_icons.py` | Shared appearance, glass, controls, motion, icons and type |
-| `ui_spec.py`, `ui_spec_watch.py`, `spec/` | The desktop's declarative specs (one frozen value per module: the bar's composition in `island.py`, sizes in `sizes.py`, the controls menu in `controls.py`, the tray menu in `tray.py`), validated and reloaded while it runs |
 
 ## `scripts/`
 

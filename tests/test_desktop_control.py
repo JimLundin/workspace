@@ -3,23 +3,29 @@
 from collections.abc import Iterable
 from functools import reduce
 
+from config import APPS
 from contracts.recording_state import RecordingState
 from contracts.status import State
 from desktop_ui.bar_events import DictationShown, RecordingShown
 from desktop_ui.desktop_control import (
+    TRAY,
     Beep,
     Controlled,
     DesktopState,
     Effect,
     Event,
+    FeatureRequest,
     Flash,
     HandleKey,
     LayoutReported,
     LayoutShown,
     Log,
+    Menu,
     MenuChosen,
+    MenuState,
     OverlayEnabled,
     OverlayToggled,
+    PhysicalKey,
     Problem,
     Record,
     RecordingChanged,
@@ -27,15 +33,18 @@ from desktop_ui.desktop_control import (
     ShowIdle,
     SwitchWindows,
     ToggleMeeting,
+    TrayAction,
     TrayNotify,
     TrayShow,
     UseLayout,
     VoiceShown,
+    control_event,
+    menu_items,
     recording_notice,
     transition,
 )
-from desktop_ui.desktop_controls import ChosenTool, FeatureRequest, Menu
-from protocol import LayoutState, Tool
+from miryoku.layout import Scancode
+from protocol import WM_KEY_STATE, WM_REQUEST, LayoutState, Tool
 
 
 def folded(events: Iterable[Event], state: DesktopState | None = None) -> tuple[DesktopState, tuple[Effect, ...]]:
@@ -101,7 +110,7 @@ def test_dictation_keys_pass_both_edges_and_the_desktops_own_keys_act_on_press()
     assert edges == (HandleKey(Tool.DICTATE, down=True), HandleKey(Tool.DICTATE, down=False))
     _, released = folded((Controlled(FeatureRequest(Tool.ZOOM, down=False)), Controlled(FeatureRequest(Tool.MEETING_TOGGLE, down=False))))
     assert released == ()
-    _, pressed = folded((Controlled(FeatureRequest(Tool.MEETING_TOGGLE, down=True)), Controlled(ChosenTool(Tool.WINDOW_SWITCHER))))
+    _, pressed = folded((Controlled(FeatureRequest(Tool.MEETING_TOGGLE, down=True)), Controlled(FeatureRequest(Tool.WINDOW_SWITCHER, down=True))))
     assert pressed == (ToggleMeeting(), SwitchWindows())
 
 
@@ -117,3 +126,62 @@ def test_the_overlay_menu_choice_toggles_and_saves_the_overlay() -> None:
         toggled, effects = folded((event,))
         assert not toggled.overlay.enabled and OverlayEnabled(enabled=False) in effects
     assert folded((MenuChosen(0),))[1] == ()
+
+
+def test_physical_key_messages_become_key_actions_with_a_reset_marker() -> None:
+    """Detect native key messages routed as tools or losing their reset marker."""
+    actions = tuple(control_event(WM_KEY_STATE, key, down, APPS) for key, down in ((0x32, 1), (0x10, 1), (0x10, 0), (0, 0)))
+    assert actions == (
+        PhysicalKey(Scancode(0x32), down=True),
+        PhysicalKey(Scancode(0x10), down=True),
+        PhysicalKey(Scancode(0x10), down=False),
+        PhysicalKey(Scancode(0), down=False),
+    )
+    assert tuple(action.reset for action in actions if isinstance(action, PhysicalKey)) == (False, False, False, True)
+
+
+def test_layout_status_is_the_toggle_and_shows_its_hotkey() -> None:
+    for layout in (LayoutState.ON, LayoutState.OFF):
+        state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
+        item = next(menu_items(state))
+        assert item.id == Menu.TOGGLE_LAYOUT.value
+        assert item.text == f"Layout: {layout.name.lower()}\tTap §"
+        assert item.enabled and item.checked == (layout is LayoutState.ON)
+
+
+def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None:
+    for layout in (None, LayoutState.QUIT):
+        state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
+        items = tuple(menu_items(state))
+        assert items[0].text == "Layout: not running"
+        assert not items[0].enabled and not items[0].checked
+        assert items[1].id == Menu.RESTART_LAYOUT.value and items[1].text == "Start layout" and items[1].enabled
+
+
+def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle() -> None:
+    # Defect: the transcripts entry is dropped or disabled during capture. It is the
+    # only way to browse saved meetings.
+    for capturing in (False, True):
+        state = MenuState(layout=LayoutState.ON, overlay_enabled=True, capturing=capturing)
+        item = next(item for item in menu_items(state) if item.id == Menu.TRANSCRIPTS.value)
+        assert (item.text, item.enabled) == ("Open meeting transcripts", True)
+
+
+def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> None:
+    # Defect: the tray shows the overlay as on after the user turned it off, or the reverse.
+    for enabled in (False, True):
+        state = MenuState(layout=LayoutState.ON, overlay_enabled=enabled, capturing=False)
+        item = next(item for item in menu_items(state) if item.id == Menu.OVERLAY.value)
+        assert item.checked is enabled
+
+
+def test_control_event_preserves_voice_release_and_rejects_unknown_requests() -> None:
+    """Detect dropping a capture's key-up or forwarding an invalid wire request."""
+    assert control_event(WM_REQUEST, Tool.DICTATE.value, 0, APPS) == FeatureRequest(Tool.DICTATE, down=False)
+    assert control_event(WM_REQUEST, 999, 1, APPS) is None
+
+
+def test_the_tray_offers_every_action_once() -> None:
+    # Defect: an action (Quit, Restart desktop) is dropped from the tray, leaving no way to reach it, or is listed twice.
+    actions = [item.action for item in TRAY if isinstance(item, TrayAction)]
+    assert sorted(actions, key=lambda action: action.value) == sorted(Menu, key=lambda action: action.value)

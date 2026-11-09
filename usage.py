@@ -1,10 +1,11 @@
-"""The usage log: which features get used, so unused ones can be removed. One JSON
+"""The usage log: features' uses and failures, with their diagnostic details. One JSON
 object per line in `%LOCALAPPDATA%/workspace/usage.jsonl`. It records that a feature
 was used (and how long it took, whether it failed), never what was typed or said.
 Standard library only: the keyboard process records through this module, so it
-writes with `json` instead of loading Pydantic. assistant/report.py reads the log.
+writes with `json` instead of loading Pydantic.
 """
 
+import contextlib
 import json
 import os
 import tempfile
@@ -39,3 +40,9 @@ def record_counts(source: str, counts: Mapping[str, int], *, path: Path = USAGE_
     """Uses counted since the last call, for features used too often to log one by one."""
     if counts:
         _append({"t": _now(), "source": source, "counts": dict(counts)}, path)
+
+
+def record_quietly(source: str, feature: str, details: Mapping[str, Detail]) -> None:
+    """`record`, dropping a write failure: the log is a convenience, never a reason for a feature to fail."""
+    with contextlib.suppress(OSError):
+        record(source, feature, details)

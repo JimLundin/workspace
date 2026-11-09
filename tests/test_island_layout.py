@@ -1,9 +1,7 @@
 """Where the island bar's capsules sit, and where parts sit inside them."""
 
-from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
-from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
-from desktop_ui.spec.island import ISLAND
-from desktop_ui.spec.sizes import SIZES
+from desktop_ui.island_layout import SIZES, Box, Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
+from desktop_ui.island_model import ISLAND, Action, Control, Glyph, Key, Marker, Text, Zone, order
 
 ORDER = order(ISLAND)
 
@@ -12,11 +10,9 @@ def metrics(width: float) -> Metrics:
     return Metrics(width, SIZES.bar.top, SIZES.bar.gap, SIZES.bar.edge)
 
 
-def test_the_island_alone_is_centred_with_an_edge_strip_to_the_top() -> None:
-    # Defect: the island drifts off centre, or the strip above it doesn't reach the screen edge.
-    assert frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34)], metrics(1000), ORDER) == (
-        Framed(Key.ISLAND, Box(444, 8, 112, 34), Box(444, 0, 112, 8), 1.0),
-    )
+def test_the_island_alone_is_centred() -> None:
+    # Defect: the island drifts off centre or off the bar's top margin.
+    assert frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34)], metrics(1000), ORDER) == (Framed(Key.ISLAND, Box(444, 8, 112, 34), 1.0),)
 
 
 def test_neighbours_sit_one_gap_apart_and_grow_outward_in_order() -> None:

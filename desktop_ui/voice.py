@@ -5,13 +5,13 @@ recording) reaches the desktop as events through its inbox. Slow dictation jobs
 run one at a time on the worker thread.
 """
 
-import contextlib
 import os
 import queue
 import threading
 import traceback
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import usage
@@ -23,7 +23,7 @@ from assistant.meetings import Meetings
 from contracts.recording_state import RecordingAction
 from contracts.status import State
 from desktop_ui.desktop_control import Event, JobChanged, Notified, Problem, RecordingChanged, ShowVoice, idle_state
-from usage import DIRECTORY, Detail
+from usage import DIRECTORY
 from winapi import audio, recording, system
 from winapi.pcm import RATE
 
@@ -35,11 +35,6 @@ def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
             return Settings("", "", "", ""), settings
         case Settings():
             return settings, None
-
-
-def _record(feature: str, details: Mapping[str, Detail]) -> None:
-    with contextlib.suppress(OSError):
-        usage.record("assistant", feature, details)
 
 
 def _run_jobs(jobs: queue.Queue[Callable[[], None] | None], report: Callable[[Event], None], log: Callable[[str], None]) -> None:
@@ -85,7 +80,7 @@ class Voice:
             log=log,
         )
         jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
-        dictation = Assistant(machine, usable, record=_record, submit=jobs.put, missing=missing)
+        dictation = Assistant(machine, usable, record=partial(usage.record_quietly, "assistant"), submit=jobs.put, missing=missing)
         worker = threading.Thread(target=_run_jobs, args=(jobs, report, log), name="worker", daemon=True)
         if missing is not None:
             report(Notified("Workspace", f"Dictation and meeting transcripts need {', '.join(missing.names)}; the layout works without them."))
