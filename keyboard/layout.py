@@ -63,13 +63,13 @@ class Key(VirtualKey):
     F = KeyCode(0x46, "f", "F")
     G = KeyCode(0x47, "g", "G")
     H = KeyCode(0x48, "h", "H")
-    LETTER_I = KeyCode(0x49, "i", "I")
+    I = KeyCode(0x49, "i", "I")  # noqa: E741 - the key is the letter I
     J = KeyCode(0x4A, "j", "J")
     K = KeyCode(0x4B, "k", "K")
     L = KeyCode(0x4C, "l", "L")
     M = KeyCode(0x4D, "m", "M")
     N = KeyCode(0x4E, "n", "N")
-    LETTER_O = KeyCode(0x4F, "o", "O")
+    O = KeyCode(0x4F, "o", "O")  # noqa: E741 - the key is the letter O
     P = KeyCode(0x50, "p", "P")
     Q = KeyCode(0x51, "q", "Q")
     R = KeyCode(0x52, "r", "R")

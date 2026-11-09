@@ -40,8 +40,8 @@ English (US), where Right Alt is a plain Alt rather than AltGr."""
 # ---- Short names used in the tables --------------------------------------------
 
 # fmt: off
-A, B, C, D, E, F, G, H, LETTER_I, J, K, L, M = Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.LETTER_I, Key.J, Key.K, Key.L, Key.M
-N, LETTER_O, P, Q, R, S, T, U, V, W, X, Y, Z = Key.N, Key.LETTER_O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z
+A, B, C, D, E, F, G, H, I, J, K, L, M = Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M  # noqa: E741 - the letters by name
+N, O, P, Q, R, S, T, U, V, W, X, Y, Z = Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z  # noqa: E741 - the letters by name
 N0, N1, N2, N3, N4, N5, N6, N7, N8, N9 = Key.N0, Key.N1, Key.N2, Key.N3, Key.N4, Key.N5, Key.N6, Key.N7, Key.N8, Key.N9
 GRAVE, MINUS, EQUAL, LBRACKET, RBRACKET, BACKSLASH = Key.GRAVE, Key.MINUS, Key.EQUAL, Key.LBRACKET, Key.RBRACKET, Key.BACKSLASH
 SEMICOLON, QUOTE, COMMA, PERIOD, SLASH = Key.SEMICOLON, Key.QUOTE, Key.COMMA, Key.PERIOD, Key.SLASH
@@ -95,7 +95,7 @@ media keys, arrows, and the physical Shift, Ctrl and Windows keys."""
 BASE: Final[Board[Binding]] = Board(
     # Colemak-DH with home row mods (Win Alt Ctrl Shift).
     top=      Row((Q,          W,          F,          P,              B  ), (J,              L,                  U,          Y,          QUOTE     )),
-    home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(LETTER_I, ALT), ht(LETTER_O, GUI))),
+    home=     Row((ht(A, GUI), ht(R, ALT), ht(S, CTL), ht(T, SFT),     G  ), (M,              ht(N, SFT),         ht(E, CTL), ht(I, ALT), ht(O, GUI))),
     bottom=   Row((Z,          X,          C,          D,              V  ), (K,              H,                  COMMA,      PERIOD,     SLASH     )),
     thumbs=Thumbs((                        ht(ESC, Layer.APPS), ht(SPACE, NAV), TAB     ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), DELETE)),
 )
