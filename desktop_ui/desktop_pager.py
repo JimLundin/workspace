@@ -11,12 +11,25 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Final, assert_never
 
-from desktop_ui.shell_items import WEB_APPS, PinnedApp
+from desktop_ui.shell_items import WEB_APPS, PinnedApp, WebApps
 from desktop_ui.window_layout import App, Program
 from keyboard.firmware import CHORDS
 from protocol import Tool
 
 JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4, Tool.DESKTOP_5)
+
+
+@dataclass(frozen=True, slots=True)
+class PagerSpec:
+    """What the pager reads: each web app's name and symbol, and the chord letter reaching each desktop."""
+
+    web_apps: WebApps
+    letters: tuple[str | None, ...]
+    """The chord letter for each desktop in order; desktops past the last have none."""
+
+
+PAGER: Final = PagerSpec(WEB_APPS, tuple(CHORDS.get(tool) for tool in JUMPS))
+"""Workspace's own pager; the bar passes it in, tests pass their own."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,31 +56,35 @@ class PagerDesktop:
 class PagerView:
     desktops: tuple[PagerDesktop, ...]
     hints: Hints
+    symbols: frozendict[PinnedApp, str]
+    """Each web app's symbol, which its icon shows."""
 
 
-def label(app: App) -> str:
+def label(app: App, web_apps: WebApps) -> str:
     match app:
         case PinnedApp():
-            return WEB_APPS[app].label
+            return web_apps[app].label
         case Program(exe=exe):
             return exe.removesuffix(".exe")
         case _:
             assert_never(app)
 
 
-def pager(placed: Sequence[Sequence[App]], current: int, *, chord: bool) -> PagerView:
+def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, *, chord: bool) -> PagerView:
     """The pager for these desktops, each with the applications placed on it.
 
     The hints show while an Apps key is held, so the letter alone completes the request.
     """
 
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:
-        listed = ", ".join(label(app) for app in apps) or "No placed apps"
+        listed = ", ".join(label(app, spec.web_apps) for app in apps) or "No placed apps"
         here = " (current)" if index == current else ""
         return PagerDesktop(str(index + 1), f"Desktop {index + 1}{here} · {listed}", current=index == current, apps=tuple(apps))
 
     desktops = tuple(desktop(index, apps) for index, apps in enumerate(placed))
+    symbols = frozendict((app, web.glyph) for app, web in spec.web_apps.items())
     if not chord:
-        return PagerView(desktops, NO_HINTS)
-    jumps = tuple(CHORDS.get(JUMPS[index]) if index < len(JUMPS) else None for index in range(len(desktops)))
-    return PagerView(desktops, Hints(jumps))
+        return PagerView(desktops, NO_HINTS, symbols)
+    letters = spec.letters
+    jumps = tuple(letters[index] if index < len(letters) else None for index in range(len(desktops)))
+    return PagerView(desktops, Hints(jumps), symbols)

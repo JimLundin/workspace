@@ -63,7 +63,7 @@ lazy from desktop_ui.bar_events import (
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
-lazy from desktop_ui.desktop_pager import pager
+lazy from desktop_ui.desktop_pager import PAGER, pager
 lazy from desktop_ui.island_layout import SIZES, Content, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import Menu
 lazy from desktop_ui.island_model import ISLAND, CapsuleView, Key, Marker, Observed, island, order
@@ -382,7 +382,7 @@ class DesktopBar:
         pager_bar.remember_icons(arrangement.shelf)
         # Changed pager targets must also publish section geometry when the island is still,
         # or a pager that loses its hints keeps its wider capsule.
-        if pager_bar.desktops(pager(arrangement.placed, arrangement.current, chord=model.chord_held), self.navigate, self.app_click):
+        if pager_bar.desktops(pager(arrangement.placed, arrangement.current, PAGER, chord=model.chord_held), self.navigate, self.app_click):
             self.window.presentation = None
         if model.chord_held:
             self._show_hints()

@@ -32,7 +32,9 @@ WEB_APPS: Final = every_member(
         PinnedApp.TEAMS: WebApp("Teams", "https://teams.cloud.microsoft/", "MSEdge.teams.cloud.microsoft_/", "chat"),
     },
 )
-LAUNCH_GRACE = 15.0
+type WebApps = frozendict[PinnedApp, WebApp]
+
+LAUNCH_GRACE: Final = 15.0
 """Seconds a launch may take to show its window before another click launches again."""
 
 type Launches = frozendict[PinnedApp, float]
@@ -104,15 +106,15 @@ def applications(observed: Sequence[Window], previous: tuple[Application, ...], 
     return tuple(grouped(identity) for identity in order)
 
 
-def pinned_app(app_id: str | None) -> PinnedApp | None:
+def pinned_app(app_id: str | None, web_apps: WebApps) -> PinnedApp | None:
     if app_id is None:
         return None
-    return next((app for app, web in WEB_APPS.items() if app_id == web.app_id or app_id.startswith(web.app_id + ".")), None)
+    return next((app for app, web in web_apps.items() if app_id == web.app_id or app_id.startswith(web.app_id + ".")), None)
 
 
-def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previous: Shelf, seats: Seats) -> Shelf:
+def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previous: Shelf, seats: Seats, web_apps: WebApps) -> Shelf:
     """Pinned web-app windows fill their slots; every other window joins its running application."""
-    owners = tuple(pinned_app(app_ids.get(window.handle)) for window in observed)
+    owners = tuple(pinned_app(app_ids.get(window.handle), web_apps) for window in observed)
 
     def slot(app: PinnedApp) -> Pinned:
         current = tuple(window for window, owner in zip(observed, owners, strict=True) if owner is app)
@@ -120,14 +122,15 @@ def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previou
         return Pinned(app, retained(current, before, seats))
 
     others = tuple(window for window, owner in zip(observed, owners, strict=True) if owner is None)
-    return Shelf(tuple(slot(app) for app in PinnedApp), applications(others, previous.running, seats))
+    return Shelf(tuple(slot(app) for app in web_apps), applications(others, previous.running, seats))
 
 
-def launch(pending: Launches, app: PinnedApp, now: float) -> Launches | None:
-    """The pending launches after launching `app` now; None while an earlier launch may still open its window."""
+def launch(pending: Launches, app: PinnedApp, now: float, grace: float) -> Launches | None:
+    """The pending launches after launching `app` now; None while an earlier launch may still open its window,
+    which it may take `grace` seconds to show."""
     if pending.get(app, now) > now:
         return None
-    return pending | {app: now + LAUNCH_GRACE}
+    return pending | {app: now + grace}
 
 
 def outstanding(pending: Launches, current: Shelf) -> Launches:

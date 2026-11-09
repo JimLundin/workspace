@@ -10,6 +10,8 @@ from desktop_ui.shell_items import (
     PinnedApp,
     Seat,
     Shelf,
+    WebApp,
+    WebApps,
     applications,
     caption_clip,
     launch,
@@ -20,6 +22,15 @@ from desktop_ui.shell_items import (
 )
 from winapi.shapes import Point, Rect, Window
 from winapi.tray_host import Click, Entry, Notify, Registration, callbacks, registration, update
+
+WEB_APPS: WebApps = frozendict(
+    {
+        PinnedApp.OUTLOOK: WebApp("Mail", "https://mail.example/", "Edge.mail.example_/", "mail"),
+        PinnedApp.TEAMS: WebApp("Chat", "https://chat.example/", "Edge.chat.example_/", "chat"),
+    }
+)
+"""The test's own web apps and their ids."""
+GRACE = 15.0
 
 
 def test_application_grouping_preserves_icon_order_and_cycles_current_windows() -> None:
@@ -55,18 +66,18 @@ def test_pinned_web_app_windows_fill_their_slots_and_leave_the_edge_group() -> N
     lookalike = Window(5, "Other", "msedge.exe", minimized=False)
     editor = Window(6, "Editor", "editor.exe", minimized=False)
     app_ids = {
-        1: "MSEdge.outlook.cloud.microsoft_/mail/",
-        2: "MSEdge.outlook.cloud.microsoft_/mail/",
-        3: "MSEdge.teams.cloud.microsoft_/.Profile 1",
-        4: "MSEdge",
-        5: "MSEdge.outlook.cloud.microsoft_/mail/calendar",
+        1: "Edge.mail.example_/",
+        2: "Edge.mail.example_/",
+        3: "Edge.chat.example_/.Profile 1",
+        4: "Edge",
+        5: "Edge.mail.example_/calendar",
     }
-    first = shelf((mail, browser, chat, calendar, lookalike, editor), app_ids, EMPTY_SHELF, {})
+    first = shelf((mail, browser, chat, calendar, lookalike, editor), app_ids, EMPTY_SHELF, {}, WEB_APPS)
     assert first == Shelf(
         (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, (chat,))),
         (Application("msedge.exe", (browser, lookalike)), Application("editor.exe", (editor,))),
     )
-    again = shelf((calendar, editor, mail), app_ids, first, {})
+    again = shelf((calendar, editor, mail), app_ids, first, {}, WEB_APPS)
     assert again == Shelf(
         (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, ())),
         (Application("editor.exe", (editor,)),),
@@ -77,14 +88,11 @@ def test_a_pinned_launch_waits_for_its_window_before_launching_again() -> None:
     # Defect: repeated clicks open several app windows, one slot's launch blocks
     # the other, or a closed window can no longer be reopened.
     none: Launches = frozendict()
-    pending = launch(none, PinnedApp.OUTLOOK, 100.0)
-    assert pending is not None and set(pending) == {PinnedApp.OUTLOOK}
-    deadline = pending[PinnedApp.OUTLOOK]
-    grace = deadline - 100.0
-    assert grace > 0
-    assert launch(pending, PinnedApp.OUTLOOK, deadline - grace / 2) is None
-    assert launch(pending, PinnedApp.OUTLOOK, deadline) == frozendict({PinnedApp.OUTLOOK: deadline + grace})
-    assert launch(pending, PinnedApp.TEAMS, 101.0) == frozendict({PinnedApp.OUTLOOK: deadline, PinnedApp.TEAMS: 101.0 + grace})
+    pending = launch(none, PinnedApp.OUTLOOK, 100.0, GRACE)
+    assert pending == frozendict({PinnedApp.OUTLOOK: 100.0 + GRACE})
+    assert launch(pending, PinnedApp.OUTLOOK, 100.0 + GRACE / 2, GRACE) is None
+    assert launch(pending, PinnedApp.OUTLOOK, 100.0 + GRACE, GRACE) == frozendict({PinnedApp.OUTLOOK: 100.0 + 2 * GRACE})
+    assert launch(pending, PinnedApp.TEAMS, 101.0, GRACE) == frozendict({PinnedApp.OUTLOOK: 100.0 + GRACE, PinnedApp.TEAMS: 101.0 + GRACE})
     opened = Shelf((Pinned(PinnedApp.OUTLOOK, (Window(1, "Mail", "msedge.exe", minimized=False),)), Pinned(PinnedApp.TEAMS, ())), ())
     assert outstanding(pending, opened) == none
     assert outstanding(pending, EMPTY_SHELF) == pending

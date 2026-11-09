@@ -20,7 +20,20 @@ from typing import assert_never
 import protocol
 from contracts.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, destination, effect, zoom_after
-from desktop_ui.shell_items import EMPTY_SHELF, WEB_APPS, Launches, PinnedApp, Seat, Seats, Shelf, caption_clip, launch, outstanding, shelf
+from desktop_ui.shell_items import (
+    EMPTY_SHELF,
+    LAUNCH_GRACE,
+    WEB_APPS,
+    Launches,
+    PinnedApp,
+    Seat,
+    Seats,
+    Shelf,
+    caption_clip,
+    launch,
+    outstanding,
+    shelf,
+)
 from desktop_ui.window_layout import (
     NOWHERE,
     SETUPS,
@@ -288,7 +301,7 @@ class Worker:
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
         own = os.getpid()
-        grouped = shelf(observed.windows, app_ids, watched.previous.shelf, seats(observed, watched.previous.shelf))
+        grouped = shelf(observed.windows, app_ids, watched.previous.shelf, seats(observed, watched.previous.shelf), WEB_APPS)
         slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
         current = frozenset(window.handle for window in slots)
         foreground = windows.foreground()
@@ -418,7 +431,7 @@ class Worker:
 
     def open_web_app(self, watched: _Watched, app: PinnedApp) -> _Watched:
         """Edge opens the slot's app window in the user's own profile; a repeated launch waits for it."""
-        pending = launch(watched.launches, app, time.monotonic())
+        pending = launch(watched.launches, app, time.monotonic(), LAUNCH_GRACE)
         if pending is None:
             return watched
         edge = edge_path()

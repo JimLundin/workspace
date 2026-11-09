@@ -26,6 +26,7 @@ from desktop_ui.window_layout import (
     reading_order,
     screens,
 )
+from tests import test_shell_items
 from winapi.screen import Monitor
 from winapi.shapes import Rect, Size, Window
 
@@ -159,7 +160,7 @@ def test_pinned_web_apps_are_not_placed_as_ordinary_edge() -> None:
         Window(2, "Chat", "msedge.exe", minimized=False),
         Window(3, "Save", "notepad.exe", minimized=False),
     )
-    observed = shelf((edge, teams, dialog), {1: "MSEdge", 2: "MSEdge.teams.cloud.microsoft_/"}, EMPTY_SHELF, {})
+    observed = shelf((edge, teams, dialog), {1: "Edge", 2: "Edge.chat.example_/"}, EMPTY_SHELF, {}, test_shell_items.WEB_APPS)
     assert groups(observed, frozenset({1, 2})) == (Group(PinnedApp.TEAMS, (2,)), Group(EDGE, (1,)))
 
 

@@ -19,7 +19,7 @@ from desktop_ui.components.text import color, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
 from desktop_ui.island_layout import SIZES, Capsule, on_pixels
 from desktop_ui.navigation import JumpDesktop, Navigation
-from desktop_ui.shell_items import WEB_APPS, PinnedApp, Shelf
+from desktop_ui.shell_items import PinnedApp, Shelf
 from desktop_ui.vector_icons import paint_icon
 from desktop_ui.window_layout import App, Program
 from winapi.icon_pixels import Pixels
@@ -208,11 +208,11 @@ def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
     return invoke
 
 
-def app_icon(app: App, images: Mapping[str, Pixels | None]) -> Icon:
+def app_icon(app: App, images: Mapping[str, Pixels | None], symbols: Mapping[PinnedApp, str]) -> Icon:
     """The icon the bar shows an app by: a web app's symbol, else the program's own icon."""
     match app:
         case PinnedApp():
-            return Glyph(WEB_APPS[app].glyph + ".fill")
+            return Glyph(symbols[app] + ".fill")
         case Program(exe=exe):
             image = images.get(exe)
             return Glyph("window") if image is None else image
@@ -291,7 +291,7 @@ class Pager(QtWidgets.QWidget):
             """The held chord's letter, else the desktop's apps, else its number."""
             if (hint := hints.desktops[index] if index < len(hints.desktops) else None) is not None:
                 return hint
-            return Stack(tuple(app_icon(app, images) for app in desktop.apps)) if desktop.apps else desktop.label
+            return Stack(tuple(app_icon(app, images, view.symbols) for app in desktop.apps)) if desktop.apps else desktop.label
 
         def pick(apps: tuple[App, ...]) -> Callable[[int, Click], None] | None:
             if not apps:
