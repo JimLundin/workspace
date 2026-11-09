@@ -23,7 +23,7 @@ from assistant.meeting_store import MeetingArchive, MeetingStore
 from cell import Cell
 from components import DIRECTORY
 from contracts.capture import AudioSource
-from contracts.recording_state import SOURCE_NAMES, Exhausted, Phase, Publication, RecordingState, RetryPolicy, capture_report, published
+from contracts.recording_state import PAUSED, SOURCE_NAMES, Phase, Publication, RecordingState, RetryPolicy, capture_report, published
 from winapi.pcm import RATE, Problem
 
 
@@ -519,7 +519,7 @@ class Meetings:
                 retry = self.retry_policy.failed(failures, finished=state.finished)
                 detail = "Transcription is unavailable. Audio is saved locally for retry."
                 self._publish(store, detail=detail)
-                if retry is Exhausted.PAUSED:
+                if retry is PAUSED:
                     store.export()
                     with self._lock:
                         self._state.set(replace(self._state.get(), paused=frozendict({**self._state.get().paused, store.folder: detail})))

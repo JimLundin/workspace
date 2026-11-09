@@ -17,7 +17,7 @@ from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, 
 from assistant.text import typed_text
 from cell import Cell
 from contracts.hotkeys import NEEDS_SETTINGS, ROUTES, Route
-from contracts.status import Job, State
+from contracts.status import TRANSCRIBING, Job, State
 from diagnostics import Detail, failure_info
 from protocol import Tool
 from winapi.pcm import RATE
@@ -278,7 +278,7 @@ class Assistant:
         if discard or not long_enough(pcm):
             self.idle()
             return False
-        self.working(Job.TRANSCRIBING)
+        self.working(TRANSCRIBING)
         tool = capture.tool
         try:
             progress = Progress.of(lengths)

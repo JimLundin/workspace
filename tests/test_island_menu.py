@@ -5,11 +5,11 @@ from dataclasses import replace
 from desktop_ui.island_layout import SIZES, tiles
 from desktop_ui.island_menu import (
     CONTROLS,
+    DISMISSED,
     Applied,
     Chosen,
     Command,
     Controls,
-    Dismissed,
     Face,
     Item,
     Key,
@@ -132,7 +132,7 @@ def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -
     # or a repeated letter stays on its first match.
     menu = Menu(entries(Controls("02:05"), SPEC), selected=0)
     assert press(menu, Key.ENTER) == Chosen(Command.STOP_RECORDING)
-    assert press(menu, Key.ESCAPE) is Dismissed.ESCAPE
+    assert press(menu, Key.ESCAPE) is DISMISSED
     first = opened(press(menu, Letter("k")))
     assert selected(first) == "Keyboard overlay"
     assert selected(press(first, Letter("K"))) == "Keyboard map"

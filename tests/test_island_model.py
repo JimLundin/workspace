@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from contracts.recording_state import RecordingState
+from contracts.status import TRANSCRIBING
 from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
 from desktop_ui.components.meaning import Tone
 from desktop_ui.island_model import (
@@ -12,7 +13,6 @@ from desktop_ui.island_model import (
     Capture,
     Control,
     Glyph,
-    Job,
     Key,
     Marker,
     Observed,
@@ -82,7 +82,7 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
             for observed in (
                 baseline,
                 replace(baseline, dictating=True),
-                replace(baseline, job=Job.TRANSCRIBING, recording=RECORDING),
+                replace(baseline, job=TRANSCRIBING, recording=RECORDING),
             ):
                 for expanded in (False, True):
                     # The open menu is the status capsule itself; its row stays.
@@ -108,7 +108,7 @@ def test_charger_and_low_battery_lead_the_machine_readings_at_the_right() -> Non
 
 def test_concurrent_activity_has_distinct_indicators_and_recording_stop_under_the_pointer() -> None:
     # Defects: transcription and recording share one indicator, or Stop shows at rest.
-    busy = replace(RESTING, job=Job.TRANSCRIBING, recording=RECORDING)
+    busy = replace(RESTING, job=TRANSCRIBING, recording=RECORDING)
     job, recording = view(busy, Key.ISLAND).slots
     assert job == (Marker.DOTS,) and recording == (Marker.DOT, Text("02:05"))
     assert view(busy, Key.ISLAND, hovered=Key.ISLAND).slots[-1][-1] == Control("stop", "Stop recording", Action.STOP_RECORDING)
@@ -116,7 +116,7 @@ def test_concurrent_activity_has_distinct_indicators_and_recording_stop_under_th
 
 def test_dictation_detaches_every_other_activity_without_persistent_facts() -> None:
     # Defect: dictation shares the centre with other activity, or loses its stop press.
-    observed = replace(RESTING, dictating=True, job=Job.TRANSCRIBING, recording=RECORDING)
+    observed = replace(RESTING, dictating=True, job=TRANSCRIBING, recording=RECORDING)
     dynamic = tuple(each for each in island(observed, SPEC) if each.zone is not Zone.RIGHT)
     assert tuple(each.key for each in dynamic) == (Key.JOB, Key.ISLAND, Key.RECORDING)
     assert dynamic[0].slots == ((Marker.DOTS,),)
@@ -128,7 +128,7 @@ def test_the_status_capsule_expands_into_the_menu() -> None:
     # Defects: the menu opens as the centre island instead of the capsule that
     # opened it, that capsule loses its readings while open, or activity stays
     # in the centre while the menu lists it.
-    busy = replace(RESTING, job=Job.TRANSCRIBING, recording=RECORDING)
+    busy = replace(RESTING, job=TRANSCRIBING, recording=RECORDING)
     opened = island(busy, SPEC, expanded=True)
     readings = view(busy, Key.STATUS).slots
     assert opened == (CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU),)

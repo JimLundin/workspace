@@ -16,7 +16,8 @@ class State(Enum):
     WORKING = auto()
 
 
-class Job(Enum):
-    """A quick job Workspace runs for you after a key press."""
+TRANSCRIBING = sentinel("TRANSCRIBING")
+"""Speech to text after dictation."""
 
-    TRANSCRIBING = auto()  # speech to text after dictation
+type Job = TRANSCRIBING
+"""A quick job Workspace runs for you after a key press."""

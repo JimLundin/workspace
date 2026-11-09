@@ -21,6 +21,7 @@ from keyboard import engine, hook_watch, settings
 from keyboard.bindings import native_control, pictured
 from keyboard.engine import EngineState, Indicator, UnreleasedError, Verdict
 from keyboard.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
+from keyboard.hook_watch import ANSWERED
 from keyboard.layout import Key, Mod, Scancode
 from protocol import LayoutState, Message, Origin, Request, Window, encode, encode_indicator
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
@@ -279,7 +280,7 @@ class HookState:
     recovery: Recovery | None = None
     hook_tick: int | None = None
     """The newest key time the hook has seen; the hook's only watchdog cost."""
-    watch: hook_watch.Watch = hook_watch.Answered.ANSWERED
+    watch: hook_watch.Watch = ANSWERED
 
 
 def _busy(state: HookState) -> HookState:
@@ -518,7 +519,7 @@ class Keyboard:
                 watch = hook_watch.probed(probe, now, sent=self.probe_hook())
                 self._state.update(lambda state: replace(state, watch=watch))
             case hook_watch.Reinstall() as reinstall:
-                self._state.update(lambda state: replace(state, watch=hook_watch.Answered.ANSWERED))
+                self._state.update(lambda state: replace(state, watch=ANSWERED))
                 return reinstall
             case watch:
                 self._state.update(lambda state: replace(state, watch=watch))

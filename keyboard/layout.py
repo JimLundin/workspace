@@ -194,8 +194,13 @@ class TapHold:
 
 type Action = Output | Mod | Layer | TapHold | Tool | App
 """What one key on one layer does. A Key or Chord is sent; a Mod or Layer is held
-while the key is held; a Tool or App is a request to the assistant (see `protocol`).
-A key with no action on a layer is None there."""
+while the key is held; a Tool or App is a request to the assistant (see `protocol`)."""
+
+BLANK = sentinel("BLANK")
+"""A key with no action on a layer: pressing it does nothing."""
+
+type Binding = Action | BLANK
+"""What a layer binds a key to: an action, or nothing."""
 
 
 # ---- Board shape ---------------------------------------------------------------
@@ -220,7 +225,7 @@ class Thumbs[CellT]:
 @dataclass(frozen=True, slots=True)
 class Board[CellT]:
     """The whole board, written the way it looks. Used for the physical keys
-    (`Board[Scancode]`) and for every layer (`Board[Action | None]`), so they line up."""
+    (`Board[Scancode]`) and for every layer (`Board[Binding]`), so they line up."""
 
     SIZE: ClassVar = 36
     """Keys on the board: three rows of ten, plus six thumb keys."""

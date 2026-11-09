@@ -384,11 +384,11 @@ class Applied:
     choice: Choice
 
 
-class Dismissed(Enum):
-    ESCAPE = auto()
+DISMISSED = sentinel("DISMISSED")
+"""Escape closed the menu."""
 
 
-type Outcome = Menu | Chosen | Applied | Dismissed
+type Outcome = Menu | Chosen | Applied | DISMISSED
 
 VOLUME_STEP: Final = 0.05
 
@@ -460,7 +460,7 @@ def press(menu: Menu, key: Press) -> Outcome:
         case Key.UP | Key.DOWN:
             return move(menu, key)
         case Key.ESCAPE:
-            return Dismissed.ESCAPE
+            return DISMISSED
         case Key.ENTER:
             return choose(menu, entry)
         case Letter(character=character):

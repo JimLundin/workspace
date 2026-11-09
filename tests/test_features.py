@@ -7,7 +7,7 @@ from typing import cast, override
 
 from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
-from contracts.status import Job, State
+from contracts.status import TRANSCRIBING, Job, State
 from diagnostics import Detail
 from protocol import Tool
 from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
@@ -132,7 +132,7 @@ def test_transcription_shows_on_the_bar_and_ends_when_finished() -> None:
         endpoint.replies = [said("hej")]
         rig = Rig(endpoint)
         rig.hold(Tool.DICTATE)
-        assert rig.desktop.jobs[-2:] == [Job.TRANSCRIBING, None]
+        assert rig.desktop.jobs[-2:] == [TRANSCRIBING, None]
 
 
 def test_clipboard_failure_keeps_a_recoverable_transcript_and_still_types() -> None:

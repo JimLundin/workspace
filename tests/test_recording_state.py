@@ -3,8 +3,8 @@
 from dataclasses import replace
 
 from contracts.recording_state import (
+    PAUSED,
     Batch,
-    Exhausted,
     Phase,
     Publication,
     RecordingState,
@@ -31,8 +31,8 @@ def test_transcription_retries_back_off_while_capturing_and_pause_after_capture(
     ]
     assert policy.failed(0, finished=True) == Retry(1, 2)
     assert policy.failed(1, finished=True) == Retry(2, 4)
-    assert policy.failed(2, finished=True) is Exhausted.PAUSED
-    assert policy.failed(10, finished=True) is Exhausted.PAUSED
+    assert policy.failed(2, finished=True) is PAUSED
+    assert policy.failed(10, finished=True) is PAUSED
 
 
 def observation() -> Publication:

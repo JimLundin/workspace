@@ -22,7 +22,7 @@ from typing import Final, assert_never
 
 from contracts.members import every_member
 from contracts.recording_state import RecordingState
-from contracts.status import Job
+from contracts.status import TRANSCRIBING, Job
 from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
 from desktop_ui.components import meaning
 from winapi.machine_status import Battery, PowerUnavailable
@@ -225,11 +225,7 @@ def zone(key: Key, spec: IslandSpec) -> Zone:
 
 
 def job_label(job: Job) -> str:
-    match job:
-        case Job.TRANSCRIBING:
-            return "Transcribing"
-        case _:
-            assert_never(job)
+    return {TRANSCRIBING: "Transcribing"}[job]
 
 
 def usage(percent: int | None) -> Text:

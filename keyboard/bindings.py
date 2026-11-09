@@ -7,14 +7,14 @@ from enum import Enum, auto
 from typing import Final
 
 from keyboard import settings
-from keyboard.layout import Action, Layer, Scancode
+from keyboard.layout import Binding, Layer, Scancode
 
 
 class LayoutError(Exception):
     """The layout is inconsistent; raised at import, never at runtime."""
 
 
-_TABLE: Final[frozendict[Layer | None, tuple[Action | None, ...]]] = frozendict({
+_TABLE: Final[frozendict[Layer | None, tuple[Binding, ...]]] = frozendict({
     None: settings.BASE.cells(),
     Layer.NAV: settings.NAV_LAYER.cells(),
     Layer.NUM: settings.NUM_LAYER.cells(),
@@ -24,12 +24,12 @@ _TABLE: Final[frozendict[Layer | None, tuple[Action | None, ...]]] = frozendict(
 """Every layer flattened, by layer (None: the base layer) then cell."""
 
 
-def action(layer: Layer | None, cell: int) -> Action | None:
-    """What key `cell` does on `layer`; None for nothing."""
+def action(layer: Layer | None, cell: int) -> Binding:
+    """What key `cell` does on `layer`."""
     return _TABLE[layer][cell]
 
 
-def actions(layer: Layer | None) -> tuple[Action | None, ...]:
+def actions(layer: Layer | None) -> tuple[Binding, ...]:
     """What every key does on `layer`, by cell."""
     return _TABLE[layer]
 

@@ -78,7 +78,7 @@ class Finding:
 
 @dataclass(frozen=True, slots=True)
 class ExceptionSpec:
-    rule: Literal["explicit-attributes", "immutable-data", "mutable-field", "mutable-parameter", "plain-record", "unused-definition"]
+    rule: Literal["explicit-attributes", "immutable-data", "member-table", "mutable-field", "mutable-parameter", "plain-record", "unused-definition"]
     module: Text
     declaration: Text
     expression: Text
@@ -205,9 +205,23 @@ CONSTANT: Final = re.compile(r"[A-Z][A-Z0-9_]*")
 """A module-level constant's name; a leading underscore keeps one private."""
 
 
+def _sentinel(statement: ast.stmt) -> bool:
+    """`NAME = sentinel("NAME")`: a marker that is its own type, shared as freely as a class."""
+    match statement:
+        case ast.Assign(value=ast.Call(func=ast.Name(id="sentinel"))) | ast.AnnAssign(value=ast.Call(func=ast.Name(id="sentinel"))):
+            return True
+        case _:
+            return False
+
+
 def _constants(tree: ast.Module) -> frozenset[str]:
-    """The constants a module declares at its top level."""
-    targets = (target for statement in tree.body if isinstance(statement, ast.Assign | ast.AnnAssign) for target in _targets(statement))
+    """The constants a module declares at its top level; a sentinel is a type, not a constant."""
+    targets = (
+        target
+        for statement in tree.body
+        if isinstance(statement, ast.Assign | ast.AnnAssign) and not _sentinel(statement)
+        for target in _targets(statement)
+    )
     names = (name for target in targets for name in (target.elts if isinstance(target, ast.Tuple) else (target,)) if isinstance(name, ast.Name))
     return frozenset(name.id for name in names if CONSTANT.fullmatch(name.id))
 
@@ -263,6 +277,60 @@ def _constant_reads(
                 yield Finding("shared-constant", module, "", f"{source}.{attribute}", node.lineno, detail)
             case _:
                 pass
+
+
+ENUM_BASES: Final = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag"})
+
+
+def _enum_members(definition: ast.ClassDef) -> tuple[str, ...] | None:
+    """The members an enum declares, or None for a class that isn't an enum."""
+    bases = frozenset(base.id if isinstance(base, ast.Name) else base.attr for base in definition.bases if isinstance(base, ast.Name | ast.Attribute))
+    if bases.isdisjoint(ENUM_BASES):
+        return None
+    targets = (target for statement in definition.body if isinstance(statement, ast.Assign | ast.AnnAssign) for target in _targets(statement))
+    return tuple(target.id for target in targets if isinstance(target, ast.Name) and not target.id.startswith("_"))
+
+
+def _member_of(node: ast.expr | None, enums: frozenset[str]) -> bool:
+    return isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in enums
+
+
+def _keyed_by(value: ast.expr, enums: frozenset[str]) -> bool:
+    """A table literal keyed by one of the module's enums: `{E.A: ..., E.B: ...}`, `frozenset({E.A, E.B})`, or one built over `E`."""
+    match value:
+        case ast.Call(func=ast.Name(id="frozendict" | "frozenset" | "dict" | "set"), args=[inner]):
+            return _keyed_by(inner, enums)
+        case ast.Dict(keys=keys):
+            return len(keys) > 1 and all(_member_of(key, enums) for key in keys)
+        case ast.Set(elts=elements):
+            return len(elements) > 1 and all(_member_of(item, enums) for item in elements)
+        case (
+            ast.DictComp(generators=[ast.comprehension(iter=ast.Name(id=name)), *_])
+            | ast.SetComp(generators=[ast.comprehension(iter=ast.Name(id=name)), *_])
+        ):
+            return name in enums
+        case _:
+            return False
+
+
+def enum_shapes(sources: Iterable[Source]) -> Iterator[Finding]:
+    """Enums that hide another shape: one member is a sentinel, and a table beside an enum is its members' values."""
+    for source in sources:
+        module, tree = module_name(source.name), ast.parse(source.text)
+        enums: frozendict[str, tuple[str, ...]] = frozendict(
+            (node.name, members) for node in tree.body if isinstance(node, ast.ClassDef) and (members := _enum_members(node)) is not None
+        )
+        for node in tree.body:
+            match node:
+                case ast.ClassDef(name=name) if len(enums.get(name, ())) == 1:
+                    detail = 'An enum with one member is a marker: use sentinel("NAME"), or None for plain absence.'
+                    yield Finding("single-member-enum", module, name, name, node.lineno, detail)
+                case ast.Assign(value=value) | ast.AnnAssign(value=ast.expr() as value) if _keyed_by(value, frozenset(enums)):
+                    names = ", ".join(ast.unparse(target) for target in _targets(node))
+                    detail = "Put each member's value on the member (an enum whose values are records), not in a table beside the enum."
+                    yield Finding("member-table", module, names, names, node.lineno, detail)
+                case _:
+                    pass
 
 
 def _within(module: str, package: str) -> bool:
@@ -1104,6 +1172,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *duplicates(observations.values()),
         *redeclarations(observations.values()),
         *shared_constants(loaded, configuration.constants),
+        *enum_shapes(loaded),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
     failures = (

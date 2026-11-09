@@ -4,7 +4,7 @@ hooks), missing a dead one, or reinstalling repeatedly after one outage."""
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from keyboard.hook_watch import Answered, Probe, Reinstall, Watch, assess, keyboard_input, probed
+from keyboard.hook_watch import ANSWERED, Probe, Reinstall, Watch, assess, keyboard_input, probed
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +28,7 @@ type Observation = Raw | HookEvent | Timer
 
 def actions(observations: Iterable[Observation]) -> list[tuple[str, int]]:
     """Play observations as the layout's message loop does, listing probes and reinstalls."""
-    watch: Watch = Answered.ANSWERED
+    watch: Watch = ANSWERED
     hook: int | None = None
     taken: list[tuple[str, int]] = []
     for observation in observations:
@@ -44,7 +44,7 @@ def actions(observations: Iterable[Observation]) -> list[tuple[str, int]]:
                         watch = probed(probe, tick, sent=sent)
                     case Reinstall(since=since):
                         taken.append(("reinstall", since))
-                        watch = Answered.ANSWERED
+                        watch = ANSWERED
                     case state:
                         watch = state
     return taken

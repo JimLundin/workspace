@@ -8,7 +8,6 @@ cached registry icons. The hidden proxy is removed before Explorer is restored.
 import ctypes
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Final
 
 lazy from win32more.Windows.Win32.System.DataExchange import COPYDATASTRUCT
 lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
@@ -61,10 +60,20 @@ class Entry:
     hidden: bool = field(default=False, kw_only=True)
 
 
+@dataclass(frozen=True, slots=True)
+class Messages:
+    """The mouse messages a click sends a tray icon, then the select or context message a version 3 icon also gets."""
+
+    mouse: tuple[int, ...]
+    selected: tuple[int, ...]
+
+
 class Click(Enum):
-    LEFT = "left"
-    RIGHT = "right"
-    DOUBLE = "double"
+    """A click on a tray icon, with the messages it sends the icon."""
+
+    LEFT = Messages((0x201, 0x202), (0x400,))
+    RIGHT = Messages((0x204, 0x205), (0x7B,))
+    DOUBLE = Messages((0x203,), ())
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,21 +160,8 @@ class Notify:
     lparam: int
 
 
-@dataclass(frozen=True, slots=True)
-class Messages:
-    """The mouse messages a click sends a tray icon, then the select or context message a version 3 icon also gets."""
-
-    mouse: tuple[int, ...]
-    selected: tuple[int, ...]
-
-
-_MESSAGES: Final = frozendict(
-    {Click.LEFT: Messages((0x201, 0x202), (0x400,)), Click.RIGHT: Messages((0x204, 0x205), (0x7B,)), Click.DOUBLE: Messages((0x203,), ())}
-)
-
-
 def callbacks(entry: Entry, click: Click, point: Point) -> tuple[Notify, ...]:
-    messages = _MESSAGES[click]
+    messages = click.value
     events = (*messages.mouse, *messages.selected) if entry.version >= 3 else messages.mouse
     if entry.version >= 4:
         coordinates = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)

@@ -19,11 +19,11 @@ from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.application_observer import EMPTY_ARRANGEMENT, Arrangement
 from desktop_ui.island_menu import (
     CONTROLS,
+    DISMISSED,
     Applied,
     Chosen,
     Command,
     Controls,
-    Dismissed,
     Menu,
     Slider,
     ToolChoice,
@@ -410,7 +410,7 @@ def _settled(model: BarModel, outcome: island_menu.Outcome) -> tuple[BarModel, t
         case Applied(choice=choice):
             model, ran = _ran(model, choice)
             return model, (*ran, Render())
-        case Dismissed.ESCAPE:
+        case _ if outcome is DISMISSED:
             return _closed(model, restore=True)
         case _:
             assert_never(outcome)

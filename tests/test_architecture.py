@@ -478,6 +478,45 @@ def test_constants_cross_modules_only_by_dot_access_from_data_modules(tmp_path: 
     assert found == [("constant-import", "app.user", "app.settings.DELAY"), ("shared-constant", "app.user", "app.logic.LIMIT")]
 
 
+def test_a_sentinel_is_shared_like_a_type(tmp_path: Path) -> None:
+    # Defect: importing a sentinel by name, as a type annotation needs, is reported as a constant import.
+    write_tree(
+        tmp_path,
+        {
+            "app/__init__.py": "",
+            "app/marks.py": 'BLANK = sentinel("BLANK")\n\ndef blank():\n    return BLANK\n',
+            "app/user.py": "from app.marks import BLANK\n\ndef run(value: int | BLANK):\n    return value is BLANK\n",
+        },
+    )
+    (tmp_path / "pyproject.toml").write_text('[tool.workspace.architecture]\nconstants = ["app"]\n', encoding="utf-8")
+    assert others(review(tmp_path)) == ()
+
+
+def test_enums_hiding_a_marker_or_a_table_are_reported(tmp_path: Path) -> None:
+    # Defects: a one-member enum stands in for a sentinel, or a table beside an enum holds
+    # what belongs on its members; or a larger enum, another module's enum as keys, or a
+    # one-entry table is wrongly flagged.
+    source = """from enum import Enum, IntEnum, auto
+from other import Colour
+
+class Done(Enum):
+    DONE = auto()
+
+class Size(IntEnum):
+    SMALL = 1
+    LARGE = 2
+
+WIDTH = {Size.SMALL: 10, Size.LARGE: 20}
+TALL = frozenset({Size.SMALL, Size.LARGE})
+NAMES = frozendict({size: size.name for size in Size})
+ONLY = {Size.SMALL: 1}
+HUES = {Colour.RED: 1, Colour.BLUE: 2}
+"""
+    write_tree(tmp_path, {"shapes.py": source})
+    found = [(finding.rule, finding.declaration) for finding in others(review(tmp_path))]
+    assert found == [("single-member-enum", "Done"), ("member-table", "WIDTH"), ("member-table", "TALL"), ("member-table", "NAMES")]
+
+
 def test_a_record_kind_field_is_only_a_constant_tag(tmp_path: Path) -> None:
     # Defect: a record whose enum, string or multi-valued Literal `kind`
     # decides what the rest of it means passes the review; or the review

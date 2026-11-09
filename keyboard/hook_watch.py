@@ -7,7 +7,6 @@ Ticks are Windows message times in milliseconds, which wrap at 2**32.
 """
 
 from dataclasses import dataclass
-from enum import Enum, auto
 from typing import Final, assert_never
 
 ANSWER_SLACK_MS: Final = 1000
@@ -20,9 +19,8 @@ PROBE_MS: Final = 1000
 earlier in the chain can each hold an event for up to LowLevelHooksTimeout."""
 
 
-class Answered(Enum):
-    ANSWERED = auto()
-    """The hook has seen every keyboard input so far."""
+ANSWERED = sentinel("ANSWERED")
+"""The hook has seen every keyboard input so far."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +38,7 @@ class Probing:
     sent: int
 
 
-type Watch = Answered | Unanswered | Probing
+type Watch = ANSWERED | Unanswered | Probing
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,10 +65,10 @@ def offset(later: int, earlier: int) -> int:
 def keyboard_input(watch: Watch, tick: int) -> Watch:
     """Raw keyboard input arrived; only the earliest unanswered input counts."""
     match watch:
-        case Answered.ANSWERED:
-            return Unanswered(tick)
         case Unanswered() | Probing():
             return watch
+        case _ if watch is ANSWERED:
+            return Unanswered(tick)
         case _:
             assert_never(watch)
 
@@ -78,14 +76,14 @@ def keyboard_input(watch: Watch, tick: int) -> Watch:
 def assess(watch: Watch, hook: int | None, now: int) -> Watch | Probe | Reinstall:
     """`hook` is the newest event time the hook has seen; `now` is the current tick."""
     match watch:
-        case Answered.ANSWERED:
-            return watch
         case Unanswered(since=since) | Probing(since=since) if hook is not None and offset(since, hook) <= ANSWER_SLACK_MS:
-            return Answered.ANSWERED
+            return ANSWERED
         case Unanswered(since=since):
             return Probe(since) if offset(now, since) >= SUSPECT_MS else watch
         case Probing(since=since, sent=sent):
             return Reinstall(since, hook) if offset(now, sent) >= PROBE_MS else watch
+        case _ if watch is ANSWERED:
+            return watch
         case _:
             assert_never(watch)
 
@@ -93,4 +91,4 @@ def assess(watch: Watch, hook: int | None, now: int) -> Watch | Probe | Reinstal
 def probed(probe: Probe, now: int, *, sent: bool) -> Watch:
     """Windows refuses probes on the lock screen and into elevated windows, where
     the hook cannot see keys either; a refused probe proves nothing."""
-    return Probing(probe.since, now) if sent else Answered.ANSWERED
+    return Probing(probe.since, now) if sent else ANSWERED

@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from contracts.status import Job
+from contracts.status import TRANSCRIBING
 from desktop_ui.bar_events import BarModel, menu, next_frame
 from desktop_ui.island_model import ISLAND, island
 from tests.test_island_model import RESTING
@@ -14,7 +14,7 @@ def model() -> BarModel:
 
 def working() -> BarModel:
     """A settled bar whose island shows a quick job running."""
-    return replace(model(), job=Job.TRANSCRIBING, views=island(replace(RESTING, job=Job.TRANSCRIBING), ISLAND))
+    return replace(model(), job=TRANSCRIBING, views=island(replace(RESTING, job=TRANSCRIBING), ISLAND))
 
 
 def test_a_settled_idle_bar_stops_its_frame_loop() -> None:

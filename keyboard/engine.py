@@ -34,7 +34,7 @@ from typing import Final, Protocol, assert_never
 
 from keyboard import settings
 from keyboard.bindings import Unmapped, action, slot
-from keyboard.layout import Action, Board, Chord, Hold, Key, Layer, Mod, Output, Scancode, TapHold, is_left_hand
+from keyboard.layout import BLANK, Action, Board, Chord, Hold, Key, Layer, Mod, Output, Scancode, TapHold, is_left_hand
 from protocol import App, LayoutState, Request, Tool
 
 
@@ -288,16 +288,15 @@ def event(state: EngineState, host: Host, e: Event) -> EngineState:
         case KeyDown(cell, now):
             if current := state.pressed[cell]:
                 return repeat(state, host, current, now)
-            layer = state.layer()
-            match action(layer, cell):
+            if (bound := action(state.layer(), cell)) is BLANK:
+                return state  # Nothing pressed, so its release has nothing to end.
+            match bound:
                 case TapHold(tap) if quick_tap(state, cell, now):
                     a: Action = tap
                 case TapHold(tap, Mod() as mod) if mod != Mod.SHIFT and in_streak(state, now):
                     a = tap
                 case TapHold(tap, hold):
                     return replace(state, pending=Pending(cell, tap, hold, host.start_timer(), now), buffer=())
-                case None:
-                    return state  # No action on this layer: nothing pressed, so its release has nothing to end.
                 case other:
                     a = other
             return press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)

@@ -9,7 +9,7 @@ from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
 from keyboard.bindings import Unmapped, action, actions, slot
 from keyboard.firmware import CHORDS
-from keyboard.layout import Action, Chord, Key, Layer, Mod, Scancode, TapHold
+from keyboard.layout import BLANK, Binding, Chord, Key, Layer, Mod, Scancode, TapHold
 from keyboard.settings import BASE, COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
 
@@ -117,8 +117,10 @@ def _output(key: Key, label: str | None = None) -> str:
     return label or _KEY_NAMES.get(key) or (c.upper() if c else key.name.title())
 
 
-def describe(a: Action | None) -> tuple[str, Role]:
+def describe(a: Binding) -> tuple[str, Role]:
     """A key's label and role, as drawn."""
+    if a is BLANK:
+        return "", Role.BLANK
     match a:
         case Key():
             return _output(a), Role.KEY
@@ -134,15 +136,13 @@ def describe(a: Action | None) -> tuple[str, Role]:
             return _MOD_NAMES[a], Role.MOD
         case Layer():
             return a.name.title(), Role.LAYER
-        case None:
-            return "", Role.BLANK
         case Tool():
             return TOOL_NAMES[a], Role.TOOL
         case App():
             return a.name[:1].upper() + a.name[1:], Role.APP
 
 
-def _hold(a: Action | None) -> str:
+def _hold(a: Binding) -> str:
     match a:
         case Tool() if ROUTES[a] is Route.HOLD:
             return "hold"

@@ -275,6 +275,20 @@ desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 constants = ["keyboard"]
 
 [[tool.workspace.architecture.exceptions]]
+rule = "member-table"
+module = "desktop_ui.window_layout"
+declaration = "EXTERNALS"
+expression = "EXTERNALS"
+reason = "Configuration keyed by Setup: it moves to desktop_ui/settings.py with the desktop's data migration, once window_layout's types leave the module."
+
+[[tool.workspace.architecture.exceptions]]
+rule = "member-table"
+module = "desktop_ui.window_layout"
+declaration = "LAYOUTS"
+expression = "LAYOUTS"
+reason = "Configuration keyed by Setup: it moves to desktop_ui/settings.py with the desktop's data migration, once window_layout's types leave the module."
+
+[[tool.workspace.architecture.exceptions]]
 rule = "mutable-parameter"
 module = "scripts.benchmark_keyboard"
 declaration = "measure_latencies.observe_gc.info"

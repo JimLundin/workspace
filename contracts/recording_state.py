@@ -2,7 +2,6 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from math import isfinite
 from typing import Final, Literal, assert_never
 
@@ -15,8 +14,8 @@ type RecordingAction = Literal["start", "stop", "open", "folder", "retry"]
 type CompletionPhase = Literal["finishing", "interrupted", "saved"]
 
 
-class Exhausted(Enum):
-    PAUSED = auto()
+PAUSED = sentinel("PAUSED")
+"""Retries are used up: the recording pauses its transcription."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,10 +33,10 @@ class RetryPolicy:
         if not self.delays or any(not isfinite(delay) or delay < 0 for delay in self.delays) or self.finished_attempts < 1:
             raise ValueError("Retries need finite, nonnegative delays and at least one attempt.")
 
-    def failed(self, failures: int, *, finished: bool) -> Retry | Exhausted:
+    def failed(self, failures: int, *, finished: bool) -> Retry | PAUSED:
         failures += 1
         if finished and failures >= self.finished_attempts:
-            return Exhausted.PAUSED
+            return PAUSED
         return Retry(failures, self.delays[min(failures - 1, len(self.delays) - 1)])
 
 
