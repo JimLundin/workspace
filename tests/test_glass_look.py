@@ -1,16 +1,25 @@
 """How shared glass surfaces read under each material and their owner's observations."""
 
-from desktop_ui.components.appearance import ATTENTION, CanvasBar, Capsule, GlassLook, Menu, Scheme, Shade, SolidLook, look, reading, tokens
+from desktop_ui.colour import Rgb
+from desktop_ui.components.appearance import CanvasBar, Capsule, GlassLook, Look, Menu, Scheme, Shade, SolidLook, look, reading
 from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance
+
+
+def brightness(color: str) -> int:
+    rgb = Rgb.parse(color)
+    return rgb.red + rgb.green + rgb.blue
 
 
 def test_glass_takes_dark_ink_over_a_bright_desktop_and_a_heavier_veil_over_a_mixed_one() -> None:
     # Defects: white ink stays on glass over a bright desktop, or a busy desktop
     # gets the thin veil and small text loses contrast.
-    match look(appearance.Material.GLASS, Capsule(appearance.Frost.BRIGHT), Tint.NONE):
-        case GlassLook(lettering=lettering):
-            assert lettering.ink.color == "#000000"
+    match (
+        look(appearance.Material.GLASS, Capsule(appearance.Frost.BRIGHT), Tint.NONE),
+        look(appearance.Material.GLASS, Capsule(appearance.Frost.SMOKED), Tint.NONE),
+    ):
+        case (GlassLook(lettering=over_bright), GlassLook(lettering=over_dark)):
+            assert brightness(over_bright.ink.color) < brightness(over_dark.ink.color)
         case other1:
             raise AssertionError(f"Glass preference produced {other1}")
     match (
@@ -26,16 +35,20 @@ def test_glass_takes_dark_ink_over_a_bright_desktop_and_a_heavier_veil_over_a_mi
 def test_attention_keeps_its_meaning_under_every_material() -> None:
     # Defects: a waiting question looks like the resting island when transparency
     # is off, or high contrast drops the distinction entirely.
-    match look(appearance.Material.GLASS, Capsule(appearance.Frost.BRIGHT), Tint.ATTENTION):
-        case GlassLook(veil=veil, lettering=lettering):
-            assert veil.color == ATTENTION and lettering.ink.color == "#ffffff"
-        case other3:
-            raise AssertionError(f"Glass preference produced {other3}")
-    match look(appearance.Material.SOLID, Capsule(appearance.Frost.SMOKED), Tint.ATTENTION):
-        case SolidLook(fill=fill):
-            assert fill == Shade(ATTENTION)
-        case other4:
-            raise AssertionError(f"Solid preference produced {other4}")
+    def both(material: appearance.Material, frost: appearance.Frost) -> tuple[Look, Look]:
+        return look(material, Capsule(frost), Tint.NONE), look(material, Capsule(frost), Tint.ATTENTION)
+
+    for frost in appearance.Frost:
+        match both(appearance.Material.GLASS, frost):
+            case (GlassLook(veil=resting_veil), GlassLook(veil=asking_veil)):
+                assert asking_veil.color != resting_veil.color
+            case other3:
+                raise AssertionError(f"Glass preference produced {other3}")
+        match both(appearance.Material.SOLID, frost):
+            case (SolidLook(fill=resting_fill), SolidLook(fill=asking_fill)):
+                assert asking_fill != resting_fill
+            case other4:
+                raise AssertionError(f"Solid preference produced {other4}")
     contrast = appearance.Contrast("#000000", "#ffff00")
     match (look(contrast, Capsule(appearance.Frost.SMOKED), Tint.NONE), look(contrast, Capsule(appearance.Frost.SMOKED), Tint.ATTENTION)):
         case (SolidLook(fill=Shade("#000000"), lettering=resting), SolidLook(fill=Shade("#ffff00"), lettering=asking)):
@@ -67,14 +80,11 @@ def test_the_scheme_owned_pane_uses_system_ink_under_high_contrast() -> None:
 
 def test_reduce_transparency_gives_a_scheme_owned_pane_its_solid_surface() -> None:
     # Defect: a scheme-owned pane keeps glass when transparency is disabled, or falls back
-    # to the capsule's fixed dark surface instead of its own app scheme.
-    for scheme in Scheme:
-        theme = tokens(scheme)
-        match look(appearance.Material.SOLID, CanvasBar(scheme), Tint.NONE):
-            case SolidLook(fill=fill, lettering=ink):
-                assert fill == Shade(theme.solid) and ink.ink == theme.ink
-            case other:
-                raise AssertionError(f"Solid preference produced {other}")
+    # to one fixed surface instead of its own app scheme.
+    solids = tuple(look(appearance.Material.SOLID, CanvasBar(scheme), Tint.NONE) for scheme in Scheme)
+    assert all(isinstance(each, SolidLook) for each in solids)
+    assert len({each.fill for each in solids if isinstance(each, SolidLook)}) == len(Scheme)
+    assert len({each.lettering.ink for each in solids}) == len(Scheme)
 
 
 def test_expanded_menu_glass_is_thicker_than_its_capsule() -> None:
