@@ -16,7 +16,7 @@ dependencies = [
     "win32more-Microsoft.Windows.SDK.Win32Metadata==0.8.71.0.26; sys_platform == 'win32'",
     # Development checks; kept in the runtime group until the dev group carries them.
     "ruff==0.17.3",
-    "pyright==1.1.414",
+    "mypy==2.4.1",
     "truststore==0.10.5",
 ]
 
@@ -48,27 +48,31 @@ constraint-dependencies = [
     "PySide6-Essentials==6.12.0; sys_platform == 'win32'",
     "shiboken6==6.12.0; sys_platform == 'win32'",
     "win32more-core==0.8.7; sys_platform == 'win32'",
-    "nodeenv==1.11.0",
-    "pyright==1.1.414",
+    "ast-serialize==0.13.1",
+    "librt==0.16.0",
+    "mypy==2.4.1",
+    "mypy-extensions==1.2.0",
+    "pathspec==1.1.1",
     "ruff==0.17.3",
 ]
 
-[tool.pyright]
-stubPath = "typings"
-typeshedPath = "typings/.workspace-typeshed"
-pythonVersion = "3.15"
-pythonPlatform = "Windows"
-typeCheckingMode = "strict"
-reportImplicitOverride = "error"
-exclude = ["**/node_modules", "**/__pycache__", "**/.*"]
+[tool.mypy]
+python_version = "3.15"
+platform = "win32"
+strict = true
+# Our own code declares no Any; an Any a dependency declares is validated where it enters.
+disallow_any_explicit = true
+enable_error_code = ["explicit-override", "ignore-without-code"]
+mypy_path = "typings"
+files = ["."]
+exclude = ['^\.', '/\.', '^typings/', 'node_modules', '__pycache__']
 
 [tool.ruff]
 target-version = "py315"
 line-length = 150
 extend-include = ["*.pyw"]
-# Preserve upstream typeshed declarations; lint consumed local stubs separately.
 # Agent worktrees under .claude are separate checkouts with their own checks.
-extend-exclude = ["typings/.workspace-typeshed", ".claude"]
+extend-exclude = [".claude"]
 
 [tool.ruff.format]
 line-ending = "lf"

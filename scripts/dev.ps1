@@ -28,7 +28,7 @@ try {
         'lint' { & $python -m ruff check @Arguments }
         'format' { & $python -m ruff format @Arguments }
         'volume' { & $python -B -m scripts.volume @Arguments }
-        'typecheck' { & $python -m scripts.typecheck --pythonpath $python @Arguments }
+        'typecheck' { & $python -m mypy @Arguments }
     }
     exit $LASTEXITCODE
 } finally { Pop-Location }

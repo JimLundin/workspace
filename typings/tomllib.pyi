@@ -1,3 +1,0 @@
-"""Consumed TOML parser interface; nested external values require validation."""
-
-def loads(s: str, /) -> dict[str, object]: ...

@@ -50,7 +50,8 @@ def folded(events: Iterable[Event], state: DesktopState | None = None) -> tuple[
         following, produced = transition(current, event)
         return following, (*effects, *produced)
 
-    return reduce(step, events, (state if state is not None else DesktopState(), ()))
+    start: tuple[DesktopState, tuple[Effect, ...]] = (state if state is not None else DesktopState(), ())
+    return reduce(step, events, start)
 
 
 def test_the_tray_shows_a_live_recording_before_the_voice_state() -> None:
@@ -134,7 +135,7 @@ def test_physical_key_messages_become_key_actions_with_a_reset_marker() -> None:
         PhysicalKey(Scancode(0x10), down=False),
         PhysicalKey(Scancode(0), down=False),
     )
-    assert tuple(action.reset for action in actions if isinstance(action, PhysicalKey)) == (False, False, False, True)
+    assert tuple(action.reset for action in actions) == (False, False, False, True)
 
 
 def test_layout_status_is_the_toggle_and_is_checked_while_on() -> None:

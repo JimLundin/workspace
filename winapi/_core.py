@@ -4,6 +4,7 @@ import ctypes
 import uuid
 from ctypes import wintypes
 from typing import Protocol, overload
+lazy from _ctypes import _CData, _SimpleCData  # Only annotations name them; _CData exists only in the stubs.
 
 from winapi.shapes import Rect
 
@@ -22,12 +23,6 @@ wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
 ole32 = ctypes.WinDLL("ole32", use_last_error=True)
 
 
-class Scalar[T](Protocol):
-    """A ctypes scalar exposes the converted native return value."""
-
-    value: T
-
-
 class NativeFunction[T](Protocol):
     """ctypes validates positional ABI arguments; the prototype fixes the result."""
 
@@ -35,18 +30,18 @@ class NativeFunction[T](Protocol):
 
 
 @overload
-def fn[T](dll: ctypes.WinDLL, name: str, restype: type[Scalar[T]], *argtypes: type[object]) -> NativeFunction[T]: ...
+def fn[T](dll: ctypes.WinDLL, name: str, restype: type[_SimpleCData[T]], *argtypes: type[_CData]) -> NativeFunction[T]: ...
 
 
 @overload
-def fn(dll: ctypes.WinDLL, name: str, restype: None, *argtypes: type[object]) -> NativeFunction[None]: ...
+def fn(dll: ctypes.WinDLL, name: str, restype: None, *argtypes: type[_CData]) -> NativeFunction[None]: ...
 
 
 def fn[T](
     dll: ctypes.WinDLL,
     name: str,
-    restype: type[Scalar[T]] | None,
-    *argtypes: type[object],
+    restype: type[_SimpleCData[T]] | None,
+    *argtypes: type[_CData],
 ) -> NativeFunction[T] | NativeFunction[None]:
     """A typed foreign function: `fn(user32, "GetForegroundWindow", HWND)`."""
     prototype = ctypes.WINFUNCTYPE(restype, *argtypes, use_last_error=True)
@@ -110,7 +105,7 @@ def guid_buffer(value: str) -> GuidBuffer:
     return ctypes.create_string_buffer(uuid.UUID(value).bytes_le, 16)
 
 
-def com_method(owner: str, pointer: ctypes.c_void_p, index: int, *arguments: type[object]) -> NativeFunction[int]:
+def com_method(owner: str, pointer: ctypes.c_void_p, index: int, *arguments: type[_CData]) -> NativeFunction[int]:
     """The method at `index` in a COM object's table, returning its HRESULT: the object's first pointer is its table."""
     table = ctypes.c_void_p.from_address(pointer.value).value if pointer.value else None
     address = ctypes.c_void_p.from_address(table + index * ctypes.sizeof(ctypes.c_void_p)).value if table else None

@@ -111,7 +111,8 @@ def observe(connection: Connection) -> tuple[Connection, Observed]:
     try:
         state = connection.observe() if connection is not None else None
     except OSError:
-        connection = disconnected(connection)
+        disconnected(connection)
+        connection = None
         state = None
     ids = state.ids if state is not None else ()
     found = tuple(
@@ -130,7 +131,7 @@ def observe(connection: Connection) -> tuple[Connection, Observed]:
 
 def seats(observed: Observed, known: Shelf) -> Seats:
     """Where each window the shelf hasn't seen yet sits; only new windows are read."""
-    seen = frozenset(window.handle for item in (*known.pinned, *known.running) for window in item.windows)
+    seen = frozenset(window.handle for items in (known.pinned, known.running) for item in items for window in item.windows)
     return frozendict(
         (window.handle, Seat(desktop, (drawn := windows.visible_rect(window.handle)).left, drawn.top))
         for window in observed.windows
@@ -152,7 +153,8 @@ def arrange(connection: Connection, observed: Observed, placement: Placement, sl
         while len(ids) < 1 + max((target.desktop for target in placement.values()), default=-1):
             ids = (*ids, connection.create())
     except OSError:
-        return disconnected(connection)
+        disconnected(connection)
+        return None
     followed: int | None = None
     for handle, target in placement.items():
         with suppress(OSError):  # A window that closed or refuses a move is tried again next poll.
@@ -187,7 +189,8 @@ def switch(connection: Connection, index: int) -> tuple[Connection, bool]:
             connection.switch(ids[index])
             return connection, True
     except OSError:
-        return disconnected(connection), False
+        disconnected(connection)
+        return None, False
     return connection, False
 
 

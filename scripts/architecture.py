@@ -269,12 +269,12 @@ def _constant_reads(
         if isinstance(node, ast.Import) or f"{node.module}.{alias.name}" in known
     )
     detail = "Only a declarations-only module shares constants: move it to one, or share it as an enum, a function or a property."
-    for node in ast.walk(tree):
-        match node:
+    for read in ast.walk(tree):
+        match read:
             case ast.Attribute(value=ast.Name(id=name), attr=attribute) if (
                 (source := bound.get(name)) is not None and source not in data and attribute in constants.get(source, frozenset())
             ):
-                yield Finding("shared-constant", module, "", f"{source}.{attribute}", node.lineno, detail)
+                yield Finding("shared-constant", module, "", f"{source}.{attribute}", read.lineno, detail)
             case _:
                 pass
 

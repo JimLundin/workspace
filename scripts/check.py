@@ -35,7 +35,7 @@ STANDARDS = frozendict(
     {
         "ruff check": (sys.executable, "-m", "ruff", "check", "--no-fix", "."),
         "ruff format": (sys.executable, "-m", "ruff", "format", "--check", "."),
-        "pyright": (sys.executable, "-m", "scripts.typecheck", "--threads", "--pythonpath", sys.executable),
+        "mypy": (sys.executable, "-m", "mypy"),
     }
 )
 """The whole-tree standards --standards runs beside the tests; CI's standards job runs them too."""
@@ -105,7 +105,7 @@ def module_outcomes(selector: str) -> Iterator[Outcome]:
     tests = tuple(
         (label, test)
         for label, test in inspect.getmembers(loaded)
-        if label.startswith("test_") and label == (requested or label) and isinstance(test, Test) and callable(test) and test.__module__ == module
+        if label.startswith("test_") and label == (requested or label) and isinstance(test, Test) and test.__module__ == module
     )
     if separator and not tests:
         yield Failed(selector, f"No test function matched {selector}")
@@ -142,7 +142,7 @@ def collected(standards: tuple[Future[tuple[Failed, ...]], ...]) -> Iterator[Fai
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--standards", action="store_true", help="also apply whole-tree Ruff and Pyright, as Dev.cmd check does")
+    parser.add_argument("--standards", action="store_true", help="also apply whole-tree Ruff and mypy, as Dev.cmd check does")
     parser.add_argument("tests", nargs="*", help="run only these test files or tests/test_x.py::test_name selectors")
     args = parser.parse_args()
     started = time.perf_counter()
@@ -166,7 +166,7 @@ def main() -> None:
             *(outcome for name in generated for outcome in module_outcomes(name)),
             *import_failures(ROOT),
             *(outcome for name in portable for outcome in module_outcomes(name)),
-            # Native fixtures have real deadlines: they wait for whole-tree Pyright, which saturates the cores.
+            # Native fixtures have real deadlines: they wait for whole-tree mypy, which saturates the cores.
             *collected(standards),
             *(outcome for name in native for outcome in module_outcomes(name)),
         )

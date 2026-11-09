@@ -279,8 +279,8 @@ class DesktopApp:
             case Flash(text):
                 self._indicator().flash(text, indicator_area(), 1.2)
             case PressedKeys(pressed, reset):
-                if overlay := self.views.get().overlay:
-                    overlay.set_pressed(pressed, reset=reset)
+                if keymap := self.views.get().overlay:
+                    keymap.set_pressed(pressed, reset=reset)
             case Indicate(text):
                 self._indicator().set(text, indicator_area())
             case ToggleLayout():

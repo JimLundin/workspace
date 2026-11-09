@@ -12,7 +12,7 @@ class WLAN_INTERFACE_INFO(ctypes.Structure):
 
 @type_check_only
 class _Interfaces:
-    def __getitem__(self, index: slice, /) -> list[WLAN_INTERFACE_INFO]: ...
+    def __getitem__(self, index: slice[None, int, None], /) -> list[WLAN_INTERFACE_INFO]: ...
 
 class WLAN_INTERFACE_INFO_LIST(ctypes.Structure):
     dwNumberOfItems: int

@@ -12,7 +12,7 @@ Left:
 
 - **Give the meeting service's 2 s publish pacing a seam.** Two meeting
   tests wait through it on every check.
-- **Move ruff and pyright to the dev group.** They still sit in the runtime
+- **Move ruff and mypy to the dev group.** They still sit in the runtime
   dependencies, though nothing at runtime uses them.
 
 ## 2. Code policy pass: enforce the modelling decisions
@@ -89,8 +89,6 @@ tests aren't covered. Left:
       - one record per owner works only where every writer holds the owner's
         lock (audit with a scan for unlocked `Cell` writes); state another
         thread writes under a different lock gets its own `Cell`;
-      - read state through properties (`self.window`), not
-        `self._state.get().window`, so pyright can narrow optionals;
       - an owner whose parts call back into it (a view publication, a window
         procedure, a server handler) gets them in a classmethod that binds them
         through a `Cell` holding the owner once it exists (`Gateway.listen`,

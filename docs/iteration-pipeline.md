@@ -23,9 +23,9 @@ Ruff owns linting and formatting. `Dev.cmd lint --fix .` applies safe fixes and
 `Dev.cmd format .` formats the tree; CI checks both. Existing `fmt: off` regions
 keep keyboard grids and tables readable.
 
-`Dev.cmd typecheck` runs `python -m scripts.typecheck`, which builds the
-gitignored `typings/.workspace-typeshed` from the installed Pyright and
-`typings/typeshed.patch`, then runs Pyright. Pyright is the only type checker.
+`Dev.cmd typecheck` runs mypy (strict, configured in `[tool.mypy]`), the only
+type checker; with file arguments it checks just those. `typings/` holds stubs
+only for a dependency that ships no types (win32more).
 
 ## Code volume
 
@@ -61,8 +61,8 @@ commit stages, and CI fails when it is stale.
    or `tests/test_x.py::test_name` selectors given as arguments narrow the
    tests; the reviews and imports still run.
 5. With `--standards`, which `Dev.cmd check` always passes, it runs whole-tree
-   `ruff check`, `ruff format --check` and Pyright beside the tests. Native
-   tests wait for them: their fixtures have real deadlines, and Pyright
+   `ruff check`, `ruff format --check` and mypy beside the tests. Native
+   tests wait for them: their fixtures have real deadlines, and mypy
    saturates the cores.
 
 A failing test's captured stderr is printed with its traceback; a passing

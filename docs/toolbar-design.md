@@ -58,7 +58,7 @@ cells, Enter chooses, and Escape closes.
 What the status capsule shows and in what order, and which side of the
 island each activity steps aside to, are `ISLAND` in `desktop_ui/island_model.py`.
 Every size the bar lays out and paints is `SIZES` in `desktop_ui/island_layout.py`.
-Each is one frozen constant that Pyright checks, beside the code that reads it.
+Each is one frozen constant that mypy checks, beside the code that reads it.
 
 `island_model`, `island_menu`, `island_layout`, `island_motion` and
 `bar_events` in `desktop_ui/` are pure decisions. `DesktopBar` owns

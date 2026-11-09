@@ -68,7 +68,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
   member or literal. Build a total table with `contracts.members.every_member`
   or `every_literal`, which fail at import unless they name every value; the
   architecture review enforces the rule. A `match` on classes stays a `match`:
-  it keeps Pyright's exhaustiveness check, which a type-keyed table loses.
+  it keeps the type checker's exhaustiveness check, which a type-keyed table loses.
 - When the enum's own module owns the values and each member has its own, make
   the values the members, read as `member.value`. Members that would share a
   value collapse into aliases, so keep a table for those and for values another layer owns (UI labels for a
@@ -79,12 +79,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
   (`type Watch = ANSWERED | Unanswered`) and compared with `is`. Keep `None` for
   plain absence, so a marker never shares its meaning. Import a sentinel by name,
   like a class. In a `match`, another module's sentinel is a dotted value pattern
-  (`case hook_watch.ANSWERED:`); a bare `case ANSWERED:` would capture. Pyright
-  1.1.414 and basedpyright 1.40.2 (mypy handles all three) reject
-  `module.SENTINEL` in an annotation, narrow a guard arm
-  (`case _ if watch is ANSWERED:`) only when it comes last, and lose the
-  sentinel in `(*[MARK] * n,)`, so use a generator there. Pyright's main branch
-  (2026-11-06) fixes only the last; drop that workaround when a release has it.
+  (`case hook_watch.ANSWERED:`) and the defining module's a guard
+  (`case _ if watch is ANSWERED:`); a bare `case ANSWERED:` would capture.
 - Don't reach into a sequence by position (`row[0]`, `pair[1]`, `items[-1]`):
   that value deserves a name. Unpack it, read a named field, or model the record
   (a typed row adapter instead of SQLite tuples). Looking up a key in a table
@@ -166,7 +162,11 @@ their tests. Legacy data and backwards compatibility are not requirements.
   type parameters and `type` aliases, and type-parameter defaults (PEP 696) for
   a generic usually specialized one way, instead of repeating the common
   arguments or adding a parallel alias.
-- Pyright (strict) is the only type checker. The
+- mypy (strict, `[tool.mypy]`) is the only type checker. Our code declares no
+  `Any`; an `Any` a dependency declares is validated where it enters, not
+  covered with a stub. Add a stub under `typings/` only for a dependency that
+  ships no types. Never test the type checker or the linters: they test our
+  code. The
   [module map](docs/functional-design.md) lists the processes and which module
   owns what.
 
@@ -175,7 +175,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 Read [docs/iteration-pipeline.md](docs/iteration-pipeline.md). Comment,
 docstring and docs-only changes need no check. Otherwise run `Dev.cmd check`: it
 runs everything every time (the reviews, every production import, every test,
-native ones included on Windows, and whole-tree Ruff and Pyright). Name test
+native ones included on Windows, and whole-tree Ruff and mypy). Name test
 files (`Dev.cmd check tests/test_x.py`) to rerun only those while iterating; the
 reviews and imports still run. Don't rerun a whole suite to clear a flaky native
 test: rerun only what failed, and report it. Run checks sequentially on the shared

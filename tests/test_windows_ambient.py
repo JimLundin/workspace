@@ -39,8 +39,9 @@ def test_processor_and_memory_bindings_read_real_values() -> None:
     later = first
     for _ in range(50):  # Windows advances these counters at its clock tick, about 16 ms.
         time.sleep(0.02)
-        later = resources.cpu_times()
-        if later is not None and later.kernel + later.user > first.kernel + first.user:
+        if (sample := resources.cpu_times()) is not None:
+            later = sample
+        if later.kernel + later.user > first.kernel + first.user:
             break
     load = cpu_load(first, later)
     assert load is not None and 0 <= load <= 100

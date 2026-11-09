@@ -1,6 +1,6 @@
 """Translate an enum's members, or a Literal alias's values, with a mapping that names every one.
 
-A `match` with `assert_never` lets Pyright prove a translation is exhaustive; a
+A `match` with `assert_never` lets the type checker prove a translation is exhaustive; a
 mapping can't, so `every_member` checks it when the defining module imports.
 """
 

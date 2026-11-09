@@ -1,10 +1,9 @@
 import ctypes
+from _ctypes import _CArgObject
 from typing import ClassVar, Protocol, type_check_only
 
-@type_check_only
-class ByReference[T](Protocol):
-    @property
-    def _obj(self) -> T: ...
+type ByReference[T] = _CArgObject
+"""What `ctypes.byref` returns; `T` names the native type the parameter points at, for the reader."""
 
 @type_check_only
 class OutputPointer[T](Protocol):

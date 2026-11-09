@@ -88,5 +88,5 @@ architecture review's `contract-isolation` rule enforces it.
 
 `check.py` runs the checks ([pipeline](iteration-pipeline.md)).
 `architecture.py` and `quality.py` are the reviews, sharing `source_analysis.py`'s
-parsing and cache; `typecheck.py` runs Pyright, `volume.py` counts code volume, and
+parsing and cache; `volume.py` counts code volume, and
 `benchmark_keyboard.py` measures the keyboard hook.

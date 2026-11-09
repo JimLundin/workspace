@@ -158,7 +158,7 @@ def light_apps() -> bool:
             light, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
     except OSError:
         return False
-    return light == 1
+    return isinstance(light, int) and light == 1
 
 
 def system_color(index: int) -> str:

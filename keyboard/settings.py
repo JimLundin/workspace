@@ -114,7 +114,7 @@ SYM_LAYER: Final[Board[Binding]] = Board(
 )
 
 # The apps from config, ten slots in key order; slots past the end do nothing.
-_APP: Final[tuple[Binding, ...]] = (*config.APPS[:10], *(XX for _ in range(10 - len(config.APPS[:10]))))
+_APP: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[XX] * (10 - len(config.APPS[:10])))
 
 APPS_LAYER: Final[Board[Binding]] = Board(
     # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
