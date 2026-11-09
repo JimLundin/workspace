@@ -39,6 +39,9 @@ def key_name(key: Key) -> str:
     return "Space" if key is Key.SPACE else c.upper() if c else key.name.title()
 
 
+_IDENTITY: Final = (f"VID_{settings.FIRMWARE_VENDOR:04X}", f"PID_{settings.FIRMWARE_PRODUCT:04X}")
+"""The firmware keyboard's USB identity as a HID device path writes it."""
+
 _KEYS: Final = _chord_keys()
 CHORDS: Final[frozendict[Request, str]] = frozendict({request: key_name(key) for key, request in _KEYS.items()})
 """Each request's key under the Apps hold: the laptop's Apps layer (hold the Delete thumb),
@@ -85,7 +88,7 @@ def connected(names: Iterable[str]) -> bool:
         match name.upper().split("#"):
             case [r"\\?\HID", identity, *_]:
                 match identity.split("&"):
-                    case [vendor, product, *_] if (vendor, product) == settings.FIRMWARE_KEYBOARD:
+                    case [vendor, product, *_] if (vendor, product) == _IDENTITY:
                         return True
                     case _:
                         pass

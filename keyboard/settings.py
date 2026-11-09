@@ -29,7 +29,8 @@ ESCAPE: Final = Scancode(0x29)
 """The escape key (the key left of 1, § on a Nordic keyboard)."""
 
 # The Charybdis Nano (3x5) Splinky: matched by its USB identity, independent of port.
-FIRMWARE_KEYBOARD: Final = ("VID_A8F8", "PID_1832")
+FIRMWARE_VENDOR: Final = 0xA8F8
+FIRMWARE_PRODUCT: Final = 0x1832
 APPS_KEY: Final = 0xA5
 """Right Alt, which the Charybdis's Tab thumb holds (VIA mod-tap `MT(MOD_RALT, KC_TAB)`).
 Its keymap uses no other Right Alt, and with the Charybdis connected Windows runs

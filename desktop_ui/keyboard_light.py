@@ -10,13 +10,10 @@ lit as it was set.
 """
 
 from dataclasses import dataclass, replace
-from typing import Final, Protocol
+from typing import Protocol
 
-from keyboard.settings import FIRMWARE_KEYBOARD
+from keyboard import settings
 from winapi import via
-
-_VENDOR: Final = int(FIRMWARE_KEYBOARD[0].removeprefix("VID_"), 16)
-_PRODUCT: Final = int(FIRMWARE_KEYBOARD[1].removeprefix("PID_"), 16)
 
 
 class Backlight(Protocol):
@@ -36,7 +33,7 @@ class ViaBacklight:
         return self.send(via.effect_message(read=False, effect=effect))
 
     def send(self, message: bytes) -> via.Effect | via.Absent:
-        reply = via.exchange(_VENDOR, _PRODUCT, message)
+        reply = via.exchange(settings.FIRMWARE_VENDOR, settings.FIRMWARE_PRODUCT, message)
         return via.Absent() if reply is None else via.effect_reply(message, reply)
 
 
