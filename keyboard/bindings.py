@@ -7,7 +7,7 @@ from enum import Enum, auto
 from typing import Final
 
 from keyboard import settings
-from keyboard.layout import Binding, Layer, Scancode
+from keyboard.layout import Binding, Hand, Layer, Scancode
 
 
 class LayoutError(Exception):
@@ -18,6 +18,15 @@ _TABLE: Final[frozendict[Layer | None, tuple[Binding, ...]]] = frozendict(
     (layer, board.cells()) for layer, board in ((None, settings.BASE), *settings.LAYERS.items())
 )
 """Every layer flattened, by layer (None: the base layer) then cell."""
+
+
+_HANDS: Final = tuple(side for side, _ in settings.PHYSICAL.placed())
+"""Each cell's hand: the half of `settings.PHYSICAL` its key is written in."""
+
+
+def hand(cell: int) -> Hand:
+    """The hand that presses key `cell`."""
+    return _HANDS[cell]
 
 
 def action(layer: Layer | None, cell: int) -> Binding:

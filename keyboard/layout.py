@@ -9,9 +9,10 @@ key code, whether Windows sends it as extended, and what it types on US English.
 A physical key (`Laptop`) carries the scancode it sends and its Nordic keycap.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import ClassVar, Final, NewType
+from typing import ClassVar, NewType
 
 from protocol import App, Tool
 
@@ -301,6 +302,13 @@ type Binding = Action | BLANK
 # ---- Board shape ---------------------------------------------------------------
 
 
+class Hand(Enum):
+    """The hand a key is written under: the left or right half of a row."""
+
+    LEFT = auto()
+    RIGHT = auto()
+
+
 @dataclass(frozen=True, slots=True)
 class Row[CellT]:
     """One row across the keyboard: five keys for the left hand, five for the right."""
@@ -330,30 +338,13 @@ class Board[CellT]:
     bottom: Row[CellT]
     thumbs: Thumbs[CellT]
 
+    def placed(self) -> Iterator[tuple[Hand, CellT]]:
+        """All 36 keys in order, each with the half of the board it is written in:
+        rows top to bottom, left to right, then thumbs."""
+        for half in (self.top, self.home, self.bottom, self.thumbs):
+            yield from ((Hand.LEFT, key) for key in half.left)
+            yield from ((Hand.RIGHT, key) for key in half.right)
+
     def cells(self) -> tuple[CellT, ...]:
-        """All 36 keys in order: rows top to bottom, left to right, then thumbs."""
-        rows = (self.top, self.home, self.bottom)
-        return (
-            *(key for row in rows for key in (*row.left, *row.right)),
-            *self.thumbs.left,
-            *self.thumbs.right,
-        )
-
-
-class Hand(Enum):
-    LEFT = auto()
-    RIGHT = auto()
-
-
-_HANDS: Final = Board(
-    top=Row((Hand.LEFT,) * 5, (Hand.RIGHT,) * 5),
-    home=Row((Hand.LEFT,) * 5, (Hand.RIGHT,) * 5),
-    bottom=Row((Hand.LEFT,) * 5, (Hand.RIGHT,) * 5),
-    thumbs=Thumbs((Hand.LEFT,) * 3, (Hand.RIGHT,) * 3),
-).cells()
-"""Each cell's hand, read off the board's own shape."""
-
-
-def hand(cell: int) -> Hand:
-    """Which hand key number `cell` belongs to (the numbering `Board.cells` uses)."""
-    return _HANDS[cell]
+        """All 36 keys in `placed` order; a key's place in it is its cell."""
+        return tuple(key for _, key in self.placed())
