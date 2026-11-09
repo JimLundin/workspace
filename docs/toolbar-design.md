@@ -11,12 +11,12 @@ The current desktop is marked, an empty desktop
 shows its number only while it is current, and holding the Apps key shows each
 desktop's letter. One fixed capsule on
 the right holds a keyboard icon while the keyboard types plainly (the layout
-is off, or the Charybdis is connected), volume, Wi-Fi, the clock with the
-battery, and processor and memory use. Activity never moves the fixed controls.
+is off, or the Charybdis is connected), volume, Wi-Fi, the battery,
+processor and memory use, and the clock at the far right behind a clock symbol. Activity never moves the fixed controls.
 
 The resource readings are a processor and a memory symbol, each followed by
 its percentage, right after the battery's, so the machine's readings sit
-together at the capsule's right end. Each reserves "100%" so a changing value never moves the
+together, and the clock closes the capsule at the screen's edge where it is easiest to find. Each reserves "100%" so a changing value never moves the
 cluster, and an unread value shows "—" rather than 0%. The status worker reads
 them every 2 s; CPU is the busy share of processor time since the previous
 reading. Disk, network and GPU are left out: on this laptop they are idle or

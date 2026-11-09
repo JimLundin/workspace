@@ -191,7 +191,7 @@ ISLAND: Final = IslandSpec(
     status=StatusSpec(
         (
             (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI),
-            (Reading.CLOCK, Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY),
+            (Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY, Reading.CLOCK),
         )
     ),
     # Where activities sit beside the centre island, left to right. A transcription
@@ -245,7 +245,7 @@ def reading(each: Reading, observed: Observed) -> Slot:
         case Reading.WIFI:
             return (Glyph(WIFI[system.wifi].icon),)
         case Reading.CLOCK:
-            return (Text(ambient.clock, reserve="00:00"),)
+            return (Glyph("clock"), Text(ambient.clock, reserve="00:00"))
         case Reading.POWER:
             match ambient.power:
                 case Battery(powered=True) | PowerUnavailable.NO_BATTERY:

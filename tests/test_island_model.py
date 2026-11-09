@@ -44,13 +44,14 @@ def test_idle_has_only_device_status_and_clock_power_on_right() -> None:
             Glyph("wifi-unknown"),
         ),
         (
-            Text("10:22", reserve="00:00"),
             Glyph("battery"),
             Text("73%", reserve="100%"),
             Glyph("cpu"),
             Text("—", reserve="100%"),
             Glyph("memory"),
             Text("—", reserve="100%"),
+            Glyph("clock"),
+            Text("10:22", reserve="00:00"),
         ),
     )
 
@@ -70,7 +71,7 @@ def test_processor_and_memory_are_plain_readings_that_reserve_their_widest_value
     # symbols, or an unread value shows as 0% (a healthy-looking lie).
     for cpu, memory, shown in ((23, 61, ("23%", "61%")), (100, 9, ("100%", "9%")), (None, None, ("—", "—"))):
         status = view(replace(RESTING, system=SystemStatus(cpu=cpu, memory=memory)), Key.STATUS)
-        assert status.slots[-1][-4:] == (Glyph("cpu"), Text(shown[0], reserve="100%"), Glyph("memory"), Text(shown[1], reserve="100%"))
+        assert status.slots[-1][-6:-2] == (Glyph("cpu"), Text(shown[0], reserve="100%"), Glyph("memory"), Text(shown[1], reserve="100%"))
         assert not any(isinstance(part, Control) for slot in status.slots for part in slot)
 
 
@@ -100,10 +101,10 @@ def test_charger_and_low_battery_lead_the_machine_readings_at_the_right() -> Non
     # Defects: a low battery loses its tone, the charger glyph is wrong, or the
     # processor and memory readings no longer follow the battery's percentage.
     low = replace(RESTING, ambient=Ambient("09:41", Battery(15, powered=False, charging=False)))
-    assert view(low, Key.STATUS).slots[-1][:3] == (Text("09:41", reserve="00:00"), Glyph("battery"), Text("15%", Tone.LOW, reserve="100%"))
+    assert view(low, Key.STATUS).slots[-1][:2] == (Glyph("battery"), Text("15%", Tone.LOW, reserve="100%"))
     full = replace(RESTING, ambient=Ambient("09:41", Battery(99, powered=True, charging=False)))
-    assert view(full, Key.STATUS).slots[-1][:3] == (Text("09:41", reserve="00:00"), Glyph("charger"), Text("99%", reserve="100%"))
-    assert view(full, Key.STATUS).slots[-1][3] == Glyph("cpu")
+    assert view(full, Key.STATUS).slots[-1][:2] == (Glyph("charger"), Text("99%", reserve="100%"))
+    assert view(full, Key.STATUS).slots[-1][2] == Glyph("cpu")
 
 
 def test_concurrent_activity_has_distinct_indicators_and_recording_stop_under_the_pointer() -> None:

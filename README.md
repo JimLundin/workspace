@@ -123,8 +123,8 @@ On the left, the desktop pager is the only toolbar: each desktop as its apps'
 icons, left to right as they sit on screen, running or not. Click an icon to go
 to that app; right-click lists its windows. One
 capsule on the right holds a keyboard icon while the keyboard types plainly
-(layout off or the Charybdis connected), volume, Wi-Fi, the clock, the
-battery, and CPU and memory use. Click the clock or battery to open the controls menu. See [the island bar](docs/toolbar-design.md) for the full policy.
+(layout off or the Charybdis connected), volume, Wi-Fi, the battery, CPU and
+memory use, and the clock at the far right. Click the clock or battery to open the controls menu. See [the island bar](docs/toolbar-design.md) for the full policy.
 
 The tray dot is green when the layout is on, grey when it is off, red while
 listening or recording, and amber while working. Its menu switches or restarts
