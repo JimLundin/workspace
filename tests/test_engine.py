@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import override
 
 from keyboard import engine
-from keyboard.actions import Action, Chord, Layer
+from keyboard.actions import Action, Chord
 from keyboard.engine import (
     MAX_BUFFERED,
     EngineState,
@@ -17,7 +17,7 @@ from keyboard.engine import (
 )
 from keyboard.keys import Key, Mod
 from keyboard.physical import Scancode
-from keyboard.settings import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS
+from keyboard.settings import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS, Layers
 from protocol import LayoutState, Request, Tool
 
 NAMES = {0xA0: "SFT", 0xA2: "CTL", 0xA4: "ALT", 0x20: "spc", 0x25: "left", 0x08: "bksp", 0xDB: "[", 0xC0: "`", 0xBE: "."}
@@ -73,7 +73,7 @@ class FakeHost:
         self.log.append(f"?{name}{'+' if down else '-'}")
 
     def indicate(self, indicator: Indicator) -> None:
-        parts = [indicator.layer.name.lower()] if indicator.layer else []
+        parts = [indicator.layer.name.lower()] if indicator.layer is not Layers.BASE else []
         parts += ["caps"] * indicator.caps_word + ["chord"] * indicator.chord
         self.indicated.append(" ".join(parts) or "-")
 
@@ -215,13 +215,13 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
     host = RejectedRelease()
     state = EngineState()
     pressed = (Key.A, Key.B, Mod.SHIFT, Tool.DICTATE, *state.pressed[4:])
-    state = replace(state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), active_layers=(Layer.NAV,))
+    state = replace(state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), active_layers=(Layers.NAV,))
     with unittest.TestCase().assertRaises(UnreleasedError) as refused:
         engine.release_all(state, host)
     assert host.log == ["-a", "-b", "-SFT", "?dictate-"]
     cleared = refused.exception.state
     assert not cleared.mods.counts
-    assert cleared.layer() is None
+    assert cleared.layer() is Layers.BASE
     assert all(action is None for action in cleared.pressed)
 
 
@@ -635,20 +635,20 @@ def test_chords_release_only_the_modifiers_they_added() -> None:
 
 def test_overlapping_layers_release_the_most_recent_copy_and_preserve_other_layers() -> None:
     t = Harness()
-    for layer in (Layer.NAV, Layer.NUM, Layer.NAV):
+    for layer in (Layers.NAV, Layers.NUM, Layers.NAV):
         t.press(layer, 0)
-    t.release(Layer.NAV)
-    assert t.state.layer() is Layer.NUM
+    t.release(Layers.NAV)
+    assert t.state.layer() is Layers.NUM
     t.tap("w")
     assert t.take() == "+4 -4"
-    t.press(Layer.NAV, 0)
-    t.release(Layer.NUM)  # removing a layer below the top must preserve both NAV holds
-    t.release(Layer.NAV)
-    assert t.state.layer() is Layer.NAV
+    t.press(Layers.NAV, 0)
+    t.release(Layers.NUM)  # removing a layer below the top must preserve both NAV holds
+    t.release(Layers.NAV)
+    assert t.state.layer() is Layers.NAV
     t.tap("o")
     assert t.take() == "+left -left"
-    t.release(Layer.NAV)
-    assert t.state.layer() is None
+    t.release(Layers.NAV)
+    assert t.state.layer() is Layers.BASE
 
 
 def test_held_undo_repeats_like_any_key() -> None:

@@ -32,6 +32,7 @@ lazy from desktop_ui.components.widgets import (
 lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
+lazy from keyboard import settings
 lazy from keyboard.actions import Layer
 lazy from keyboard.physical import Scancode
 
@@ -80,7 +81,8 @@ PRESSED: Final = every_member(Scheme, {Scheme.DARK: ("#f5f5f7", "#161618"), Sche
 """A pressed key lights up in the scheme's ink, unlike any binding's tint."""
 
 
-_LAYERS: Final[tuple[tuple[str, Layer | None], ...]] = (("Base", None), *((layer.name.title(), layer) for layer in Layer))
+_LAYERS: Final[tuple[Layer, ...]] = (settings.Layers.BASE, *(layer for layer in settings.Layers if layer is not settings.Layers.BASE))
+"""The key map's tabs: the base layer first, then the held layers."""
 _ROW_START: Final = (0.0, 1.5, 0.0, 1.25, 3.5)
 """Where each row starts, in key widths, as on an ISO keyboard."""
 _UNIT, _GAP, _HEIGHT = 64, 5, 56
@@ -96,7 +98,7 @@ class KeymapCanvas(QtWidgets.QWidget):
         self.scale = 1.0
         self.setAccessibleName("Physical keyboard and current layer")
 
-    def draw(self, layer: Layer | None, scale: float = 1.0) -> None:
+    def draw(self, layer: Layer, scale: float = 1.0) -> None:
         self.scale = scale
         self.caps.clear()
         self.boxes.clear()
@@ -201,7 +203,7 @@ class _Overlaid:
     """Where the person put the overlay's handle; None until it is first placed."""
     drag: Offset | None = None
     """The pointer's offset from the handle while dragging."""
-    view: tuple[Layer | None, str, tuple[Rect, ...]] | None = None
+    view: tuple[Layer, str, tuple[Rect, ...]] | None = None
     highlights: KeyHighlights = field(default_factory=KeyHighlights)
     highlight_timer: QtCore.QTimer | None = None
 
@@ -251,7 +253,7 @@ class KeymapOverlay:
         overlay = cls(shown, window, heading, canvas, frame, handle, handle_frame, Cell(_Overlaid(shown.load_position())))
         return overlay
 
-    def show(self, layer: Layer | None, title: str, work: Rect, *, visible: bool, pressed: frozenset[Scancode] = frozenset()) -> None:
+    def show(self, layer: Layer, title: str, work: Rect, *, visible: bool, pressed: frozenset[Scancode] = frozenset()) -> None:
         if not visible:
             self._finish_drag()
             self.set_pressed(frozenset(), reset=True)
@@ -351,17 +353,17 @@ class KeymapWindow:
             window.hide()
             window.deleteLater()
 
-        def chooser(layer: Layer | None) -> Callable[[], None]:
+        def chooser(layer: Layer) -> Callable[[], None]:
             return lambda: shown.draw(layer)
 
         window = Window("Workspace key map", close, width=940, height=390)
         layout = column(window)
         layout.setContentsMargins(20, 16, 20, 16)
-        keys = tuple(button(name, chooser(layer)) for name, layer in _LAYERS)
+        keys = tuple(button(layer.name.title(), chooser(layer)) for layer in _LAYERS)
         for key in keys:
             key.setCheckable(True)
         shortcuts = tuple(QtGui.QShortcut(QtGui.QKeySequence(str(index + 1)), window) for index in range(len(_LAYERS)))
-        for shortcut, (_, layer) in zip(shortcuts, _LAYERS, strict=True):
+        for shortcut, layer in zip(shortcuts, _LAYERS, strict=True):
             shortcut.activated.connect(chooser(layer))
         buttons = row()
         buttons.addWidget(segmented(list(keys)))
@@ -376,14 +378,14 @@ class KeymapWindow:
             )
         )
         shown = cls(window, canvas, keys, shortcuts)
-        shown.draw(None)
+        shown.draw(settings.Layers.BASE)
         near_pointer(window, 940, 390)
         show_window(window, focus=True, target=canvas)
         return shown
 
-    def draw(self, layer: Layer | None) -> None:
+    def draw(self, layer: Layer) -> None:
         self.canvas.draw(layer)
-        for key, (_, shown) in zip(self.buttons, _LAYERS, strict=True):
+        for key, shown in zip(self.buttons, _LAYERS, strict=True):
             key.setChecked(shown is layer)
 
     def close(self) -> None:

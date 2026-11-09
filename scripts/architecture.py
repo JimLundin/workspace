@@ -226,11 +226,25 @@ def _constants(tree: ast.Module) -> frozenset[str]:
     return frozenset(name.id for name in names if CONSTANT.fullmatch(name.id))
 
 
+def _declaration(statement: ast.stmt) -> bool:
+    """An assignment or a docstring: something declared, not run."""
+    match statement:
+        case ast.Assign() | ast.AnnAssign() | ast.Expr(value=ast.Constant(value=str())):
+            return True
+        case _:
+            return False
+
+
 def _declarations_only(tree: ast.Module) -> bool:
-    """A data module: a docstring, imports and declarations, nothing that runs or defines behaviour."""
+    """A data module: a docstring, imports and declarations, nothing that runs or defines behaviour.
+    A class counts as a declaration when its body only declares, like an enum whose members are the data."""
     for statement in tree.body:
         match statement:
-            case ast.Import() | ast.ImportFrom() | ast.Assign() | ast.AnnAssign() | ast.Expr(value=ast.Constant(value=str())):
+            case ast.Import() | ast.ImportFrom():
+                pass
+            case ast.ClassDef(body=body) if all(_declaration(item) for item in body):
+                pass
+            case _ if _declaration(statement):
                 pass
             case _:
                 return False

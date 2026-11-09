@@ -135,8 +135,7 @@ class WinHost:
         self.tell(Message.REQUEST, encode(request, config.APPS), int(down))
 
     def indicate(self, indicator: Indicator) -> None:
-        layer: int = indicator.layer.value if indicator.layer else 0
-        self.tell(Message.INDICATOR, encode_indicator(layer, caps_word=indicator.caps_word), 0)
+        self.tell(Message.INDICATOR, encode_indicator(indicator.layer.code, caps_word=indicator.caps_word), 0)
         if indicator.chord != self._state.get().chord:
             self._state.set(replace(self._state.get(), chord=indicator.chord))
             self.tell(Message.CHORD, int(indicator.chord), 0)

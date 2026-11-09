@@ -7,12 +7,14 @@ from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
+from keyboard import settings
 from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
-from keyboard.bindings import Unmapped, action, actions, slot
+from keyboard.bindings import Unmapped, action, actions, layer_of, slot
+from keyboard.board import Board
 from keyboard.firmware import CHORDS
 from keyboard.keys import Key, Mod
 from keyboard.physical import Laptop
-from keyboard.settings import BASE, COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
+from keyboard.settings import COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
 
 ROWS: Final = (
@@ -69,9 +71,9 @@ CHORD_HOLD: Final = "Apps"
 
 
 def shortcut(tool: Tool) -> Shortcut | None:
-    """The first binding in Layer order, else the tool's firmware chord."""
+    """The first binding in the held layers' order, else the tool's firmware chord."""
     physical = PHYSICAL.cells()
-    for layer in Layer:
+    for layer in settings.Layers:
         held = _holding(layer)
         if held is None:
             continue
@@ -163,18 +165,19 @@ def _hold(a: Binding) -> str:
             return "hold"
         case TapHold(hold=Mod() as modifier):
             return modifier.legend
-        case TapHold(hold=Layer() as layer):
-            return layer.name.title()
+        case TapHold(hold=Board() as board):
+            return layer_of(board).name.title()
         case _:
             return ""
 
 
-def _holding(layer: Layer | None) -> int | None:
-    """The cell of the thumb that holds `layer`."""
-    return next((cell for cell, a in enumerate(BASE.cells()) if isinstance(a, TapHold) and a.hold is layer), None)
+def _holding(layer: Layer) -> int | None:
+    """The cell of the base layer's thumb that holds `layer`; None for the base layer itself."""
+    base = actions(settings.Layers.BASE)
+    return next((cell for cell, a in enumerate(base) if isinstance(a, TapHold) and a.hold is layer.board), None)
 
 
-def _cap(layer: Layer | None, held: int | None, key: Laptop) -> Cap:
+def _cap(layer: Layer, held: int | None, key: Laptop) -> Cap:
     """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
     name = key.legend
     if key.scancode == ESCAPE:
@@ -182,7 +185,7 @@ def _cap(layer: Layer | None, held: int | None, key: Laptop) -> Cap:
     match slot(key.scancode):
         case Unmapped():
             return Cap(name, "", "", Role.BLANK)
-        case int(cell) if cell == held and layer is not None:
+        case int(cell) if cell == held:
             return Cap(name, layer.name.title(), "held", Role.HELD)
         case int(cell):
             a = action(layer, cell)
@@ -190,15 +193,15 @@ def _cap(layer: Layer | None, held: int | None, key: Laptop) -> Cap:
             return Cap(name, label, _hold(a), role)
 
 
-def keymap(layer: Layer | None) -> tuple[tuple[Cap, ...], ...]:
-    """The keyboard, row by row, as `layer` (None: the base layer) has it."""
-    held = _holding(layer) if layer is not None else None
+def keymap(layer: Layer) -> tuple[tuple[Cap, ...], ...]:
+    """The keyboard, row by row, as `layer` has it."""
+    held = _holding(layer)
     return tuple(tuple(_cap(layer, held, key) for key in row) for row in ROWS)
 
 
-def indicator_text(layer: Layer | None, *, caps_word: bool) -> str | None:
-    """What the layer indicator says; None: nothing to show."""
-    parts = [layer.name] if layer else []
+def indicator_text(layer: Layer, *, caps_word: bool) -> str | None:
+    """What the layer indicator says; None: nothing to show. The base layer says nothing."""
+    parts = [layer.name] if layer is not settings.Layers.BASE else []
     if caps_word:
         parts.append("CAPS WORD")
     return " · ".join(parts) or None

@@ -7,8 +7,9 @@ from enum import Enum, auto
 from typing import Final
 
 from keyboard import settings
-from keyboard.actions import Binding, Layer
-from keyboard.board import Hand
+from keyboard.actions import Binding, Layer, TapHold
+from keyboard.board import Board, Hand
+from keyboard.keys import Mod
 from keyboard.physical import Scancode
 
 
@@ -16,10 +17,32 @@ class LayoutError(Exception):
     """The layout is inconsistent; raised at import, never at runtime."""
 
 
-_TABLE: Final[frozendict[Layer | None, tuple[Binding, ...]]] = frozendict(
-    (layer, board.cells()) for layer, board in ((None, settings.BASE), *settings.LAYERS.items())
-)
-"""Every layer flattened, by layer (None: the base layer) then cell."""
+_TABLE: Final[frozendict[Layer, tuple[Binding, ...]]] = frozendict((layer, layer.board.cells()) for layer in settings.Layers)
+"""Every layer flattened, by layer then cell."""
+
+
+def layer_of(board: Board[Binding]) -> Layer:
+    """The layer whose board a hold names. Every hold is checked at import, so this always finds one."""
+    return next(each for each in settings.Layers if each.board is board)
+
+
+def held(hold: Mod | Board[Binding]) -> Mod | Layer:
+    """What a tap-hold key holds: its modifier, or the layer its board belongs to."""
+    return hold if isinstance(hold, Mod) else layer_of(hold)
+
+
+def _check_holds() -> None:
+    boards = tuple(each.board for each in settings.Layers)
+    for each in settings.Layers:
+        for cell, bound in enumerate(_TABLE[each]):
+            match bound:
+                case TapHold(hold=Board() as board) if not any(board is known for known in boards):
+                    raise LayoutError(f"{each.name} cell {cell} holds a board that is no member of settings.Layers")
+                case _:
+                    pass
+
+
+_check_holds()
 
 
 _HANDS: Final = tuple(side for side, _ in settings.PHYSICAL.placed())
@@ -31,12 +54,12 @@ def hand(cell: int) -> Hand:
     return _HANDS[cell]
 
 
-def action(layer: Layer | None, cell: int) -> Binding:
+def action(layer: Layer, cell: int) -> Binding:
     """What key `cell` does on `layer`."""
     return _TABLE[layer][cell]
 
 
-def actions(layer: Layer | None) -> tuple[Binding, ...]:
+def actions(layer: Layer) -> tuple[Binding, ...]:
     """What every key does on `layer`, by cell."""
     return _TABLE[layer]
 

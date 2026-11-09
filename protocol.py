@@ -157,7 +157,7 @@ def decode(code: int, apps: Sequence[App]) -> Request | None:
 
 
 def encode_indicator(layer: int, *, caps_word: bool) -> int:
-    """The indicator's state as a message's wparam. `layer`: the layer's value, 0 for the base layer."""
+    """The indicator's state as a message's wparam. `layer`: the layer's `code`, its place among the layout's layers (below 16)."""
     return layer | caps_word << 4
 
 

@@ -10,6 +10,7 @@ from pydantic import StrictBool, TypeAdapter
 
 from components import DIRECTORY
 from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
+from keyboard import settings
 from keyboard.actions import Layer
 from keyboard.physical import Scancode
 from winapi.shapes import Point, Rect, Size
@@ -111,7 +112,7 @@ class OverlayState:
 
     enabled: bool = field(default=True, kw_only=True)
     layout_on: bool = field(default=False, kw_only=True)
-    layer: Layer | None = None
+    layer: Layer = settings.Layers.BASE
     caps_word: bool = field(default=False, kw_only=True)
     pressed: frozenset[Scancode] = frozenset()
 
@@ -123,7 +124,7 @@ class OverlayState:
     def title(self) -> str:
         """The layer indicator's words, led by BASE while no layer is held."""
         words = indicator_text(self.layer, caps_word=self.caps_word)
-        if self.layer is not None and words is not None:
+        if self.layer is not settings.Layers.BASE and words is not None:
             return words
         return " · ".join(("BASE", *((words,) if words else ())))
 
@@ -131,10 +132,10 @@ class OverlayState:
         return (
             replace(self, layout_on=True, pressed=frozenset())
             if on
-            else replace(self, layout_on=False, pressed=frozenset(), layer=None, caps_word=False)
+            else replace(self, layout_on=False, pressed=frozenset(), layer=settings.Layers.BASE, caps_word=False)
         )
 
-    def indicate(self, layer: Layer | None, *, caps_word: bool) -> OverlayState:
+    def indicate(self, layer: Layer, *, caps_word: bool) -> OverlayState:
         return replace(self, layer=layer, caps_word=caps_word)
 
     def key(self, scancode: Scancode, *, down: bool) -> OverlayState:

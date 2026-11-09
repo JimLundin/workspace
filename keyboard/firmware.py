@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from keyboard import settings
-from keyboard.actions import Layer, TapHold
+from keyboard.actions import TapHold
 from keyboard.bindings import action
 from keyboard.board import Board
 from keyboard.keys import Key
@@ -13,7 +13,7 @@ from protocol import App, Request, Tool
 
 
 def _base_key(cell: int) -> Key | None:
-    match action(None, cell):
+    match action(settings.Layers.BASE, cell):
         case Key() as key:
             return key
         case TapHold(tap=Key() as key):
@@ -24,7 +24,7 @@ def _base_key(cell: int) -> Key | None:
 
 def _chord_keys() -> frozendict[Key, Request]:
     """Each Apps layer request by the base key at its place: one map for both keyboards."""
-    requests = tuple((cell, request) for cell in range(Board.SIZE) if isinstance(request := action(Layer.APPS, cell), Tool | App))
+    requests = tuple((cell, request) for cell in range(Board.SIZE) if isinstance(request := action(settings.Layers.APPS, cell), Tool | App))
     chorded = tuple((key, request) for cell, request in requests if (key := _base_key(cell)))
     if len(chorded) != len(requests):
         raise ImportError("an Apps layer request sits where the base layer has no key to chord")
