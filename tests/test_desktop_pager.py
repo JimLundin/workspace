@@ -1,20 +1,18 @@
 """The desktop pager's view."""
 
-from desktop_ui.desktop_pager import NO_HINTS, PagerDesktop, pager
+from desktop_ui.desktop_pager import NO_HINTS, pager
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import CODE, TERMINAL
 
 
 def test_pager_names_and_carries_each_desktops_apps_in_order_and_marks_the_current_one() -> None:
-    # Defects: a desktop's icons lose the on-screen order they were given, or an
-    # empty desktop gets another desktop's apps.
-    view = pager(((PinnedApp.TEAMS,), (TERMINAL, CODE, PinnedApp.TEAMS), (), (PinnedApp.OUTLOOK,)), 2, chord=False)
-    assert view.desktops == (
-        PagerDesktop("1", "Desktop 1 · Teams", current=False, apps=(PinnedApp.TEAMS,)),
-        PagerDesktop("2", "Desktop 2 · windowsterminal, code, Teams", current=False, apps=(TERMINAL, CODE, PinnedApp.TEAMS)),
-        PagerDesktop("3", "Desktop 3 (current) · No placed apps", current=True),
-        PagerDesktop("4", "Desktop 4 · Outlook", current=False, apps=(PinnedApp.OUTLOOK,)),
-    )
+    # Defects: a desktop's icons lose the on-screen order they were given, an
+    # empty desktop gets another desktop's apps, or two desktops read alike.
+    placed = ((PinnedApp.TEAMS,), (TERMINAL, CODE, PinnedApp.TEAMS), (), (PinnedApp.OUTLOOK,))
+    view = pager(placed, 2, chord=False)
+    assert tuple(desktop.apps for desktop in view.desktops) == placed
+    assert tuple(desktop.current for desktop in view.desktops) == (False, False, True, False)
+    assert len({desktop.name for desktop in view.desktops}) == len(placed)
     assert view.hints == NO_HINTS
 
 

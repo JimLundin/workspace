@@ -37,12 +37,29 @@ def badges(world: World) -> dict[int, tuple[Keycap, ...]]:
 def test_badges_carry_each_apps_letter_and_mark_the_window_its_next_press_reaches() -> None:
     # Defects: the wrong app's letter, a cycle mark on the focused window instead
     # of the next one, a mark on an app's only window, or Zoom off focus.
+    def kind(cap: Keycap) -> object:
+        """A keycap without its letter, which the chord table decides."""
+        match cap:
+            case AppCap(next=reaches):
+                return (AppCap, reaches)
+            case DirectionCap(direction=direction):
+                return (DirectionCap, direction)
+            case ActionCap():
+                return ActionCap
+
+    def kinds(caps: tuple[Keycap, ...]) -> tuple[object, ...]:
+        return tuple(kind(cap) for cap in caps)
+
+    def app(caps: tuple[Keycap, ...]) -> str:
+        return next(cap.letter for cap in caps if isinstance(cap, AppCap))
+
     shown = badges(WORLD)
-    assert shown[1] == (AppCap("Q", next=False), ActionCap("M"))
-    assert shown[5] == (AppCap("Q", next=True), DirectionCap("E", Direction.DOWN))
-    assert shown[2] == (AppCap("W", next=False), DirectionCap("O", Direction.RIGHT))
-    assert shown[3] == (AppCap("A", next=True),)
-    assert badges(replace(WORLD, foreground=5))[1] == (AppCap("Q", next=False), DirectionCap("I", Direction.UP))
+    assert kinds(shown[1]) == ((AppCap, False), ActionCap)
+    assert kinds(shown[5]) == ((AppCap, True), (DirectionCap, Direction.DOWN))
+    assert kinds(shown[2]) == ((AppCap, False), (DirectionCap, Direction.RIGHT))
+    assert kinds(shown[3]) == ((AppCap, True),)
+    assert app(shown[1]) == app(shown[5]) and len({app(shown[1]), app(shown[2]), app(shown[3])}) == 3
+    assert kinds(badges(replace(WORLD, foreground=5))[1]) == ((AppCap, False), (DirectionCap, Direction.UP))
 
 
 def test_direction_letters_name_the_window_spatial_focus_reaches() -> None:

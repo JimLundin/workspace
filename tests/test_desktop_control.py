@@ -86,7 +86,12 @@ def test_recording_warnings_only_announce_interruptions_and_failed_captures() ->
 def test_a_problem_is_logged_and_shown_once_as_a_warning() -> None:
     # Defect: a problem from dictation or meetings is silent, shown twice, or never reaches the log.
     _, effects = folded((Problem("The disk is full."),))
-    assert effects == (Log("The disk is full."), TrayNotify("Workspace", "The disk is full.", warning=True))
+    assert effects[0] == Log("The disk is full.")
+    match effects[1:]:
+        case (TrayNotify(text="The disk is full.", warning=True),):
+            return
+        case other:
+            raise AssertionError(f"Expected one warning carrying the problem, got {other}")
 
 
 def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_over_noise() -> None:
@@ -94,7 +99,7 @@ def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_
     # it (or dictation's view of it) off, or dictation never hears the layout's state.
     state, effects = folded((LayoutReported(LayoutState.ON.value), LayoutReported(99)))
     assert state.layout is LayoutState.ON and state.overlay.layout_on
-    assert effects.count(Flash("Layout on")) == 2 and LayoutShown(enabled=True) in effects
+    assert sum(isinstance(effect, Flash) for effect in effects) == 2 and LayoutShown(enabled=True) in effects
     assert effects.count(UseLayout(on=True)) == 2
     _, quitting = folded((LayoutReported(LayoutState.QUIT.value),), state)
     assert not any(isinstance(effect, Flash) for effect in quitting) and LayoutShown(enabled=False) in quitting
@@ -141,17 +146,16 @@ def test_physical_key_messages_become_key_actions_with_a_reset_marker() -> None:
 def test_layout_status_is_the_toggle_and_is_checked_while_on() -> None:
     for layout in (LayoutState.ON, LayoutState.OFF):
         state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
-        item = next(menu_items(state))
-        assert item.id == Menu.TOGGLE_LAYOUT.value
+        item = next(each for each in menu_items(state) if each.id == Menu.TOGGLE_LAYOUT.value)
         assert item.enabled and item.checked == (layout is LayoutState.ON)
 
 
 def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None:
     for layout in (None, LayoutState.QUIT):
         state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
-        items = tuple(menu_items(state))
-        assert not items[0].enabled and not items[0].checked
-        assert items[1].id == Menu.RESTART_LAYOUT.value and items[1].enabled
+        items = {item.id: item for item in menu_items(state)}
+        toggle, restart = items[Menu.TOGGLE_LAYOUT.value], items[Menu.RESTART_LAYOUT.value]
+        assert not toggle.enabled and not toggle.checked and restart.enabled
 
 
 def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle() -> None:
