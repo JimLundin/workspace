@@ -32,7 +32,7 @@ in reverse start order.
 | `launch.py` | Starts, stops and restarts the components |
 | `components.py` | The component catalogue: the gateway, layout and desktop, their windows, quit messages and endpoint files |
 | `protocol.py` | Window messages between the layout and the desktop, and the `Tool` and `App` requests |
-| `config.py` | User settings: apps, snippets, dark-screen delay |
+| `config.py` | User settings: apps, dark-screen delay |
 | `cell.py` | `Cell`, the one class that reassigns: an owner's changing state |
 | `diagnostics.py` | Failure details for the programs' own logs |
 | `winapi/` | Typed Win32 and COM bindings: the only `ctypes` code |

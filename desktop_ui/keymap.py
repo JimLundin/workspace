@@ -154,8 +154,6 @@ def describe(a: Action) -> tuple[str, Role]:
             return _MOD_NAMES[a], Role.MOD
         case Layer():
             return a.name.title(), Role.LAYER
-        case Command.LOCK_LAYER:
-            return "Lock", Role.LAYER
         case Command.NOTHING:
             return "", Role.BLANK
         case Tool():
@@ -202,9 +200,9 @@ def keymap(layer: Layer | None) -> tuple[tuple[Cap, ...], ...]:
     return tuple(tuple(_cap(layer, held, scancode, name) for scancode, name in row) for row in ROWS)
 
 
-def indicator_text(layer: Layer | None, *, locked: bool, caps_word: bool) -> str | None:
+def indicator_text(layer: Layer | None, *, caps_word: bool) -> str | None:
     """What the layer indicator says; None: nothing to show."""
-    parts = [f"{layer.name} · locked" if locked and layer else layer.name] if layer else []
+    parts = [layer.name] if layer else []
     if caps_word:
         parts.append("CAPS WORD")
     return " · ".join(parts) or None

@@ -159,9 +159,6 @@ class Host:
     def request(self, request: Request, *, down: object) -> None:
         pass
 
-    def type_text(self, text: str) -> None:
-        pass
-
     def indicate(self, indicator: Indicator) -> None:
         pass
 

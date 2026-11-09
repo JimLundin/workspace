@@ -1,10 +1,8 @@
-"""Your settings: the apps the chords reach and text snippets.
+"""Your settings: the apps the chords reach and the dark-screen delay.
 Edit freely; it's checked when Workspace starts.
 (Secrets and the AI endpoint are environment variables instead; see the README.)
 """
 
-from collections.abc import Callable
-from datetime import datetime
 from typing import Final
 
 from protocol import App, Installed, PinnedWeb
@@ -24,26 +22,6 @@ APPS: Final[tuple[App, ...]] = (
     App("word", Installed("winword.exe", "winword.exe")),
     App("PowerPoint", Installed("powerpnt.exe", "powerpnt.exe")),
 )
-
-# ---- Snippets --------------------------------------------------------------------------
-# Type the trigger and it's replaced by the text. A function is called each time.
-# Triggers start with ",," so they never turn up in normal writing.
-
-
-def _now(fmt: str) -> Callable[[], str]:
-    return lambda: datetime.now().strftime(fmt)
-
-
-SNIPPETS: Final[dict[str, str | Callable[[], str]]] = {
-    ",,date": _now("%Y-%m-%d"),
-    ",,time": _now("%H:%M"),
-    ",,now": _now("%Y-%m-%d %H:%M"),
-    ",,week": _now("week %V"),
-    ",,shrug": "¯\\_(ツ)_/¯",
-    ",,thx": "Thanks!",
-    ",,mvh": "Med vänliga hälsningar",
-    ",,br": "Best regards",
-}
 
 # ---- Screens ---------------------------------------------------------------------------
 # With Dark when away on, the home 4K screen goes dark after this many minutes without

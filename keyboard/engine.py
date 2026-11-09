@@ -3,12 +3,10 @@ into, in Windows terms (virtual keys, modifiers). It makes no Win32 calls itself
 those go through a `Host`, so the logic can be tested without Windows.
 """
 
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
-from config import SNIPPETS
 from keyboard.layout import (
     CELLS,
     ESCAPE,
@@ -28,7 +26,6 @@ from keyboard.layout import (
     Scancode,
     TapHold,
     Unmapped,
-    character,
     is_left_hand,
     slot,
 )
@@ -46,9 +43,6 @@ class Host(Protocol):
 
     def request(self, request: Request, *, down: bool) -> None:
         """A tool or app key went down or up: pass it on to the assistant."""
-
-    def type_text(self, text: str) -> None:
-        """Type text as characters, whatever the keyboard layout."""
 
     def indicate(self, indicator: Indicator) -> None:
         """What the layer indicator should show now (it changed)."""
@@ -89,39 +83,17 @@ it was already holding (auto-repeats are not buffered): 9 x 2 = 18. Anything
 beyond that decides the key as a hold rather than growing."""
 
 
-type Snippet = str | Callable[[], str]
-
-
 @dataclass(frozen=True, slots=True)
 class Configuration:
-    """Resolve tables and buffer bounds once, before handling keyboard events."""
+    """The tables and timings the engine reads; tests swap them."""
 
-    actions: Mapping[Layer | None, tuple[Action, ...]]
-    snippets: tuple[tuple[str, Snippet], ...]
+    actions: frozendict[Layer | None, tuple[Action, ...]] = TABLE
     streak_ms: int = STREAK_MS
     quick_tap_ms: int = QUICK_TAP_MS
     quit_hold_ms: int = QUIT_HOLD_MS
-    max_trigger: int = field(init=False)
-
-    def __post_init__(self) -> None:
-        actions = {layer: tuple(row) for layer, row in self.actions.items()}
-        snippets = tuple((trigger, value) for trigger, value in self.snippets)
-        layers: set[Layer | None] = {None}
-        layers.update(Layer)
-        if set(actions) != layers or any(len(row) != CELLS for row in actions.values()):
-            raise ValueError("Every layer must define one action per keyboard cell.")
-        if any(not trigger for trigger, _value in snippets):
-            raise ValueError("Snippet triggers must not be empty.")
-        if self.streak_ms < 0 or self.quick_tap_ms < 0 or self.quit_hold_ms <= 0:
-            raise ValueError("Keyboard timings must be nonnegative, with a positive quit hold.")
-        # Pyright 1.1.414's stub incorrectly gives frozendict.__init__ no arguments.
-        table = frozendict(actions)
-        object.__setattr__(self, "actions", table)
-        object.__setattr__(self, "snippets", snippets)
-        object.__setattr__(self, "max_trigger", max((len(trigger) for trigger, _value in snippets), default=0))
 
 
-DEFAULT_CONFIGURATION: Final = Configuration(TABLE, tuple(SNIPPETS.items()))
+DEFAULT_CONFIGURATION: Final = Configuration()
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,13 +101,12 @@ class Indicator:
     """State the user can't see on the keys: the layer keys come from, and caps word."""
 
     layer: Layer | None
-    locked: bool = field(kw_only=True)
     caps_word: bool = field(kw_only=True)
     chord: bool = field(kw_only=True)
     """The Apps layer is held, so a key makes its request, as a firmware chord would."""
 
 
-QUIET: Final = Indicator(None, locked=False, caps_word=False, chord=False)
+QUIET: Final = Indicator(None, caps_word=False, chord=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,26 +215,17 @@ class EngineState:
     last_tap: LastTap | None = None
     """The last tap-hold key tapped, and when (for quick tap)."""
     caps_word: bool = False
-    locked: Layer | None = None
     mods: Modifiers = Modifiers()
-    typed: str = ""
-    """The last characters typed, for snippets. Anything that moves the cursor, or a
-    shortcut, clears it."""
     shown: Indicator = QUIET
     """What the indicator was last told."""
 
     def layer(self) -> Layer | None:
-        """The layer keys are read from: the top held layer, else a locked one, else
-        None for the base layer."""
-        return self.active_layers[-1] if self.active_layers else self.locked
-
-    def without_typed(self) -> EngineState:
-        """The cursor moved or a shortcut ran: no snippet can complete what was typed before."""
-        return replace(self, typed="") if self.typed else self
+        """The layer keys are read from: the top held layer, else None for the base layer."""
+        return self.active_layers[-1] if self.active_layers else None
 
     def failed_open(self) -> EngineState:
-        """Input failed: stop remapping and forget what was typed and the escape press."""
-        return replace(self, enabled=False, typed="", escape_down_at=None)
+        """Input failed: stop remapping and forget the escape press."""
+        return replace(self, enabled=False, escape_down_at=None)
 
 
 class UnreleasedError(OSError):
@@ -299,12 +261,6 @@ class Engine:
     Requests: every Workspace request is on the Apps layer. Hold-to-talk tools
     send their press and release; disabling the layout releases them.
 
-    Snippets: the last characters typed are remembered; once they end in a
-    snippet's trigger, the trigger is erased and the snippet typed instead.
-
-    Layer lock: the lock key on a layer keeps that layer on after its thumb is
-    released. Tap the lock key again, or the escape key, to unlock.
-
     The engine holds only its configuration: each call takes the keyboard's
     `EngineState` and returns the next one, and its caller keeps it.
     """
@@ -312,24 +268,16 @@ class Engine:
     configuration: Configuration = field(default=DEFAULT_CONFIGURATION, kw_only=True)
 
     def on_key(self, state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
-        """Decode native key fields; mapped keys become KeyDown or KeyUp once.
-        `now` is the event's timestamp in ms (it may wrap around).
-        The output owner and three native fields avoid allocating another input
-        record before mapping in the measured keyboard path.
-        """
+        """One physical key event, then the indicator. `now` is the event's timestamp in ms (it may wrap around)."""
         state, verdict = self.key(state, host, scancode, down=down, now=now)
         return self.refresh(state, host), verdict
 
     def refresh(self, state: EngineState, host: Host) -> EngineState:
-        """Tells the indicator if what it should show has changed.
-
-        Every key event refreshes, so the measured keyboard path compares the
-        fields and builds a frozen record only for a change.
-        """
-        layer, locked, shown = state.layer(), state.locked is not None, state.shown
+        """Tells the indicator if what it should show has changed; every key event refreshes, so it builds a record only for a change."""
+        layer, shown = state.layer(), state.shown
         chord = layer is Layer.APPS
-        if layer is not shown.layer or locked is not shown.locked or state.caps_word is not shown.caps_word or chord is not shown.chord:
-            indicated = Indicator(layer, locked=locked, caps_word=state.caps_word, chord=chord)
+        if layer is not shown.layer or state.caps_word is not shown.caps_word or chord is not shown.chord:
+            indicated = Indicator(layer, caps_word=state.caps_word, chord=chord)
             host.indicate(indicated)
             return replace(state, shown=indicated)
         return state
@@ -342,8 +290,6 @@ class Engine:
         return self.refresh(state, host)
 
     def key(self, state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
-        # Keep the output owner and native fields explicit until the mapping
-        # decision creates the single buffered event used by this measured path.
         # Escape key: tap = on/off, hold = quit. Checked first, works in both states.
         if scancode == ESCAPE:
             pressed_at = state.escape_down_at
@@ -360,7 +306,7 @@ class Engine:
             return state, Verdict.PASS
         match slot(scancode):
             case Unmapped.FREE:
-                return state.without_typed(), Verdict.PASS
+                return state, Verdict.PASS
             case Unmapped.BLOCKED:
                 return state, Verdict.SWALLOW
             case int(cell):
@@ -384,8 +330,7 @@ class Engine:
                 return state
             case KeyDown(cell, now):
                 if current := state.pressed[cell]:
-                    # Auto-repeat: repeat the output already chosen on the first press.
-                    return self.press(state, host, current, now) if isinstance(current, (Key, Chord)) else state
+                    return self.repeat(state, host, current, now)
                 layer = state.layer()
                 match self.configuration.actions[layer][cell]:
                     case TapHold(tap) if self.quick_tap(state, cell, now):
@@ -399,6 +344,10 @@ class Engine:
                 return self.press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)
             case _:
                 assert_never(e)
+
+    def repeat(self, state: EngineState, host: Host, current: Action, now: int) -> EngineState:
+        """Auto-repeat: repeat the output already chosen on the first press."""
+        return self.press(state, host, current, now) if isinstance(current, (Key, Chord)) else state
 
     def event_while_pending(self, state: EngineState, host: Host, p: Pending, e: Event) -> EngineState:
         if e.cell == p.cell:
@@ -416,7 +365,7 @@ class Engine:
                 if not released_meanwhile:
                     # A key held since before is already decided: repeat it now.
                     if current := state.pressed[cell]:
-                        return self.press(state, host, current, now) if isinstance(current, (Key, Chord)) else state
+                        return self.repeat(state, host, current, now)
                     # A buffered key's repeated down adds nothing; reuse the queued event.
                     for waiting in reversed(buffer):
                         if waiting.cell == cell:
@@ -492,7 +441,7 @@ class Engine:
                     released = self.release(released, host, a)
                 except Exception:
                     failures += 1
-        cleared = replace(released, active_layers=(), last_typed_at=None, last_tap=None, caps_word=False, locked=None, mods=Modifiers(), typed="")
+        cleared = replace(released, active_layers=(), last_typed_at=None, last_tap=None, caps_word=False, mods=Modifiers())
         try:
             released.mods.release_all(host)
         except Exception:
@@ -517,27 +466,6 @@ class Engine:
             case Mod() | Layer() | TapHold() | Command() | Tool() | App():
                 return state, a
 
-    def remember(self, state: EngineState, host: Host, a: Output) -> EngineState:
-        """Snippets: keep the last characters typed, and expand a complete trigger."""
-        if not self.configuration.max_trigger:
-            return state.without_typed()
-        key, mods = (a, frozenset[Mod]()) if isinstance(a, Key) else (a.key, a.mods)
-        held = frozenset(state.mods.counts) | mods
-        if key is Key.BACKSPACE and not held:
-            return replace(state, typed=state.typed[:-1])
-        character_typed = character(key, shifted=Mod.SHIFT in held) if held <= SHIFT_ONLY else None
-        if character_typed is None:
-            return state.without_typed()
-        typed = (state.typed + character_typed)[-self.configuration.max_trigger :]
-        trigger, text = next(((trigger, text) for trigger, text in self.configuration.snippets if typed.endswith(trigger)), ("", None))
-        if text is None:
-            return replace(state, typed=typed)
-        for _ in trigger:
-            host.send(Key.BACKSPACE, down=True)
-            host.send(Key.BACKSPACE, down=False)
-        host.type_text(text() if callable(text) else text)
-        return state.without_typed()
-
     def press(self, state: EngineState, host: Host, a: Action, now: int) -> EngineState:
         # Both Shift keys held (this one is already recorded as pressed): toggle caps word.
         if a == Mod.SHIFT and state.pressed.count(Mod.SHIFT) >= 2:
@@ -548,10 +476,8 @@ class Engine:
         match a:
             case Key():
                 host.send(a, down=True)
-                state = self.remember(state, host, a)
             case Chord():
                 state.mods.chord(host, a)
-                state = self.remember(state, host, a)
             case Mod():
                 if a not in state.mods.counts:
                     host.send(a, down=True)
@@ -560,20 +486,14 @@ class Engine:
                 # A layer beyond MAX_LAYERS is ignored rather than stored.
                 if len(state.active_layers) < MAX_LAYERS:
                     state = replace(state, active_layers=(*state.active_layers, a))
-            case Command.LOCK_LAYER:
-                if state.locked is not None:
-                    state = replace(state, locked=None)
-                elif state.active_layers:
-                    state = replace(state, locked=state.active_layers[-1])
             case Tool() | App():
-                state = state.without_typed()
                 if Mod.ALT in state.mods.counts:
                     # Applications see Alt pressed alone; tapping an unassigned key
                     # keeps its release from opening a menu.
                     host.send(Key.MENU_MASK, down=True)
                     host.send(Key.MENU_MASK, down=False)
                 host.request(a, down=True)
-            case Command.NOTHING | TapHold():
+            case Command() | TapHold():
                 pass
             case _:
                 assert_never(a)

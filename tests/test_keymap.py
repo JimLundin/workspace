@@ -81,8 +81,7 @@ def test_every_tool_is_on_the_key_map_or_a_chord() -> None:
 
 
 def test_indicator_text() -> None:
-    assert indicator_text(None, locked=False, caps_word=False) is None
-    assert indicator_text(Layer.NAV, locked=False, caps_word=False) == "NAV"
-    assert indicator_text(Layer.NUM, locked=True, caps_word=False) == "NUM · locked"
-    assert indicator_text(None, locked=False, caps_word=True) == "CAPS WORD"
-    assert indicator_text(Layer.SYM, locked=False, caps_word=True) == "SYM · CAPS WORD"
+    assert indicator_text(None, caps_word=False) is None
+    assert indicator_text(Layer.NAV, caps_word=False) == "NAV"
+    assert indicator_text(None, caps_word=True) == "CAPS WORD"
+    assert indicator_text(Layer.SYM, caps_word=True) == "SYM · CAPS WORD"

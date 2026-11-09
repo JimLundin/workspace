@@ -272,7 +272,7 @@ def test_rejected_chord_releases_its_added_modifier_and_defers_diagnostics() -> 
     driver.key = inputs.KeyEvent(0x32, 0x03, 0, 10, 0)
     driver.reject_down = Key.LBRACKET
     keyboard = Keyboard.open(driver)
-    keyboard.set_keys(replace(keyboard.engine_state, locked=Layer.SYM))
+    keyboard.set_keys(replace(keyboard.engine_state, active_layers=(Layer.SYM,)))
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
     assert not bool(keyboard.engine_state.enabled) and not keyboard.host.owned
     assert (Mod.SHIFT, False) in driver.output
@@ -488,22 +488,10 @@ def test_escape_toggle_clears_highlights_with_other_keys_still_held() -> None:
         assert messages[-1] == (WM_KEY_STATE, 0, 0)
 
 
-def test_layout_output_preserves_snippets_but_assistant_input_resets_them() -> None:
+def test_native_arrow_reaches_apps() -> None:
     keyboard = Keyboard.open(KeyboardFixture())
     keyboard.restore(replace(keyboard.state, foreground=1))
-    keyboard.set_keys(replace(keyboard.engine_state, typed=",,t"))
-    assert not keyboard.swallow(inputs.KeyEvent(0x54, 0, 0, 0, LAYOUT_MAGIC), down=True)
-    assert keyboard.engine_state.typed == ",,t"
-    assert not keyboard.swallow(inputs.KeyEvent(0x48, 0, 0, 0, MAGIC), down=True)
-    assert keyboard.engine_state.typed == ""
-
-
-def test_native_arrow_reaches_apps_and_clears_snippets() -> None:
-    keyboard = Keyboard.open(KeyboardFixture())
-    keyboard.restore(replace(keyboard.state, foreground=1))
-    keyboard.set_keys(replace(keyboard.engine_state, typed=",,t"))
     assert not keyboard.swallow(inputs.KeyEvent(0x25, 0x4B, inputs.LLKHF_EXTENDED, 0, 0), down=True)
-    assert keyboard.engine_state.typed == ""
 
 
 def test_physical_shift_arrow_selection_remains_native_with_layout_enabled() -> None:
@@ -551,11 +539,9 @@ def test_modifiers_pressed_while_disabled_can_release_after_enabling_the_layout(
         assert messages == []
 
 
-def test_native_function_key_clears_a_partial_snippet_without_remapping() -> None:
+def test_native_function_key_is_not_remapped() -> None:
     with observed_keyboard() as (keyboard, messages):
-        keyboard.set_keys(replace(keyboard.engine_state, typed=",,t"))
         assert not keyboard.swallow(inputs.KeyEvent(0x70, 0x3B, 0, 0, 0), down=True)
-        assert keyboard.engine_state.typed == ""
         assert messages == []
 
 
@@ -581,10 +567,10 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
     assert not keyboard.busy
 
 
-def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> None:
+def test_layout_query_includes_the_current_layer_for_a_new_overlay() -> None:
     driver = KeyboardFixture()
     keyboard = Keyboard.open(driver)
-    keyboard.set_keys(replace(keyboard.engine_state, shown=Indicator(Layer.SYM, locked=True, caps_word=True, chord=False)))
+    keyboard.set_keys(replace(keyboard.engine_state, shown=Indicator(Layer.SYM, caps_word=True, chord=False)))
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     layers = [decode_indicator(wparam) for message, wparam, _ in driver.messages if message == WM_INDICATOR]
-    assert layers == [(Layer.SYM.value, True, True)]
+    assert layers == [(Layer.SYM.value, True)]

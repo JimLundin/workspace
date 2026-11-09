@@ -182,8 +182,6 @@ class Command(Enum):
     """Things the engine does itself, rather than sending a key."""
 
     NOTHING = auto()
-    LOCK_LAYER = auto()
-    """Keep the held layer on after its key is released; press again to unlock."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,7 +284,7 @@ GUI, ALT, CTL, SFT = Mod.GUI, Mod.ALT, Mod.CTRL, Mod.SHIFT
 NAV, NUM, SYM = Layer.NAV, Layer.NUM, Layer.SYM
 # fmt: on
 
-XX, LOCK = Command.NOTHING, Command.LOCK_LAYER
+XX = Command.NOTHING
 ht, sc = TapHold, Scancode
 
 
@@ -332,7 +330,7 @@ BASE: Final[Board[Action]] = Board(
 
 NAV_LAYER: Final[Board[Action]] = Board(
     # Hold the Space thumb.
-    top=      Row((LOCK, XX,  XX,  XX,  XX), (REDO,      PASTE,     COPY,      CUT,     UNDO )),
+    top=      Row((XX,   XX,  XX,  XX,  XX), (REDO,      PASTE,     COPY,      CUT,     UNDO )),
     home=     Row((GUI,  ALT, CTL, SFT, XX), (CAPS_LOCK, LEFT,      DOWN,      UP,      RIGHT)),
     bottom=   Row((XX,   XX,  XX,  XX,  XX), (INSERT,    HOME,      PAGE_DOWN, PAGE_UP, END  )),
     thumbs=Thumbs((           XX,  XX,  XX), (ENTER,     BACKSPACE, DELETE   )),
@@ -340,7 +338,7 @@ NAV_LAYER: Final[Board[Action]] = Board(
 
 NUM_LAYER: Final[Board[Action]] = Board(
     # Hold the Backspace thumb.
-    top=      Row((LBRACKET,  N7, N8,     N9, RBRACKET ), (XX, XX,  XX,  XX,  LOCK)),  # [ 7 8 9 ]
+    top=      Row((LBRACKET,  N7, N8,     N9, RBRACKET ), (XX, XX,  XX,  XX,  XX  )),  # [ 7 8 9 ]
     home=     Row((SEMICOLON, N4, N5,     N6, EQUAL    ), (XX, SFT, CTL, ALT, GUI )),  # ; 4 5 6 =
     bottom=   Row((GRAVE,     N1, N2,     N3, BACKSLASH), (XX, XX,  XX,  XX,  XX  )),  # ` 1 2 3 \
     thumbs=Thumbs((               PERIOD, N0, MINUS    ), (XX, XX,  XX )),             # . 0 -
@@ -348,7 +346,7 @@ NUM_LAYER: Final[Board[Action]] = Board(
 
 SYM_LAYER: Final[Board[Action]] = Board(
     # Hold the Enter thumb.
-    top=      Row((sh(LBRACKET),  sh(N7), sh(N8), sh(N9), sh(RBRACKET) ), (XX, XX,  XX,  XX,  LOCK)),  # { & * ( }
+    top=      Row((sh(LBRACKET),  sh(N7), sh(N8), sh(N9), sh(RBRACKET) ), (XX, XX,  XX,  XX,  XX  )),  # { & * ( }
     home=     Row((sh(SEMICOLON), sh(N4), sh(N5), sh(N6), sh(EQUAL)    ), (XX, SFT, CTL, ALT, GUI )),  # : $ % ^ +
     bottom=   Row((sh(GRAVE),     sh(N1), sh(N2), sh(N3), sh(BACKSLASH)), (XX, XX,  XX,  XX,  XX  )),  # ~ ! @ # |
     thumbs=Thumbs((                       sh(N9), sh(N0), sh(MINUS)    ), (XX, XX,  XX )),             # ( ) _

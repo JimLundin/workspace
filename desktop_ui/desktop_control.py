@@ -524,9 +524,9 @@ def _overlay_after(action: ControlAction | None, overlay: OverlayState) -> Overl
 
 def indicated(code: int, overlay: OverlayState) -> tuple[str | None, OverlayState]:
     """The indicator's words and the overlay after the layout's indicator word."""
-    index, locked, caps_word = decode_indicator(code)
+    index, caps_word = decode_indicator(code)
     layer = next((layer for layer in Layer if layer.value == index), None)
-    return indicator_text(layer, locked=locked, caps_word=caps_word), overlay.indicate(layer, locked=locked, caps_word=caps_word)
+    return indicator_text(layer, caps_word=caps_word), overlay.indicate(layer, caps_word=caps_word)
 
 
 def _layout(value: int, known: LayoutState | None) -> LayoutState | None:

@@ -29,6 +29,5 @@ def test_an_app_not_in_the_list_cannot_be_sent() -> None:
 
 def test_indicator_round_trips() -> None:
     for layer in range(6):
-        for locked in (False, True):
-            for caps in (False, True):
-                assert decode_indicator(encode_indicator(layer, locked=locked, caps_word=caps)) == (layer, locked, caps)
+        for caps in (False, True):
+            assert decode_indicator(encode_indicator(layer, caps_word=caps)) == (layer, caps)

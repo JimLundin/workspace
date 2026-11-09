@@ -9,7 +9,6 @@ from keyboard.layout import Key, Mod, Scancode
 from keyboard.win import Keyboard
 from protocol import WM_REQUEST
 from winapi import inputs, system
-from winapi.shapes import Point
 
 
 class KeyboardFixture:
@@ -41,9 +40,6 @@ class KeyboardFixture:
             raise self.send_error
         if down and key is self.reject_down:
             raise OSError("Sensitive content must not enter recovery logs")
-
-    def cursor_position(self) -> Point:
-        return Point(0, 0)
 
     def keyboard_devices(self) -> tuple[str, ...]:
         return self.devices
@@ -82,9 +78,6 @@ class KeyboardFixture:
 
     def beep(self, sound: int) -> None:
         self.sounds.append(sound)
-
-    def type_text(self, text: str) -> None:
-        pass
 
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
         self.recoveries.append(tuple(details.items()))

@@ -86,12 +86,9 @@ class FakeHost:
         name = request.name.lower() if isinstance(request, Tool) else f"app:{request.name}"
         self.log.append(f"?{name}{'+' if down else '-'}")
 
-    def type_text(self, text: str) -> None:
-        self.log.append(f"~{text}")
-
     def indicate(self, indicator: Indicator) -> None:
         parts = [indicator.layer.name.lower()] if indicator.layer else []
-        parts += ["locked"] * indicator.locked + ["caps"] * indicator.caps_word + ["chord"] * indicator.chord
+        parts += ["caps"] * indicator.caps_word + ["chord"] * indicator.chord
         self.indicated.append(" ".join(parts) or "-")
 
 
@@ -264,7 +261,7 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
     host = RejectedRelease()
     state = EngineState()
     pressed = (Key.A, Key.B, Mod.SHIFT, Tool.DICTATE, *state.pressed[4:])
-    state = replace(state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), locked=Layer.NAV)
+    state = replace(state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), active_layers=(Layer.NAV,))
     with unittest.TestCase().assertRaises(UnreleasedError) as refused:
         Engine().release_all(state, host)
     assert host.log == ["-a", "-b", "-SFT", "?dictate-"]
@@ -354,24 +351,23 @@ def test_escape_switching_off_releases_held_mods() -> None:
     assert t.take() == "-SFT !OFF"
 
 
-def test_tray_toggle_releases_input_and_clears_the_locked_layer() -> None:
+def test_tray_toggle_releases_input_and_the_held_layer() -> None:
     t = Harness()
     t.d("c")
     t.timeout_last()  # Nav
-    t.tap("2")  # lock Nav
-    t.u("c")
     t.d("r")  # Shift
     t.d("o")  # left arrow
     t.take()
 
     t.toggle()
     assert t.take() == "-SFT -left !OFF"
+    t.u("c")
     assert t.h.indicated[-1] == "-"
     assert t.key(sc("q"), down=True, now=20) is Verdict.PASS
     assert t.key(sc("q"), down=False, now=30) is Verdict.PASS
     t.toggle()
     t.tap("q")
-    assert t.take() == "!ON +a -a"  # back to the base layout, not locked Nav
+    assert t.take() == "!ON +a -a"  # back to the base layout, not Nav
 
 
 def test_tray_toggle_discards_pending_input_and_its_timer() -> None:
@@ -571,34 +567,6 @@ def test_caps_word_signals_when_turned_on() -> None:
     t.timeout_last()
     t.timeout_last()
     assert "!CAPS_WORD" in t.take()
-
-
-# ---- layer lock ------------------------------------------------------------
-def test_layer_lock_keeps_nav_until_tapped_again() -> None:
-    t = Harness()
-    t.d("c")
-    t.tap("2")
-    t.u("c")  # hold Space thumb, tap lock, let go
-    t.tap("o")  # still Nav: left
-    assert t.take() == "+left -left"
-    t.tap("2")  # lock key again: unlocked
-    t.tap("o")  # base: n
-    assert t.take() == "+n -n"
-
-
-def test_layer_lock_on_num_and_cleared_by_escape() -> None:
-    t = Harness()
-    t.d(",")
-    t.tap("=")
-    t.u(",")  # hold Backspace thumb, tap lock (right pinky)
-    t.tap("w")  # still Num: 4
-    assert t.take() == "+4 -4"
-    t.key(ESC, down=True, now=0)
-    t.key(ESC, down=False, now=10)  # off
-    t.key(ESC, down=True, now=20)
-    t.key(ESC, down=False, now=30)  # on: lock is gone
-    t.tap("w")
-    assert t.take() == "!OFF !ON +r -r"
 
 
 # ---- chordal hold ----------------------------------------------------------
@@ -849,63 +817,6 @@ def test_tab_still_taps() -> None:
     assert t.take() == "+0x9 -0x9"
 
 
-# ---- snippets --------------------------------------------------------------------------
-
-BACKSPACES = " ".join(["+bksp -bksp"] * 5)
-
-
-def type_thx(t: Harness) -> None:
-    for name in (";", ";", "r", "l", "a"):  # , , t h x
-        t.tap(name)
-
-
-def test_snippet_replaces_its_trigger() -> None:
-    t = Harness()
-    type_thx(t)
-    assert t.take() == f"+0xbc -0xbc +0xbc -0xbc +t -t +h -h +x {BACKSPACES} ~Thanks! -x"
-
-
-def test_snippets_can_include_shifted_characters() -> None:
-    t = Harness(replace(DEFAULT_CONFIGURATION, snippets=(("ABC", "Expanded."),)))
-    for key in (Key.A, Key.B, Key.C):
-        chord = Chord(key, frozenset({Mod.SHIFT}))
-        t.press(chord, 0)
-        t.release(chord)
-    assert "~Expanded." in t.take()
-
-
-def test_disabled_snippets_do_not_accumulate_an_unbounded_typing_buffer() -> None:
-    t = Harness(replace(DEFAULT_CONFIGURATION, snippets=()))
-    for _ in range(100):
-        type_thx(t)
-    assert "~Thanks!" not in t.take() and not t.state.typed
-    ordinary = Harness()
-    type_thx(ordinary)
-    assert "~Thanks!" in ordinary.take(), "One engine's configuration must not change another engine."
-
-
-def test_snippet_survives_a_corrected_typo() -> None:
-    t = Harness()
-    for name in (";", ";", "r", "l", "s"):  # , , t h c
-        t.tap(name)
-    t.tap(",")  # Backspace thumb, tapped
-    t.tap("a")  # x
-    assert t.take().endswith(f"+x {BACKSPACES} ~Thanks! -x")
-
-
-def test_snippet_is_forgotten_after_moving_the_cursor() -> None:
-    t = Harness()
-    t.tap(";")
-    t.tap(";")
-    t.d("c")  # Space thumb: Nav
-    t.timeout_last()
-    t.tap("o")  # Left arrow
-    t.u("c")
-    for name in ("r", "l", "a"):
-        t.tap(name)
-    assert "~" not in t.take()
-
-
 # ---- the layer indicator ---------------------------------------------------------------
 
 
@@ -926,16 +837,6 @@ def test_indicator_stays_quiet_for_taps_and_typing() -> None:
     assert t.h.indicated == []
 
 
-def test_indicator_shows_a_locked_layer_until_unlocked() -> None:
-    t = Harness()
-    t.d(",")
-    t.timeout_last()  # Backspace held: Num
-    t.tap("=")  # Lock, right top-row pinky
-    t.u(",")  # still locked
-    t.tap("=")  # unlock
-    assert t.h.indicated == ["num", "num locked", "-"]
-
-
 def test_indicator_shows_caps_word() -> None:
     t = Harness()
     both_shifts(t)
@@ -950,14 +851,3 @@ def test_switching_off_clears_the_indicator() -> None:
     t.key(ESC, down=True, now=0)
     t.key(ESC, down=False, now=10)
     assert t.h.indicated == ["nav", "-"]
-
-
-def test_native_function_key_invalidates_partial_snippets() -> None:
-    t = Harness()
-    for name in (";", ";", "r"):
-        t.tap(name)
-    assert t.state.typed == ",,t"
-    assert t.key(Scancode(0x3B), down=True, now=1) is Verdict.PASS  # F1 can change focus or open application help.
-    for name in ("l", "a"):
-        t.tap(name)
-    assert "~Thanks!" not in t.take()

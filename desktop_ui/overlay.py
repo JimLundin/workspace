@@ -111,7 +111,6 @@ class OverlayState:
     enabled: bool = field(default=True, kw_only=True)
     layout_on: bool = field(default=False, kw_only=True)
     layer: Layer | None = None
-    locked: bool = field(default=False, kw_only=True)
     caps_word: bool = field(default=False, kw_only=True)
     pressed: frozenset[Scancode] = frozenset()
 
@@ -122,7 +121,7 @@ class OverlayState:
     @property
     def title(self) -> str:
         """The layer indicator's words, led by BASE while no layer is held."""
-        words = indicator_text(self.layer, locked=self.locked, caps_word=self.caps_word)
+        words = indicator_text(self.layer, caps_word=self.caps_word)
         if self.layer is not None and words is not None:
             return words
         return " · ".join(("BASE", *((words,) if words else ())))
@@ -131,11 +130,11 @@ class OverlayState:
         return (
             replace(self, layout_on=True, pressed=frozenset())
             if on
-            else replace(self, layout_on=False, pressed=frozenset(), layer=None, locked=False, caps_word=False)
+            else replace(self, layout_on=False, pressed=frozenset(), layer=None, caps_word=False)
         )
 
-    def indicate(self, layer: Layer | None, *, locked: bool, caps_word: bool) -> OverlayState:
-        return replace(self, layer=layer, locked=locked, caps_word=caps_word)
+    def indicate(self, layer: Layer | None, *, caps_word: bool) -> OverlayState:
+        return replace(self, layer=layer, caps_word=caps_word)
 
     def key(self, scancode: Scancode, *, down: bool) -> OverlayState:
         if not scancode:

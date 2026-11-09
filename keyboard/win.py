@@ -39,7 +39,6 @@ from protocol import (
     encode_indicator,
 )
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
-from winapi.shapes import Point
 
 LOCK_NAME: Final = "Local\\keyboard"
 """Name of the lock that stops a second copy from running in this Windows session."""
@@ -51,7 +50,6 @@ class KeyboardSystem(Protocol):
     """Native input, observation and delivery owned by the keyboard process."""
 
     def send_key(self, key: Key | Mod, *, down: bool) -> None: ...
-    def cursor_position(self) -> Point: ...
     def keyboard_devices(self) -> tuple[str, ...]: ...
     def foreground(self) -> int: ...
     def title(self, hwnd: int) -> str: ...
@@ -63,7 +61,6 @@ class KeyboardSystem(Protocol):
     def set_timer(self, ms: int) -> int: ...
     def kill_timer(self, timer: int) -> None: ...
     def beep(self, sound: int) -> None: ...
-    def type_text(self, text: str) -> None: ...
     def record_recovery(self, details: Mapping[str, Detail]) -> None: ...
     def post_quit(self) -> None: ...
 
@@ -79,7 +76,6 @@ class NativeKeyboardSystem:
 
     # Bind native observations directly: the hook avoids extra Python forwarding
     # calls while callers still depend on KeyboardSystem, never module globals.
-    cursor_position = staticmethod(inputs.cursor_position)
     keyboard_devices = staticmethod(keyboard_devices.names)
     foreground = staticmethod(windows.foreground)
     title = staticmethod(windows.title)
@@ -96,9 +92,6 @@ class NativeKeyboardSystem:
     set_timer = staticmethod(system.set_timer)
     kill_timer = staticmethod(system.kill_timer)
     beep = staticmethod(system.beep)
-
-    def type_text(self, text: str) -> None:
-        inputs.type_text(text, LAYOUT_MAGIC)
 
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
         diagnostics.append(LOG, diagnostics.evidence("input_recovery", details))
@@ -176,12 +169,9 @@ class WinHost:
         if not self.tell(WM_REQUEST, encode(request, APPS), int(down)) and down:
             self.platform.beep(system.MB_ICONHAND)
 
-    def type_text(self, text: str) -> None:
-        self.platform.type_text(text)
-
     def indicate(self, indicator: Indicator) -> None:
         layer: int = indicator.layer.value if indicator.layer else 0
-        self.tell(WM_INDICATOR, encode_indicator(layer, locked=indicator.locked, caps_word=indicator.caps_word), 0)
+        self.tell(WM_INDICATOR, encode_indicator(layer, caps_word=indicator.caps_word), 0)
         if indicator.chord != self._state.get().chord:
             self._state.set(replace(self._state.get(), chord=indicator.chord))
             self.tell(WM_CHORD, int(indicator.chord), 0)
@@ -215,7 +205,6 @@ class Exit(Enum):
 
 @dataclass(frozen=True, slots=True)
 class _Hooked:
-    pointer: Point
     foreground: int = 0
     picker_active: bool = False
     pressed: frozenset[Scancode] = frozenset()
@@ -254,7 +243,7 @@ class Keyboard:
     @classmethod
     def open(cls, platform: KeyboardSystem | None = None) -> Keyboard:
         system = platform if platform is not None else NativeKeyboardSystem()
-        return cls(system, Engine(), WinHost(system), Cell(_Hooked(system.cursor_position())))
+        return cls(system, Engine(), WinHost(system), Cell(_Hooked()))
 
     @property
     def state(self) -> _Hooked:
@@ -307,10 +296,6 @@ class Keyboard:
     @property
     def picker_active(self) -> bool:
         return self._state.get().picker_active
-
-    @property
-    def pointer(self) -> Point:
-        return self._state.get().pointer
 
     @property
     def pressed(self) -> frozenset[Scancode]:
@@ -644,11 +629,8 @@ class Keyboard:
         foreground = self.platform.foreground()
         moved = foreground != state.foreground
         picker_active = self.platform.title(foreground) == SWITCHER_TITLE if moved else state.picker_active
-        pointer = self.platform.cursor_position()
-        if moved or pointer != state.pointer or key.flags & inputs.LLKHF_EXTENDED or key.extra == MAGIC:
-            self.set_keys(self.engine_state.without_typed())
-        if moved or pointer != state.pointer:
-            self._state.set(replace(state, foreground=foreground, pointer=pointer, picker_active=picker_active))
+        if moved:
+            self._state.set(replace(state, foreground=foreground, picker_active=picker_active))
         if (self.native_releases or not self.engine_state.enabled) and not key.flags & inputs.LLKHF_INJECTED:
             identity = key.scancode | (0x100 if key.flags & inputs.LLKHF_EXTENDED else 0)
             if not down and identity in self.native_releases:
@@ -666,7 +648,6 @@ class Keyboard:
                 self._state.set(replace(self._state.get(), native_releases=self.native_releases | {identity}))
             return False
         if native_control(key.vk):
-            self.set_keys(self.engine_state.without_typed())
             return False
         if key.flags & inputs.LLKHF_EXTENDED:
             # Extended keys share base scancodes with layout cells: never remap

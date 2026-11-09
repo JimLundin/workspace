@@ -4,7 +4,7 @@ Workspace is a personal work environment for a Windows laptop. It runs on the
 installed Python 3.15 and needs no admin rights. It runs five processes:
 
 - **The layout** (`keyboard/`) remaps the laptop's ISO keyboard to Colemak Mod-DH
-  in the Miryoku style, with home row mods, layers, caps word and snippets.
+  in the Miryoku style, with home row mods, layers and caps word.
 - **The desktop** (`desktop/`, `desktop_ui/`) owns everything you see: the
   floating bar, the tray icon, the key map and overlay, and window placement.
   It also runs dictation and meeting recording (`assistant/`). Every key
@@ -40,10 +40,10 @@ installed Python 3.15 and needs no admin rights. It runs five processes:
 | `WORKSPACE_VOCABULARY` | empty | Names and jargon to expect in dictation |
 | `WORKSPACE_COLEMAK_LAYOUT` | your Colemak entry | The Windows layout ID used while the layout is off |
 
-Without the two required variables, the layout, snippets and window keys still
+Without the two required variables, the layout and window keys still
 work, and the dictation and recording keys say what is missing.
 
-Your apps, snippets and the idle delay for dark screens live in `config.py`.
+Your apps and the idle delay for dark screens live in `config.py`.
 
 ## The keys
 
@@ -111,10 +111,6 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **.** | Copy speech |
 | Apps **/** | Dictate toggle |
 | Apps **Space** | Record |
-
-**Snippets.** Type a trigger and Workspace replaces it: `,,date`, `,,time`,
-`,,now`, `,,week`, `,,shrug`, `,,thx`, `,,mvh` and `,,br`. Add your own in
-`config.py`.
 
 Workspace keeps the Windows taskbar hidden while it runs, and restores it when
 it exits or crashes. The Windows key opens Start as usual.

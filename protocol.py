@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Final, Literal
 
 LAYOUT_MAGIC: Final = 0x4D49_5250
-"""Layout output: bypass remapping without invalidating its own snippet history."""
+"""Layout output: the hook lets its own injected keys through untouched."""
 
 MAGIC: Final = 0x4D49_524F
 """Tags input the workspace sends, so the layout's hook lets it through untouched."""
@@ -125,10 +125,10 @@ def decode(code: int, apps: Sequence[App]) -> Request | None:
         return None
 
 
-def encode_indicator(layer: int, *, locked: bool, caps_word: bool) -> int:
+def encode_indicator(layer: int, *, caps_word: bool) -> int:
     """The indicator's state as a message's wparam. `layer`: the layer's value, 0 for the base layer."""
-    return layer | locked << 4 | caps_word << 5
+    return layer | caps_word << 4
 
 
-def decode_indicator(code: int) -> tuple[int, bool, bool]:
-    return code & 0xF, bool(code & 0x10), bool(code & 0x20)
+def decode_indicator(code: int) -> tuple[int, bool]:
+    return code & 0xF, bool(code & 0x10)
