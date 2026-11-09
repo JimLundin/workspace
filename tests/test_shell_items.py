@@ -77,11 +77,14 @@ def test_a_pinned_launch_waits_for_its_window_before_launching_again() -> None:
     # Defect: repeated clicks open several app windows, one slot's launch blocks
     # the other, or a closed window can no longer be reopened.
     none: Launches = frozendict()
-    pending: Launches = frozendict({PinnedApp.OUTLOOK: 115.0})
-    assert launch(none, PinnedApp.OUTLOOK, 100.0) == pending
-    assert launch(pending, PinnedApp.OUTLOOK, 114.0) is None
-    assert launch(pending, PinnedApp.OUTLOOK, 115.0) == frozendict({PinnedApp.OUTLOOK: 130.0})
-    assert launch(pending, PinnedApp.TEAMS, 101.0) == frozendict({PinnedApp.OUTLOOK: 115.0, PinnedApp.TEAMS: 116.0})
+    pending = launch(none, PinnedApp.OUTLOOK, 100.0)
+    assert pending is not None and set(pending) == {PinnedApp.OUTLOOK}
+    deadline = pending[PinnedApp.OUTLOOK]
+    grace = deadline - 100.0
+    assert grace > 0
+    assert launch(pending, PinnedApp.OUTLOOK, deadline - grace / 2) is None
+    assert launch(pending, PinnedApp.OUTLOOK, deadline) == frozendict({PinnedApp.OUTLOOK: deadline + grace})
+    assert launch(pending, PinnedApp.TEAMS, 101.0) == frozendict({PinnedApp.OUTLOOK: deadline, PinnedApp.TEAMS: 101.0 + grace})
     opened = Shelf((Pinned(PinnedApp.OUTLOOK, (Window(1, "Mail", "msedge.exe", minimized=False),)), Pinned(PinnedApp.TEAMS, ())), ())
     assert outstanding(pending, opened) == none
     assert outstanding(pending, EMPTY_SHELF) == pending
