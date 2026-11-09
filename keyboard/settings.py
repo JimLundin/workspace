@@ -7,7 +7,7 @@ from typing import Final
 
 import config
 from contracts.members import every_member
-from keyboard.layout import BLANK, Binding, Board, Chord, Key, Layer, Mod, Row, Scancode, TapHold, Thumbs
+from keyboard.layout import BLANK, Binding, Board, Chord, Key, Laptop, Layer, Mod, Row, TapHold, Thumbs
 from protocol import Tool
 
 # ---- Timings ---------------------------------------------------------------------
@@ -25,8 +25,8 @@ QUIT_HOLD_MS: Final = 2000
 
 # ---- The keys the layout owns ------------------------------------------------------
 
-ESCAPE: Final = Scancode(0x29)
-"""The escape key (the key left of 1, § on a Nordic keyboard)."""
+ESCAPE: Final = Laptop.SECTION.scancode
+"""The escape key: the key left of 1, § on a Nordic keyboard."""
 
 # The Charybdis Nano (3x5) Splinky: matched by its USB identity, independent of port.
 FIRMWARE_VENDOR: Final = 0xA8F8
@@ -53,7 +53,7 @@ NAV, NUM, SYM = Layer.NAV, Layer.NUM, Layer.SYM
 # fmt: on
 
 XX = BLANK
-ht, sc = TapHold, Scancode
+ht = TapHold
 
 
 sh, ctl = Chord.shifted, Chord.ctrl
@@ -66,21 +66,24 @@ UNDO, REDO, COPY, PASTE, CUT = ctl(Z), ctl(Y), ctl(C), ctl(V), ctl(X)
 # hand, so the formatter is told to leave this section alone.
 
 # fmt: off
-PHYSICAL: Final[Board[Scancode]] = Board(
-    # Physical keys of the ISO laptop keyboard (Miryoku KMonad mapping: rows moved
-    # up one, reverse angle on the left, wide spacing). Nordic keycaps on the right.
-    top=      Row((sc(0x03), sc(0x04), sc(0x05), sc(0x06), sc(0x07)), (sc(0x09), sc(0x0A), sc(0x0B), sc(0x0C), sc(0x0D))),  # 2 3 4 5 6    | 8 9 0 + acute
-    home=     Row((sc(0x10), sc(0x11), sc(0x12), sc(0x13), sc(0x14)), (sc(0x17), sc(0x18), sc(0x19), sc(0x1A), sc(0x1B))),  # Q W E R T    | I O P Å ¨
-    bottom=   Row((sc(0x3A), sc(0x1E), sc(0x1F), sc(0x20), sc(0x21)), (sc(0x25), sc(0x26), sc(0x27), sc(0x28), sc(0x2B))),  # Caps A S D F | K L Ö Ä '
-    thumbs=Thumbs((                    sc(0x2D), sc(0x2E), sc(0x2F)), (sc(0x32), sc(0x33), sc(0x34))),                      # X C V        | M , .
+PHYSICAL: Final[Board[Laptop]] = Board(
+    # The ISO laptop keyboard (Miryoku KMonad mapping: rows moved up one, reverse angle on the left, wide spacing).
+    top=      Row((Laptop.N2,   Laptop.N3, Laptop.N4, Laptop.N5, Laptop.N6), (Laptop.N8, Laptop.N9, Laptop.N0,      Laptop.PLUS,    Laptop.ACUTE     )),
+    home=     Row((Laptop.Q,    Laptop.W,  Laptop.E,  Laptop.R,  Laptop.T ), (Laptop.I,  Laptop.O,  Laptop.P,       Laptop.ARING,   Laptop.DIAERESIS )),
+    bottom=   Row((Laptop.CAPS, Laptop.A,  Laptop.S,  Laptop.D,  Laptop.F ), (Laptop.K,  Laptop.L,  Laptop.OUMLAUT, Laptop.AUMLAUT, Laptop.APOSTROPHE)),
+    thumbs=Thumbs((                        Laptop.X,  Laptop.C,  Laptop.V ), (Laptop.M,  Laptop.COMMA, Laptop.PERIOD)),
 )
 
-UNUSED: Final = frozenset(
-    # Keys between and below the hands (1 7 Y U G H J Z B N - <) and the Spacebar: blocked.
-    sc(code) for code in (0x02, 0x08, 0x15, 0x16, 0x22, 0x23, 0x24, 0x2C, 0x30, 0x31, 0x35, 0x39, 0x56)
-)
+UNUSED: Final = frozenset({
+    # Keys between and below the hands, and the Spacebar: blocked.
+    Laptop.N1, Laptop.N7, Laptop.Y, Laptop.U, Laptop.G, Laptop.H, Laptop.J,
+    Laptop.Z, Laptop.B, Laptop.N, Laptop.MINUS, Laptop.LESS, Laptop.SPACE,
+})
 
-FUNCTION_KEYS: Final = frozenset(Scancode(code) for code in range(0x3B, 0x45)) | frozenset({Scancode(0x57), Scancode(0x58)})
+FUNCTION_KEYS: Final = frozenset({
+    Laptop.F1, Laptop.F2, Laptop.F3, Laptop.F4, Laptop.F5, Laptop.F6,
+    Laptop.F7, Laptop.F8, Laptop.F9, Laptop.F10, Laptop.F11, Laptop.F12,
+})
 """The physical F1-F12 row remains native while the layout is enabled."""
 
 NATIVE_KEYS: Final = frozenset((

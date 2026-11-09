@@ -39,9 +39,9 @@ class Unmapped(Enum):
 
 def _build_slots() -> frozendict[Scancode, int | Unmapped]:
     entries: tuple[tuple[Scancode, int | Unmapped], ...] = (
-        *((scancode, cell) for cell, scancode in enumerate(settings.PHYSICAL.cells())),
-        *((scancode, Unmapped.BLOCKED) for scancode in settings.UNUSED),
-        *((scancode, Unmapped.FREE) for scancode in settings.FUNCTION_KEYS),
+        *((key.scancode, cell) for cell, key in enumerate(settings.PHYSICAL.cells())),
+        *((key.scancode, Unmapped.BLOCKED) for key in settings.UNUSED),
+        *((key.scancode, Unmapped.FREE) for key in settings.FUNCTION_KEYS),
     )
     slots = frozendict(entries)
     if len(slots) == len(entries):

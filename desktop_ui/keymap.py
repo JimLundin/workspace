@@ -9,25 +9,49 @@ from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
 from keyboard.bindings import Unmapped, action, actions, slot
 from keyboard.firmware import CHORDS
-from keyboard.layout import BLANK, Binding, Chord, Key, Layer, Mod, Scancode, TapHold
+from keyboard.layout import BLANK, Binding, Chord, Key, Laptop, Layer, Mod, TapHold
 from keyboard.settings import BASE, COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
 
-
-def _row(first: int, names: str) -> tuple[tuple[Scancode, str], ...]:
-    return tuple((Scancode(first + i), name) for i, name in enumerate(names.split()))
-
-
 ROWS: Final = (
-    ((Scancode(0x29), "\u00a7"), *_row(0x02, "1 2 3 4 5 6 7 8 9 0 + \u00b4")),
-    _row(0x10, "Q W E R T Y U I O P \u00c5 \u00a8"),
-    ((Scancode(0x3A), "Caps"), *_row(0x1E, "A S D F G H J K L \u00d6 \u00c4"), (Scancode(0x2B), "'")),
-    ((Scancode(0x56), "<"), *_row(0x2C, "Z X C V B N M , . -")),
-    ((Scancode(0x39), "Space"),),
+    (
+        Laptop.SECTION,
+        Laptop.N1,
+        Laptop.N2,
+        Laptop.N3,
+        Laptop.N4,
+        Laptop.N5,
+        Laptop.N6,
+        Laptop.N7,
+        Laptop.N8,
+        Laptop.N9,
+        Laptop.N0,
+        Laptop.PLUS,
+        Laptop.ACUTE,
+    ),
+    (Laptop.Q, Laptop.W, Laptop.E, Laptop.R, Laptop.T, Laptop.Y, Laptop.U, Laptop.I, Laptop.O, Laptop.P, Laptop.ARING, Laptop.DIAERESIS),
+    (
+        Laptop.CAPS,
+        Laptop.A,
+        Laptop.S,
+        Laptop.D,
+        Laptop.F,
+        Laptop.G,
+        Laptop.H,
+        Laptop.J,
+        Laptop.K,
+        Laptop.L,
+        Laptop.OUMLAUT,
+        Laptop.AUMLAUT,
+        Laptop.APOSTROPHE,
+    ),
+    (Laptop.LESS, Laptop.Z, Laptop.X, Laptop.C, Laptop.V, Laptop.B, Laptop.N, Laptop.M, Laptop.COMMA, Laptop.PERIOD, Laptop.MINUS),
+    (Laptop.SPACE,),
 )
-"""The keyboard's letter block and Spacebar: scancode and Nordic keycap name."""
+"""The keyboard's letter block and Spacebar, row by row, as the key map draws it."""
 
-PHYSICAL_NAMES: Final = {scancode: name for row in ROWS for scancode, name in row}
+PHYSICAL_NAMES: Final = frozendict({key.scancode: key.legend for row in ROWS for key in row})
+"""Each drawn key's keycap name, by the scancode the layout reports it with."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +75,7 @@ def shortcut(tool: Tool) -> Shortcut | None:
             continue
         for cell, binding in enumerate(actions(layer)):
             if binding is tool:
-                return Shortcut(PHYSICAL_NAMES[physical[cell]], PHYSICAL_NAMES[physical[held]])
+                return Shortcut(physical[cell].legend, physical[held].legend)
     letter = CHORDS.get(tool)
     return Shortcut(letter, CHORD_HOLD) if letter is not None else None
 
@@ -148,11 +172,12 @@ def _holding(layer: Layer | None) -> int | None:
     return next((cell for cell, a in enumerate(BASE.cells()) if isinstance(a, TapHold) and a.hold is layer), None)
 
 
-def _cap(layer: Layer | None, held: int | None, scancode: Scancode, name: str) -> Cap:
+def _cap(layer: Layer | None, held: int | None, key: Laptop) -> Cap:
     """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
-    if scancode == ESCAPE:
+    name = key.legend
+    if key.scancode == ESCAPE:
         return Cap(name, "On/off", "hold: quit", Role.SPECIAL)
-    match slot(scancode):
+    match slot(key.scancode):
         case Unmapped():
             return Cap(name, "", "", Role.BLANK)
         case int(cell) if cell == held and layer is not None:
@@ -166,7 +191,7 @@ def _cap(layer: Layer | None, held: int | None, scancode: Scancode, name: str) -
 def keymap(layer: Layer | None) -> tuple[tuple[Cap, ...], ...]:
     """The keyboard, row by row, as `layer` (None: the base layer) has it."""
     held = _holding(layer) if layer is not None else None
-    return tuple(tuple(_cap(layer, held, scancode, name) for scancode, name in row) for row in ROWS)
+    return tuple(tuple(_cap(layer, held, key) for key in row) for row in ROWS)
 
 
 def indicator_text(layer: Layer | None, *, caps_word: bool) -> str | None:

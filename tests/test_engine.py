@@ -257,8 +257,8 @@ def test_unbound_keys_cannot_type_or_trigger_physical_shortcuts() -> None:
 def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> None:
     t = Harness()
     for function in FUNCTION_KEYS:
-        assert t.key(function, down=True, now=0) == Verdict.PASS
-        assert t.key(function, down=False, now=1) == Verdict.PASS
+        assert t.key(function.scancode, down=True, now=0) == Verdict.PASS
+        assert t.key(function.scancode, down=False, now=1) == Verdict.PASS
     t.state = replace(t.state, enabled=False)
     for code in (0x01, 0x0F, 0x1C, 0x0E, 0x2A, 0x36, 0x1D, 0x38, 0x4B, 0x5D):
         assert t.key(Scancode(code), down=True, now=2) == Verdict.PASS
