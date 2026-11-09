@@ -30,7 +30,6 @@ from cell import Cell
 from config import APPS
 from desktop_ui import bar_events
 from desktop_ui.desktop_control import (
-    Beep,
     Chord,
     Controlled,
     DesktopState,
@@ -261,7 +260,7 @@ class DesktopApp:
         match effect:
             case ShowVoice() | ShowIdle() | HandleKey() | UseLayout() | ExpireCapture() | Record() | ToggleMeeting():
                 return self._voice(effect)
-            case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep() | Launch() | OpenLogs():
+            case RestoreTray() | TrayNotify() | TrayShow() | Log() | Launch() | OpenLogs():
                 self._shell(effect)
             case ShowActivity() | Navigate() | Chord() | LayoutShown():
                 if bar := self._bar:
@@ -300,7 +299,7 @@ class DesktopApp:
                 assert_never(effect)
         return None
 
-    def _shell(self, effect: RestoreTray | TrayNotify | TrayShow | Log | Beep | Launch | OpenLogs) -> None:
+    def _shell(self, effect: RestoreTray | TrayNotify | TrayShow | Log | Launch | OpenLogs) -> None:
         match effect:
             case RestoreTray():
                 self.tray.restore()
@@ -310,8 +309,6 @@ class DesktopApp:
                 self.tray.show(shown)
             case Log(text):
                 log(text)
-            case Beep():
-                system.beep(system.MB_ICONEXCLAMATION)
             case Launch(command, names):
                 launched(command, *names)
             case OpenLogs():

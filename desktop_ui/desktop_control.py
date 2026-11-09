@@ -316,11 +316,6 @@ class Log:
 
 
 @dataclass(frozen=True, slots=True)
-class Beep:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class TrayNotify:
     title: str
     text: str
@@ -436,7 +431,6 @@ class OpenLogs:
 type Effect = (
     Instruction
     | Log
-    | Beep
     | TrayNotify
     | TrayShow
     | ShowActivity
@@ -581,7 +575,6 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
             yield ShowActivity(RecordingShown(recording))
             yield TrayShow(tray_state(after.shown))
             if notice := recording_notice(state.shown.recording, recording):
-                yield Beep()
                 yield TrayNotify(notice.title, notice.text, warning=True)
             yield ShowIdle()
         case MenuRequested():
@@ -607,7 +600,6 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
             yield OverlayEnabled(enabled=after.overlay.enabled)
         case Problem(message):
             yield Log(message)
-            yield Beep()
             yield TrayNotify("Workspace", message, warning=True)
         case _:
             assert_never(fact)

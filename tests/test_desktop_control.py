@@ -8,7 +8,6 @@ from contracts.recording_state import RecordingState
 from contracts.status import State
 from desktop_ui.bar_events import DictationShown, RecordingShown
 from desktop_ui.desktop_control import (
-    Beep,
     Controlled,
     DesktopState,
     Effect,
@@ -80,13 +79,13 @@ def test_recording_warnings_only_announce_interruptions_and_failed_captures() ->
     state, effects = folded((RecordingChanged(recording), RecordingChanged(paused)))
     assert state.shown.recording == paused
     assert ShowActivity(RecordingShown(paused)) in effects and effects[-1] == ShowIdle()
-    assert effects.count(Beep()) == 1 and sum(isinstance(effect, TrayNotify) and effect.warning for effect in effects) == 1
+    assert sum(isinstance(effect, TrayNotify) and effect.warning for effect in effects) == 1
 
 
-def test_a_problem_is_logged_and_beeps_once_as_a_warning() -> None:
-    # Defect: a problem from dictation or meetings is silent, beeps twice, or never reaches the log.
+def test_a_problem_is_logged_and_shown_once_as_a_warning() -> None:
+    # Defect: a problem from dictation or meetings is silent, shown twice, or never reaches the log.
     _, effects = folded((Problem("The disk is full."),))
-    assert effects == (Log("The disk is full."), Beep(), TrayNotify("Workspace", "The disk is full.", warning=True))
+    assert effects == (Log("The disk is full."), TrayNotify("Workspace", "The disk is full.", warning=True))
 
 
 def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_over_noise() -> None:

@@ -54,13 +54,13 @@ def test_physical_press_is_reported_before_a_tap_hold_is_resolved() -> None:
         assert keyboard.swallow(key, down=True)
         assert messages == [(WM_KEY_STATE, 0x32, 1)]
         assert keyboard.engine_state.layer() is None
-        assert keyboard.pressed == {Scancode(0x32)}
+        assert keyboard.state.pressed == {Scancode(0x32)}
         keyboard.swallow(key, down=True)  # auto-repeat must not refresh the highlight
         assert messages == [(WM_KEY_STATE, 0x32, 1)]
         keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 40, 0), down=False)
         keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 41, 0), down=False)
         assert messages == [(WM_KEY_STATE, 0x32, 1), (WM_KEY_STATE, 0x32, 0)]
-        assert not keyboard.pressed
+        assert not keyboard.state.pressed
 
 
 def test_desktop_outage_keeps_remapping_and_reconnects_without_replaying_shortcuts() -> None:
@@ -74,8 +74,7 @@ def test_desktop_outage_keeps_remapping_and_reconnects_without_replaying_shortcu
     assert hook_key(keyboard, driver, DICTATE_KEY, down=True, at=10) == 1
     assert hook_key(keyboard, driver, DICTATE_KEY, down=False, at=20) == 1
     assert hook_key(keyboard, driver, APPS_THUMB, down=False, at=25) == 1
-    assert keyboard.engine_state.enabled and keyboard.fault is None
-    assert driver.sounds == [system.MB_ICONHAND]
+    assert keyboard.engine_state.enabled and keyboard.state.recovery is None
     assert driver.messages == []
     keyboard.swallow(inputs.KeyEvent(0x34, 0x05, 0, 30, 0), down=True)
     keyboard.swallow(inputs.KeyEvent(0x34, 0x05, 0, 40, 0), down=False)
@@ -99,7 +98,7 @@ def test_generated_and_extended_input_does_not_light_physical_keys() -> None:
             keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, flags, 10, extra), down=True)
             keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, flags, 40, extra), down=False)
             assert not any(message == WM_KEY_STATE for message, _, _ in messages)
-            assert not keyboard.pressed
+            assert not keyboard.state.pressed
 
 
 def test_blocked_keys_light_up_but_unpictured_keys_do_not() -> None:
@@ -121,7 +120,7 @@ def test_apps_l_holds_dictation_until_release_and_updates_its_highlight() -> Non
         key = inputs.KeyEvent(0, DICTATE_KEY, 0, 10, 0)
         assert keyboard.swallow(key, down=True)
         assert messages == [(WM_KEY_STATE, DICTATE_KEY, 1), (WM_REQUEST, Tool.DICTATE.value, 1)]
-        assert keyboard.pressed == {APPS_THUMB, DICTATE_KEY}
+        assert keyboard.state.pressed == {APPS_THUMB, DICTATE_KEY}
         keyboard.swallow(key, down=True)
         keyboard.swallow(inputs.KeyEvent(0, DICTATE_KEY, 0, 300, 0), down=False)
         assert messages == [
@@ -130,7 +129,7 @@ def test_apps_l_holds_dictation_until_release_and_updates_its_highlight() -> Non
             (WM_KEY_STATE, DICTATE_KEY, 0),
             (WM_REQUEST, Tool.DICTATE.value, 0),
         ]
-        assert keyboard.pressed == {APPS_THUMB}
+        assert keyboard.state.pressed == {APPS_THUMB}
 
 
 def test_native_modifier_released_after_enabling_does_not_stick_to_space() -> None:
@@ -167,12 +166,12 @@ def test_picker_enter_release_passes_after_the_selected_window_takes_focus() -> 
     driver = KeyboardFixture()
     driver.current_title = SWITCHER_TITLE
     with observed_keyboard(platform=driver) as (keyboard, messages):
-        keyboard.restore(replace(keyboard.state, foreground=0))
+        keyboard.restore(replace(keyboard.state, window=0))
         enter = inputs.KeyEvent(0x0D, 0x1C, 0, 0, 0)
         assert not keyboard.swallow(enter, down=True)
-        keyboard.restore(replace(keyboard.state, picker_active=False))
+        keyboard.restore(replace(keyboard.state, switcher=False))
         assert not keyboard.swallow(enter, down=False)
-        assert not keyboard.native_releases and messages == []
+        assert not keyboard.state.owed and messages == []
 
 
 def test_layout_query_resets_then_replays_all_physically_held_keys() -> None:
@@ -191,7 +190,7 @@ def test_toggle_and_input_failure_clear_held_keys() -> None:
         key = inputs.KeyEvent(0x4D, 0x32, 0, 10, 0)
         keyboard.swallow(key, down=True)
         keyboard.on_message(WM_TOGGLE_LAYOUT)
-        assert not keyboard.pressed
+        assert not keyboard.state.pressed
         assert messages[-1] == (WM_KEY_STATE, 0, 0)
         messages.clear()
         assert not keyboard.swallow(key, down=True)
@@ -200,7 +199,7 @@ def test_toggle_and_input_failure_clear_held_keys() -> None:
         keyboard.swallow(key, down=True)
         sent = len(messages)
         keyboard.input_failed(OSError("Rejected input"))
-        assert not keyboard.pressed
+        assert not keyboard.state.pressed
         assert (WM_KEY_STATE, 0, 0) in messages[sent:]
         assert not bool(keyboard.engine_state.enabled)
 
@@ -257,8 +256,8 @@ def test_hook_failure_passes_input_even_when_recovery_effects_also_fail() -> Non
     keyboard.set_keys(replace(keyboard.engine_state, pressed=(Key.A, *keyboard.engine_state.pressed[1:])))
     keyboard.host.own(Key.A)
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
-    assert not bool(keyboard.engine_state.enabled) and not keyboard.busy
-    assert keyboard.fault is not None and keyboard.fault.error_type == "RuntimeError"
+    assert not bool(keyboard.engine_state.enabled) and not keyboard.state.busy
+    assert keyboard.state.recovery is not None and keyboard.state.recovery.fault.error_type == "RuntimeError"
     assert not driver.recoveries
     for _ in range(5):
         keyboard.maintenance()
@@ -305,7 +304,7 @@ def test_recovery_retries_are_bounded_and_enabling_waits_for_accepted_releases()
     for _ in range(10):
         keyboard.maintenance()
     assert len(driver.output) == 6  # Immediate cleanup plus five timer attempts.
-    assert not keyboard.recovery_ticks and keyboard.fault is None
+    assert keyboard.state.recovery is None
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     assert not bool(keyboard.engine_state.enabled)
     driver.send_error = None
@@ -322,7 +321,7 @@ def test_firmware_keyboard_bypasses_remapping_and_restores_the_previous_mode() -
     driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#connected",)
     keyboard.update_devices()
     assert not keyboard.engine_state.enabled and driver.output[-1] == (Key.Q, False)
-    assert not keyboard.pressed and keyboard.firmware is not None
+    assert not keyboard.state.pressed and keyboard.state.firmware is not None
     output = tuple(driver.output)
     for key in (inputs.KeyEvent(0x4E, N_KEY, 0, 20, 0), inputs.KeyEvent(0, ESCAPE, 0, 20, 0)):
         assert not keyboard.swallow(key, down=True)
@@ -351,7 +350,7 @@ def test_firmware_keyboard_bypasses_remapping_and_restores_the_previous_mode() -
     driver.send_error = OSError("Native release refused")
     driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#connected",)
     keyboard.update_devices()
-    assert keyboard.firmware is not None and not keyboard.firmware.resume_layout
+    assert keyboard.state.firmware is not None and not keyboard.state.firmware.resume_layout
     driver.send_error = None
     driver.devices = ()
     keyboard.update_devices()
@@ -372,7 +371,7 @@ def test_firmware_apps_thumb_voice_holds_pair_each_press_with_its_release() -> N
     assert keyboard.swallow(DICTATE_LETTER, down=False)
     assert requests_of(driver) == [(Tool.DICTATE.value, 1), (Tool.DICTATE.value, 0)]
     assert [message for message in driver.messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
-    assert not keyboard.shortcuts and not keyboard.native_releases
+    assert not keyboard.state.shortcuts and not keyboard.state.owed
     assert not driver.output and not keyboard.engine_state.enabled
 
 
@@ -402,10 +401,10 @@ def test_firmware_voice_finishes_on_unplug_and_swallows_the_late_voice_key_relea
     keyboard.update_devices()
     assert_host_remapping_restored(keyboard)
     assert requests_of(driver) == [(Tool.DICTATE.value, 1), (Tool.DICTATE.value, 0)]
-    assert not keyboard.apps_held
+    assert not keyboard.state.apps_held
     assert keyboard.swallow(DICTATE_LETTER, down=True)
     assert keyboard.swallow(DICTATE_LETTER, down=False)
-    assert not keyboard.shortcuts and not keyboard.native_releases
+    assert not keyboard.state.shortcuts and not keyboard.state.owed
 
 
 def test_firmware_voice_finishes_on_hook_failure_and_keyboard_shutdown() -> None:
@@ -450,7 +449,7 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
     requests = [control_event(*message, APPS) for message in driver.messages if message[0] == WM_REQUEST]
     assert requests == [FeatureRequest(Tool.DESKTOP_1, down=True), FeatureRequest(Tool.DESKTOP_1, down=False)]
     assert [message for message in driver.messages if message[0] == WM_CHORD] == [(WM_CHORD, 1, 0), (WM_CHORD, 0, 0)]
-    assert not keyboard.shortcuts and not keyboard.native_releases and not driver.output
+    assert not keyboard.state.shortcuts and not keyboard.state.owed and not driver.output
     assert keyboard.swallow(APPS_KEY, down=True)
     app = inputs.KeyEvent(0x51, 0x10, 0, 40, 0)  # Q
     assert keyboard.swallow(app, down=True)
@@ -484,13 +483,13 @@ def test_escape_toggle_clears_highlights_with_other_keys_still_held() -> None:
         keyboard.swallow(inputs.KeyEvent(0, ESCAPE, 0, 20, 0), down=True)
         keyboard.swallow(inputs.KeyEvent(0, ESCAPE, 0, 40, 0), down=False)
         assert not bool(keyboard.engine_state.enabled)
-        assert not keyboard.pressed
+        assert not keyboard.state.pressed
         assert messages[-1] == (WM_KEY_STATE, 0, 0)
 
 
 def test_native_arrow_reaches_apps() -> None:
     keyboard = Keyboard.open(KeyboardFixture())
-    keyboard.restore(replace(keyboard.state, foreground=1))
+    keyboard.restore(replace(keyboard.state, window=1))
     assert not keyboard.swallow(inputs.KeyEvent(0x25, 0x4B, inputs.LLKHF_EXTENDED, 0, 0), down=True)
 
 
@@ -506,7 +505,7 @@ def test_physical_shift_arrow_selection_remains_native_with_layout_enabled() -> 
                 assert not keyboard.swallow(arrow, down=True)  # Holding an arrow still repeats.
                 assert not keyboard.swallow(arrow, down=False)
             assert not keyboard.swallow(shift, down=False)
-        assert messages == [] and not keyboard.pressed
+        assert messages == [] and not keyboard.state.pressed
 
 
 def test_extended_keys_never_fall_into_layout_bindings_and_function_controls_remain_available() -> None:
@@ -554,7 +553,7 @@ def test_layout_replies_to_queries_and_tray_toggles_without_key_injection() -> N
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     states = [wparam for message, wparam, _ in driver.messages if message == WM_LAYOUT_STATE]
     assert states == [LayoutState.ON.value, LayoutState.OFF.value, LayoutState.OFF.value, LayoutState.ON.value]
-    assert not keyboard.busy
+    assert not keyboard.state.busy
 
 
 def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> None:
@@ -564,7 +563,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
     keyboard.set_keys(replace(keyboard.engine_state, pressed=(Key.Q, *keyboard.engine_state.pressed[1:])))  # An output held before opening the tray.
     keyboard.on_message(WM_TOGGLE_LAYOUT)
     assert not bool(keyboard.engine_state.enabled)
-    assert not keyboard.busy
+    assert not keyboard.state.busy
 
 
 def test_layout_query_includes_the_current_layer_for_a_new_overlay() -> None:

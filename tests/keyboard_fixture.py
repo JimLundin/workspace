@@ -28,7 +28,6 @@ class KeyboardFixture:
         self.delivery_error: Exception | None = None
         self.handle: int | None = 1
         """The desktop's running window; None while it is down."""
-        self.sounds: list[int] = []
         self.reject_down: Key | Mod | None = None
         self.messages: list[tuple[int, int, int]] = []
         self.output: list[tuple[Key | Mod, bool]] = []
@@ -76,9 +75,6 @@ class KeyboardFixture:
     def kill_timer(self, timer: int) -> None:
         pass
 
-    def beep(self, sound: int) -> None:
-        self.sounds.append(sound)
-
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
         self.recoveries.append(tuple(details.items()))
 
@@ -109,7 +105,7 @@ def observed_keyboard(*, platform: KeyboardFixture | None = None) -> Generator[t
 
 
 def assert_host_remapping_restored(keyboard: Keyboard) -> None:
-    assert keyboard.engine_state.enabled and keyboard.firmware is None
+    assert keyboard.engine_state.enabled and keyboard.state.firmware is None
 
 
 def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:

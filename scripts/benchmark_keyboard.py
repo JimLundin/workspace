@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
-lazy from keyboard.engine import Engine, EngineState, Indicator, Signal
+lazy from keyboard.engine import Engine, EngineState, Indicator
 lazy from keyboard.layout import Key, Mod, Scancode
-lazy from protocol import Request
+lazy from protocol import LayoutState, Request
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,7 +153,7 @@ class Host:
     def stop_timer(self, timer: int) -> None:
         pass
 
-    def signal(self, signal: Signal) -> None:
+    def layout_state(self, state: LayoutState) -> None:
         pass
 
     def request(self, request: Request, *, down: object) -> None:

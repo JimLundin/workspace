@@ -29,7 +29,7 @@ from keyboard.layout import (
     is_left_hand,
     slot,
 )
-from protocol import App, Request, Tool
+from protocol import App, LayoutState, Request, Tool
 
 
 class Host(Protocol):
@@ -38,8 +38,8 @@ class Host(Protocol):
     def send(self, key: Key | Mod, *, down: bool) -> None: ...
     def start_timer(self) -> int: ...
     def stop_timer(self, timer: int) -> None: ...
-    def signal(self, signal: Signal) -> None:
-        """Let the user know about a change they can't otherwise see."""
+    def layout_state(self, state: LayoutState) -> None:
+        """The layout was switched on or off."""
 
     def request(self, request: Request, *, down: bool) -> None:
         """A tool or app key went down or up: pass it on to the assistant."""
@@ -57,14 +57,6 @@ class Verdict(Enum):
     """Handled (or deliberately blocked): don't let it through."""
     QUIT = auto()
     """The escape key was held long enough: shut down."""
-
-
-class Signal(Enum):
-    """Changes the user gets a sound for."""
-
-    ON = auto()
-    OFF = auto()
-    CAPS_WORD = auto()
 
 
 class Decision(Enum):
@@ -286,7 +278,7 @@ class Engine:
         """Switch the layout on/off, releasing held input and clearing its indicator."""
         state = self.release_all(replace(state, escape_down_at=None), host)
         state = replace(state, enabled=not state.enabled)
-        host.signal(Signal.ON if state.enabled else Signal.OFF)
+        host.layout_state(LayoutState.ON if state.enabled else LayoutState.OFF)
         return self.refresh(state, host)
 
     def key(self, state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
@@ -470,8 +462,6 @@ class Engine:
         # Both Shift keys held (this one is already recorded as pressed): toggle caps word.
         if a == Mod.SHIFT and state.pressed.count(Mod.SHIFT) >= 2:
             state = replace(state, caps_word=not state.caps_word)
-            if state.caps_word:
-                host.signal(Signal.CAPS_WORD)
         state, a = self.apply_caps_word(state, a)
         match a:
             case Key():

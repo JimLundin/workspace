@@ -13,7 +13,6 @@ from keyboard.engine import (
     EngineState,
     Indicator,
     Modifiers,
-    Signal,
     UnreleasedError,
     Verdict,
 )
@@ -32,7 +31,7 @@ from keyboard.layout import (
     TapHold,
     slot,
 )
-from protocol import Request, Tool
+from protocol import LayoutState, Request, Tool
 
 NAMES = {0xA0: "SFT", 0xA2: "CTL", 0xA4: "ALT", 0x20: "spc", 0x25: "left", 0x08: "bksp", 0xDB: "[", 0xC0: "`", 0xBE: "."}
 
@@ -79,8 +78,8 @@ class FakeHost:
     def stop_timer(self, timer: int) -> None:
         pass
 
-    def signal(self, signal: Signal) -> None:
-        self.log.append(f"!{signal.name}")
+    def layout_state(self, state: LayoutState) -> None:
+        self.log.append(f"!{state.name}")
 
     def request(self, request: Request, *, down: bool) -> None:
         name = request.name.lower() if isinstance(request, Tool) else f"app:{request.name}"
@@ -519,15 +518,6 @@ def test_caps_word_toggles_off_and_clears_on_switch_off() -> None:
     t.key(ESC, down=False, now=30)  # on: caps word is gone
     t.tap("2")
     assert t.take() == "!OFF !ON +q -q"
-
-
-def test_caps_word_signals_when_turned_on() -> None:
-    t = Harness()
-    t.d("r")
-    t.d("o")
-    t.timeout_last()
-    t.timeout_last()
-    assert "!CAPS_WORD" in t.take()
 
 
 # ---- chordal hold ----------------------------------------------------------

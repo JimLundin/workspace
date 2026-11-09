@@ -1,4 +1,4 @@
-"""Message loops, timers, events, locks, sounds and message boxes."""
+"""Message loops, timers, events, locks and message boxes."""
 
 import ctypes
 from collections.abc import Iterator, Sequence
@@ -14,8 +14,7 @@ WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 0x0100, 0x0101, 0x0104, 0x010
 WM_LBUTTONUP, WM_RBUTTONUP = 0x0202, 0x0205
 WM_APP: Final = 0x8000
 
-MB_OK: Final = 0x00
-MB_ICONHAND, MB_ICONEXCLAMATION, MB_ICONASTERISK = 0x10, 0x30, 0x40
+MB_ICONHAND: Final = 0x10
 
 _ERROR_ALREADY_EXISTS: Final = 183
 _INFINITE: Final = 0xFFFF_FFFF
@@ -26,7 +25,6 @@ _DispatchMessageW = fn(user32, "DispatchMessageW", ULONG_PTR, ctypes.POINTER(win
 _PostQuitMessage = fn(user32, "PostQuitMessage", None, ctypes.c_int)
 _SetTimer = fn(user32, "SetTimer", ULONG_PTR, wintypes.HWND, ULONG_PTR, wintypes.UINT, ctypes.c_void_p)
 _KillTimer = fn(user32, "KillTimer", wintypes.BOOL, wintypes.HWND, ULONG_PTR)
-_MessageBeep = fn(user32, "MessageBeep", wintypes.BOOL, wintypes.UINT)
 _MessageBoxW = fn(user32, "MessageBoxW", ctypes.c_int, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT)
 _GetTickCount = fn(kernel32, "GetTickCount", wintypes.DWORD)
 _GetCurrentProcess = fn(kernel32, "GetCurrentProcess", wintypes.HANDLE)
@@ -105,11 +103,6 @@ def set_window_timer(hwnd: int, ms: int) -> int:
     if not timer:
         raise OSError("Windows refused the capture watchdog timer.")
     return timer
-
-
-def beep(sound: int) -> None:
-    """A Windows system sound (an MB_ICON* value, or MB_OK); it plays in the background."""
-    _MessageBeep(sound)
 
 
 def message_box(text: str, title: str, style: int) -> int:
