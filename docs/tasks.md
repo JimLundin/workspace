@@ -183,6 +183,15 @@ Still to decide, raised in the same session:
   protocol that the `settings` module satisfies (mypy accepts a module for a
   protocol). Only startup code imports `settings`, tests pass their own
   layout modules, and a review rule rejects a test that imports a data module.
+- **Inject every module-level keyboard table, not just `settings`** (user,
+  2026-11-09: make the pivot to passing data in; a follow-up after the
+  window-layout tables). Tables built at import from the real layout:
+  `bindings._TABLE`, `_HANDS` and `_SLOTS`; `firmware._KEYS`, `CHORDS` and
+  `CHORD_KEYS`; and in `desktop_ui/keymap.py`, `ROWS`, `PHYSICAL_NAMES` and
+  `shortcut()`. `CHORDS` also reaches `desktop_ui/key_hints.py` and the
+  pager's jump hints. Tests that can't use their own tables until this is
+  done: `test_keymap::test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first`
+  (it pins the keymap's legends) and the chord letters behind key hints.
 - **`Scancode` is applied midway, not where scancodes come from.** Either type
   it at the source (`KeyEvent.scancode`, `Keycap.scancode`) or drop it and use
   `Laptop` past the hook. Leaning towards dropping it.
