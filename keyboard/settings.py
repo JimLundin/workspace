@@ -103,8 +103,9 @@ BASE: Final[Board[Binding]] = Board(
     thumbs=Thumbs((                        ht(ESC, Layer.APPS), ht(SPACE, NAV), TAB     ), (ht(ENTER, SYM), ht(BACKSPACE, NUM), DELETE)),
 )
 
-# The apps from config, ten slots in key order; slots past the end do nothing.
-_APP: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[XX] * (10 - len(config.APPS[:10])))
+# The apps from config, ten slots named by their chord letters; slots past the end do nothing.
+_APPS: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[XX] * (10 - len(config.APPS[:10])))
+_Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = every_member(Layer, {
     Layer.NAV: Board(
@@ -131,9 +132,9 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = every_member(Layer, {
     Layer.APPS: Board(
         # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
         # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
-        top=      Row((_APP[0],         _APP[1],               _APP[2],              _APP[3],         _APP[4]      ),
+        top=      Row((_Q,              _W,                    _F,                   _P,              _B           ),
                       (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,       Tool.DESKTOP_4,  Tool.DESKTOP_5)),
-        home=     Row((_APP[5],         _APP[6],               _APP[7],              _APP[8],         _APP[9]      ),
+        home=     Row((_A,              _R,                    _S,                   _T,              _G           ),
                       (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,      Tool.FOCUS_UP,   Tool.FOCUS_RIGHT)),
         bottom=   Row((XX,              Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER, Tool.PLACE_NOW,  XX           ),
                       (XX,              Tool.DICTATE,          XX,                   Tool.COPY_TRANSCRIPT, Tool.DICTATE_TOGGLE)),

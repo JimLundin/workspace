@@ -6,7 +6,7 @@ lines are code lines. Product code averages 6.0 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 81,803 | 13,703 |
+| **product** | 81,796 | 13,704 |
 | **support** | 53,854 | 7,979 |
 
 | area | nodes | lines |
@@ -15,7 +15,7 @@ lines are code lines. Product code averages 6.0 nodes a line.
 | tests | 38,732 | 5,608 |
 | winapi | 19,634 | 3,301 |
 | scripts | 11,513 | 1,665 |
-| keyboard | 9,227 | 1,444 |
+| keyboard | 9,220 | 1,445 |
 | assistant | 6,982 | 1,198 |
 | typings | 3,609 | 706 |
 | contracts | 1,612 | 306 |
