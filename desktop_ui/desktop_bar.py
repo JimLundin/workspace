@@ -12,7 +12,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import suppress
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import assert_never
@@ -72,7 +72,6 @@ lazy from desktop_ui.bar_events import (
     TrayClicked,
     UseSizes,
     UseTool,
-    Visibility,
     VolumeSet,
     menu,
     next_frame,
@@ -115,10 +114,6 @@ class BarActions:
     menu: Callable[[], None]
     problem: Callable[[str], None]
     tool: Callable[[Tool], None]
-    taskbar: Callable[[], None] | None = field(default=None, kw_only=True)
-    """Toggle the taskbar; None toggles the real one."""
-    notification_settings: Callable[[], None] | None = field(default=None, kw_only=True)
-    """Open notification settings; None opens Windows' own."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,7 +196,7 @@ class DesktopBar:
     observations: BarObservations
     reporter: _Reporter
     taskbar: TaskbarControl
-    shell: _Shell | None
+    shell: _Shell
     audio_meter: AudioMeter | None
     errors: queue.Queue[str]
     loop: EventLoop
@@ -215,16 +210,8 @@ class DesktopBar:
     """The 50 ms microphone trace while dictating."""
     _model: Cell[BarModel]
 
-    # Actions, native-shell lifetime, audio ownership and desktop observations
-    # are separate composition dependencies rather than UI options.
     @classmethod
-    def open(
-        cls,
-        actions: BarActions,
-        *,
-        native_shell: bool = True,
-        audio_level: Callable[[], float | None] | None = None,
-    ) -> DesktopBar:
+    def open(cls, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
         observed = BarObservations()
         deliver: Cell[Callable[[Event], None] | None] = Cell(None)
         reporter = _Reporter(deliver)
@@ -243,16 +230,16 @@ class DesktopBar:
         audio.timeout.connect(lambda: reporter.report(SampleDue()))
         model = BarModel(
             specs,
-            visible=native_shell,
             preference=observed.material(),
             ambient=Ambient(observed.local_time().strftime("%H:%M"), PowerUnavailable.UNKNOWN),
         )
+        taskbar = TaskbarControl()
         bar = cls(
             actions,
             observed,
             reporter,
-            TaskbarControl(),
-            None,
+            taskbar,
+            _start_shell(errors, taskbar),
             None,
             errors,
             loop,
@@ -266,8 +253,6 @@ class DesktopBar:
         )
         try:
             bar = replace(bar, audio_meter=AudioMeter.start(audio_level) if audio_level is not None else None)
-            if native_shell:
-                bar = replace(bar, shell=bar._start_shell())
             deliver.set(bar.handle)
             bar.timer.start()
             bar.handle(Rerender())
@@ -277,47 +262,11 @@ class DesktopBar:
             raise
         return bar
 
-    def _start_shell(self) -> _Shell:
-        status = StatusObserver.start()
-        away = AwayScreens.start(_record_usage)
-
-        def message(_hwnd: int, message: int, wparam: int, _lparam: int) -> int | None:
-            away.message(message, wparam)
-            return None
-
-        controls = shell.AppWindow.create("workspace shell controls", message)
-        try:
-            session.subscribe(controls.handle)
-        except OSError as error:
-            self.errors.put(f"Screens can't go dark when locked: {error}")
-        worker = threading.Thread(target=self._start_taskbar, name="taskbar recovery", daemon=True)
-        built = _Shell(
-            status,
-            controls,
-            away,
-            TrayHost.start(),
-            ApplicationObserver.start(self.errors.put),
-            KeyHintOverlay(NativeOverlayDesktop()),
-            worker,
-        )
-        worker.start()
-        return built
-
-    def _start_taskbar(self) -> None:
-        try:
-            self.taskbar.start()
-        except OSError as error:
-            self.errors.put(str(error))
-
     # ---- what the model says ------------------------------------------------------------
 
     @property
     def model(self) -> BarModel:
         return self._model.get()
-
-    @property
-    def visible(self) -> bool:
-        return self.model.visible
 
     # ---- the fold ----------------------------------------------------------------------
 
@@ -349,8 +298,7 @@ class DesktopBar:
             case Act(action):
                 self._act(action)
             case Navigate(order):
-                if self.shell is not None:
-                    self.shell.applications.order(order)
+                self.shell.applications.order(order)
             case ToggleTaskbar() | ToggleAway() | NotificationSettings() | SetVolume() | ClickTray() | ShowHints():
                 self._shell_effect(effect)
             case UseSizes(sizes):
@@ -384,19 +332,14 @@ class DesktopBar:
             case ToggleTaskbar():
                 self.toggle_taskbar()
             case ToggleAway():
-                if self.shell is not None:
-                    self.shell.away.toggle()
+                self.shell.away.toggle()
             case NotificationSettings():
-                if self.actions.notification_settings is not None:
-                    self.actions.notification_settings()
-                else:
-                    os.startfile("ms-settings:notifications")
+                os.startfile("ms-settings:notifications")
             case SetVolume(level):
-                if self.shell is not None:
-                    self.shell.status.set_volume(level)
+                self.shell.status.set_volume(level)
             case ClickTray(slot, click):
                 entries = self.window.tray
-                if self.shell is not None and slot < len(entries):
+                if slot < len(entries):
                     self.shell.tray.click(entries[slot], click, inputs.cursor_position())
             case ShowHints():
                 self._show_hints()
@@ -404,9 +347,6 @@ class DesktopBar:
                 assert_never(effect)
 
     def toggle_taskbar(self) -> None:
-        if self.actions.taskbar is not None:
-            self.actions.taskbar()
-            return
         try:
             self.taskbar.toggle()
         except OSError as error:
@@ -414,8 +354,6 @@ class DesktopBar:
 
     def _show_hints(self) -> None:
         """The hints follow the window in front, which can change while the chord is held."""
-        if self.shell is None:
-            return
         model = self.model
         world = model.arrangement.world
         if not model.chord_held or world is None:
@@ -439,7 +377,7 @@ class DesktopBar:
         opened = menu(model) if model.opened is not None else None
         views = island(self._observed(model), model.specs.island, hovered=model.hovered, expanded=opened is not None)
         shown = tuple(Shown(view, self._measure(model, view, opened)) for view in views)
-        motion = retarget(model.motion, shown, animate=self.visible and self.observations.motion())
+        motion = retarget(model.motion, shown, animate=self.observations.motion())
         listening = model.dictating
         if listening and not self.audio_timer.isActive():
             self.window.samples.extend(0.0 for _ in range(len(self.window.samples)))
@@ -450,7 +388,7 @@ class DesktopBar:
             self.audio_timer.stop()
         if self.audio_meter is not None:
             self.audio_meter.listen(enabled=listening)
-        self.window.setVisible(self.visible)
+        self.window.setVisible(True)
         return Retargeted(views, motion, opened)
 
     def _draw(self, model: BarModel) -> None:
@@ -499,13 +437,13 @@ class DesktopBar:
             )
         )
         # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
-        if self.shell is not None and model.opened is not None:
+        if model.opened is not None:
             self.shell.tray.locate(self.window.tray_locations())
 
     def _paint(self) -> Iterator[Event]:
         model = self.model
         now = self.observations.clock()
-        drawn = next_frame(model, now, animate=self.visible and self.observations.motion())
+        drawn = next_frame(model, now, animate=self.observations.motion())
         self.window.wave_progress = drawn.wave_progress
         self.window.spin_angle = drawn.spin_angle
         self._draw(replace(model, motion=drawn.motion))
@@ -525,15 +463,13 @@ class DesktopBar:
         while not self.errors.empty():
             self.actions.problem(self.errors.get_nowait())
         model = self.model
-        if self.shell is not None:
-            self.shell.away.poll(recording=model.recording.capturing)
+        self.shell.away.poll(recording=model.recording.capturing)
         now = self.observations.clock()
         applications, arrangement = self._poll_shell(model)
         power, next_power = (self.observations.power(), now + 15) if now >= model.next_power else (model.power, model.next_power)
         system = model.system
-        if self.shell is not None:
-            with suppress(queue.Empty):
-                system = self.shell.status.results.get_nowait()
+        with suppress(queue.Empty):
+            system = self.shell.status.results.get_nowait()
         sample_bounds = self.window.bounds(Key.ISLAND) or self.window.bounds(Key.STATUS)
         # Small glass takes its scheme from the desktop beside the island.
         frost = next((sample.frost for sample in self.materials.read() if sample.bounds == sample_bounds), model.frost)
@@ -555,13 +491,11 @@ class DesktopBar:
             applications,
             arrangement,
             taskbar_revealed=self.taskbar.revealed,
-            dark_when_away=self.shell.away.setting.enabled if self.shell is not None else None,
+            dark_when_away=self.shell.away.setting.enabled,
             tray_tips=tuple(entry.tip or "Tray application" for entry in self.window.tray),
         )
 
     def _poll_shell(self, model: BarModel) -> tuple[Shelf, Arrangement]:
-        if self.shell is None:
-            return model.applications, model.arrangement
         sections = self.window.shell_sections
         self.window.show_tray(self.shell.tray.poll())  # The tick's render rebuilds an open menu's tray cells.
         arrangement = model.arrangement
@@ -586,7 +520,7 @@ class DesktopBar:
         # arrives early. The bounded history stays with its Qt paint owner.
         self.window.wave_from = tuple(self.window.trace())
         self.window.samples.append(level(self.audio_meter.level() if self.audio_meter is not None else None))
-        self.window.wave_progress = 0.0 if self.visible and self.observations.motion() else 1.0
+        self.window.wave_progress = 0.0 if self.observations.motion() else 1.0
         capsule = self.window.capsules.get(Key.ISLAND)
         if capsule is not None and any(Marker.WAVE in slot for view in model.views for slot in view.slots):
             capsule.update_indicators()
@@ -623,10 +557,6 @@ class DesktopBar:
 
     # ---- what others tell the bar ------------------------------------------------------
 
-    def show(self, *, visible: bool) -> None:
-        """Show or hide the bar; hidden, it lays out without animating."""
-        self.handle(Visibility(visible))
-
     def navigate(self, order: Order) -> None:
         """The application observer owns windows and desktops; it carries out every navigation."""
         self.handle(Navigate(order))
@@ -642,23 +572,54 @@ class DesktopBar:
             self.audio_meter.close()
         self.materials.close()
         built = self.shell
-        if built is not None:
-            built.hints.close()
-            built.status.close()
-            built.tray.close()
-            built.applications.close()
+        built.hints.close()
+        built.status.close()
+        built.tray.close()
+        built.applications.close()
         try:
             self.taskbar.close()
-            if built is not None:
-                built.worker.join(timeout=6)
+            built.worker.join(timeout=6)
         finally:
-            if built is not None:
-                built.away.close()
-                session.unsubscribe(built.controls.handle)
-                built.controls.destroy()
+            built.away.close()
+            session.unsubscribe(built.controls.handle)
+            built.controls.destroy()
             self.resolution.update(active=False)
             self.window.dispose()
             self.loop.close()
+
+
+def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl) -> _Shell:
+    status = StatusObserver.start()
+    away = AwayScreens.start(_record_usage)
+
+    def message(_hwnd: int, message: int, wparam: int, _lparam: int) -> int | None:
+        away.message(message, wparam)
+        return None
+
+    controls = shell.AppWindow.create("workspace shell controls", message)
+    try:
+        session.subscribe(controls.handle)
+    except OSError as error:
+        errors.put(f"Screens can't go dark when locked: {error}")
+    worker = threading.Thread(target=_start_taskbar, args=(taskbar, errors), name="taskbar recovery", daemon=True)
+    built = _Shell(
+        status,
+        controls,
+        away,
+        TrayHost.start(),
+        ApplicationObserver.start(errors.put),
+        KeyHintOverlay(NativeOverlayDesktop()),
+        worker,
+    )
+    worker.start()
+    return built
+
+
+def _start_taskbar(taskbar: TaskbarControl, errors: queue.Queue[str]) -> None:
+    try:
+        taskbar.start()
+    except OSError as error:
+        errors.put(str(error))
 
 
 def _record_usage(feature: str, details: Mapping[str, Detail]) -> None:

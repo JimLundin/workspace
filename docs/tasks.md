@@ -6,22 +6,12 @@ Delete a task when it's done.
 ## 1. Make checking fast
 
 Workspace runs from the checkout through `launch.py`, and `Dev.cmd deploy`
-only restarts the programs. A check selects tests against the source the same
-tier last passed.
+only restarts the programs. A check runs everything.
 
 Left:
 
-- **Give the meeting service's 2 s publish pacing a seam.** It removes the
-  meeting tests from the slow lists.
-- **The full native tier died** (2026-11-07): `Dev.cmd check --native` with no
-  native receipt failed after about 2.5 min with "The Windows test process did
-  not write its result", while small native selections passed. Recheck it now
-  that the native tier is small.
-- **A narrow check blames a cold openai import on one test.** `assistant.llm`
-  imports openai lazily, so the check's SDK preload (`sdk_packages`, eager
-  imports only) skips it, and the first `test_features` test that transcribes
-  pays about 2–4 s (`test_a_second_talk_key_while_listening_is_ignored` fails
-  the editing budget whenever `assistant/features.py` changes).
+- **Give the meeting service's 2 s publish pacing a seam.** Two meeting
+  tests wait through it on every check.
 - **Move ruff and pyright to the dev group.** They still sit in the runtime
   dependencies, though nothing at runtime uses them.
 
@@ -95,8 +85,6 @@ tests aren't covered. Left:
         tests, so do them with care, not blind;
       - dictated by a dependency: the desktop `Inbox` handler and the bar's
         `deliver` (bindings at the window-procedure boundary);
-      - `scripts.check.Phases` and the other script owners: with the next
-        check-script change, since that needs the native tier.
       Patterns that held up:
       - one record per owner works only where every writer holds the owner's
         lock (audit with a scan for unlocked `Cell` writes); state another

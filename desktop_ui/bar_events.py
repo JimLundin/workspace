@@ -48,8 +48,6 @@ class BarModel:
 
     specs: ui_spec.Specs
     closed: bool = False
-    visible: bool = True
-    """Whether the bar's window is meant to be on screen."""
     opened: Menu | None = None
     """The controls menu, while it is open."""
     menu_target: int = 0
@@ -248,13 +246,6 @@ class Closing:
     pass
 
 
-@dataclass(frozen=True, slots=True)
-class Visibility:
-    """The bar was shown or hidden; hidden, it lays out without animating."""
-
-    visible: bool
-
-
 # ---- requests: their own effect -----------------------------------------------------
 
 
@@ -300,7 +291,6 @@ type Event = (
     | Framed
     | Sampled
     | Closing
-    | Visibility
     | Instruction
 )
 
@@ -507,7 +497,7 @@ def _shown(model: BarModel, change: ActivityChange) -> BarModel:
 
 
 type Interaction = Pressed | Hovered | Selected | Picked | MenuKey | Deactivated | VolumeSet | TrayClicked | Rerender
-type Observation = ActivityChange | ChordHeld | Opening | Ticked | Respecced | Retargeted | Framed | Sampled | Closing | Visibility
+type Observation = ActivityChange | ChordHeld | Opening | Ticked | Respecced | Retargeted | Framed | Sampled | Closing
 
 
 def _interacted(model: BarModel, event: Interaction) -> tuple[BarModel, tuple[Effect, ...]]:
@@ -549,8 +539,6 @@ def _observed(model: BarModel, event: Observation) -> tuple[BarModel, tuple[Effe
         case OverlayShown() | DictationShown() | JobShown() | RecordingShown() | LayoutShown():
             changed = _shown(model, event)
             return changed, ((Render(),) if changed != model else ())
-        case Visibility(visible):
-            return replace(model, visible=visible), ()
         case ChordHeld(held):
             return replace(model, chord_held=held), (ShowHints(),)
         case Opening(opened, target):

@@ -20,8 +20,6 @@ from pathlib import Path
 
 from pydantic import TypeAdapter, ValidationError
 
-from scripts.development_paths import PROFILE
-
 
 @dataclass(frozen=True, slots=True)
 class Source:
@@ -34,6 +32,9 @@ def parse(source: Source) -> ast.Module:
     return ast.parse(source.text, filename=source.name)
 
 
+ANALYSIS = Path(tempfile.gettempdir()) / "workspace-analysis"
+
+
 @dataclass(frozen=True, slots=True)
 class Cache:
     """Optional storage of immutable observations, bound to the analysis engine."""
@@ -41,13 +42,13 @@ class Cache:
     folder: Path
 
     @classmethod
-    def bound(cls, root: Path, *, folder: Path = PROFILE / "development" / "analysis") -> Cache:
+    def bound(cls, root: Path, *, folder: Path = ANALYSIS) -> Cache:
         """The cache for root's sources under this interpreter, pydantic and analysis engine."""
         engine = Path(__file__).resolve().parent
         digest = hashlib.sha256(sys.version.encode())
         digest.update(importlib.metadata.version("pydantic").encode())
         digest.update(str(root.resolve()).encode())
-        for name in ("source_analysis.py", "architecture.py", "quality.py", "check.py"):
+        for name in ("source_analysis.py", "architecture.py", "quality.py"):
             digest.update((engine / name).read_bytes())
         digest.update((root / "pyproject.toml").read_bytes())
         return cls(folder / digest.hexdigest())

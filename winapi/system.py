@@ -6,7 +6,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final, NewType
 
-from winapi._core import ULONG_PTR, CloseHandle, CreateEventW, GetCurrentThreadId, PostMessageW, fn, kernel32, last_error, user32
+from winapi._core import ULONG_PTR, CloseHandle, CreateEventW, PostMessageW, fn, kernel32, last_error, user32
 
 WM_CLOSE: Final = 0x0010
 WM_TIMER: Final = 0x0113
@@ -83,10 +83,6 @@ def post_quit() -> None:
 def post_message(hwnd: int, message: int, wparam: int, lparam: int) -> bool:
     """Queues a message for a window (any process's); doesn't wait for it."""
     return bool(PostMessageW(hwnd, message, wparam, lparam))
-
-
-def thread_id() -> int:
-    return int(GetCurrentThreadId())
 
 
 def tick_count() -> int:

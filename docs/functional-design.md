@@ -87,7 +87,7 @@ architecture review's `contract-isolation` rule enforces it.
 
 ## `scripts/`
 
-`check.py` runs the checks ([pipeline](iteration-pipeline.md)), with
-`selection.py` choosing the tests a change affects, `check_tiers.py` the time
-budgets and `check_native.py` the native runners. `architecture.py` and
-`quality.py` are the reviews, `volume.py` counts code volume, and
+`check.py` runs the checks ([pipeline](iteration-pipeline.md)).
+`architecture.py` and `quality.py` are the reviews, sharing `source_analysis.py`'s
+parsing and cache; `typecheck.py` runs Pyright, `volume.py` counts code volume, and
+`benchmark_keyboard.py` measures the keyboard hook.

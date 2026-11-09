@@ -1,13 +1,9 @@
-"""Policy behavior through the same source review used by editing checks."""
+"""Policy behavior through the same source review the check runs."""
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 from scripts.architecture import Finding, Report, dependencies, python_sources, review
-from tests.check_fixture import copy_check_scripts
-from tests.git_fixture import initialized
 
 
 def others(report: Report) -> tuple[Finding, ...]:
@@ -263,31 +259,6 @@ def test_unsupported_and_unexplained_exceptions_are_configuration_errors(tmp_pat
         pass
     else:
         raise AssertionError("An unexplained exception was accepted.")
-
-
-def test_explicit_test_scope_cannot_bypass_architecture_or_write_a_receipt(tmp_path: Path) -> None:
-    write_tree(
-        tmp_path,
-        {
-            "miryoku/__init__.py": "",
-            "miryoku/engine.py": "import assistant\n",
-            "assistant/__init__.py": "",
-            "tests/test_requested.py": 'def test_requested():\n    raise AssertionError("must not execute")\n',
-        },
-    )
-    copy_check_scripts(tmp_path, ("check.py",))
-    initialized(tmp_path)
-    receipt = tmp_path / "checked.json"
-    result = subprocess.run(
-        [sys.executable, "-m", "scripts.check", "--tests", "tests/test_requested.py", "--receipt", str(receipt)],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=30,
-    )
-    assert result.returncode == 1 and "keyboard-isolation" in result.stdout
-    assert "must not execute" not in result.stdout and not receipt.exists()
 
 
 def test_mock_frameworks_and_replacement_fixtures_are_rejected_in_all_sources(tmp_path: Path) -> None:

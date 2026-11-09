@@ -53,10 +53,6 @@ schema rejects. A meeting test uses it to check the tool schema offered to the
 model against payloads the follow-up validator accepts; schema evaluation
 belongs to jsonschema.
 
-Watchdog's stubs expose its consumed event fields and observer lifecycle. The
-handler protocol records the actual dispatch call used by the native observer;
-Workspace owns filtering, batching, check sequencing and preview shutdown.
-
 The win32more stubs cover the consumed desktop-composition and dispatcher
 calls from the pinned 0.8.7 core and Windows SDK packages. The generated
 COM wrappers inherit `ComPtr`; their mixin properties do not imply Python

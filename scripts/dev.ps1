@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('setup', 'check', 'deploy', 'lint', 'format', 'typecheck', 'watch', 'preview', 'volume')]
+    [ValidateSet('setup', 'check', 'deploy', 'lint', 'format', 'typecheck', 'volume')]
     [string]$Command = 'check',
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Arguments
@@ -24,8 +24,6 @@ Push-Location $root
 try {
     switch ($Command) {
         'check' { & $python -m scripts.check --standards @Arguments }
-        'watch' { & $python -B -m scripts.watch @Arguments }
-        'preview' { & $python -B -m scripts.watch --preview-only --preview @Arguments }
         'deploy' { & $python launch.py restart @Arguments }
         'lint' { & $python -m ruff check @Arguments }
         'format' { & $python -m ruff format @Arguments }

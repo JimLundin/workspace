@@ -9,7 +9,8 @@ itself runs from this checkout and `.venv`. Dependencies are declared in
 them there and run `uv lock`.
 
 ```powershell
-.\Dev.cmd check --tests tests/test_meetings.py
+.\Dev.cmd check
+.\Dev.cmd check tests/test_meetings.py
 .\Dev.cmd deploy
 .\Dev.cmd lint assistant/meetings.py
 .\Dev.cmd format assistant/meetings.py
@@ -25,17 +26,6 @@ keep keyboard grids and tables readable.
 `Dev.cmd typecheck` runs `python -m scripts.typecheck`, which builds the
 gitignored `typings/.workspace-typeshed` from the installed Pyright and
 `typings/typeshed.patch`, then runs Pyright. Pyright is the only type checker.
-
-For feedback on save (`Dev.cmd setup` installs the watcher):
-
-```powershell
-.\Dev.cmd watch --tests tests/test_island_model.py
-.\Dev.cmd preview
-```
-
-`watch` reruns the editing tier's affected tests in fresh processes after each
-debounced save. `--native` adds the affected native modules and slow tests. `preview` restarts the real toolbar with sample data and inert
-actions after each save; it starts no launcher, microphone or keyboard observer. `watch --preview` runs the same preview beside the tests.
 
 ## Code volume
 
@@ -62,51 +52,25 @@ commit stages, and CI fails when it is stale.
    PLR0913 (at most five inputs), and the import rules for relative, inline and
    aliased imports and `__all__` forwarding. See the Design section of
    [AGENTS.md](../AGENTS.md).
-3. With `--standards`, which `Dev.cmd check` always passes, it runs whole-tree
-   `ruff check` and `ruff format --check` before tests, and Pyright over the
-   changed Python files alongside the tests. `--full` and CI type the whole tree.
-4. It runs the selected tests. Without `--tests` it compares source with the
-   last source that tier passed (a receipt in
-   `%LOCALAPPDATA%\workspace\development\checked`) and selects the test modules
-   that import a changed module, directly or through test helpers. Pin changes,
-   application assets and a missing baseline select the full source suite. A
-   passing check records its source; a passing `--native` check records both
-   tiers.
+3. It imports every production module, excusing a missing Windows-only
+   dependency (Qt, Win32, WinRT) off Windows only.
+4. It runs every test in this process, one at a time: generated tests
+   (`tests/properties/`) first, before those imports, since Hypothesis reads
+   constants from loaded modules, then the portable tests, then the native modules
+   (`tests/test_windows_*.py`), which skip themselves off Windows. Test files
+   or `tests/test_x.py::test_name` selectors given as arguments narrow the
+   tests; the reviews and imports still run.
+5. With `--standards`, which `Dev.cmd check` always passes, it runs whole-tree
+   `ruff check`, `ruff format --check` and Pyright beside the tests. Native
+   tests wait for them: their fixtures have real deadlines, and Pyright
+   saturates the cores.
 
-Checks have two tiers. The editing tier, the default, runs only portable tests:
-it leaves out native modules (`tests/test_windows_*.py`) and the slow portable
-tests listed in `SLOW` in `scripts/check_tiers.py`. In a narrow editing check
-(direct imports, fewer than ten modules) a test that takes over 1.5 s fails the
-check by name; make it faster or list it, with its reason, in `SLOW`. A native
-test over 3 s fails `--native` and `--full` by name unless `NATIVE_SLOW` lists
-it. Both lists have caps, so a new slow test means fixing another. `--native`
-adds the affected native modules and the slow tests. `--full` runs everything, natively, and types
-the whole tree: run it after broad native changes or before a merge.
-CI runs the full suite with `python -m scripts.check --full`, which skips the native tier off Windows.
-
-Any failure stops before a receipt. `--tests` runs exactly the named files and
-`tests/test_x.py::test_name` selectors, with no time budget.
-
-Execution order: one Windows runner on a private desktop takes the import
-review and the portable modules (three worker processes once ten or more modules
-are selected). A narrow check imports the SDK packages its tests reach as its own
-phase first. After the runner exits, and in `--full` after whole-tree pyright
-finishes, native modules run in parallel runners, each on its own private
-desktop: one per lane in `NATIVE_LANES` (`scripts/selection.py`), and the rest
-together. Native fixtures have real
-deadlines; overlapping them with the pool or pyright made them fail.
-
-Typical cost on the four-core development laptop, warm policy cache:
-a one-file pure edit about 8 s, `--full` about 165 s (whole-tree pyright alone
-takes 85 s). Editing `scripts/check.py`
-or the policy reviews invalidates the analysis cache; the next check pays
-about 80 s once.
-
-Every check that reaches execution writes timing evidence to
-`%LOCALAPPDATA%\workspace\development\timings\check-*.json`, or to the path given
-with `--timings`. Each failure is listed with its node id and a short summary.
-Editing checks cache per-file policy observations under
-`%LOCALAPPDATA%\workspace\development\analysis`.
+A failing test's captured stderr is printed with its traceback; a passing
+test's stays quiet. The review and quality gates stop the check before any
+import or test. `Dev.cmd check` takes about a minute on the four-core
+development laptop. The reviews cache per-file observations under the system
+temporary folder (`workspace-analysis`). CI runs `python -m scripts.check` on
+Ubuntu and Windows, and the standards in their own job.
 
 Generated tests live in `tests/properties/` and need the `test` extra
 (`Dev.cmd setup` installs it, in the `dev` group).

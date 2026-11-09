@@ -28,11 +28,9 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - A native test (`tests/test_windows_*.py`) must catch a defect only real
   Windows, Qt or a child process can show. A decision you can check with values
   is a portable test, even when the code it lives in is native.
-- Tests have a time budget: 1.5 s in the editing check, 3 s for native tests.
-  Before listing a slow test in `scripts/check_tiers.py` (with its reason, under
-  the cap), remove the cause: real waits, sleeps and retry backoff have seams, and
-  an expensive launch (a fixture window, a fresh interpreter) can be shared
-  with the neighbouring test that starts the same thing.
+- Every check runs every test, so keep tests fast: real waits, sleeps and
+  retry backoff have seams, and an expensive launch (a fixture window, a fresh
+  interpreter) can be shared with the neighbouring test that starts the same thing.
 
 # Design
 
@@ -133,18 +131,15 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 # Checking
 
-Read [docs/iteration-pipeline.md](docs/iteration-pipeline.md). Scale checks to
-the change. Comment, docstring and docs-only changes need no check. Otherwise use
-`Dev.cmd check` for affected portable tests while editing and `--native` after
-changing native code; keep `--full` for broad changes. Don't rerun a whole suite
-to clear a flaky native test: rerun only what failed, and report it. A test over
-the editing budget fails by name: speed it up or list it in
-`scripts/check_tiers.py`. Run native checks sequentially on the shared desktop.
-A passing check records the source it passed (`%LOCALAPPDATA%\workspace\development\checked`),
-and the next check selects the tests affected since; the first check runs everything.
-Change scripts under `scripts/` with `--native` before restarting, since the
-editing tier skips the slow check-process tests. CI runs the full suite
-(`python -m scripts.check --full`; off Windows it skips the native tier).
+Read [docs/iteration-pipeline.md](docs/iteration-pipeline.md). Comment,
+docstring and docs-only changes need no check. Otherwise run `Dev.cmd check`: it
+runs everything every time (the reviews, every production import, every test,
+native ones included on Windows, and whole-tree Ruff and Pyright). Name test
+files (`Dev.cmd check tests/test_x.py`) to rerun only those while iterating; the
+reviews and imports still run. Don't rerun a whole suite to clear a flaky native
+test: rerun only what failed, and report it. Run checks sequentially on the shared
+desktop. CI runs `python -m scripts.check` on Ubuntu, where native tests skip
+themselves, and Windows.
 Besides the rules named above, the architecture review rejects JavaScript in
 Python strings (`inline-script`), a definition no production code uses
 (`unused-definition`), two functions of the same structure (`duplicate-code`)

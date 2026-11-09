@@ -6,18 +6,18 @@ lines are code lines. Product code averages 6.0 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 89,542 | 14,907 |
-| **support** | 68,659 | 10,226 |
+| **product** | 89,314 | 14,861 |
+| **support** | 57,737 | 8,502 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 48,272 | 8,020 |
-| tests | 45,830 | 6,620 |
-| winapi | 19,632 | 3,297 |
-| scripts | 18,742 | 2,837 |
+| desktop_ui | 48,053 | 7,976 |
+| tests | 43,044 | 6,165 |
+| winapi | 19,623 | 3,295 |
+| scripts | 10,694 | 1,585 |
 | miryoku | 10,110 | 1,571 |
 | assistant | 7,044 | 1,202 |
-| typings | 4,087 | 769 |
+| typings | 3,999 | 752 |
 | (top level) | 1,774 | 318 |
 | contracts | 1,612 | 305 |
 | gateway | 1,067 | 186 |
@@ -32,14 +32,13 @@ The 25 largest files:
 | `tests/test_engine.py` | 4,498 | 750 |
 | `miryoku/win.py` | 4,234 | 687 |
 | `tests/test_keyboard_hook.py` | 4,082 | 515 |
-| `scripts/check.py` | 3,787 | 516 |
 | `tests/test_meetings.py` | 3,106 | 474 |
-| `desktop_ui/desktop_bar.py` | 3,043 | 575 |
 | `miryoku/engine.py` | 2,873 | 436 |
+| `desktop_ui/desktop_bar.py` | 2,858 | 539 |
 | `assistant/meetings.py` | 2,738 | 456 |
 | `desktop_ui/keymap_views.py` | 2,364 | 322 |
 | `desktop_ui/island_menu.py` | 2,313 | 349 |
-| `desktop_ui/bar_events.py` | 2,251 | 451 |
+| `desktop_ui/bar_events.py` | 2,217 | 443 |
 | `miryoku/layout.py` | 2,196 | 299 |
 | `tests/test_features.py` | 2,057 | 304 |
 | `desktop_ui/application_observer.py` | 2,035 | 339 |
@@ -52,3 +51,4 @@ The 25 largest files:
 | `tests/test_microphone.py` | 1,689 | 300 |
 | `desktop_ui/desktop_control.py` | 1,688 | 372 |
 | `desktop_ui/window_layout.py` | 1,678 | 201 |
+| `assistant/meeting_store.py` | 1,596 | 252 |

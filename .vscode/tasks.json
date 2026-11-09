@@ -10,22 +10,6 @@
       "problemMatcher": []
     },
     {
-      "label": "Workspace: watch",
-      "type": "shell",
-      "command": ".\\Dev.cmd watch",
-      "options": {"cwd": "${workspaceFolder}"},
-      "isBackground": true,
-      "problemMatcher": []
-    },
-    {
-      "label": "Workspace: UI preview",
-      "type": "shell",
-      "command": ".\\Dev.cmd preview",
-      "options": {"cwd": "${workspaceFolder}"},
-      "isBackground": true,
-      "problemMatcher": []
-    },
-    {
       "label": "Workspace: deploy",
       "type": "shell",
       "command": ".\\Dev.cmd deploy",

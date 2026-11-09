@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["hypothesis==6.170.12", "watchdog==6.0.0"]
+dev = ["hypothesis==6.170.12"]
 
 [tool.uv]
 # Not a package: environments hold only its dependencies (`uv sync --no-install-project`).
@@ -286,13 +286,6 @@ module = "scripts.benchmark_keyboard"
 declaration = "round_latencies.observe_gc"
 expression = "Callable[[str, dict[str, int]], None]"
 reason = "The callback is appended to gc.callbacks, whose element type dictates its signature."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "scripts.watch"
-declaration = "Events.dispatch"
-expression = "dispatch"
-reason = "Watchdog calls dispatch on any handler; subclassing its handler would import watchdog eagerly instead of lazily."
 
 [[tool.workspace.architecture.exceptions]]
 rule = "unused-definition"
