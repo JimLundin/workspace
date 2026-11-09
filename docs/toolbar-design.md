@@ -47,7 +47,7 @@ desktops.
 ## The controls menu
 
 Pressing the clock or battery opens the menu in place. It holds a card per
-running activity, toggles (keyboard overlay, Windows taskbar, window
+running activity, toggles (keyboard overlay, window
 placement, dark when away), **Record a meeting**, a volume slider, small tools (switch windows, copy transcript, key
 map), the system tray icons, and links to Windows notification settings and the
 tray menu. `CONTROLS` in `desktop_ui/island_menu.py` is the source of truth: its rows, their order, each cell's span, label and symbol. Arrows move between

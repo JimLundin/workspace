@@ -74,7 +74,7 @@ tests aren't covered. Left:
       long-lived owner and no loop of ours can carry the state. Otherwise:
       the run loop carries the state as a local
       (`application_observer.Worker`, the meeting journal); a value returns
-      the next value (`EngineState`, `Modifiers`, `WindowsKeyTap`); closures
+      the next value (`EngineState`, `Modifiers`); closures
       replace late-bound Cells; threads aren't kept (started/finished
       events); flags are events, one-shot results are Futures, counters are
       `itertools.count`. 41 `Cell[` uses remain (2026-11-08). Left:

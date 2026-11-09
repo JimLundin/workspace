@@ -25,7 +25,6 @@ class Command(Enum):
     STOP_RECORDING = auto()
     KEYMAP = auto()
     OVERLAY = auto()
-    TASKBAR = auto()
     PLACEMENT = auto()
     DARK_WHEN_AWAY = auto()
     NOTIFICATIONS = auto()
@@ -144,7 +143,6 @@ class Controls:
 
     recording: str | None
     overlay: bool = field(default=False, kw_only=True)
-    taskbar: bool = field(default=False, kw_only=True)
     placement_paused: bool = field(default=False, kw_only=True)
     dark_when_away: int | None = field(default=None, kw_only=True)
     """Dark when away's idle delay in minutes while it's on; None while it's off."""
@@ -160,7 +158,6 @@ class EntryId(StrEnum):
     state, stays here; the spec gives its place, look, label and symbol."""
 
     OVERLAY = auto()
-    TASKBAR = auto()
     PLACEMENT = auto()
     DARK_WHEN_AWAY = auto()
     RECORD = auto()
@@ -224,16 +221,10 @@ CONTROLS: Final = ControlsSpec(
             4,
             (
                 CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
-                CellSpec(EntryId.TASKBAR, Face.TOGGLE, 4, "Windows taskbar", "table"),
-            ),
-        ),
-        CellsRow(
-            4,
-            (
                 CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
-                CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 4, "Dark when away", "lock"),
             ),
         ),
+        CellsRow(4, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark when away", "lock"),)),
         CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
         CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
         CellsRow(
@@ -273,8 +264,6 @@ def entry(spec: CellSpec, controls: Controls) -> Entry | None:
     match spec.entry:
         case EntryId.OVERLAY:
             return toggle(spec, "On" if controls.overlay else "Off", Command.OVERLAY, on=controls.overlay)
-        case EntryId.TASKBAR:
-            return toggle(spec, "Shown" if controls.taskbar else "Hidden", Command.TASKBAR, on=controls.taskbar)
         case EntryId.PLACEMENT:
             return toggle(spec, "Paused" if controls.placement_paused else "On", Command.PLACEMENT, on=not controls.placement_paused)
         case EntryId.DARK_WHEN_AWAY:
@@ -509,7 +498,7 @@ def restores_focus(choice: Choice) -> bool:
     match choice:
         case ToolChoice() | Volume():
             return True
-        case Command.OVERLAY | Command.TASKBAR | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.RECORD | Command.STOP_RECORDING:
+        case Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.RECORD | Command.STOP_RECORDING:
             return True
         case Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
             return False

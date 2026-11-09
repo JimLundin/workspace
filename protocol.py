@@ -36,8 +36,6 @@ WM_KEY_STATE: Final = _WM_APP + 7
 Scancode 0 clears the held keys, before a state replay or when the layout stops."""
 WM_CHORD: Final = _WM_APP + 8
 """Layout -> desktop: wparam is 1 while either keyboard holds its Apps key, else 0."""
-WM_WINDOWS_KEY_TAP: Final = _WM_APP + 9
-"""Layout -> desktop: the Windows key was tapped alone; show or hide the taskbar."""
 
 
 class LayoutState(Enum):

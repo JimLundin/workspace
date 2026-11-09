@@ -54,7 +54,6 @@ lazy from desktop_ui.bar_events import (
     Surroundings,
     Ticked,
     ToggleAway,
-    ToggleTaskbar,
     UseTool,
     menu,
     next_frame,
@@ -217,8 +216,6 @@ class DesktopBar:
                 self.actions.tool(tool)
             case Navigate(order):
                 self.navigate(order)
-            case ToggleTaskbar():
-                self.toggle_taskbar()
             case ToggleAway():
                 self.shell.away.toggle()
             case NotificationSettings():
@@ -233,12 +230,6 @@ class DesktopBar:
                 self._show_hints()
             case _:
                 assert_never(effect)
-
-    def toggle_taskbar(self) -> None:
-        try:
-            self.taskbar.toggle()
-        except OSError as error:
-            self.actions.problem(str(error))
 
     def _show_hints(self) -> None:
         """The hints follow the window in front, which can change while the chord is held."""
@@ -374,7 +365,6 @@ class DesktopBar:
             preference,
             frost,
             arrangement,
-            taskbar_revealed=self.taskbar.revealed,
             dark_when_away=self.shell.away.setting.enabled,
             tray_tips=tuple(entry.tip or "Tray application" for entry in self.window.tray),
             screen=Rect(area.x(), area.y(), area.x() + area.width(), area.y() + area.height()),

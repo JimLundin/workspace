@@ -41,7 +41,6 @@ class Menu(Enum):
     OVERLAY = 11
     MEETING = 12
     TRANSCRIPTS = 13
-    TASKBAR = 15
     RESTART_DESKTOP = 19
 
 
@@ -74,7 +73,6 @@ TRAY: Final[tuple[TrayAction | Separator, ...]] = (
     TrayAction(Menu.OVERLAY, "Keyboard overlay"),
     TrayAction(Menu.KEYMAP, "Key map"),
     Separator(),
-    TrayAction(Menu.TASKBAR, "Toggle Windows taskbar", "Windows key"),
     TrayAction(Menu.MEETING),
     TrayAction(Menu.TRANSCRIPTS, "Open meeting transcripts"),
     Separator(),
@@ -101,7 +99,7 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
             return MenuItem(item.action.value, "Stop recording" if state.capturing else "Record a meeting")
         case Menu.OVERLAY:
             return MenuItem(item.action.value, item.label + hint, checked=state.overlay_enabled)
-        case Menu.KEYMAP | Menu.TASKBAR | Menu.TRANSCRIPTS | Menu.LOGS | Menu.RESTART_DESKTOP | Menu.QUIT:
+        case Menu.KEYMAP | Menu.TRANSCRIPTS | Menu.LOGS | Menu.RESTART_DESKTOP | Menu.QUIT:
             return MenuItem(item.action.value, item.label + hint)
         case _:
             assert_never(item.action)
@@ -294,11 +292,6 @@ class Chord:
 
 
 @dataclass(frozen=True, slots=True)
-class ToggleTaskbar:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class Quit:
     pass
 
@@ -310,7 +303,7 @@ class ShowSwitcher:
     choices: tuple[winapi.shapes.Window, ...]
 
 
-type Instruction = ShowVoice | ShowIdle | Record | ExpireCapture | RestoreTray | Chord | ToggleTaskbar | Quit | ShowSwitcher
+type Instruction = ShowVoice | ShowIdle | Record | ExpireCapture | RestoreTray | Chord | Quit | ShowSwitcher
 
 type Event = Fact | Instruction
 
@@ -561,8 +554,6 @@ def _chosen(choice: int) -> Iterator[Effect]:
             pass  # `transition` folds it as `OverlayToggled`.
         case Menu.KEYMAP:
             yield ShowKeymap()
-        case Menu.TASKBAR:
-            yield ToggleTaskbar()
         case Menu.MEETING:
             yield ToggleMeeting()
         case Menu.TRANSCRIPTS:
@@ -646,7 +637,7 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
 def transition(state: DesktopState, event: Event) -> tuple[DesktopState, Iterator[Effect]]:
     """The state after `event` and the effects it calls for, in order, produced lazily."""
     match event:
-        case ShowVoice() | ShowIdle() | Record() | ExpireCapture() | RestoreTray() | Chord() | ToggleTaskbar() | Quit() | ShowSwitcher():
+        case ShowVoice() | ShowIdle() | Record() | ExpireCapture() | RestoreTray() | Chord() | Quit() | ShowSwitcher():
             return state, iter((event,))
         case MenuChosen(Menu.OVERLAY.value):
             return transition(state, OverlayToggled())

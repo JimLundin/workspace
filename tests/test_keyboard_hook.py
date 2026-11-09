@@ -21,7 +21,6 @@ from protocol import (
     WM_QUERY_LAYOUT_STATE,
     WM_REQUEST,
     WM_TOGGLE_LAYOUT,
-    WM_WINDOWS_KEY_TAP,
     LayoutState,
     Tool,
     decode_indicator,
@@ -589,16 +588,3 @@ def test_layout_query_includes_the_current_locked_layer_for_a_new_overlay() -> N
     keyboard.on_message(WM_QUERY_LAYOUT_STATE)
     layers = [decode_indicator(wparam) for message, wparam, _ in driver.messages if message == WM_INDICATOR]
     assert layers == [(Layer.SYM.value, True, True)]
-
-
-def test_a_bare_windows_key_tap_asks_the_assistant_for_the_taskbar_once() -> None:
-    # Defects: the hook stops reporting taps now that the assistant has no hook
-    # of its own, a home row Win (the layout's own output) is ignored, or
-    # another program's injected Win toggles the taskbar.
-    for flags, extra, expected in ((0, 0, 1), (inputs.LLKHF_INJECTED, LAYOUT_MAGIC, 1), (inputs.LLKHF_INJECTED, 0, 0)):
-        driver = KeyboardFixture()
-        keyboard = Keyboard.open(driver)
-        for message in (system.WM_KEYDOWN, system.WM_KEYUP):
-            driver.key = inputs.KeyEvent(0x5B, 0x5B, flags | inputs.LLKHF_EXTENDED, 10, extra)
-            keyboard.hook_proc(0, message, 0)
-        assert [m for m, _w, _l in driver.messages].count(WM_WINDOWS_KEY_TAP) == expected

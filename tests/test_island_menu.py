@@ -84,11 +84,10 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
 
 def test_toggles_show_their_state_and_apply_in_place() -> None:
     # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
-    cells = entries(Controls(None, overlay=True, taskbar=False, dark_when_away=2), SPEC)
+    cells = entries(Controls(None, overlay=True, dark_when_away=2), SPEC)
     toggles = [cell.entry for cell in cells if cell.face is Face.TOGGLE]
     assert toggles == [
         Toggle("Keyboard overlay", "On", "layers", Command.OVERLAY, on=True),
-        Toggle("Windows taskbar", "Hidden", "table", Command.TASKBAR, on=False),
         Toggle("Placement", "On", "grid", Command.PLACEMENT, on=True),
         Toggle("Dark when away", "External · 2 min idle", "lock", Command.DARK_WHEN_AWAY, on=True),
     ]
@@ -102,9 +101,9 @@ def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     # the grid's edge, or Down from the last cell strands the selection.
     menu = Menu(entries(RESTING, SPEC))
     assert selected(press(menu, Key.DOWN)) == "Keyboard overlay"
-    assert selected(press(at(menu, "Keyboard overlay"), Key.RIGHT)) == "Windows taskbar"
-    assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Placement"
-    assert selected(press(at(menu, "Windows taskbar"), Key.LEFT)) == "Keyboard overlay"
+    assert selected(press(at(menu, "Keyboard overlay"), Key.RIGHT)) == "Placement"
+    assert selected(press(at(menu, "Keyboard overlay"), Key.DOWN)) == "Dark when away"
+    assert selected(press(at(menu, "Placement"), Key.LEFT)) == "Keyboard overlay"
     assert selected(press(at(menu, "Dark when away"), Key.DOWN)) == "Record a meeting"
     assert selected(press(at(menu, "Record a meeting"), Key.DOWN)) == "Sound"
     assert selected(press(at(menu, "Copy latest transcript"), Key.RIGHT)) == "Keyboard map"
@@ -148,7 +147,7 @@ def test_tool_cells_derive_hints_and_short_captions() -> None:
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:
     # Defects: a window tool acts on the menu instead of the user's window, or a Workspace
     # view that just opened loses the keyboard to the previous window.
-    assert restores_focus(ToolChoice(Tool.COPY_TRANSCRIPT)) and restores_focus(Command.TASKBAR)
+    assert restores_focus(ToolChoice(Tool.COPY_TRANSCRIPT)) and restores_focus(Command.PLACEMENT)
     assert not restores_focus(Command.KEYMAP) and not restores_focus(TrayChoice(0))
 
 

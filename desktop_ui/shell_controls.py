@@ -1,4 +1,4 @@
-"""Native taskbar ownership, independent of any canvas. The layout observes the Windows key."""
+"""Native taskbar ownership: Explorer's taskbars stay hidden while the desktop runs."""
 
 import os
 import subprocess
@@ -73,7 +73,6 @@ def launch_recovery_guard() -> RecoveryGuard:
 
 @dataclass(frozen=True, slots=True)
 class _Taskbars:
-    revealed: bool = False
     ready: bool = False
     """Recovery is running, so the taskbars may be hidden."""
     closed: bool = False
@@ -82,17 +81,13 @@ class _Taskbars:
 
 @dataclass(frozen=True, slots=True)
 class TaskbarControl:
-    """Hide Explorer's taskbars until toggled, and restore them on normal or abrupt exit."""
+    """Keep Explorer's taskbars hidden, and restore them on normal or abrupt exit."""
 
     desktop: TaskbarDesktop = desktop_shell
     launch: Callable[[], RecoveryGuard] = launch_recovery_guard
     _state: Cell[_Taskbars] = field(default_factory=lambda: Cell(_Taskbars()), init=False, repr=False)
     """Replaced whole under the lock."""
     lock: threading.Lock = field(default_factory=threading.Lock, init=False)
-
-    @property
-    def revealed(self) -> bool:
-        return self._state.get().revealed
 
     @property
     def ready(self) -> bool:
@@ -110,11 +105,6 @@ class TaskbarControl:
         if not ready:
             raise OSError("Independent taskbar recovery could not start; Windows taskbars remain available.")
 
-    def toggle(self) -> None:
-        with self.lock:
-            self._state.update(lambda taskbars: replace(taskbars, revealed=not taskbars.revealed))
-        self.enforce()
-
     def enforce(self) -> None:
         with self.lock:
             taskbars = self._state.get()
@@ -126,8 +116,8 @@ class TaskbarControl:
                     self.desktop.taskbar_visible(hwnd, show=True)
                 raise OSError("Taskbar recovery stopped; Windows taskbars have been restored.")
             for hwnd in self.desktop.taskbars():
-                if self.desktop.visible(hwnd) != taskbars.revealed:
-                    self.desktop.taskbar_visible(hwnd, show=taskbars.revealed)
+                if self.desktop.visible(hwnd):
+                    self.desktop.taskbar_visible(hwnd, show=False)
 
     def close(self) -> None:
         with self.lock:

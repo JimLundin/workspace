@@ -116,8 +116,8 @@ App keys focus the app, cycle its windows, or start it.
 `,,now`, `,,week`, `,,shrug`, `,,thx`, `,,mvh` and `,,br`. Add your own in
 `config.py`.
 
-Workspace keeps the Windows taskbar hidden. Tap the Windows key to show it and
-open Start, and tap it again to hide it.
+Workspace keeps the Windows taskbar hidden while it runs, and restores it when
+it exits or crashes. The Windows key opens Start as usual.
 
 ## The bar and the tray
 
@@ -132,7 +132,7 @@ battery, and CPU and memory use. Click the clock or battery to open the controls
 
 The tray dot is green when the layout is on, grey when it is off, red while
 listening or recording, and amber while working. Its menu switches or restarts
-the layout, opens the keyboard overlay and key map, toggles the Windows taskbar,
+the layout, opens the keyboard overlay and key map,
 starts or stops a meeting recording, opens the meeting transcripts and the logs
 folder, restarts the layout or the desktop, and quits Workspace. The tray menu's
 items and their order are `TRAY` in `desktop_ui/desktop_control.py`.

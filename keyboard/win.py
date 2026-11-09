@@ -22,7 +22,6 @@ from keyboard import hook_watch
 from keyboard.engine import QUIET, Engine, EngineState, Indicator, Signal, UnreleasedError, Verdict
 from keyboard.firmware import APPS_KEY, CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
 from keyboard.layout import ESCAPE, SLOTS, TAPPING_TERM_MS, Key, Mod, Scancode, Unmapped, native_control
-from keyboard.windows_key import WindowsKeyTap
 from protocol import (
     LAYOUT_MAGIC,
     MAGIC,
@@ -34,7 +33,6 @@ from protocol import (
     WM_QUERY_LAYOUT_STATE,
     WM_REQUEST,
     WM_TOGGLE_LAYOUT,
-    WM_WINDOWS_KEY_TAP,
     LayoutState,
     Request,
     encode,
@@ -240,10 +238,8 @@ class _Hooked:
     hook_tick: int | None = None
     """The newest key time the hook has seen; the hook's only watchdog cost."""
     watch: hook_watch.Watch = hook_watch.Answered.ANSWERED
-    windows_key: WindowsKeyTap = field(default_factory=WindowsKeyTap)
     engine: EngineState = field(default_factory=EngineState)
     """The layout engine's state: each key, timer and toggle returns the next one."""
-    """Bare Windows-key taps toggle the assistant's taskbar."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,10 +363,6 @@ class Keyboard:
     @property
     def watch(self) -> hook_watch.Watch:
         return self._state.get().watch
-
-    @property
-    def windows_key(self) -> WindowsKeyTap:
-        return self._state.get().windows_key
 
     def on_message(self, message: int) -> None:
         """Tray requests; toggling uses the same re-entrancy guard as physical keys."""
@@ -531,7 +523,7 @@ class Keyboard:
             down = wparam in (system.WM_KEYDOWN, system.WM_SYSKEYDOWN)
             try:
                 key = self.platform.read_key_event(lparam)
-                self.observe_windows_key(key, down=down)
+                self._state.update(lambda state: replace(state, hook_tick=key.time))
                 if self.swallow(key, down=down):
                     return 1
             except Exception as error:
@@ -539,18 +531,6 @@ class Keyboard:
                 with contextlib.suppress(Exception):
                     self.input_failed(error)
         return self.platform.call_next_hook(code, wparam, lparam)
-
-    def observe_windows_key(self, key: inputs.KeyEvent, *, down: bool) -> None:
-        """Record the newest key time, and tell the desktop of a bare Windows-key tap.
-
-        Physical keys and the layout's own output (a home row Win) count; other injected input does not.
-        """
-        state = self._state.get()
-        counted = not key.flags & inputs.LLKHF_INJECTED or key.extra == LAYOUT_MAGIC
-        tap = state.windows_key.key(key.vk, down=down) if counted else state.windows_key
-        self._state.set(replace(state, hook_tick=key.time, windows_key=tap))
-        if counted and tap.tapped:
-            self.host.tell(WM_WINDOWS_KEY_TAP, 0, 0)
 
     def watch_hook(self, now: int) -> hook_watch.Reinstall | None:
         """Probe a hook suspected dead; the hook's owner acts on a reinstall."""

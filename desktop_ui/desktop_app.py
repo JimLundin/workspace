@@ -67,7 +67,6 @@ from desktop_ui.desktop_control import (
     SwitchWindows,
     ToggleLayout,
     ToggleMeeting,
-    ToggleTaskbar,
     TrayNotify,
     TrayShow,
     UseLayout,
@@ -83,7 +82,7 @@ from desktop_ui.tray import Tray
 from desktop_ui.view_publication import log
 from desktop_ui.voice import Voice
 from diagnostics import DIRECTORY
-from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_QUERY_LAYOUT_STATE, WM_REQUEST, WM_WINDOWS_KEY_TAP
+from protocol import WM_CHORD, WM_INDICATOR, WM_KEY_STATE, WM_LAYOUT_STATE, WM_QUERY_LAYOUT_STATE, WM_REQUEST
 from winapi import screen, shell, system, windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
@@ -125,8 +124,6 @@ def window_event(message: int, wparam: int, lparam: int) -> Event | None:
         return LayoutReported(wparam)
     if message == WM_CHORD:
         return Chord(held=bool(wparam))
-    if message == WM_WINDOWS_KEY_TAP:
-        return ToggleTaskbar()
     if message == system.WM_TIMER:  # the capture timer, the control window's only timer
         return ExpireCapture(time.monotonic())
     if message == system.WM_CLOSE:  # Quit Workspace, or a test
@@ -266,7 +263,7 @@ class DesktopApp:
                 return self._voice(effect)
             case RestoreTray() | TrayNotify() | TrayShow() | Log() | Beep() | Launch() | OpenLogs():
                 self._shell(effect)
-            case ShowActivity() | Navigate() | Chord() | ToggleTaskbar() | LayoutShown():
+            case ShowActivity() | Navigate() | Chord() | LayoutShown():
                 if bar := self._bar:
                     self._on_bar(bar, effect)
             case SwitchWindows():
@@ -323,7 +320,7 @@ class DesktopApp:
             case _:
                 assert_never(effect)
 
-    def _on_bar(self, bar: DesktopBar, effect: ShowActivity | Navigate | Chord | ToggleTaskbar | LayoutShown) -> None:
+    def _on_bar(self, bar: DesktopBar, effect: ShowActivity | Navigate | Chord | LayoutShown) -> None:
         match effect:
             case ShowActivity(change):
                 bar.handle(change)
@@ -331,8 +328,6 @@ class DesktopApp:
                 bar.navigate(order)
             case Chord(held):
                 bar.handle(bar_events.ChordHeld(held))
-            case ToggleTaskbar():
-                bar.toggle_taskbar()
             case LayoutShown(enabled):
                 bar.handle(bar_events.LayoutShown(enabled))
             case _:

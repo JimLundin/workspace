@@ -54,7 +54,6 @@ class Surroundings:
     preference: appearance.Preference = appearance.Material.SOLID
     frost: appearance.Frost = appearance.Frost.SMOKED
     arrangement: Arrangement = EMPTY_ARRANGEMENT
-    taskbar_revealed: bool = False
     dark_when_away: bool | None = None
     """Whether screens go dark while away; None without the native shell."""
     tray_tips: tuple[str, ...] = ()
@@ -105,7 +104,6 @@ def menu(model: BarModel) -> Menu:
             Controls(
                 recorded.title if recorded is not None else None,
                 overlay=model.overlay_enabled,
-                taskbar=seen.taskbar_revealed,
                 placement_paused=seen.arrangement.paused,
                 dark_when_away=DARK_WHEN_IDLE_MINUTES if seen.dark_when_away else None,
                 sound=sound,
@@ -310,11 +308,6 @@ class Navigate:
 
 
 @dataclass(frozen=True, slots=True)
-class ToggleTaskbar:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class ToggleAway:
     pass
 
@@ -350,7 +343,6 @@ type Effect = (
     | AllControls
     | UseTool
     | Navigate
-    | ToggleTaskbar
     | ToggleAway
     | NotificationSettings
     | SetVolume
@@ -379,8 +371,6 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
             return model, (Keyboard(),)
         case Command.OVERLAY:
             return model, (Overlay(),)
-        case Command.TASKBAR:
-            return model, (ToggleTaskbar(),)
         case Command.PLACEMENT:
             return model, (Navigate(Placing.TOGGLE_PAUSE),)
         case Command.DARK_WHEN_AWAY:

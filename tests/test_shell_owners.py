@@ -55,10 +55,6 @@ def test_taskbar_is_rehidden_after_explorer_reappears_and_restored_on_close() ->
     desktop.shown[202] = True  # Explorer restart or a secondary monitor.
     control.enforce()
     assert desktop.shown == {101: False, 202: False}
-    control.toggle()
-    assert all(desktop.shown.values())
-    control.toggle()
-    assert not any(desktop.shown.values())
     control.close()
     assert all(desktop.shown.values()) and guard.closed
     control.enforce()
