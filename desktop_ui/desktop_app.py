@@ -78,7 +78,7 @@ from desktop_ui.desktop_control import (
 from desktop_ui.navigation import ShowWindow
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
-from desktop_ui.tray import Tray
+from desktop_ui.tray import TRAY_ICON, Tray
 from desktop_ui.view_publication import log
 from desktop_ui.voice import Voice
 from protocol import Message
@@ -211,7 +211,7 @@ class DesktopApp:
     @classmethod
     def compose(cls, root: QtWidgets.QApplication, voice: Voice, inbox: Inbox) -> DesktopApp:
         state = Cell(DesktopState(overlay=OverlayState(enabled=load_enabled())))
-        app = cls(root, inbox, voice, Tray.add(inbox.window.handle, WM_TRAY), state)
+        app = cls(root, inbox, voice, Tray.add(inbox.window.handle, WM_TRAY, TRAY_ICON), state)
         inbox.connect(app.handle)
         return app
 
