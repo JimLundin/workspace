@@ -39,6 +39,23 @@ SPRINGS: Final = Springs(
 """The bar's own springs; its owner passes them in, tests pass their own."""
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Timing:
+    """The bar's clocks beyond its springs."""
+
+    pulse: float
+    """Seconds per cycle of a quick job's pulsing dots..."""
+    lag: float
+    """...and how far, as a share of a cycle, each dot follows the one before it."""
+    opaque_at: float
+    """The presence at which a capsule's glass and content are fully opaque, before it reaches its full width."""
+    wave_sample: float
+    """Seconds between the microphone trace's samples; the wave moves across each one."""
+
+
+TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05)
+
+
 @dataclass(frozen=True, slots=True)
 class Shown:
     """A view the bar wants on screen, with its measured content."""

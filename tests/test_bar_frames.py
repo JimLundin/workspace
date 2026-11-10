@@ -22,16 +22,16 @@ def test_a_settled_idle_bar_stops_its_frame_loop() -> None:
     # Defect: the frame timer keeps running once nothing moves.
     drawn = next_frame(model(), 10.0, animate=True)
     assert not drawn.running and not drawn.indicators and drawn.wave_progress == 1.0
-    assert drawn.spin_angle == next_frame(model(), 10.3, animate=True).spin_angle
+    assert drawn.pulse == next_frame(model(), 10.3, animate=True).pulse
 
 
 def test_running_work_spins_only_while_motion_is_allowed() -> None:
     # Defects: the job's dots paint frozen, keep the frame loop
     # running after work ends, or ignores Windows' reduced-motion setting.
     first, later = next_frame(working(), 10.0, animate=True), next_frame(working(), 10.3, animate=True)
-    assert first.running and first.indicators and first.spin_angle != later.spin_angle
+    assert first.running and first.indicators and first.pulse != later.pulse
     still = next_frame(working(), 10.3, animate=False)
-    assert still.spin_angle == next_frame(working(), 10.0, animate=False).spin_angle and not still.running and still.indicators
+    assert still.pulse == next_frame(working(), 10.0, animate=False).pulse and not still.running and still.indicators
     assert not next_frame(model(), 10.3, animate=True).running
 
 

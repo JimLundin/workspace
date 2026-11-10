@@ -68,7 +68,7 @@ lazy from desktop_ui.desktop_pager import PAGER, pager
 lazy from desktop_ui.island_layout import SIZES, Content, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import CONTROLS, Menu
 lazy from desktop_ui.island_model import ISLAND, CapsuleView, Key, Marker, Observed, island, order
-lazy from desktop_ui.island_motion import SPRINGS, Shown, placed, retarget
+lazy from desktop_ui.island_motion import SPRINGS, TIMING, Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
@@ -131,7 +131,7 @@ class DesktopBar:
     timer: QtCore.QTimer
     """The 100 ms desktop observation tick."""
     audio_timer: QtCore.QTimer
-    """The 50 ms microphone trace while dictating."""
+    """The microphone trace's sampling while dictating."""
     _model: Cell[BarModel]
 
     @classmethod
@@ -142,11 +142,11 @@ class DesktopBar:
 
         errors: queue.Queue[str] = queue.Queue()
         loop = EventLoop.start(application())
-        spec = BarSpec(ISLAND, CONTROLS, SPRINGS, SIZES, GLASS, WASHES)
+        spec = BarSpec(ISLAND, CONTROLS, SPRINGS, TIMING, SIZES, GLASS, WASHES)
         window = BarWindow(report, loop.composition, spec)
         tick, audio = QtCore.QTimer(window), QtCore.QTimer(window)
         tick.setInterval(100)
-        audio.setInterval(50)
+        audio.setInterval(round(spec.timing.wave_sample * 1000))
         audio.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         seen = Surroundings(preference=appearance.preference(), ambient=Ambient(datetime.now().strftime("%H:%M"), PowerUnavailable.UNKNOWN))
         taskbar = TaskbarControl()
@@ -326,7 +326,7 @@ class DesktopBar:
         now = time.monotonic()
         drawn = next_frame(model, now, animate=appearance.animations_enabled())
         self.window.wave_progress = drawn.wave_progress
-        self.window.spin_angle = drawn.spin_angle
+        self.window.pulse = drawn.pulse
         self._draw(replace(model, motion=drawn.motion))
         if drawn.indicators:
             for key, capsule in self.window.capsules.items():

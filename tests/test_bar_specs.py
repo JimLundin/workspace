@@ -68,6 +68,7 @@ SPEC = BarSpec(
     test_island_model.SPEC,
     test_island_menu.SPEC,
     test_island_motion.SPRINGS,
+    test_island_motion.TIMING,
     BASE,
     test_glass_look.GLASS,
     Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5),

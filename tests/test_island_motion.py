@@ -2,7 +2,7 @@
 
 from desktop_ui.island_layout import Content, Spot
 from desktop_ui.island_model import Action, CapsuleView, Glyph, Key, Text, Zone
-from desktop_ui.island_motion import IslandMotion, Shown, Springs, advance, finish, placed, retarget, settled
+from desktop_ui.island_motion import IslandMotion, Shown, Springs, Timing, advance, finish, placed, retarget, settled
 from desktop_ui.motion import Spring
 
 
@@ -12,6 +12,7 @@ def shown(key: Key, zone: Zone, width: float, *parts: Text | Glyph) -> Shown:
 
 SPRINGS = Springs(morph=Spring(0.86, 0.42), appear=Spring(0.78, 0.42), leave=Spring(1.0, 0.3), fade=Spring(1.0, 0.2))
 """The test's own springs; each settles well within a second."""
+TIMING = Timing(pulse=2.0, lag=0.25, opaque_at=0.5, wave_sample=0.04)
 
 ISLAND = shown(Key.ISLAND, Zone.ISLAND, 112, Text("10:22"))
 RECORDING = shown(Key.RECORDING, Zone.TRAIL, 36, Text("02:05"))

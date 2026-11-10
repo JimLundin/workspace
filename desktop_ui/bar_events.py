@@ -35,7 +35,7 @@ from desktop_ui.island_menu import (
     restores_focus,
 )
 from desktop_ui.island_model import Action, CapsuleView, IslandSpec, Key, Marker, capture
-from desktop_ui.island_motion import IslandMotion, Springs, advance, finish, settled
+from desktop_ui.island_motion import IslandMotion, Springs, Timing, advance, finish, settled
 from desktop_ui.navigation import Order, Placing
 from protocol import Tool
 from winapi import appearance
@@ -72,6 +72,7 @@ class BarSpec:
     island: IslandSpec
     controls: ControlsSpec
     springs: Springs
+    timing: Timing
     sizes: Sizes
     glass: Glass
     washes: Washes
@@ -534,18 +535,14 @@ class Frame:
     """What one frame draws, and whether another frame should follow."""
 
     motion: IslandMotion
-    spin_angle: float
-    """Degrees; 90 is the dots at rest."""
+    pulse: float
+    """How far through its cycle a quick job's pulse is, from 0 (at rest) to 1."""
     wave_progress: float
     """How far the dictation wave has moved from its last sample to the next, 0 to 1."""
     indicators: bool
     """An activity indicator or the wave is showing, so their capsules repaint."""
     running: bool
     """Something is still moving: the frame loop keeps going."""
-
-
-WAVE_SAMPLE_S: Final = 0.05
-"""The microphone trace's sampling period: the wave moves across it between samples."""
 
 
 def next_frame(model: BarModel, now: float, *, animate: bool) -> Frame:
@@ -556,10 +553,11 @@ def next_frame(model: BarModel, now: float, *, animate: bool) -> Frame:
     working = spinning(replace(model, motion=motion))
     spins = animate and working
     waving = animate and model.dictating and model.opened is None
-    wave = min(1.0, max(0.0, (now - model.sampled_at) / WAVE_SAMPLE_S)) if waving and model.sampled_at is not None else 1.0
+    timing = model.spec.timing
+    wave = min(1.0, max(0.0, (now - model.sampled_at) / timing.wave_sample)) if waving and model.sampled_at is not None else 1.0
     return Frame(
         motion,
-        (90 - now * 300) % 360 if spins else 90.0,
+        now / timing.pulse % 1 if spins else 0.0,
         wave,
         indicators=working or waving,
         running=not settled(motion) or spins or waving,

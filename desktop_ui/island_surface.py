@@ -29,6 +29,7 @@ from desktop_ui.components.widgets import tool_window
 from desktop_ui.island_layout import Box, Cells, Content, Framed, Sizes, Spot, Tile, arrange, on_pixels, tiles
 from desktop_ui.island_menu import Face, Item, Live, Menu, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Part, Text
+from desktop_ui.island_motion import Timing
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.shell_surface import Pager, pixmap
 from desktop_ui.vector_icons import paint_icon
@@ -82,9 +83,9 @@ def expanded(height: float, sizes: Sizes) -> bool:
     return height > sizes.capsule.height + 0.5
 
 
-def visibility(presence: float) -> float:
+def visibility(presence: float, timing: Timing) -> float:
     """Glass and content become opaque before a capsule reaches its full width."""
-    return min(1.0, max(0.0, presence * 1.6))
+    return min(1.0, max(0.0, presence / timing.opaque_at))
 
 
 def animated(part: Part) -> bool:
@@ -127,7 +128,7 @@ def pane(drawn: Drawn, presented: Presented, spec: BarSpec) -> Pane | None:
                 drawn.view.key.name,
                 box.on_device(presented.scale),
                 radius(box.height, spec.sizes) * presented.scale,
-                visibility(drawn.framed.presence),
+                visibility(drawn.framed.presence, spec.timing),
                 _veil(look, presented.frost, spec.glass),
             )
         case SolidLook():
@@ -501,7 +502,7 @@ class Capsule(KeyboardFocus):
         shift = self.shift(self.drawn.content)
         for button, (_, x) in zip(self.controls, controls(self.drawn.content), strict=True):
             button.move(round(shift + x), round(self.window_.sizes.bar.top + self.window_.sizes.capsule.inset))
-            button.setVisible(self.drawn.fade > 0.5 and visibility(self.drawn.framed.presence) == 1)
+            button.setVisible(self.drawn.fade > 0.5 and visibility(self.drawn.framed.presence, self.window_.spec.timing) == 1)
 
     def shift(self, content: Content) -> float:
         """Content keeps its measured layout, centred while the capsule's width morphs around it."""
@@ -552,7 +553,7 @@ class Capsule(KeyboardFocus):
         strip = QtGui.QPainterPath()
         strip.addRect(QtCore.QRectF(0, 0, self.width(), top))
         painter.fillPath(strip, hit())
-        alpha = visibility(self.drawn.framed.presence)
+        alpha = visibility(self.drawn.framed.presence, self.window_.spec.timing)
         paint_capsule(painter, path, self.drawn.look, alpha)
         drawn = self.drawn
         flat = not expanded(drawn.content.height, sizes)
@@ -645,11 +646,11 @@ class Capsule(KeyboardFocus):
     def paint_dots(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
         """A quick job: dots pulsing in turn, each centred in an equal share of its room."""
         ink, markers = self.drawn.look.lettering.ink, self.window_.sizes.markers
-        cycle = (90 - self.window_.spin_angle) % 360 / 360  # One turn of the frame clock per pulse cycle.
+        cycle, lag = self.window_.pulse, self.window_.spec.timing.lag
         pitch, radius = spot.width / markers.dot_count, markers.dots_radius
         painter.setPen(Qt.PenStyle.NoPen)
         for index in range(markers.dot_count):
-            lift = max(0.0, math.sin((cycle - index / 6) * 2 * math.pi))
+            lift = max(0.0, math.sin((cycle - index * lag) * 2 * math.pi))
             resting = self.window_.washes.resting
             painter.setBrush(color(Shade(ink.color, ink.opacity * (resting + (1 - resting) * lift))))
             painter.drawEllipse(QtCore.QPointF(spot.x + pitch * (index + 0.5), middle - lift * markers.dots_lift), radius, radius)
@@ -669,7 +670,7 @@ class BarWindow(QtWidgets.QWidget):
         self.composition = composition
         self.menu: Menu | None = None
         self.capsules: Mapping[Key, Capsule] = frozendict()
-        self.spin_angle = 90.0
+        self.pulse = 0.0
         # Qt owns the painted trace; samples arrive from the bar's audio meter.
         self.samples: deque[float] = deque([0.0] * sizes.capsule.wave_bars, maxlen=sizes.capsule.wave_bars)
         self.wave_from: tuple[float, ...] = tuple(self.samples)
@@ -787,7 +788,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation = presented
 
     def trace(self) -> Iterator[float]:
-        """Interpolate the displayed history between the meter's 50 ms samples."""
+        """Interpolate the displayed history between the meter's samples."""
         progress = self.wave_progress
         return (before + (after - before) * progress for before, after in zip(self.wave_from, self.samples, strict=True))
 
