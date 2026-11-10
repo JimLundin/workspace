@@ -85,15 +85,15 @@ def fit_position(position: Point, size: Size, work: Rect) -> Point:
 
 @dataclass(frozen=True, slots=True)
 class KeyHighlights:
-    """Held keys stay lit; a quick tap stays visible for at least 120 milliseconds."""
+    """Held keys stay lit; a quick tap stays visible for at least the tap span it is given."""
 
     held: frozenset[Scancode] = frozenset()
     until: frozendict[Scancode, float] = frozendict()
     """When each recently pressed key may go dark."""
 
-    def updated(self, held: frozenset[Scancode], now: float) -> KeyHighlights:
-        """The highlights once `held` are the keys down at `now`."""
-        pressed = frozendict((key, now + 0.12) for key in held - self.held)
+    def updated(self, held: frozenset[Scancode], now: float, tap: float) -> KeyHighlights:
+        """The highlights once `held` are the keys down at `now`; a newly pressed key stays lit for at least `tap` seconds."""
+        pressed = frozendict((key, now + tap) for key in held - self.held)
         kept = frozendict((key, until) for key, until in self.until.items() if key not in pressed and (key in held or until > now))
         return KeyHighlights(held, kept | pressed)
 

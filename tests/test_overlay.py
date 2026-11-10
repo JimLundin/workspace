@@ -11,8 +11,8 @@ from winapi.shapes import Point, Rect, Size
 Q, M = Scancode(0x10), Scancode(0x32)
 
 
-# How long a tap stays lit, as the highlights decide it; the tests check what follows from it.
-SPAN = KeyHighlights().updated(frozenset({Q}), 0.0).until[Q]
+SPAN = 0.12
+"""The test's own tap span."""
 TAP = SPAN / 10
 """A press and release well inside the span."""
 EPSILON = SPAN / 100
@@ -22,10 +22,10 @@ def test_a_quick_tap_stays_visible_for_the_span_and_then_needs_no_timer() -> Non
     # Defects: a tap vanishes before it can be seen, lingers, or keeps a timer running.
     assert SPAN > TAP > 0
     highlights = KeyHighlights()
-    highlights = highlights.updated(frozenset({Q}), 1.0)
+    highlights = highlights.updated(frozenset({Q}), 1.0, SPAN)
     assert highlights.visible(1.0) == frozenset({Q})
     assert highlights.delay(1.0) is None  # held keys need no timer
-    highlights = highlights.updated(frozenset(), 1.0 + TAP)
+    highlights = highlights.updated(frozenset(), 1.0 + TAP, SPAN)
     assert highlights.visible(1.0 + SPAN - EPSILON) == frozenset({Q})
     delay = highlights.delay(1.0 + TAP)
     assert delay is not None and delay > 0
@@ -35,35 +35,35 @@ def test_a_quick_tap_stays_visible_for_the_span_and_then_needs_no_timer() -> Non
 
 def test_all_chord_keys_stay_lit_and_long_holds_clear_on_release() -> None:
     highlights = KeyHighlights()
-    highlights = highlights.updated(frozenset({M}), 1.0)
-    highlights = highlights.updated(frozenset({M, Q}), 1.0 + 2 * SPAN)
+    highlights = highlights.updated(frozenset({M}), 1.0, SPAN)
+    highlights = highlights.updated(frozenset({M, Q}), 1.0 + 2 * SPAN, SPAN)
     assert highlights.visible(60.0) == frozenset({M, Q})
     assert highlights.delay(60.0) is None
-    highlights = highlights.updated(frozenset({M}), 60.0)
+    highlights = highlights.updated(frozenset({M}), 60.0, SPAN)
     assert highlights.visible(60.0) == frozenset({M})
-    highlights = highlights.updated(frozenset(), 60.0 + TAP)
+    highlights = highlights.updated(frozenset(), 60.0 + TAP, SPAN)
     assert highlights.visible(60.0 + TAP) == frozenset()
     assert highlights.delay(60.0 + TAP) is None
 
 
 def test_repressing_during_a_flash_gets_a_new_deadline() -> None:
     highlights = KeyHighlights()
-    highlights = highlights.updated(frozenset({Q}), 1.0)
-    highlights = highlights.updated(frozenset(), 1.0 + TAP)
+    highlights = highlights.updated(frozenset({Q}), 1.0, SPAN)
+    highlights = highlights.updated(frozenset(), 1.0 + TAP, SPAN)
     again = 1.0 + 2 * TAP
-    highlights = highlights.updated(frozenset({Q}), again)
-    highlights = highlights.updated(frozenset(), again + TAP)
+    highlights = highlights.updated(frozenset({Q}), again, SPAN)
+    highlights = highlights.updated(frozenset(), again + TAP, SPAN)
     assert highlights.visible(again + SPAN - EPSILON) == frozenset({Q})
     assert highlights.visible(again + SPAN + EPSILON) == frozenset()
 
 
 def test_independent_taps_expire_in_order_without_extending_each_other() -> None:
     highlights = KeyHighlights()
-    highlights = highlights.updated(frozenset({Q}), 1.0)
-    highlights = highlights.updated(frozenset(), 1.0 + TAP)
+    highlights = highlights.updated(frozenset({Q}), 1.0, SPAN)
+    highlights = highlights.updated(frozenset(), 1.0 + TAP, SPAN)
     later = 1.0 + SPAN / 2
-    highlights = highlights.updated(frozenset({M}), later)
-    highlights = highlights.updated(frozenset(), later + TAP)
+    highlights = highlights.updated(frozenset({M}), later, SPAN)
+    highlights = highlights.updated(frozenset(), later + TAP, SPAN)
     assert highlights.visible(1.0 + SPAN - EPSILON) == frozenset({Q, M})
     assert highlights.visible(1.0 + SPAN + EPSILON) == frozenset({M})
     assert highlights.visible(later + SPAN + EPSILON) == frozenset()
@@ -71,8 +71,8 @@ def test_independent_taps_expire_in_order_without_extending_each_other() -> None
 
 def test_reset_clears_both_held_keys_and_tap_flashes_immediately() -> None:
     highlights = KeyHighlights()
-    highlights = highlights.updated(frozenset({Q, M}), 1.0)
-    highlights = highlights.updated(frozenset({M}), 1.0 + TAP)
+    highlights = highlights.updated(frozenset({Q, M}), 1.0, SPAN)
+    highlights = highlights.updated(frozenset({M}), 1.0 + TAP, SPAN)
     highlights = KeyHighlights()  # The owner resets with a fresh value.
     assert highlights.visible(1.0 + 2 * TAP) == frozenset()
     assert highlights.delay(1.0 + 2 * TAP) is None

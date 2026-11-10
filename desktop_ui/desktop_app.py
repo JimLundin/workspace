@@ -87,7 +87,7 @@ from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
 lazy from desktop_ui.components.widgets import near_pointer, show_window
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
-lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
+lazy from desktop_ui.keymap_views import KEYMAP, KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import INDICATOR, Indicator
 lazy from desktop_ui.qt_ui import application
 lazy from desktop_ui.vector_icons import icon
@@ -355,7 +355,7 @@ class DesktopApp:
     def show_keymap(self) -> None:
         keymap = self.views.get().keymap
         if keymap is None or not shiboken6.isValid(keymap.window):
-            opened = KeymapWindow.open()
+            opened = KeymapWindow.open(KEYMAP)
             self.views.update(lambda views: replace(views, keymap=opened))
         else:
             show_window(keymap.window, focus=True, target=keymap.canvas)
@@ -366,7 +366,7 @@ class DesktopApp:
         if shown is None:
             if not overlay.visible:
                 return
-            shown = KeymapOverlay.open()
+            shown = KeymapOverlay.open(KEYMAP)
             opened = shown
             self.views.update(lambda views: replace(views, overlay=opened))
         shown.show(overlay.layer, overlay.title, indicator_area(), visible=overlay.visible, pressed=overlay.pressed)
