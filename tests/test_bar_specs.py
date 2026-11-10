@@ -65,14 +65,15 @@ BASE = Sizes(
 """The test's own sizes, unlike the bar's so a test can't pass on its values."""
 
 SPEC = BarSpec(
-    test_island_model.SPEC,
-    test_island_menu.SPEC,
-    test_island_motion.SPRINGS,
-    test_island_motion.TIMING,
-    BASE,
-    test_glass_look.GLASS,
-    Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5),
-    "test bar",
+    island=test_island_model.SPEC,
+    controls=test_island_menu.SPEC,
+    springs=test_island_motion.SPRINGS,
+    timing=test_island_motion.TIMING,
+    sizes=BASE,
+    glass=test_glass_look.GLASS,
+    palette=test_glass_look.PALETTE,
+    washes=Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5),
+    title="test bar",
 )
 """The test's own bar, for tests of the bar's decisions."""
 

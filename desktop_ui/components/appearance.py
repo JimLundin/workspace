@@ -17,11 +17,30 @@ from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance
 from winapi.shapes import Lighting, Stop
 
-GLASS_ACCENT: Final = "#4b8fe8"  # a soft blue, lighter and less saturated than system blue
-ATTENTION: Final = "#f08a00"  # something needs you
-RED: Final = "#ff453a"  # recording, low battery, errors
-MICROPHONE: Final = "#ff9f0a"  # the microphone is live, as Apple's privacy indicator
-ON_ACCENT: Final = "#ffffff"  # ink and knobs over the accent or another signal hue
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Palette:
+    """The colours that carry meaning; glass and content have none of their own."""
+
+    accent: str
+    """The primary action and selection."""
+    attention: str
+    """Something needs you."""
+    red: str
+    """Recording, low battery, errors."""
+    microphone: str
+    """The microphone is live."""
+    on_accent: str
+    """Ink and knobs over the accent or another signal hue."""
+
+
+PALETTE: Final = Palette(
+    accent="#4b8fe8",  # a soft blue, lighter and less saturated than system blue
+    attention="#f08a00",
+    red="#ff453a",
+    microphone="#ff9f0a",  # as Apple's privacy indicator
+    on_accent="#ffffff",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,38 +190,39 @@ def tooltip_style(theme: Tokens, kit: Kit) -> str:
     )
 
 
-def control_style(theme: Tokens, kit: Kit) -> str:
+def control_style(theme: Tokens, design: Design) -> str:
     """Workspace's dialogs and controls: Inter, capsule buttons, quiet wells and overlay scroll bars."""
     ink, ink2, ink3 = theme.ink.css, theme.ink2.css, theme.ink3.css
     fill, hover, press, line = theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
-    weight, ring, edge = int(typeface.TYPE.title.weight), kit.ring, kit.hairline
+    kit, accent, on_accent = design.kit, design.palette.accent, design.palette.on_accent
+    weight, ring, edge = int(design.type.title.weight), kit.ring, kit.hairline
     along, across = kit.scrollbar_along, kit.scrollbar_across
     return f"""
-QWidget {{ color: {ink}; font-family: '{typeface.FAMILY}'; {typeface.TYPE.body.css} }}
+QWidget {{ color: {ink}; font-family: '{typeface.FAMILY}'; {design.type.body.css} }}
 QDialog {{ background: {theme.window}; }}
 QLabel {{ background: transparent; border: none; }}
-QLabel#muted {{ color: {ink2}; {typeface.TYPE.detail.css} }}
+QLabel#muted {{ color: {ink2}; {design.type.detail.css} }}
 QToolButton {{
  border: none; border-radius: {kit.button_radius}px; background: transparent; {kit.button.css()}
  font-weight: {weight}; min-height: {kit.button_least}px;
 }}
 QToolButton:hover {{ background: {hover}; }}
 QToolButton:pressed {{ background: {press}; }}
-QToolButton:focus {{ outline: none; border: {ring}px solid {GLASS_ACCENT}; {kit.button.css(ring)} }}
+QToolButton:focus {{ outline: none; border: {ring}px solid {accent}; {kit.button.css(ring)} }}
 QToolButton:disabled {{ color: {ink3}; }}
 QToolButton:checked {{ background: {hover}; }}
 QLineEdit {{
  background: {fill}; border: none; border-radius: {kit.field_radius}px; {kit.field.css()}
- selection-background-color: {GLASS_ACCENT}; selection-color: {ON_ACCENT};
+ selection-background-color: {accent}; selection-color: {on_accent};
 }}
-QLineEdit:focus {{ border: {ring}px solid {GLASS_ACCENT}; {kit.field.css(ring)} }}
+QLineEdit:focus {{ border: {ring}px solid {accent}; {kit.field.css(ring)} }}
 QListWidget {{ background: transparent; border: none; outline: none; }}
 QListWidget::item {{ {kit.item.css()} border-radius: {kit.item_radius}px; }}
 QListWidget::item:hover {{ background: {hover}; }}
-QListWidget::item:selected {{ background: {GLASS_ACCENT}; color: {ON_ACCENT}; }}
+QListWidget::item:selected {{ background: {accent}; color: {on_accent}; }}
 QMenu {{ background: {theme.solid}; border: {edge}px solid {line}; border-radius: {kit.menu_radius}px; padding: {kit.menu_pad}px; }}
 QMenu::item {{ {kit.menu_item.css()} border-radius: {kit.item_radius}px; }}
-QMenu::item:selected {{ background: {GLASS_ACCENT}; color: {ON_ACCENT}; }}
+QMenu::item:selected {{ background: {accent}; color: {on_accent}; }}
 QMenu::separator {{
  height: {edge}px; background: {line}; margin: {kit.menu_separator.vertical}px {kit.menu_separator.horizontal}px;
 }}
@@ -381,7 +401,7 @@ GLASS: Final = Glass(
         },
     ),
     attention=Attention(
-        hue=ATTENTION,
+        hue=PALETTE.attention,
         veil=0.9,
         canvas_veil=0.94,
         rim=Rim(0.55, 0.06, 0.10),
@@ -399,9 +419,19 @@ GLASS: Final = Glass(
 """Workspace's material; owners pass it in, tests pass their own."""
 
 
-def tokens(scheme: Scheme) -> Tokens:
-    """Workspace's own tokens for a window's scheme, for the owners that build windows."""
-    return GLASS.tokens[scheme]
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Design:
+    """Workspace's look as its windows read it: the colours that carry meaning, the
+    glass and each scheme's tokens, the controls' metrics and the type scale."""
+
+    palette: Palette
+    glass: Glass
+    kit: Kit
+    type: typeface.TypeScale
+
+    def tokens(self) -> Tokens:
+        """The tokens for the scheme Windows' app mode asks for now, for the owners that build windows."""
+        return self.glass.tokens[scheme()]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -498,7 +528,7 @@ def look(preference: appearance.Preference, pane: Pane, tint: Tint, glass: Glass
     return GlassLook(_veil(pane, glass), theme.rim, lettering(theme))
 
 
-def reading(lettering: Lettering, tone: Tone, *, contrast: bool) -> Shade:
+def reading(lettering: Lettering, tone: Tone, palette: Palette, *, contrast: bool) -> Shade:
     """A part's ink. High contrast keeps every reading in the system foreground."""
     if contrast:
         return lettering.ink
@@ -506,8 +536,8 @@ def reading(lettering: Lettering, tone: Tone, *, contrast: bool) -> Shade:
         case Tone.INK:
             return lettering.ink
         case Tone.MICROPHONE:
-            return Shade(MICROPHONE)
+            return Shade(palette.microphone)
         case Tone.LOW:
-            return Shade(RED)
+            return Shade(palette.red)
         case _:
             assert_never(tone)

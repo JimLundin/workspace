@@ -84,7 +84,7 @@ from desktop_ui.voice import Voice
 from protocol import App, Message
 from winapi import screen, shell, system, windows
 from winapi.shapes import Rect
-lazy from desktop_ui.components.appearance import KIT, scheme, tokens, tooltip_style
+lazy from desktop_ui.components.appearance import tooltip_style
 lazy from desktop_ui.components.widgets import near_pointer, show_window
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.keymap_views import KEYMAP, KeymapOverlay, KeymapWindow
@@ -362,7 +362,7 @@ class DesktopApp:
     def show_keymap(self) -> None:
         keymap = self.views.get().keymap
         if keymap is None or not shiboken6.isValid(keymap.window):
-            opened = KeymapWindow.open(KEYMAP)
+            opened = KeymapWindow.open(KEYMAP, self.settings.design)
             self.views.update(lambda views: replace(views, keymap=opened))
         else:
             show_window(keymap.window, focus=True, target=keymap.canvas)
@@ -373,14 +373,14 @@ class DesktopApp:
         if shown is None:
             if not overlay.visible:
                 return
-            shown = KeymapOverlay.open(KEYMAP, self.settings.places.directory / "overlay-position.json")
+            shown = KeymapOverlay.open(KEYMAP, self.settings.places.directory / "overlay-position.json", self.settings.design)
             opened = shown
             self.views.update(lambda views: replace(views, overlay=opened))
         shown.show(overlay.layer, overlay.title, indicator_area(), visible=overlay.visible, pressed=overlay.pressed)
 
     def _indicator(self) -> Indicator:
         if not (indicator := self.views.get().indicator):
-            indicator = Indicator.build(INDICATOR)
+            indicator = Indicator.build(INDICATOR, self.settings.design)
             built = indicator
             self.views.update(lambda views: replace(views, indicator=built))
         return indicator
@@ -404,7 +404,7 @@ class DesktopApp:
             if bar := self.views.get().bar:
                 bar.navigate(ShowWindow(handle))
 
-        current = WindowSwitcher(choices, focus, SWITCHER, self.settings.programs.switcher)
+        current = WindowSwitcher(choices, focus, SWITCHER, self.settings.programs.switcher, self.settings.design)
         self.views.update(lambda views: replace(views, switcher=current))
 
         def cleared(_: int) -> None:
@@ -465,7 +465,7 @@ def run(settings: DesktopSettings) -> None:
         inbox = Inbox.open(settings.programs.desktop.window, settings.apps, log)
         voice = Voice.open(settings_from(os.environ, places.gateway_endpoint), inbox.window.handle, inbox.report, log, places.directory / "meetings")
         root = application(log)
-        root.setStyleSheet(tooltip_style(tokens(scheme()), KIT))
+        root.setStyleSheet(tooltip_style(settings.design.tokens(), settings.design.kit))
         app = DesktopApp.compose(root, voice, inbox, settings, log)
         QtCore.QTimer.singleShot(0, app.start)
         try:

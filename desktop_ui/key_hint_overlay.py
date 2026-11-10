@@ -17,12 +17,12 @@ from cell import Cell
 from contracts.members import every_member
 from desktop_ui.components.appearance import (
     GLASS,
-    GLASS_ACCENT,
-    ON_ACCENT,
+    PALETTE,
     CanvasBar,
     Glass,
     GlassLook,
     Look,
+    Palette,
     Rim,
     Scheme,
     Shade,
@@ -63,6 +63,8 @@ class BadgeSpec:
     scheme: Scheme
     """Badges float over any window, so they keep one scheme."""
     glass: Glass
+    palette: Palette
+    """The accent marks the window a chord's next press reaches."""
 
 
 BADGES: Final = BadgeSpec(
@@ -75,6 +77,7 @@ BADGES: Final = BadgeSpec(
     arrows=every_member(Direction, {Direction.LEFT: "←", Direction.DOWN: "↓", Direction.UP: "↑", Direction.RIGHT: "→"}),
     scheme=Scheme.DARK,
     glass=GLASS,
+    palette=PALETTE,
 )
 """Workspace's badges; the bar passes them to the overlay."""
 
@@ -107,6 +110,7 @@ class Style:
 
     surface: Look
     arrows: frozendict[Direction, str]
+    palette: Palette
     contrast: bool = field(kw_only=True)
 
 
@@ -127,7 +131,7 @@ def keycap_face(keycap: Keycap, style: Style) -> Face:
             # High contrast swaps the system colours instead of adding a hue.
             return Face(lettering.ink, background(style.surface), text)
         case AppCap(next=True):
-            return Face(Shade(GLASS_ACCENT), Shade(ON_ACCENT), text)
+            return Face(Shade(style.palette.accent), Shade(style.palette.on_accent), text)
         case AppCap():
             return Face(lettering.hover, lettering.ink, text)
         case DirectionCap():
@@ -151,9 +155,9 @@ def style(preference: Preference, spec: BadgeSpec) -> Style:
     surface = look(preference, CanvasBar(spec.scheme), Tint.NONE, spec.glass)
     match preference:
         case Contrast():
-            return Style(surface, spec.arrows, contrast=True)
+            return Style(surface, spec.arrows, spec.palette, contrast=True)
         case Material.GLASS | Material.SOLID:
-            return Style(surface, spec.arrows, contrast=False)
+            return Style(surface, spec.arrows, spec.palette, contrast=False)
         case _:
             assert_never(preference)
 

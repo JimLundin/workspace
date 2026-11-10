@@ -16,7 +16,7 @@ from contracts.status import Job
 from desktop_ui import island_menu
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.application_observer import EMPTY_ARRANGEMENT, Arrangement
-from desktop_ui.components.appearance import Glass, Washes
+from desktop_ui.components.appearance import Glass, Palette, Washes
 from desktop_ui.island_layout import Sizes
 from desktop_ui.island_menu import (
     DISMISSED,
@@ -64,7 +64,7 @@ class Surroundings:
     """The bar window's device pixels per DIP."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class BarSpec:
     """Everything the bar is declared as: what it shows, its menu, how it moves and its sizes."""
 
@@ -74,6 +74,7 @@ class BarSpec:
     timing: Timing
     sizes: Sizes
     glass: Glass
+    palette: Palette
     washes: Washes
     title: str
     """The bar window's title."""

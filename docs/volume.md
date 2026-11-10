@@ -6,13 +6,13 @@ lines are code lines. Product code averages 5.8 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 86,052 | 14,728 |
-| **support** | 56,981 | 8,494 |
+| **product** | 86,267 | 14,768 |
+| **support** | 57,011 | 8,498 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 45,386 | 7,838 |
-| tests | 41,827 | 6,112 |
+| desktop_ui | 45,568 | 7,875 |
+| tests | 41,857 | 6,116 |
 | winapi | 19,646 | 3,299 |
 | scripts | 11,545 | 1,676 |
 | keyboard | 8,737 | 1,459 |
@@ -22,34 +22,34 @@ lines are code lines. Product code averages 5.8 nodes a line.
 | (top level) | 1,482 | 269 |
 | gateway | 1,074 | 187 |
 | settings | 1,066 | 149 |
-| desktop | 87 | 25 |
+| desktop | 120 | 28 |
 
 The 25 largest files:
 
 | file | nodes | lines |
 |---|---:|---:|
 | `scripts/architecture.py` | 6,585 | 918 |
-| `desktop_ui/island_surface.py` | 5,774 | 708 |
+| `desktop_ui/island_surface.py` | 5,812 | 716 |
 | `tests/test_keyboard_hook.py` | 4,006 | 479 |
 | `keyboard/win.py` | 3,781 | 623 |
 | `tests/test_engine.py` | 3,464 | 568 |
 | `tests/test_meetings.py` | 3,106 | 474 |
-| `desktop_ui/keymap_views.py` | 2,848 | 471 |
+| `desktop_ui/keymap_views.py` | 2,855 | 471 |
 | `assistant/meetings.py` | 2,717 | 454 |
 | `desktop_ui/desktop_bar.py` | 2,404 | 432 |
 | `keyboard/engine.py` | 2,218 | 349 |
 | `desktop_ui/island_menu.py` | 2,121 | 362 |
+| `desktop_ui/desktop_app.py` | 2,107 | 391 |
 | `desktop_ui/application_observer.py` | 2,098 | 360 |
-| `desktop_ui/desktop_app.py` | 2,096 | 391 |
 | `desktop_ui/desktop_control.py` | 2,002 | 428 |
 | `desktop_ui/island_layout.py` | 1,941 | 368 |
-| `desktop_ui/bar_events.py` | 1,917 | 402 |
+| `desktop_ui/bar_events.py` | 1,923 | 403 |
+| `desktop_ui/components/appearance.py` | 1,846 | 412 |
 | `desktop_ui/island_model.py` | 1,846 | 318 |
 | `winapi/composition.py` | 1,845 | 314 |
 | `winapi/audio.py` | 1,826 | 277 |
 | `tests/test_meeting_audio.py` | 1,795 | 226 |
 | `tests/test_features.py` | 1,779 | 277 |
-| `desktop_ui/components/appearance.py` | 1,775 | 391 |
 | `desktop_ui/shell_surface.py` | 1,735 | 247 |
 | `winapi/recording.py` | 1,696 | 257 |
 | `tests/test_microphone.py` | 1,689 | 300 |

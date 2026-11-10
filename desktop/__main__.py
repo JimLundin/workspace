@@ -11,7 +11,7 @@ from protocol import Places
 from settings import apps, programs
 lazy from desktop_ui import island_layout, island_menu, island_model, island_motion
 lazy from desktop_ui.bar_events import BarSpec
-lazy from desktop_ui.components import appearance
+lazy from desktop_ui.components import appearance, typeface
 lazy from desktop_ui.desktop_app import run
 lazy from desktop_ui.desktop_settings import DesktopSettings
 
@@ -19,17 +19,20 @@ lazy from desktop_ui.desktop_settings import DesktopSettings
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("Workspace only runs on Windows")
+    design = appearance.Design(palette=appearance.PALETTE, glass=appearance.GLASS, kit=appearance.KIT, type=typeface.TYPE)
     bar = BarSpec(
-        island_model.ISLAND,
-        island_menu.CONTROLS,
-        island_motion.SPRINGS,
-        island_motion.TIMING,
-        island_layout.SIZES,
-        appearance.GLASS,
-        appearance.WASHES,
+        island=island_model.ISLAND,
+        controls=island_menu.CONTROLS,
+        springs=island_motion.SPRINGS,
+        timing=island_motion.TIMING,
+        sizes=island_layout.SIZES,
+        glass=design.glass,
+        palette=design.palette,
+        washes=appearance.WASHES,
         title="Workspace floating bar",
     )
-    run(DesktopSettings(programs=programs.PROGRAMS, places=Places.of(os.environ, programs.PROGRAMS), apps=apps.APPS, bar=bar))
+    places = Places.of(os.environ, programs.PROGRAMS)
+    run(DesktopSettings(programs=programs.PROGRAMS, places=places, apps=apps.APPS, design=design, bar=bar))
 
 
 if __name__ == "__main__":

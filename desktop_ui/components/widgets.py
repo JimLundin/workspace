@@ -7,8 +7,7 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from desktop_ui.components.appearance import KIT, Kit, Shade, Tokens, control_style, scheme, tokens
-from desktop_ui.components.typeface import TYPE
+from desktop_ui.components.appearance import Design, Kit, Shade, Tokens, control_style
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
 from winapi import windows
@@ -17,15 +16,16 @@ from winapi.shapes import Size
 prepare()
 
 
-def window_style(theme: Tokens, kit: Kit) -> str:
+def window_style(theme: Tokens, design: Design) -> str:
     """The shared controls on the kit's solid window, and its segmented choices."""
+    kit = design.kit
     segment, choice = theme.segment, kit.choice
     return (
-        control_style(theme, kit)
+        control_style(theme, design)
         + f"""
 QWidget#workspaceWindow {{ background: {theme.window}; }}
 QFrame#segmented {{ background: {theme.hover.css}; border-radius: {kit.segmented_radius}px; }}
-QFrame#segmented QToolButton {{ border-radius: {kit.choice_radius}px; {choice.css()} min-height: {kit.choice_least}px; {TYPE.label.css} }}
+QFrame#segmented QToolButton {{ border-radius: {kit.choice_radius}px; {choice.css()} min-height: {kit.choice_least}px; {design.type.label.css} }}
 QFrame#segmented QToolButton:focus {{ {choice.css(kit.ring)} }}
 QFrame#segmented QToolButton:checked {{ background: {segment}; }}
 """
@@ -89,13 +89,13 @@ def glyph(name: str, ink: Shade, size: int = 16) -> QtGui.QPixmap:
 
 
 class Window(QtWidgets.QWidget):
-    def __init__(self, title: str, close: Callable[[], None], *, width: int = 900, height: int = 640) -> None:
+    def __init__(self, title: str, close: Callable[[], None], design: Design, *, width: int, height: int) -> None:
         super().__init__()
         self.on_close = close
         self.setObjectName("workspaceWindow")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.setWindowTitle(title)
-        self.setStyleSheet(window_style(tokens(scheme()), KIT))
+        self.setStyleSheet(window_style(design.tokens(), design))
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.resize(width, height)
         self.escape = QtGui.QShortcut(QtGui.QKeySequence("Escape"), self)

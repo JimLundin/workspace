@@ -11,6 +11,7 @@ from desktop_ui.components.appearance import (
     Lettering,
     Look,
     Menu,
+    Palette,
     Rim,
     Scheme,
     Shade,
@@ -43,6 +44,9 @@ def scheme_tokens(scheme: Scheme, ink: str, solid: str) -> Tokens:
         segment=solid,
     )
 
+
+PALETTE = Palette(accent="#123456", attention="#654321", red="#aa0011", microphone="#bb7700", on_accent="#fefefe")
+"""The test's own colours that carry meaning."""
 
 GLASS = Glass(
     tokens=frozendict(
@@ -132,9 +136,9 @@ def test_attention_keeps_its_meaning_under_every_material() -> None:
 def test_high_contrast_keeps_every_reading_in_the_system_foreground() -> None:
     # Defect: the microphone or a low battery keeps Workspace's colours under high contrast.
     contrast = material(appearance.Contrast("#000000", "#ffff00"), Capsule(appearance.Frost.SMOKED), Tint.NONE).lettering
-    assert {reading(contrast, tone, contrast=True) for tone in Tone} == {contrast.ink}
+    assert {reading(contrast, tone, PALETTE, contrast=True) for tone in Tone} == {contrast.ink}
     glass = material(appearance.Material.GLASS, Capsule(appearance.Frost.LIGHT), Tint.NONE).lettering
-    assert reading(glass, Tone.LOW, contrast=False) != glass.ink
+    assert reading(glass, Tone.LOW, PALETTE, contrast=False) != glass.ink
 
 
 def test_the_scheme_owned_pane_uses_system_ink_under_high_contrast() -> None:

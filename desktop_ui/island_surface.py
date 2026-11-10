@@ -21,7 +21,7 @@ lazy from PySide6.QtCore import Qt
 from desktop_ui import island_menu
 from desktop_ui.bar_control import KeyboardFocus, paint_feedback
 from desktop_ui.bar_events import BarSpec, Deactivated, Event, Hovered, MenuKey, Picked, Pressed, Selected, TrayClicked, VolumeSet
-from desktop_ui.components.appearance import GLASS_ACCENT, ON_ACCENT, RED, Glass, GlassLook, Look, Shade, SolidLook, reading, rim_stops
+from desktop_ui.components.appearance import Glass, GlassLook, Look, Shade, SolidLook, reading, rim_stops
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
@@ -337,9 +337,9 @@ class MenuCell(QtWidgets.QAbstractButton):
         at = QtCore.QPointF(self.sizes.cells.symbol_x, (self.height() - capsule.control) / 2)
         painter.setPen(Qt.PenStyle.NoPen)
         off = Shade(lettering.ink.color, self.capsule.window_.washes.off)
-        painter.setBrush(color(self.capsule.signal(GLASS_ACCENT, lettering.ink) if on else off))
+        painter.setBrush(color(self.capsule.signal(self.capsule.window_.spec.palette.accent, lettering.ink) if on else off))
         painter.drawEllipse(QtCore.QRectF(at.x(), at.y(), capsule.control, capsule.control))
-        ink = self.capsule.signal(ON_ACCENT, lettering.press) if on else lettering.ink
+        ink = self.capsule.signal(self.capsule.window_.spec.palette.on_accent, lettering.press) if on else lettering.ink
         inset = (capsule.control - capsule.icon) / 2
         self.paint_icon(painter, name, ink, QtCore.QPointF(at.x() + inset, at.y() + inset))
 
@@ -376,15 +376,20 @@ class MenuCell(QtWidgets.QAbstractButton):
         if slider.level is None:
             return
         filled = QtCore.QRectF(bar.left(), bar.top(), bar.width() * slider.level, bar.height())
-        painter.setBrush(color(lettering.quiet if slider.muted else self.capsule.signal(GLASS_ACCENT, lettering.ink)))
+        painter.setBrush(color(lettering.quiet if slider.muted else self.capsule.signal(self.capsule.window_.spec.palette.accent, lettering.ink)))
         painter.drawRoundedRect(filled, cells.track_corner, cells.track_corner)
-        painter.setBrush(color(self.capsule.signal(ON_ACCENT, lettering.ink)))
+        painter.setBrush(color(self.capsule.signal(self.capsule.window_.spec.palette.on_accent, lettering.ink)))
         painter.drawEllipse(QtCore.QPointF(filled.right(), bar.center().y()), cells.knob, cells.knob)
 
     def paint_live(self, painter: QtGui.QPainter, activity: Live) -> None:
         """An activity card: its glyph, its reading, and its Stop circle."""
         lettering, bounds, cells = self.capsule.drawn.look.lettering, QtCore.QRectF(self.rect()), self.sizes.cells
-        paint_dot(painter, color(self.capsule.signal(RED, lettering.ink)), QtCore.QPointF(cells.live_dot_x, bounds.height() / 2), cells.live_dot)
+        paint_dot(
+            painter,
+            color(self.capsule.signal(self.capsule.window_.spec.palette.red, lettering.ink)),
+            QtCore.QPointF(cells.live_dot_x, bounds.height() / 2),
+            cells.live_dot,
+        )
         detail = QtGui.QFontMetricsF(inter(self.sizes.type.detail)).elidedText(
             activity.detail, Qt.TextElideMode.ElideRight, bounds.width() - cells.live_elide
         )
@@ -613,18 +618,21 @@ class Capsule(KeyboardFocus):
         match spot.part:
             case Text(text=text, tone=tone):
                 painter.setFont(inter(sizes.type.reading))
-                painter.setPen(color(reading(lettering, tone, contrast=self.contrast)))
+                painter.setPen(color(reading(lettering, tone, self.window_.spec.palette, contrast=self.contrast)))
                 row = QtCore.QRectF(spot.x, sizes.bar.top, spot.width + 1, capsule.height)
                 painter.drawText(row, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
             case Glyph(name=name, tone=tone):
                 side = round(capsule.icon)
                 paint_icon(
-                    painter, name, reading(lettering, tone, contrast=self.contrast), QtCore.QRect(round(spot.x), round(middle - side / 2), side, side)
+                    painter,
+                    name,
+                    reading(lettering, tone, self.window_.spec.palette, contrast=self.contrast),
+                    QtCore.QRect(round(spot.x), round(middle - side / 2), side, side),
                 )
             case Control():
                 pass  # A child button paints it.
             case Marker.WAVE:
-                trace = color(reading(lettering, Tone.INK, contrast=self.contrast))
+                trace = color(reading(lettering, Tone.INK, self.window_.spec.palette, contrast=self.contrast))
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(trace)
                 pitch, corner = capsule.wave_bar + capsule.wave_gap, markers.wave_corner
@@ -634,7 +642,7 @@ class Capsule(KeyboardFocus):
             case Marker.DOTS:
                 self.paint_dots(painter, spot, middle)
             case Marker.DOT:
-                red = color(self.signal(RED, lettering.ink))
+                red = color(self.signal(self.window_.spec.palette.red, lettering.ink))
                 halo = QtGui.QColor(red)
                 halo.setAlphaF(self.window_.washes.halo)
                 centre = QtCore.QPointF(spot.x + spot.width / 2, middle)

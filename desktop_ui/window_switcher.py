@@ -8,9 +8,8 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import winapi.shapes
-from desktop_ui.components.appearance import GLASS_ACCENT, KIT, ON_ACCENT, Shade, Tokens, scheme, tokens
+from desktop_ui.components.appearance import Design, Shade, Tokens
 from desktop_ui.components.text import inter
-from desktop_ui.components.typeface import TYPE
 from desktop_ui.components.widgets import column, glyph, row, surface_style, window_style
 from desktop_ui.qt_runtime import prepare
 
@@ -111,10 +110,11 @@ def matching(windows: Sequence[winapi.shapes.Window], query: str) -> tuple[winap
 class _Rows(QtWidgets.QStyledItemDelegate):
     """Paints each window as its title over its program, with the selection in the accent."""
 
-    def __init__(self, theme: Tokens, parent: QtWidgets.QListWidget, spec: SwitcherSpec) -> None:
+    def __init__(self, theme: Tokens, parent: QtWidgets.QListWidget, spec: SwitcherSpec, design: Design) -> None:
         super().__init__(parent)
         self.theme: Tokens = theme
         self.spec = spec
+        self.design = design
         self.rows: QtWidgets.QListWidget = parent
 
     @override
@@ -132,31 +132,31 @@ class _Rows(QtWidgets.QStyledItemDelegate):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         if selected or option.state & QtWidgets.QStyle.StateFlag.State_MouseOver:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QtGui.QColor(GLASS_ACCENT if selected else self.theme.hover.argb))
+            painter.setBrush(QtGui.QColor(self.design.palette.accent if selected else self.theme.hover.argb))
             painter.drawRoundedRect(bounds, spec.radius - spec.inset, spec.radius - spec.inset)
         text = bounds.adjusted(spec.text_side, spec.text_top, -spec.text_side, -spec.text_top)
-        painter.setFont(inter(TYPE.title))
-        painter.setPen(QtGui.QColor(ON_ACCENT if selected else self.theme.ink.argb))
-        line = QtGui.QFontMetrics(inter(TYPE.title))
+        painter.setFont(inter(self.design.type.title))
+        painter.setPen(QtGui.QColor(self.design.palette.on_accent if selected else self.theme.ink.argb))
+        line = QtGui.QFontMetrics(inter(self.design.type.title))
         painter.drawText(
             text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line.elidedText(title, Qt.TextElideMode.ElideRight, round(text.width()))
         )
-        painter.setFont(inter(TYPE.detail))
-        painter.setPen(QtGui.QColor(Shade(ON_ACCENT, spec.selected_detail).argb if selected else self.theme.ink2.argb))
+        painter.setFont(inter(self.design.type.detail))
+        painter.setPen(QtGui.QColor(Shade(self.design.palette.on_accent, spec.selected_detail).argb if selected else self.theme.ink2.argb))
         painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, detail)
         painter.restore()
 
 
-def _style(theme: Tokens, spec: SwitcherSpec) -> str:
+def _style(theme: Tokens, spec: SwitcherSpec, design: Design) -> str:
     return (
-        window_style(theme, KIT)
-        + surface_style(theme, round(spec.radius), KIT)
+        window_style(theme, design)
+        + surface_style(theme, round(spec.radius), design.kit)
         + f"""
-QLineEdit#query {{ background: transparent; border: none; padding: 0; {TYPE.query.css} }}
+QLineEdit#query {{ background: transparent; border: none; padding: 0; {design.type.query.css} }}
 QListWidget {{ background: transparent; border: none; outline: none; }}
 QListWidget::item {{ background: transparent; border: none; padding: 0; }}
 QFrame#separator {{ background: {theme.separator.css}; border: none; }}
-QLabel#hint {{ color: {theme.ink3.css}; {TYPE.detail.css} }}
+QLabel#hint {{ color: {theme.ink3.css}; {design.type.detail.css} }}
 """
     )
 
@@ -180,18 +180,18 @@ def _field(panel: QtWidgets.QWidget, theme: Tokens, spec: SwitcherSpec) -> tuple
 class WindowSwitcher(QtWidgets.QDialog):
     """A Spotlight-like panel: a large search field over rows, on the kit's solid window."""
 
-    def __init__(self, windows: Sequence[winapi.shapes.Window], focus: Callable[[int], None], spec: SwitcherSpec, title: str) -> None:
+    def __init__(self, windows: Sequence[winapi.shapes.Window], focus: Callable[[int], None], spec: SwitcherSpec, title: str, design: Design) -> None:
         """The switcher over `windows`, titled `title`, which the layout recognises to pass it Esc, Enter and Tab."""
         super().__init__()
         self.spec = spec
         self.windows = tuple(windows)
         self.focus_window = focus
-        theme = tokens(scheme())
+        theme = design.tokens()
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet(_style(theme, spec))
+        self.setStyleSheet(_style(theme, spec, design))
         outer = column(self)
         shadow, lift = spec.shadow, spec.shadow_lift
         outer.setContentsMargins(shadow, shadow - lift, shadow, shadow + lift)
@@ -207,7 +207,7 @@ class WindowSwitcher(QtWidgets.QDialog):
         separator.setFixedHeight(spec.separator)
         self.items = QtWidgets.QListWidget(panel)
         self.items.setAccessibleName(spec.list_name)
-        self.items.setItemDelegate(_Rows(theme, self.items, spec))
+        self.items.setItemDelegate(_Rows(theme, self.items, spec, design))
         self.items.setMouseTracking(True)
         self.items.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
         hint = QtWidgets.QLabel(spec.hint, panel)

@@ -6,13 +6,13 @@ from typing import Final
 lazy from PySide6 import QtCore, QtWidgets
 
 from cell import Cell
-from desktop_ui.components.appearance import GLASS_ACCENT
+from desktop_ui.components.appearance import PALETTE
 from desktop_ui.components.typeface import TYPE, Font
 from desktop_ui.island_layout import SIZES
 from desktop_ui.qt_runtime import prepare
 from winapi import windows
 from winapi.shapes import Rect
-lazy from desktop_ui.components.appearance import KIT, scheme, tokens
+lazy from desktop_ui.components.appearance import Design
 lazy from desktop_ui.components.controls import label
 lazy from desktop_ui.components.widgets import device_size, row, surface, tool_window, window_style
 lazy from desktop_ui.qt_ui import cancel, later
@@ -46,7 +46,7 @@ INDICATOR: Final = IndicatorSpec(
     font=TYPE.title,
     bottom=28,
     flash=1.2,
-    flash_ink=GLASS_ACCENT,
+    flash_ink=PALETTE.accent,
 )
 
 
@@ -68,13 +68,13 @@ class Indicator:
     _shown: Cell[_Shown] = field(default_factory=lambda: Cell(_Shown()), init=False, repr=False)
 
     @classmethod
-    def build(cls, spec: IndicatorSpec) -> Indicator:
-        theme = tokens(scheme())
+    def build(cls, spec: IndicatorSpec, design: Design) -> Indicator:
+        theme = design.tokens()
         window = QtWidgets.QWidget()
         tool_window(window, None, on_top=False)
-        window.setStyleSheet(window_style(theme, KIT))
+        window.setStyleSheet(window_style(theme, design))
         window.setWindowOpacity(spec.opacity)
-        layout = row(surface(window, theme, round(spec.radius), KIT))
+        layout = row(surface(window, theme, round(spec.radius), design.kit))
         pad, lead = round(spec.padding), round(spec.leading)
         layout.setContentsMargins(pad, lead, pad, lead)
         text = label("")

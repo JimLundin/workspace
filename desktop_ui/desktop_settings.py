@@ -6,6 +6,7 @@ the others, the apps the chords reach, and its own views' specs. Declares no val
 from dataclasses import dataclass
 
 from desktop_ui.bar_events import BarSpec
+from desktop_ui.components.appearance import Design
 from protocol import App, Places, Programs
 
 
@@ -15,4 +16,6 @@ class DesktopSettings:
     places: Places
     apps: tuple[App, ...]
     """The apps the chords reach, in chord-letter order."""
+    design: Design
+    """How every window reads: its colours, glass, controls and type."""
     bar: BarSpec
