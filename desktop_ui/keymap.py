@@ -7,13 +7,19 @@ from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
+from keyboard import settings
 from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
-from keyboard.bindings import Unmapped, action, actions, slot
-from keyboard.firmware import CHORDS
+from keyboard.bindings import Bindings, Unmapped
+from keyboard.firmware import Chords
 from keyboard.keys import Key, Mod
 from keyboard.physical import Laptop
 from keyboard.settings import COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
+
+BINDINGS: Final = Bindings.of(settings.LAYOUT)
+"""The layout's lookups, until the desktop is handed its layout."""
+CHORDS: Final = Chords.of(BINDINGS).letters
+"""Each request's chord letter, until the desktop is handed its layout."""
 
 ROWS: Final = (
     (
@@ -75,7 +81,7 @@ def shortcut(tool: Tool) -> Shortcut | None:
         held = _holding(layer)
         if held is None:
             continue
-        for cell, binding in enumerate(actions(layer)):
+        for cell, binding in enumerate(BINDINGS.actions(layer)):
             if binding is tool:
                 return Shortcut(physical[cell].legend, physical[held].legend)
     letter = CHORDS.get(tool)
@@ -171,7 +177,7 @@ def _hold(a: Binding) -> str:
 
 def _holding(layer: Layer) -> int | None:
     """The cell of the base layer's thumb that holds `layer`; None for the base layer itself."""
-    base = actions(Layer.BASE)
+    base = BINDINGS.actions(Layer.BASE)
     return next((cell for cell, a in enumerate(base) if isinstance(a, TapHold) and a.hold is layer), None)
 
 
@@ -180,13 +186,13 @@ def _cap(layer: Layer, held: int | None, key: Laptop) -> Cap:
     name = key.legend
     if key.scancode == ESCAPE:
         return Cap(name, "On/off", "hold: quit", Role.SPECIAL)
-    match slot(key.scancode):
+    match BINDINGS.slot(key.scancode):
         case Unmapped():
             return Cap(name, "", "", Role.BLANK)
         case int(cell) if cell == held:
             return Cap(name, layer.name.title(), "held", Role.HELD)
         case int(cell):
-            a = action(layer, cell)
+            a = BINDINGS.action(layer, cell)
             label, role = describe(a)
             return Cap(name, label, _hold(a), role)
 

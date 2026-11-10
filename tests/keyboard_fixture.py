@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 from components import DESKTOP
 from diagnostics import Detail
+from keyboard import settings
 from keyboard.keys import Key, Mod
 from keyboard.physical import Scancode
 from keyboard.win import Keyboard
@@ -102,7 +103,7 @@ def hold_apps(keyboard: Keyboard, *, at: int) -> None:
 def observed_keyboard(*, platform: KeyboardFixture | None = None) -> Generator[tuple[Keyboard, list[tuple[int, int, int]]]]:
     """Use the same driver seam for input observations and captured notifications."""
     driver = platform if platform is not None else KeyboardFixture()
-    yield Keyboard.open(driver), driver.messages
+    yield Keyboard.open(settings.LAYOUT, driver), driver.messages
 
 
 def assert_host_remapping_restored(keyboard: Keyboard) -> None:
@@ -112,7 +113,7 @@ def assert_host_remapping_restored(keyboard: Keyboard) -> None:
 def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
     driver = KeyboardFixture()
     driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#voice",)
-    keyboard = Keyboard.open(driver)
+    keyboard = Keyboard.open(settings.LAYOUT, driver)
     keyboard.update_devices()
     driver.messages.clear()
     return keyboard, driver

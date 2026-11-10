@@ -10,6 +10,7 @@ import config
 from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
 from keyboard.board import Board, Row, Thumbs
 from keyboard.keys import Key, Mod
+from keyboard.layout import Layout, Timings, UsbIdentity
 from keyboard.physical import Laptop
 from protocol import Tool
 
@@ -151,3 +152,16 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
     ),
 })
 # fmt: on
+
+LAYOUT: Final = Layout(
+    physical=PHYSICAL,
+    unused=UNUSED,
+    function_keys=FUNCTION_KEYS,
+    native_keys=NATIVE_KEYS,
+    layers=LAYERS,
+    escape=ESCAPE,
+    apps_key=APPS_KEY,
+    firmware=UsbIdentity(FIRMWARE_VENDOR, FIRMWARE_PRODUCT),
+    timings=Timings(tapping_term=TAPPING_TERM_MS, streak=STREAK_MS, quick_tap=QUICK_TAP_MS, quit_hold=QUIT_HOLD_MS),
+)
+"""The layout `keyboard.__main__` runs."""

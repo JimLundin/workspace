@@ -1,25 +1,28 @@
-"""What each physical key does on each layer, built from `keyboard.settings` and
-checked once, when the module is imported: a key used twice fails the import, so a
-broken layout never starts.
+"""What each physical key does on each layer, built from a `keyboard.layout.Layout`
+and checked as it is built: a key used twice, a layer without a board or a hold of
+BASE raises `LayoutError`, so a broken layout never starts.
 """
 
+from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Final
 
-from keyboard import settings
 from keyboard.actions import Binding, Layer, TapHold
 from keyboard.board import Hand
+from keyboard.layout import Layout, LayoutError
 from keyboard.physical import Scancode
 
 
-class LayoutError(Exception):
-    """The layout is inconsistent; raised at import, never at runtime."""
+class Unmapped(Enum):
+    FREE = auto()
+    """An explicitly permitted native function key."""
+    BLOCKED = auto()
+    """No binding: swallowed, does nothing."""
 
 
-def _build_table() -> frozendict[Layer, tuple[Binding, ...]]:
-    if missing := tuple(layer.name for layer in Layer if layer not in settings.LAYERS):
-        raise LayoutError(f"settings.LAYERS has no board for: {', '.join(missing)}")
-    table = frozendict((layer, board.cells()) for layer, board in settings.LAYERS.items())
+def _table(layout: Layout) -> frozendict[Layer, tuple[Binding, ...]]:
+    if missing := tuple(layer.name for layer in Layer if layer not in layout.layers):
+        raise LayoutError(f"the layout has no board for: {', '.join(missing)}")
+    table = frozendict((layer, board.cells()) for layer, board in layout.layers.items())
     for layer, cells in table.items():
         for cell, bound in enumerate(cells):
             match bound:
@@ -30,41 +33,11 @@ def _build_table() -> frozendict[Layer, tuple[Binding, ...]]:
     return table
 
 
-_TABLE: Final = _build_table()
-"""Every layer flattened, by layer then cell."""
-
-
-_HANDS: Final = tuple(side for side, _ in settings.PHYSICAL.placed())
-"""Each cell's hand: the half of `settings.PHYSICAL` its key is written in."""
-
-
-def hand(cell: int) -> Hand:
-    """The hand that presses key `cell`."""
-    return _HANDS[cell]
-
-
-def action(layer: Layer, cell: int) -> Binding:
-    """What key `cell` does on `layer`."""
-    return _TABLE[layer][cell]
-
-
-def actions(layer: Layer) -> tuple[Binding, ...]:
-    """What every key does on `layer`, by cell."""
-    return _TABLE[layer]
-
-
-class Unmapped(Enum):
-    FREE = auto()
-    """An explicitly permitted native function key."""
-    BLOCKED = auto()
-    """No binding: swallowed, does nothing."""
-
-
-def _build_slots() -> frozendict[Scancode, int | Unmapped]:
+def _slots(layout: Layout) -> frozendict[Scancode, int | Unmapped]:
     entries: tuple[tuple[Scancode, int | Unmapped], ...] = (
-        *((key.scancode, cell) for cell, key in enumerate(settings.PHYSICAL.cells())),
-        *((key.scancode, Unmapped.BLOCKED) for key in settings.UNUSED),
-        *((key.scancode, Unmapped.FREE) for key in settings.FUNCTION_KEYS),
+        *((key.scancode, cell) for cell, key in enumerate(layout.physical.cells())),
+        *((key.scancode, Unmapped.BLOCKED) for key in layout.unused),
+        *((key.scancode, Unmapped.FREE) for key in layout.function_keys),
     )
     slots = frozendict(entries)
     if len(slots) == len(entries):
@@ -81,14 +54,37 @@ def _build_slots() -> frozendict[Scancode, int | Unmapped]:
             raise LayoutError(f"function key {scancode:#x} is also in the layout")
 
 
-_SLOTS: Final = _build_slots()
-"""Scancode -> a binding or explicitly permitted function key. Everything else is blocked."""
+@dataclass(frozen=True, slots=True)
+class Bindings:
+    """A layout's lookups: what each cell does on each layer, each cell's hand, and each scancode's cell."""
 
+    table: frozendict[Layer, tuple[Binding, ...]]
+    """Every layer flattened, by layer then cell."""
+    hands: tuple[Hand, ...]
+    """Each cell's hand: the half of the physical board its key is written in."""
+    slots: frozendict[Scancode, int | Unmapped]
+    """Scancode -> a cell or an explicitly permitted function key. Everything else is blocked."""
 
-def slot(scancode: Scancode) -> int | Unmapped:
-    return _SLOTS.get(scancode, Unmapped.BLOCKED)
+    @classmethod
+    def of(cls, layout: Layout) -> Bindings:
+        """`layout`'s lookups, or `LayoutError` if it is inconsistent."""
+        return cls(_table(layout), tuple(side for side, _ in layout.physical.placed()), _slots(layout))
 
+    def hand(self, cell: int) -> Hand:
+        """The hand that presses key `cell`."""
+        return self.hands[cell]
 
-def pictured(scancode: Scancode) -> bool:
-    """A key the overlay shows: a layout key, or a blocked one (which lights to say so)."""
-    return _SLOTS.get(scancode, Unmapped.FREE) is not Unmapped.FREE
+    def action(self, layer: Layer, cell: int) -> Binding:
+        """What key `cell` does on `layer`."""
+        return self.table[layer][cell]
+
+    def actions(self, layer: Layer) -> tuple[Binding, ...]:
+        """What every key does on `layer`, by cell."""
+        return self.table[layer]
+
+    def slot(self, scancode: Scancode) -> int | Unmapped:
+        return self.slots.get(scancode, Unmapped.BLOCKED)
+
+    def pictured(self, scancode: Scancode) -> bool:
+        """A key the overlay shows: a layout key, or a blocked one (which lights to say so)."""
+        return self.slots.get(scancode, Unmapped.FREE) is not Unmapped.FREE

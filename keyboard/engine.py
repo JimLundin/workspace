@@ -1,8 +1,8 @@
 """Windows keyboard logic: decides what each physical key press or release turns
 into, in Windows terms (virtual keys, modifiers). It makes no Win32 calls itself;
 those go through a `Host`, so the logic can be tested without Windows. Each
-function takes the keyboard's `EngineState` and returns the next one; its
-caller keeps it.
+step takes the keyboard's `EngineState` and returns the next one; its caller
+keeps it. The layout's rules are an `Engine`, built from a `keyboard.layout.Layout`.
 
 Tap-hold rule (like KMonad's tap-hold-next-release): a tap-hold key becomes
 "hold" if another key is pressed AND released while it is down, or if it is
@@ -13,7 +13,7 @@ hand, it is a tap, decided at once. You use a modifier with the other hand, so
 a same-hand key means a fast roll, not a shortcut. Holding past the tapping
 term still always makes it a modifier.
 
-Quick tap: tap a tap-hold key and press it again within `QUICK_TAP_MS`, and
+Quick tap: tap a tap-hold key and press it again within `Timings.quick_tap`, and
 the second press is that key held down, so it repeats (Backspace, Space...).
 
 Typing streak: right after a typed character, a home row mod (except Shift) is
@@ -32,11 +32,11 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
-from keyboard import settings
 from keyboard.actions import BLANK, Action, Chord, Layer, Output, TapHold
-from keyboard.bindings import Unmapped, action, hand, slot
+from keyboard.bindings import Bindings, Unmapped
 from keyboard.board import Board
 from keyboard.keys import Key, Mod
+from keyboard.layout import Layout, Timings
 from keyboard.physical import Scancode
 from protocol import App, LayoutState, Request, Tool
 
@@ -221,10 +221,155 @@ class UnreleasedError(OSError):
         self.state: Final = state
 
 
-def on_key(state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
-    """One physical key event, then the indicator. `now` is the event's timestamp in ms (it may wrap around)."""
-    state, verdict = key(state, host, scancode, down=down, now=now)
-    return refresh(state, host), verdict
+@dataclass(frozen=True, slots=True)
+class Engine:
+    """A layout's rules: what each key event turns into. Each method takes the
+    keyboard's `EngineState` and returns the next one; its caller keeps it."""
+
+    bindings: Bindings
+    timings: Timings
+    escape: Scancode
+    """Tap to switch the layout on or off; hold to quit."""
+
+    @classmethod
+    def of(cls, layout: Layout, bindings: Bindings) -> Engine:
+        return cls(bindings, layout.timings, layout.escape)
+
+    def on_key(self, state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
+        """One physical key event, then the indicator. `now` is the event's timestamp in ms (it may wrap around)."""
+        state, verdict = self.key(state, host, scancode, down=down, now=now)
+        return refresh(state, host), verdict
+
+    def key(self, state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
+        # Escape key: tap = on/off, hold = quit. Checked first, works in both states.
+        if scancode == self.escape:
+            pressed_at = state.escape_down_at
+            if down:
+                if pressed_at is None:
+                    state = replace(state, escape_down_at=now)
+            elif pressed_at is not None:
+                state = replace(state, escape_down_at=None)
+                if elapsed(now, pressed_at) >= self.timings.quit_hold:
+                    return release_all(state, host), Verdict.QUIT
+                state = toggle(state, host)
+            return state, Verdict.SWALLOW
+        if not state.enabled:
+            return state, Verdict.PASS
+        match self.bindings.slot(scancode):
+            case Unmapped.FREE:
+                return state, Verdict.PASS
+            case Unmapped.BLOCKED:
+                return state, Verdict.SWALLOW
+            case int(cell):
+                return self.event(state, host, KeyDown(cell, now) if down else KeyUp(cell, now)), Verdict.SWALLOW
+
+    def in_streak(self, state: EngineState, now: int) -> bool:
+        last = state.last_typed_at
+        return last is not None and elapsed(now, last) < self.timings.streak
+
+    def quick_tap(self, state: EngineState, cell: int, now: int) -> bool:
+        last = state.last_tap
+        return last is not None and last.cell == cell and elapsed(now, last.at) < self.timings.quick_tap
+
+    def event(self, state: EngineState, host: Host, e: Event) -> EngineState:
+        if p := state.pending:
+            return self.event_while_pending(state, host, p, e)
+        match e:
+            case KeyUp(cell):
+                if current := state.pressed[cell]:
+                    return release(replace(state, pressed=_put(state.pressed, cell, None)), host, current)
+                return state
+            case KeyDown(cell, now):
+                if current := state.pressed[cell]:
+                    return repeat(state, host, current, now)
+                if (bound := self.bindings.action(state.layer(), cell)) is BLANK:
+                    return state  # Nothing pressed, so its release has nothing to end.
+                match bound:
+                    case TapHold(tap) if self.quick_tap(state, cell, now):
+                        a: Action = tap
+                    case TapHold(tap, Mod() as mod) if mod != Mod.SHIFT and self.in_streak(state, now):
+                        a = tap
+                    case TapHold(tap, hold):
+                        return replace(state, pending=Pending(cell, tap, hold, host.start_timer(), now), buffer=())
+                    case other:
+                        a = other
+                return press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)
+            case _:
+                assert_never(e)
+
+    def event_while_pending(self, state: EngineState, host: Host, p: Pending, e: Event) -> EngineState:
+        if e.cell == p.cell:
+            match e:
+                case KeyUp(_, now):
+                    return self.resolve(state, host, Decision.TAP, now=now)
+                case KeyDown():
+                    return state  # auto-repeat of the undecided key is ignored
+                case _:
+                    assert_never(e)
+        buffer = state.buffer
+        match e:
+            case KeyDown(cell, now):
+                released_meanwhile = any(isinstance(waiting, KeyUp) and waiting.cell == cell for waiting in buffer)
+                if not released_meanwhile:
+                    # A key held since before is already decided: repeat it now.
+                    if current := state.pressed[cell]:
+                        return repeat(state, host, current, now)
+                    # A buffered key's repeated down adds nothing; reuse the queued event.
+                    for waiting in reversed(buffer):
+                        if waiting.cell == cell:
+                            if isinstance(waiting, KeyDown):
+                                return state
+                            break
+                # The first press on the modifier's own hand is a roll, unless it is
+                # another home row mod: same-hand mods combine, as QMK's Chordal Hold.
+                first_press = not any(isinstance(waiting, KeyDown) for waiting in buffer)
+                if first_press and isinstance(p.hold, Mod) and self.bindings.hand(cell) is self.bindings.hand(p.cell):
+                    match self.bindings.action(state.layer(), cell):
+                        case TapHold(hold=Mod()):
+                            pass
+                        case _:
+                            return self.event(self.resolve(state, host, Decision.TAP, now=now), host, e)
+            case KeyUp():
+                pass
+            case _:
+                assert_never(e)
+        if len(buffer) >= MAX_BUFFERED:
+            # Too many keys waiting: decide it as a hold, then handle this one.
+            return self.event(self.resolve(state, host, Decision.HOLD, now=e.at), host, e)
+        buffer = (*buffer, e)
+        state = replace(state, buffer=buffer)
+        if isinstance(e, KeyUp) and any(isinstance(waiting, KeyDown) and waiting.cell == e.cell for waiting in buffer):
+            # A home row mod holds only for a key on the other hand; a same-hand tap inside it is a roll.
+            across = isinstance(p.hold, Layer) or any(
+                isinstance(waiting, KeyDown) and self.bindings.hand(waiting.cell) is not self.bindings.hand(p.cell) for waiting in buffer
+            )
+            return self.resolve(state, host, Decision.HOLD if across else Decision.TAP, now=e.at)
+        return state
+
+    def timeout(self, state: EngineState, host: Host, timer: int) -> EngineState:
+        if (p := state.pending) and p.timer == timer:
+            return refresh(self.resolve(state, host, Decision.HOLD, now=p.pressed_at), host)
+        return state
+
+    def resolve(self, state: EngineState, host: Host, decision: Decision, *, now: int) -> EngineState:
+        """Decide the undecided key. `now` is when the decision happened."""
+        p = state.pending
+        if p is None:
+            return state
+        state = replace(state, pending=None)
+        host.stop_timer(p.timer)
+        match decision:
+            case Decision.HOLD:
+                state = press(replace(state, pressed=_put(state.pressed, p.cell, p.hold)), host, p.hold, p.pressed_at)
+            case Decision.TAP:
+                state = release(press(state, host, p.tap, p.pressed_at), host, p.tap)
+                state = replace(state, last_tap=LastTap(p.cell, now))
+            case _:
+                assert_never(decision)
+        waiting, state = state.buffer, replace(state, buffer=())
+        for e in waiting:
+            state = self.event(state, host, e)
+        return state
 
 
 def refresh(state: EngineState, host: Host) -> EngineState:
@@ -246,145 +391,9 @@ def toggle(state: EngineState, host: Host) -> EngineState:
     return refresh(state, host)
 
 
-def key(state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
-    # Escape key: tap = on/off, hold = quit. Checked first, works in both states.
-    if scancode == settings.ESCAPE:
-        pressed_at = state.escape_down_at
-        if down:
-            if pressed_at is None:
-                state = replace(state, escape_down_at=now)
-        elif pressed_at is not None:
-            state = replace(state, escape_down_at=None)
-            if elapsed(now, pressed_at) >= settings.QUIT_HOLD_MS:
-                return release_all(state, host), Verdict.QUIT
-            state = toggle(state, host)
-        return state, Verdict.SWALLOW
-    if not state.enabled:
-        return state, Verdict.PASS
-    match slot(scancode):
-        case Unmapped.FREE:
-            return state, Verdict.PASS
-        case Unmapped.BLOCKED:
-            return state, Verdict.SWALLOW
-        case int(cell):
-            return event(state, host, KeyDown(cell, now) if down else KeyUp(cell, now)), Verdict.SWALLOW
-
-
-def in_streak(state: EngineState, now: int) -> bool:
-    last = state.last_typed_at
-    return last is not None and elapsed(now, last) < settings.STREAK_MS
-
-
-def quick_tap(state: EngineState, cell: int, now: int) -> bool:
-    last = state.last_tap
-    return last is not None and last.cell == cell and elapsed(now, last.at) < settings.QUICK_TAP_MS
-
-
-def event(state: EngineState, host: Host, e: Event) -> EngineState:
-    if p := state.pending:
-        return event_while_pending(state, host, p, e)
-    match e:
-        case KeyUp(cell):
-            if current := state.pressed[cell]:
-                return release(replace(state, pressed=_put(state.pressed, cell, None)), host, current)
-            return state
-        case KeyDown(cell, now):
-            if current := state.pressed[cell]:
-                return repeat(state, host, current, now)
-            if (bound := action(state.layer(), cell)) is BLANK:
-                return state  # Nothing pressed, so its release has nothing to end.
-            match bound:
-                case TapHold(tap) if quick_tap(state, cell, now):
-                    a: Action = tap
-                case TapHold(tap, Mod() as mod) if mod != Mod.SHIFT and in_streak(state, now):
-                    a = tap
-                case TapHold(tap, hold):
-                    return replace(state, pending=Pending(cell, tap, hold, host.start_timer(), now), buffer=())
-                case other:
-                    a = other
-            return press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)
-        case _:
-            assert_never(e)
-
-
 def repeat(state: EngineState, host: Host, current: Action, now: int) -> EngineState:
     """Auto-repeat: repeat the output already chosen on the first press."""
     return press(state, host, current, now) if isinstance(current, (Key, Chord)) else state
-
-
-def event_while_pending(state: EngineState, host: Host, p: Pending, e: Event) -> EngineState:
-    if e.cell == p.cell:
-        match e:
-            case KeyUp(_, now):
-                return resolve(state, host, Decision.TAP, now=now)
-            case KeyDown():
-                return state  # auto-repeat of the undecided key is ignored
-            case _:
-                assert_never(e)
-    buffer = state.buffer
-    match e:
-        case KeyDown(cell, now):
-            released_meanwhile = any(isinstance(waiting, KeyUp) and waiting.cell == cell for waiting in buffer)
-            if not released_meanwhile:
-                # A key held since before is already decided: repeat it now.
-                if current := state.pressed[cell]:
-                    return repeat(state, host, current, now)
-                # A buffered key's repeated down adds nothing; reuse the queued event.
-                for waiting in reversed(buffer):
-                    if waiting.cell == cell:
-                        if isinstance(waiting, KeyDown):
-                            return state
-                        break
-            # The first press on the modifier's own hand is a roll, unless it is
-            # another home row mod: same-hand mods combine, as QMK's Chordal Hold.
-            first_press = not any(isinstance(waiting, KeyDown) for waiting in buffer)
-            if first_press and isinstance(p.hold, Mod) and hand(cell) is hand(p.cell):
-                match action(state.layer(), cell):
-                    case TapHold(hold=Mod()):
-                        pass
-                    case _:
-                        return event(resolve(state, host, Decision.TAP, now=now), host, e)
-        case KeyUp():
-            pass
-        case _:
-            assert_never(e)
-    if len(buffer) >= MAX_BUFFERED:
-        # Too many keys waiting: decide it as a hold, then handle this one.
-        return event(resolve(state, host, Decision.HOLD, now=e.at), host, e)
-    buffer = (*buffer, e)
-    state = replace(state, buffer=buffer)
-    if isinstance(e, KeyUp) and any(isinstance(waiting, KeyDown) and waiting.cell == e.cell for waiting in buffer):
-        # A home row mod holds only for a key on the other hand; a same-hand tap inside it is a roll.
-        across = isinstance(p.hold, Layer) or any(isinstance(waiting, KeyDown) and hand(waiting.cell) is not hand(p.cell) for waiting in buffer)
-        return resolve(state, host, Decision.HOLD if across else Decision.TAP, now=e.at)
-    return state
-
-
-def timeout(state: EngineState, host: Host, timer: int) -> EngineState:
-    if (p := state.pending) and p.timer == timer:
-        return refresh(resolve(state, host, Decision.HOLD, now=p.pressed_at), host)
-    return state
-
-
-def resolve(state: EngineState, host: Host, decision: Decision, *, now: int) -> EngineState:
-    """Decide the undecided key. `now` is when the decision happened."""
-    p = state.pending
-    if p is None:
-        return state
-    state = replace(state, pending=None)
-    host.stop_timer(p.timer)
-    match decision:
-        case Decision.HOLD:
-            state = press(replace(state, pressed=_put(state.pressed, p.cell, p.hold)), host, p.hold, p.pressed_at)
-        case Decision.TAP:
-            state = release(press(state, host, p.tap, p.pressed_at), host, p.tap)
-            state = replace(state, last_tap=LastTap(p.cell, now))
-        case _:
-            assert_never(decision)
-    waiting, state = state.buffer, replace(state, buffer=())
-    for e in waiting:
-        state = event(state, host, e)
-    return state
 
 
 def release_all(state: EngineState, host: Host) -> EngineState:

@@ -17,12 +17,13 @@ import config
 import diagnostics
 from cell import Cell
 from diagnostics import Detail, FailureInfo, failure_info
-from keyboard import engine, hook_watch, settings
-from keyboard.bindings import pictured
-from keyboard.engine import EngineState, Indicator, UnreleasedError, Verdict
-from keyboard.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected, shortcut
+from keyboard import hook_watch
+from keyboard.bindings import Bindings
+from keyboard.engine import Engine, EngineState, Indicator, UnreleasedError, Verdict, release_all, toggle
+from keyboard.firmware import CapturedKey, Chords, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected
 from keyboard.hook_watch import ANSWERED
 from keyboard.keys import Key, Mod
+from keyboard.layout import Layout, UsbIdentity
 from keyboard.physical import Scancode
 from protocol import LayoutState, Message, Origin, Request, Window, encode, encode_indicator
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
@@ -92,7 +93,9 @@ class _Hosted:
 class WinHost:
     """What the engine needs, done with Windows calls. Only the hook thread uses it."""
 
-    platform: KeyboardSystem = field(default_factory=NativeKeyboardSystem)
+    platform: KeyboardSystem
+    tapping_term: int
+    """Milliseconds before an undecided tap-hold key is held."""
     _state: Cell[_Hosted] = field(default_factory=lambda: Cell(_Hosted()), init=False, repr=False)
 
     @property
@@ -125,7 +128,7 @@ class WinHost:
                 self.send(key, down=False)
 
     def start_timer(self) -> int:
-        return self.platform.set_timer(settings.TAPPING_TERM_MS)
+        return self.platform.set_timer(self.tapping_term)
 
     def stop_timer(self, timer: int) -> None:
         self.platform.kill_timer(timer)
@@ -204,18 +207,34 @@ def physical(key: inputs.KeyEvent) -> bool:
     return not key.injected
 
 
-def route(key: inputs.KeyEvent, state: HookState, *, down: bool) -> Route:
+@dataclass(frozen=True, slots=True)
+class Routing:
+    """What the hook routes keys by, from the layout."""
+
+    chords: Chords
+    apps_key: int
+    """The virtual key the Charybdis's Apps thumb sends."""
+    native_keys: frozenset[int]
+    escape: Scancode
+    firmware: UsbIdentity
+
+    @classmethod
+    def of(cls, layout: Layout, bindings: Bindings) -> Routing:
+        return cls(Chords.of(bindings), layout.apps_key, layout.native_keys, layout.escape, layout.firmware)
+
+
+def route(key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: bool) -> Route:
     """The hook's policy, in the order it applies: each rule only sees keys the ones above let through."""
     if state.busy or key.extra == Origin.LAYOUT:
         return Route.OWN
     key_identity = identity(key)
     typed = physical(key) and key.extra != Origin.DESKTOP
     if typed and (state.firmware is not None or state.shortcuts):
-        if state.firmware is not None and key.vk == settings.APPS_KEY:
+        if state.firmware is not None and key.vk == routing.apps_key:
             return Route.APPS_THUMB
         if any(held.identity == key_identity for held in state.shortcuts):
             return Route.SHORTCUT_HELD
-        if state.firmware is not None and down and key_identity not in state.owed and shortcut(key.vk, apps_held=state.apps_held):
+        if state.firmware is not None and down and key_identity not in state.owed and routing.chords.shortcut(key.vk, apps_held=state.apps_held):
             return Route.SHORTCUT
     if state.firmware is not None:
         return Route.FIRMWARE
@@ -223,21 +242,21 @@ def route(key: inputs.KeyEvent, state: HookState, *, down: bool) -> Route:
         return Route.OWED_UP
     if key.extra == Origin.DESKTOP:
         return Route.OWN
-    if (state.switcher and key.vk in SWITCHER_KEYS) or key.vk in settings.NATIVE_KEYS:
+    if (state.switcher and key.vk in SWITCHER_KEYS) or key.vk in routing.native_keys:
         return Route.NATIVE
     if key.extended:
         return Route.EXTENDED
     return Route.LAYOUT
 
 
-def owes(key: inputs.KeyEvent, state: HookState, *, down: bool) -> bool:
+def owes(key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: bool) -> bool:
     """Whether Windows must later get this key's up natively: a physical down the layout won't own.
 
     That is every physical down while the layout is off (but the escape key, which turns
     it on), and the window switcher's own keys."""
     if not down or not physical(key) or key.extra == Origin.DESKTOP:
         return False
-    if not state.engine.enabled and (key.scancode != settings.ESCAPE or key.extended):
+    if not state.engine.enabled and (key.scancode != routing.escape or key.extended):
         return True
     return state.switcher and key.vk in SWITCHER_KEYS
 
@@ -310,12 +329,16 @@ class Keyboard:
 
     platform: KeyboardSystem
     host: WinHost
+    engine: Engine
+    routing: Routing
     _state: Cell[HookState]
 
     @classmethod
-    def open(cls, platform: KeyboardSystem | None = None) -> Keyboard:
+    def open(cls, layout: Layout, platform: KeyboardSystem | None = None) -> Keyboard:
+        """The keyboard for `layout`, or `LayoutError` if the layout is inconsistent."""
         system = platform if platform is not None else NativeKeyboardSystem()
-        return cls(system, WinHost(system), Cell(HookState()))
+        bindings = Bindings.of(layout)
+        return cls(system, WinHost(system, layout.timings.tapping_term), Engine.of(layout, bindings), Routing.of(layout, bindings), Cell(HookState()))
 
     @property
     def state(self) -> HookState:
@@ -347,14 +370,14 @@ class Keyboard:
         return verdict
 
     def release_keys(self) -> None:
-        self.step_keys(lambda keys: (engine.release_all(keys, self.host), Verdict.PASS))
+        self.step_keys(lambda keys: (release_all(keys, self.host), Verdict.PASS))
 
     def toggle_keys(self) -> None:
-        self.step_keys(lambda keys: (engine.toggle(keys, self.host), Verdict.PASS))
+        self.step_keys(lambda keys: (toggle(keys, self.host), Verdict.PASS))
 
     def timeout(self, timer: int) -> None:
         """A tapping-term timer fired."""
-        self.step_keys(lambda keys: (engine.timeout(keys, self.host, timer), Verdict.PASS))
+        self.step_keys(lambda keys: (self.engine.timeout(keys, self.host, timer), Verdict.PASS))
 
     def raw_key(self, at: int) -> None:
         """Raw input saw a key at `at`: the hook watchdog's evidence that keys still arrive."""
@@ -384,7 +407,7 @@ class Keyboard:
     def update_devices(self) -> None:
         """Observe hotplug outside the hook, release outputs, and restore prior intent."""
         previous = self._state.get().firmware
-        attached = connected(self.platform.keyboard_devices())
+        attached = connected(self.platform.keyboard_devices(), self.routing.firmware)
         if attached == (previous is not None):
             return
         if attached:
@@ -486,7 +509,7 @@ class Keyboard:
     def show_key(self, scancode: Scancode, *, down: bool) -> None:
         """Send each physical transition once; repeats and unpictured keys add nothing."""
         pressed = self._state.get().pressed
-        if scancode != settings.ESCAPE and not pictured(scancode):
+        if scancode != self.engine.escape and not self.engine.bindings.pictured(scancode):
             return
         if (scancode in pressed) == down:
             return
@@ -576,8 +599,8 @@ class Keyboard:
         state = self._state.get()
         if state.firmware is None and not state.busy and key.extra != Origin.LAYOUT:
             state = self.observe_window()
-        kind = route(key, state, down=down)
-        if kind in (Route.NATIVE, Route.EXTENDED, Route.LAYOUT) and owes(key, state, down=down):
+        kind = route(key, state, self.routing, down=down)
+        if kind in (Route.NATIVE, Route.EXTENDED, Route.LAYOUT) and owes(key, state, self.routing, down=down):
             self._state.update(lambda state: replace(state, owed=state.owed | {identity(key)}))
         match kind:
             case Route.OWN | Route.NATIVE:
@@ -591,7 +614,7 @@ class Keyboard:
                     self.finish_shortcut(identity(key))
                 return True
             case Route.SHORTCUT:
-                if request := shortcut(key.vk, apps_held=state.apps_held):
+                if request := self.routing.chords.shortcut(key.vk, apps_held=state.apps_held):
                     self._state.update(lambda state: replace(state, shortcuts=(*state.shortcuts, HeldShortcut(identity(key), request))))
                     self.host.request(request, down=True)
                 return True
@@ -635,17 +658,17 @@ class Keyboard:
         """One key through the engine, with the overlay told of physical transitions."""
         was_enabled = self.engine_state.enabled
         scancode = Scancode(key.scancode)
-        if not was_enabled and key.scancode == settings.ESCAPE and not down:
+        if not was_enabled and key.scancode == self.engine.escape and not down:
             self.prepare_enable()
         if was_enabled and physical(key):
             self.show_key(scancode, down=down)
-        verdict = self.step_keys(lambda keys: engine.on_key(keys, self.host, scancode, down=down, now=key.time))
+        verdict = self.step_keys(lambda keys: self.engine.on_key(keys, self.host, scancode, down=down, now=key.time))
         if self.engine_state.enabled != was_enabled or verdict is Verdict.QUIT:
             self.clear_pressed()
         return verdict
 
 
-def run() -> Exit:
+def run(layout: Layout) -> Exit:
     """Blocks until the layout quits."""
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
@@ -654,7 +677,7 @@ def run() -> Exit:
     with contextlib.suppress(OSError):  # without it the hook still works, only more slowly under load
         system.keep_responsive()
     try:
-        keyboard = Keyboard.open()
+        keyboard = Keyboard.open(layout)
         keyboard.update_devices()
         hook = inputs.set_keyboard_hook(keyboard.hook_proc)
         if hook is None:

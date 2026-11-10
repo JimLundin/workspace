@@ -11,9 +11,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Final, assert_never
 
+from desktop_ui import keymap
 from desktop_ui.shell_items import WEB_APPS, PinnedApp, WebApps
 from desktop_ui.window_layout import App, Program
-from keyboard.firmware import CHORDS
 from protocol import Tool
 
 JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4, Tool.DESKTOP_5)
@@ -34,7 +34,7 @@ class PagerSpec:
     """...and what an empty desktop holds."""
 
 
-PAGER: Final = PagerSpec(WEB_APPS, tuple(CHORDS.get(tool) for tool in JUMPS), desktop="Desktop", current="current", empty="No placed apps")
+PAGER: Final = PagerSpec(WEB_APPS, tuple(keymap.CHORDS.get(tool) for tool in JUMPS), desktop="Desktop", current="current", empty="No placed apps")
 """Workspace's own pager; the bar passes it in, tests pass their own."""
 
 

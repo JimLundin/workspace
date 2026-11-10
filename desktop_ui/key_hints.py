@@ -10,8 +10,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import protocol
+from desktop_ui import keymap
 from desktop_ui.navigation import AppKey, Direction, Focus, SpatialFocus, World, effect, identity, keyed, launcher
-from keyboard.firmware import CHORDS
 from protocol import Request, Tool
 from winapi.shapes import Rect
 
@@ -98,7 +98,7 @@ def rank(keycap: Keycap) -> int:
 
 def hints(world: World) -> tuple[Badge, ...]:
     """The badges while the chord is held."""
-    drawn = tuple(each for request, letter in CHORDS.items() for each in placed(world, request, letter))
+    drawn = tuple(each for request, letter in keymap.CHORDS.items() for each in placed(world, request, letter))
     badges = (
         Badge(handle, target.rect, tuple(sorted((keycap for window, keycap in drawn if window == handle), key=rank)))
         for handle, target in world.placement.items()

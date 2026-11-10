@@ -5,10 +5,12 @@ import unittest
 from dataclasses import replace
 from typing import override
 
-from keyboard import engine
+from keyboard import engine, settings
 from keyboard.actions import Action, Chord, Layer
+from keyboard.bindings import Bindings
 from keyboard.engine import (
     MAX_BUFFERED,
+    Engine,
     EngineState,
     Indicator,
     Modifiers,
@@ -33,6 +35,7 @@ PHYSICAL = {  # physical key by its QWERTY name
 }  # fmt: skip
 
 ESC = ESCAPE
+ENGINE = Engine.of(settings.LAYOUT, Bindings.of(settings.LAYOUT))
 SPACEBAR = Scancode(0x39)
 
 
@@ -89,7 +92,7 @@ class Harness:
         self.state = EngineState()
 
     def key(self, scancode: Scancode, *, down: bool, now: int) -> Verdict:
-        self.state, verdict = engine.on_key(self.state, self.h, scancode, down=down, now=now)
+        self.state, verdict = ENGINE.on_key(self.state, self.h, scancode, down=down, now=now)
         return verdict
 
     def release_all(self) -> None:
@@ -124,7 +127,7 @@ class Harness:
 
     def timeout_last(self) -> None:
         """Fire the most recently started timer."""
-        self.state = engine.timeout(self.state, self.h, self.h.timer)
+        self.state = ENGINE.timeout(self.state, self.h, self.h.timer)
 
     def take(self) -> str:
         log, self.h.log = self.h.log, []

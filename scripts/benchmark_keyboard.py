@@ -2,7 +2,7 @@
 
 Run with the same interpreter before and after a keyboard change. Use --root to
 select a saved source tree. Native hook/SendInput latency and OS scheduling need
-separate desktop measurements; this measures engine.on_key and tap-hold timers.
+separate desktop measurements; this measures Engine.on_key and tap-hold timers.
 """
 
 import argparse
@@ -19,8 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
-lazy from keyboard import engine
-lazy from keyboard.engine import EngineState, Indicator
+lazy from keyboard import settings
+lazy from keyboard.bindings import Bindings
+lazy from keyboard.engine import Engine, EngineState, Indicator
 lazy from keyboard.keys import Key, Mod
 lazy from keyboard.physical import Scancode
 lazy from protocol import LayoutState, Request
@@ -93,11 +94,12 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
     )
     events = tuple((Scancode(key), down, index * 20) for index in range(count) for key, down in (pattern[index % len(pattern)],))
     host = Host()
-    measurements, collections, pauses = measure_latencies(host, events, rounds)
+    rules = Engine.of(settings.LAYOUT, Bindings.of(settings.LAYOUT))
+    measurements, collections, pauses = measure_latencies(rules, host, events, rounds)
     gc.collect()
     tracemalloc.start()
     try:
-        play(host, events)
+        play(rules, host, events)
         retained, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -108,6 +110,7 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         "keyboard/actions.py",
         "keyboard/board.py",
         "keyboard/bindings.py",
+        "keyboard/layout.py",
         "keyboard/settings.py",
         "keyboard/win.py",
         "keyboard/__main__.py",
@@ -170,6 +173,7 @@ class Host:
 
 
 def measure_latencies(
+    rules: Engine,
     host: Host,
     events: Sequence[tuple[Scancode, bool, int]],
     rounds: int,
@@ -188,12 +192,13 @@ def measure_latencies(
 
     gc.enable()
     # Warm up adaptive bytecode and tables before collecting latency samples.
-    play(host, events[:1000])
-    measurements = tuple(round_latencies(host, events, rounds, observe_gc))
+    play(rules, host, events[:1000])
+    measurements = tuple(round_latencies(rules, host, events, rounds, observe_gc))
     return measurements, tuple(collections), tuple(pauses)
 
 
 def round_latencies(
+    rules: Engine,
     host: Host,
     events: Sequence[tuple[Scancode, bool, int]],
     rounds: int,
@@ -210,9 +215,9 @@ def round_latencies(
             for index, (key, down, now) in enumerate(events):
                 started = perf_counter_ns()
                 if key:
-                    state, _ = engine.on_key(state, host, key, down=down, now=now)
+                    state, _ = rules.on_key(state, host, key, down=down, now=now)
                 else:
-                    state = engine.timeout(state, host, 1)
+                    state = rules.timeout(state, host, 1)
                 latencies[index] = perf_counter_ns() - started
         finally:
             gc.callbacks.remove(observe_gc)
@@ -228,14 +233,14 @@ def round_latencies(
         )
 
 
-def play(host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> EngineState:
+def play(rules: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> EngineState:
     """The engine's state after `events`, from a fresh start."""
     state = EngineState()
     for key, down, now in events:
         if key:
-            state, _ = engine.on_key(state, host, key, down=down, now=now)
+            state, _ = rules.on_key(state, host, key, down=down, now=now)
         else:
-            state = engine.timeout(state, host, 1)
+            state = rules.timeout(state, host, 1)
     return state
 
 
