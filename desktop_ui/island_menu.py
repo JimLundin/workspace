@@ -146,6 +146,8 @@ class Controls:
     dark_when_away: bool = field(default=False, kw_only=True)
     sound: Slider = Slider("", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
+    hints: frozendict[Tool, str] = field(default=frozendict(), kw_only=True)
+    """Each tool's keys on the layout, at a tool cell's trailing edge."""
 
 
 # ---- the menu's shape: `desktop.bar.CONTROLS` declares one ---------------------------------
@@ -227,8 +229,6 @@ class ControlsSpec:
 
     rows: tuple[RowSpec, ...]
     words: MenuWords
-    hints: frozendict[Tool, str]
-    """Each tool's keys, from the layout the desktop is handed, at a tool cell's trailing edge."""
 
 
 def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
@@ -252,9 +252,9 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
         case EntryId.SOUND:
             return controls.sound
         case EntryId.SWITCH_WINDOWS:
-            return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER, menu.hints)
+            return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER, controls.hints)
         case EntryId.COPY_TRANSCRIPT:
-            return tool_item(spec.label, spec.icon, Tool.COPY_TRANSCRIPT, menu.hints)
+            return tool_item(spec.label, spec.icon, Tool.COPY_TRANSCRIPT, controls.hints)
         case EntryId.KEYMAP:
             return Item(spec.label, spec.icon, Command.KEYMAP)
         case EntryId.NOTIFICATIONS:

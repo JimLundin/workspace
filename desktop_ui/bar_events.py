@@ -76,6 +76,8 @@ class BarSpec:
     glass: Glass
     palette: Palette
     washes: Washes
+    hints: frozendict[Tool, str]
+    """Each tool's keys on the layout the desktop is handed, which the menu shows beside its tools."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +126,7 @@ def menu(model: BarModel) -> Menu:
                 dark_when_away=seen.dark_when_away is True,
                 sound=sound,
                 tray=seen.tray_tips,
+                hints=model.spec.hints,
             ),
             model.spec.controls,
         )

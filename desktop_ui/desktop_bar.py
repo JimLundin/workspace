@@ -23,6 +23,7 @@ lazy from PySide6 import QtCore, QtGui
 from cell import Cell
 from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
+lazy import protocol
 lazy import winapi.ambient
 lazy from contracts.recording_state import RecordingAction
 lazy from desktop_ui.ambient import Ambient
@@ -63,7 +64,7 @@ lazy from desktop_ui.bar_events import (
 lazy from desktop_ui.bar_status import StatusObserver
 lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
-lazy from desktop_ui.desktop_pager import pager
+lazy from desktop_ui.desktop_pager import PagerSpec, pager
 lazy from desktop_ui.desktop_settings import DesktopSettings
 lazy from desktop_ui.island_layout import Content, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import Menu
@@ -77,7 +78,7 @@ lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.shell_controls import TaskbarControl
 lazy from desktop_ui.shell_items import Application, Item, Pinned, PinnedApp
 lazy from desktop_ui.window_layout import App, Program
-lazy from protocol import Installed, Tool
+lazy from protocol import Installed, Request, Tool
 lazy from winapi import appearance, inputs, session, shell, windows
 lazy from winapi.machine_status import PowerUnavailable
 lazy from winapi.shapes import Rect
@@ -132,8 +133,11 @@ class DesktopBar:
     """The 100 ms desktop observation tick."""
     audio_timer: QtCore.QTimer
     """The microphone trace's sampling while dictating."""
-    settings: DesktopSettings
-    """The apps a pager click starts, the pager's spec and the chord letters the key hints show."""
+    apps: tuple[protocol.App, ...]
+    """The apps the chords reach, which a pager click also starts."""
+    pager: PagerSpec
+    letters: frozendict[Request, str]
+    """Each request's chord letter, which the pager and the key hints show while the chord is held."""
     _model: Cell[BarModel]
 
     @classmethod
@@ -166,7 +170,9 @@ class DesktopBar:
             window,
             tick,
             audio,
-            settings,
+            settings.apps,
+            settings.pager,
+            settings.keyboard.letters,
             Cell(BarModel(spec, seen=seen)),
         )
         try:
@@ -246,7 +252,7 @@ class DesktopBar:
         if not model.chord_held or world is None:
             self.shell.hints.show((), model.seen.preference)
             return
-        self.shell.hints.show(hints(replace(world, foreground=windows.foreground()), self.settings.keyboard.letters), model.seen.preference)
+        self.shell.hints.show(hints(replace(world, foreground=windows.foreground()), self.letters), model.seen.preference)
 
     # ---- measuring and painting ----------------------------------------------------------
 
@@ -391,7 +397,7 @@ class DesktopBar:
         # Changed pager targets must also publish section geometry when the island is still,
         # or a pager that loses its hints keeps its wider capsule.
         if pager_bar.desktops(
-            pager(arrangement.placed, arrangement.current, self.settings.pager, chord=model.chord_held), self.navigate, self.app_click
+            pager(arrangement.placed, arrangement.current, self.pager, self.letters, chord=model.chord_held), self.navigate, self.app_click
         ):
             self.window.presentation = None
         if model.chord_held:
@@ -426,7 +432,7 @@ class DesktopBar:
                 elif click is not Click.RIGHT:
                     self.handle(Deactivated())
                     # A configured app key also starts the app when it isn't running.
-                    key = next((each for each in self.settings.apps if isinstance(each.target, Installed) and each.target.exe.lower() == exe), None)
+                    key = next((each for each in self.apps if isinstance(each.target, Installed) and each.target.exe.lower() == exe), None)
                     self.navigate(AppKey(key) if key is not None else CycleApp(app))
             case _:
                 assert_never(app)

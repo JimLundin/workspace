@@ -64,7 +64,6 @@ SPEC = ControlsSpec(
         CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
     ),
     MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed"),
-    hints=frozendict({Tool.WINDOW_SWITCHER: "S"}),
 )
 
 RESTING = Controls(None, sound=Slider("Volume", 0.4, muted=False))

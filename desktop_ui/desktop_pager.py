@@ -18,7 +18,7 @@ from protocol import Request, Tool
 JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4, Tool.DESKTOP_5)
 
 
-def jump_letters(letters: Mapping[Request, str]) -> tuple[str | None, ...]:
+def _jump_letters(letters: Mapping[Request, str]) -> tuple[str | None, ...]:
     """The chord letter for each desktop in order, from each request's letter on the layout."""
     return tuple(letters.get(tool) for tool in JUMPS)
 
@@ -28,8 +28,6 @@ class PagerSpec:
     """What the pager reads: each web app's name and symbol, and the chord letter reaching each desktop."""
 
     web_apps: WebApps
-    letters: tuple[str | None, ...]
-    """The chord letter for each desktop in order; desktops past the last have none."""
     desktop: str
     """A desktop's name, before its number..."""
     current: str
@@ -79,7 +77,7 @@ def label(app: App, web_apps: WebApps) -> str:
             assert_never(app)
 
 
-def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, *, chord: bool) -> PagerView:
+def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, letters: Mapping[Request, str], *, chord: bool) -> PagerView:
     """The pager for these desktops, each with the applications placed on it.
 
     The hints show while an Apps key is held, so the letter alone completes the request.
@@ -94,6 +92,6 @@ def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, *, cho
     symbols = frozendict((app, web.glyph) for app, web in spec.web_apps.items())
     if not chord:
         return PagerView(desktops, NO_HINTS, symbols)
-    letters = spec.letters
-    jumps = tuple(letters[index] if index < len(letters) else None for index in range(len(desktops)))
+    jumping = _jump_letters(letters)
+    jumps = tuple(jumping[index] if index < len(jumping) else None for index in range(len(desktops)))
     return PagerView(desktops, Hints(jumps), symbols)

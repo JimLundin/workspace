@@ -8,13 +8,11 @@ is handed: the values the programs share (`settings`) and the desktop's own
 
 import os
 import sys
-from dataclasses import replace
 from pathlib import Path
 
 from protocol import Places, Tool, interpreter
 from settings import apps, layout, programs
 lazy from desktop import bar, look, placement, windows
-lazy from desktop_ui import desktop_pager
 lazy from desktop_ui.bar_events import BarSpec
 lazy from desktop_ui.desktop_app import run
 lazy from desktop_ui.desktop_settings import DesktopSettings, Launcher
@@ -29,13 +27,14 @@ def main() -> None:
     hints = frozendict({tool: shortcut_hint(keyboard.shortcut(tool), compact=True) for tool in Tool})
     island = BarSpec(
         island=bar.ISLAND,
-        controls=replace(bar.CONTROLS, hints=hints),
+        controls=bar.CONTROLS,
         springs=bar.SPRINGS,
         timing=bar.TIMING,
         sizes=bar.SIZES,
         glass=look.DESIGN.glass,
         palette=look.DESIGN.palette,
         washes=look.WASHES,
+        hints=hints,
     )
     run(
         DesktopSettings(
@@ -52,7 +51,7 @@ def main() -> None:
             switcher=windows.SWITCHER,
             tray=windows.TRAY_ICON,
             placement=placement.PLACEMENT,
-            pager=replace(bar.PAGER, letters=desktop_pager.jump_letters(keyboard.letters)),
+            pager=bar.PAGER,
         )
     )
 
