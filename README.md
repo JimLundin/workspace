@@ -43,7 +43,7 @@ installed Python 3.15 and needs no admin rights. It runs five processes:
 Without the two required variables, the layout and window keys still
 work, and the dictation and recording keys say what is missing.
 
-Your apps and the idle delay for dark screens live in `config.py`.
+Your apps live in `config.py`.
 
 ## The keys
 

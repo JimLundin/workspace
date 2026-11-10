@@ -22,9 +22,3 @@ APPS: Final[tuple[App, ...]] = (
     App("word", Installed("winword.exe", "winword.exe")),
     App("PowerPoint", Installed("powerpnt.exe", "powerpnt.exe")),
 )
-
-# ---- Screens ---------------------------------------------------------------------------
-# With Dark when away on, the home 4K screen goes dark after this many minutes without
-# keyboard or mouse input, and wakes at the next touch. Whole minutes from 1 to 60.
-
-DARK_WHEN_IDLE_MINUTES: Final = 2

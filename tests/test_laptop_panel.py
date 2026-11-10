@@ -25,8 +25,33 @@ class Panel:
         return Level(level)
 
 
-def owner(panel: Panel) -> LaptopPanel:
-    return LaptopPanel(panel)
+@dataclass(slots=True)
+class Memory:
+    """The kept level, as a file on disk would keep it across a restart."""
+
+    value: int | None = None
+
+    def load(self) -> int | None:
+        return self.value
+
+    def save(self, value: int) -> None:
+        self.value = value
+
+    def clear(self) -> None:
+        self.value = None
+
+
+def owner(panel: Panel, memory: Memory | None = None) -> LaptopPanel:
+    return LaptopPanel.resume(panel, memory if memory is not None else Memory())
+
+
+def test_a_restart_while_dimmed_puts_back_the_persons_level() -> None:
+    # Defect: Workspace restarted while locked finds the panel at 0, has nothing to put
+    # back, and leaves the laptop dark once the person unlocks.
+    panel, memory = Panel(current=70), Memory()
+    owner(panel, memory).darken()
+    owner(panel, memory).darken().restore()
+    assert panel.current == 70 and memory.value is None
 
 
 def test_darkening_turns_the_panel_down_to_zero_and_restoring_puts_back_the_persons_level() -> None:

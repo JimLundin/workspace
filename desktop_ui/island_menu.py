@@ -144,8 +144,7 @@ class Controls:
     recording: str | None
     overlay: bool = field(default=False, kw_only=True)
     placement_paused: bool = field(default=False, kw_only=True)
-    dark_when_away: int | None = field(default=None, kw_only=True)
-    """Dark when away's idle delay in minutes while it's on; None while it's off."""
+    dark_when_away: bool = field(default=False, kw_only=True)
     sound: Slider = Slider("", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
@@ -214,8 +213,6 @@ class MenuWords:
     on: str
     off: str
     paused: str
-    away: str
-    """Dark when away's state while on, formatted with its idle `minutes`."""
     recording: str
     """A recording's card."""
     sound: str
@@ -262,7 +259,6 @@ CONTROLS: Final = ControlsSpec(
         on="On",
         off="Off",
         paused="Paused",
-        away="External · {minutes} min idle",
         recording="Recording",
         sound="Sound",
         unread="unavailable",
@@ -298,8 +294,7 @@ def entry(spec: CellSpec, controls: Controls, words: MenuWords) -> Entry | None:
             return toggle(spec, words.paused if paused else words.on, Command.PLACEMENT, on=not paused)
         case EntryId.DARK_WHEN_AWAY:
             away = controls.dark_when_away
-            detail = words.off if away is None else words.away.format(minutes=away)
-            return toggle(spec, detail, Command.DARK_WHEN_AWAY, on=away is not None)
+            return toggle(spec, words.on if away else words.off, Command.DARK_WHEN_AWAY, on=away)
         case EntryId.RECORD:
             return None if controls.recording is not None else Item(spec.label, spec.icon, Command.RECORD)
         case EntryId.SOUND:

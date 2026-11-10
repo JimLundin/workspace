@@ -11,7 +11,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from typing import Final, assert_never
 
-from config import DARK_WHEN_IDLE_MINUTES
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job
 from desktop_ui import island_menu
@@ -121,7 +120,7 @@ def menu(model: BarModel) -> Menu:
                 recorded.title if recorded is not None else None,
                 overlay=model.overlay_enabled,
                 placement_paused=seen.arrangement.paused,
-                dark_when_away=DARK_WHEN_IDLE_MINUTES if seen.dark_when_away else None,
+                dark_when_away=seen.dark_when_away is True,
                 sound=sound,
                 tray=seen.tray_tips,
             ),

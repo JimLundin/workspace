@@ -63,7 +63,7 @@ SPEC = ControlsSpec(
         CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
         CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
     ),
-    MenuWords(on="Yes", off="No", paused="Held", away="After {minutes}", recording="Taping", sound="Level", unread="?", muted="hushed"),
+    MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed"),
 )
 
 RESTING = Controls(None, sound=Slider("Volume", 0.4, muted=False))
@@ -122,7 +122,7 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
     def states(controls: Controls) -> dict[Command, bool]:
         return {cell.entry.choice: cell.entry.on for cell in entries(controls, SPEC) if isinstance(cell.entry, Toggle)}
 
-    assert states(Controls(None, overlay=True, dark_when_away=2)) == {Command.OVERLAY: True, Command.PLACEMENT: True, Command.DARK_WHEN_AWAY: True}
+    assert states(Controls(None, overlay=True, dark_when_away=True)) == {Command.OVERLAY: True, Command.PLACEMENT: True, Command.DARK_WHEN_AWAY: True}
     assert states(Controls(None, placement_paused=True)) == {Command.OVERLAY: False, Command.PLACEMENT: False, Command.DARK_WHEN_AWAY: False}
     menu = Menu(entries(RESTING, SPEC))
     assert press(at(menu, "Keys"), Key.ENTER) == Applied(Command.OVERLAY)

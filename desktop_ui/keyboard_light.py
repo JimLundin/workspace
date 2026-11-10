@@ -1,17 +1,19 @@
 """The Charybdis's backlight goes dark with the screens while nobody is looking, and comes back with them.
 
-`desktop_ui.away_screens` decides when (the lock, or idleness) and darkens and
-restores this light at the same edges as the screens. The keyboard can't see a
-lock or idleness, and locking doesn't suspend USB, so its own sleep handling
-never fires. Workspace tells it over VIA instead: it reads the effect the person
-set, turns the matrix off without saving, and puts that effect back. Nothing is
-written to the keyboard's EEPROM, so a keyboard unplugged meanwhile comes back
-lit as it was set.
+`desktop_ui.away_screens` darkens this light when the session locks and restores
+it on unlock, with the screens. The keyboard can't see a lock, and locking
+doesn't suspend USB, so its own sleep handling never fires. Workspace tells it
+over VIA instead: it reads the effect the person set, turns the matrix off
+without saving, and puts that effect back. Nothing is written to the keyboard's
+EEPROM, so a keyboard unplugged meanwhile comes back lit as it was set. The
+effect to put back is also kept on disk, so a Workspace restarted while locked
+still restores it.
 """
 
 from dataclasses import dataclass, replace
 from typing import Protocol
 
+from desktop_ui.kept import Kept
 from keyboard import settings
 from winapi import via
 
@@ -42,20 +44,25 @@ class KeyboardLight:
     """The lights-off state while away; each change returns the owner's next state."""
 
     backlight: Backlight
+    kept: Kept
     restore_to: int | None = None
     """The effect the person set, while Workspace keeps the lights off."""
+
+    @classmethod
+    def resume(cls, backlight: Backlight, kept: Kept) -> KeyboardLight:
+        """The light as a previous Workspace may have left it: dark, with the effect to put back kept."""
+        return cls(backlight, kept, kept.load())
 
     def darken(self) -> KeyboardLight:
         if self.restore_to is not None:
             return self  # Already off: reading again would remember "off" as the person's setting.
         match self.backlight.effect():
             case via.Effect(value=0):
-                # Already off, as after Workspace restarted while away: remembering
-                # "off" would leave the keyboard dark once the person came back.
-                return self
+                return self  # The person's own setting: nothing to turn off, and nothing to put back.
             case via.Effect(value=effect):
                 match self.backlight.set_effect(0):
                     case via.Effect():
+                        self.kept.save(effect)
                         return replace(self, restore_to=effect)
                     case via.Absent():
                         return self
@@ -67,4 +74,5 @@ class KeyboardLight:
             return self
         # Absent means it was unplugged meanwhile, and it starts lit from its saved setting.
         self.backlight.set_effect(self.restore_to)
+        self.kept.clear()
         return replace(self, restore_to=None)

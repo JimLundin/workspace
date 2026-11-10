@@ -347,7 +347,6 @@ class DesktopBar:
             self.errors.put(str(error))
         while not self.errors.empty():
             self.actions.problem(self.errors.get_nowait())
-        self.shell.away.poll(recording=model.recording.capturing)
         now = time.monotonic()
         seen = model.seen
         arrangement = self._poll_shell(model)
@@ -370,7 +369,7 @@ class DesktopBar:
             preference,
             frost,
             arrangement,
-            dark_when_away=self.shell.away.setting.enabled,
+            dark_when_away=self.shell.away.enabled,
             tray_tips=tuple(entry.tip or "Tray application" for entry in self.window.tray),
             screen=Rect(area.x(), area.y(), area.x() + area.width(), area.y() + area.height()),
             scale=self.window.devicePixelRatioF(),

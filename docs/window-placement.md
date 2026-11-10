@@ -56,8 +56,8 @@ window and cross monitors. Desktop chords go straight to their desktop; nothing 
 
 `DARK_WHEN_AWAY` names the screens to darken: Home's MAIN, an OLED.
 `desktop_ui/away_screens.py` turns them off over DDC/CI (VCP D6) while the
-session is locked or after `DARK_WHEN_IDLE_MINUTES` without input. A display
-request from another program holds off the idle reason. Toggle it in the
+session is locked, and back on at unlock; nothing is polled, so walking away is
+covered by Windows locking the session after its own timeout. Toggle it in the
 controls menu.
 
 At the same moments the Charybdis's backlight goes off over VIA, and the

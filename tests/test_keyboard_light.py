@@ -25,8 +25,24 @@ class Keyboard:
         return via.Effect(effect)
 
 
-def light(keyboard: Keyboard) -> KeyboardLight:
-    return KeyboardLight(keyboard)
+@dataclass(slots=True)
+class Memory:
+    """The kept effect, as a file on disk would keep it across a restart."""
+
+    value: int | None = None
+
+    def load(self) -> int | None:
+        return self.value
+
+    def save(self, value: int) -> None:
+        self.value = value
+
+    def clear(self) -> None:
+        self.value = None
+
+
+def light(keyboard: Keyboard, memory: Memory | None = None) -> KeyboardLight:
+    return KeyboardLight.resume(keyboard, memory if memory is not None else Memory())
 
 
 def test_darkening_turns_the_lights_off_and_restoring_puts_back_the_effect_the_person_set() -> None:
@@ -71,11 +87,18 @@ def test_the_effect_is_read_from_the_answer_to_the_same_request() -> None:
     assert via.effect_reply(sent, bytes((0x12, 0, 0, 9)).ljust(32, b"\0")) == via.Absent()
 
 
-def test_a_restart_while_dark_never_remembers_off_as_the_persons_effect() -> None:
-    # Defect: Workspace restarted while away reads the dark keyboard's 0, saves it,
-    # and "restores" 0, leaving the backlight off once the person comes back.
-    keyboard = Keyboard(current=0)
-    owner = light(keyboard).darken()
-    assert owner.restore_to is None and keyboard.sets == []
-    owner.restore()
-    assert keyboard.sets == []
+def test_a_restart_while_dark_puts_back_the_effect_the_person_set() -> None:
+    # Defect: Workspace restarted while locked finds the keyboard already off, has nothing
+    # to put back, and leaves the backlight dark once the person unlocks.
+    keyboard, memory = Keyboard(current=7), Memory()
+    light(keyboard, memory).darken()
+    restarted = light(keyboard, memory)
+    restarted.darken().restore()
+    assert keyboard.current == 7 and memory.value is None
+
+
+def test_a_keyboard_the_person_turned_off_stays_off() -> None:
+    # Defect: "off" is remembered as something to put back, or a later restore writes an effect they never chose.
+    keyboard, memory = Keyboard(current=0), Memory()
+    light(keyboard, memory).darken().restore()
+    assert keyboard.sets == [] and memory.value is None
