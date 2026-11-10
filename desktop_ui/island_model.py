@@ -200,6 +200,10 @@ class Words:
     """The expanded status capsule's name."""
     charger: str
     """Said of a connected charger."""
+    cpu: str
+    memory: str
+    unavailable: str
+    """Said of a resource not yet read."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +219,8 @@ class StatusSpec:
     """The battery percentage at or below which, on its own power, the reading warns."""
     unread: str
     """A reading not yet read, rather than a healthy-looking 0%."""
+    mains: str
+    """The battery reading on a machine without one."""
     widest_percent: str
     widest_clock: str
     """The widest reading of each kind, which its room keeps, so a changing value never shifts the capsule."""
@@ -252,6 +258,7 @@ ISLAND: Final = IslandSpec(
         Symbols(keyboard="keyboard", clock="clock", charger="charger", battery="battery", cpu="cpu", memory="memory"),
         low_battery=20,
         unread="—",
+        mains="AC",
         widest_percent="100%",
         widest_clock="00:00",
     ),
@@ -282,6 +289,9 @@ ISLAND: Final = IslandSpec(
         open_controls="Open Workspace controls",
         close_controls="Workspace controls · Escape closes",
         charger="Charger connected",
+        cpu="CPU",
+        memory="memory",
+        unavailable="unavailable",
     ),
 )
 """The island bar's composition."""
@@ -307,6 +317,27 @@ def zone(key: Key, spec: IslandSpec) -> Zone:
             return Zone.LEAD if any(ACTIVITY_KEYS[each] is key for each in spec.activities.lead) else Zone.TRAIL
         case _:
             assert_never(key)
+
+
+def battery_text(ambient: Ambient, status: StatusSpec) -> str:
+    match ambient.power:
+        case Battery(percent=percent):
+            return f"{percent}%"
+        case PowerUnavailable.NO_BATTERY:
+            return status.mains
+        case PowerUnavailable.UNKNOWN:
+            return status.unread
+        case _:
+            assert_never(ambient.power)
+
+
+def resources(system: SystemStatus, words: Words) -> str:
+    """The processor and memory readings, as words."""
+
+    def said(name: str, percent: int | None) -> str:
+        return f"{name} {words.unavailable}" if percent is None else f"{name} {percent}%"
+
+    return said(words.cpu, system.cpu) + ", " + said(words.memory, system.memory)
 
 
 def usage(percent: int | None, status: StatusSpec) -> Text:
@@ -336,9 +367,9 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
         case Reading.BATTERY:
             match ambient.power:
                 case Battery(percent=percent, powered=False) if percent <= status.low_battery:
-                    return (Text(ambient.battery_text, meaning.Tone.LOW, reserve=status.widest_percent),)
+                    return (Text(battery_text(ambient, status), meaning.Tone.LOW, reserve=status.widest_percent),)
                 case _:
-                    return (Text(ambient.battery_text, reserve=status.widest_percent),)
+                    return (Text(battery_text(ambient, status), reserve=status.widest_percent),)
         case Reading.CPU:
             return (Glyph(symbols.cpu), usage(system.cpu, status))
         case Reading.MEMORY:
@@ -351,13 +382,14 @@ def devices(system: SystemStatus, status: StatusSpec) -> str:
     return status.speakers[system.speakers].description + ". " + status.wifi[system.wifi].description
 
 
-def describe(ambient: Ambient, words: Words) -> str:
+def describe(ambient: Ambient, spec: IslandSpec) -> str:
     match ambient.power:
         case Battery(powered=True):
-            charger = words.charger
+            charger = spec.words.charger
         case _:
             charger = ""
-    return ". ".join(value for value in (ambient.text, charger) if value)
+    readings = "  ·  ".join(value for value in (ambient.clock, battery_text(ambient, spec.status)) if value)
+    return ". ".join(value for value in (readings, charger) if value)
 
 
 def recording_slot(recorded: Capture, words: Words, *, hovered: bool) -> Slot:
@@ -396,7 +428,7 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
             Key.STATUS,
             Zone.RIGHT,
             readings,
-            ". ".join((observed.system.resource_description, devices(observed.system, spec.status), describe(observed.ambient, words)))
+            ". ".join((resources(observed.system, words), devices(observed.system, spec.status), describe(observed.ambient, spec)))
             + f" · {words.open_controls}",
             Action.OPEN_MENU,
         ),

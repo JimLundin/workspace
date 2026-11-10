@@ -26,6 +26,7 @@ from desktop_ui.island_menu import (
     Letter,
     Live,
     Menu,
+    MenuWords,
     Outcome,
     Slider,
     Toggle,
@@ -61,7 +62,8 @@ SPEC = ControlsSpec(
         TrayRow(TRAY_TRACKS),
         CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
         CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
-    )
+    ),
+    MenuWords(on="Yes", off="No", paused="Held", away="After {minutes}", recording="Taping", sound="Level", unread="?", muted="hushed"),
 )
 
 RESTING = Controls(None, sound=Slider("Volume", 0.4, muted=False))

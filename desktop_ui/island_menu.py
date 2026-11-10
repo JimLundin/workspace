@@ -146,7 +146,7 @@ class Controls:
     placement_paused: bool = field(default=False, kw_only=True)
     dark_when_away: int | None = field(default=None, kw_only=True)
     """Dark when away's idle delay in minutes while it's on; None while it's off."""
-    sound: Slider = Slider("Sound", None, muted=False)
+    sound: Slider = Slider("", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
 
@@ -207,11 +207,30 @@ class TrayRow:
 type RowSpec = CellsRow | ActivitiesRow | TrayRow
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MenuWords:
+    """What the menu's entries say beyond their labels."""
+
+    on: str
+    off: str
+    paused: str
+    away: str
+    """Dark when away's state while on, formatted with its idle `minutes`."""
+    recording: str
+    """A recording's card."""
+    sound: str
+    """The sound slider's name."""
+    unread: str
+    """The speaker level before Windows reports one."""
+    muted: str
+
+
 @dataclass(frozen=True, slots=True)
 class ControlsSpec:
-    """The menu's rows, top to bottom."""
+    """The menu's rows, top to bottom, and its wording."""
 
     rows: tuple[RowSpec, ...]
+    words: MenuWords
 
 
 CONTROLS: Final = ControlsSpec(
@@ -238,7 +257,17 @@ CONTROLS: Final = ControlsSpec(
         TrayRow(4),
         CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
         CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
-    )
+    ),
+    MenuWords(
+        on="On",
+        off="Off",
+        paused="Paused",
+        away="External · {minutes} min idle",
+        recording="Recording",
+        sound="Sound",
+        unread="unavailable",
+        muted="muted",
+    ),
 )
 """The controls menu (press the clock or battery), top to bottom.
 
@@ -259,16 +288,18 @@ def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
     return Toggle(spec.label, detail, spec.icon, choice, on=on)
 
 
-def entry(spec: CellSpec, controls: Controls) -> Entry | None:
+def entry(spec: CellSpec, controls: Controls, words: MenuWords) -> Entry | None:
     """The entry `spec` places, as it reads now; None while it doesn't apply."""
     match spec.entry:
         case EntryId.OVERLAY:
-            return toggle(spec, "On" if controls.overlay else "Off", Command.OVERLAY, on=controls.overlay)
+            return toggle(spec, words.on if controls.overlay else words.off, Command.OVERLAY, on=controls.overlay)
         case EntryId.PLACEMENT:
-            return toggle(spec, "Paused" if controls.placement_paused else "On", Command.PLACEMENT, on=not controls.placement_paused)
+            paused = controls.placement_paused
+            return toggle(spec, words.paused if paused else words.on, Command.PLACEMENT, on=not paused)
         case EntryId.DARK_WHEN_AWAY:
             away = controls.dark_when_away
-            return toggle(spec, "Off" if away is None else f"External · {away} min idle", Command.DARK_WHEN_AWAY, on=away is not None)
+            detail = words.off if away is None else words.away.format(minutes=away)
+            return toggle(spec, detail, Command.DARK_WHEN_AWAY, on=away is not None)
         case EntryId.RECORD:
             return None if controls.recording is not None else Item(spec.label, spec.icon, Command.RECORD)
         case EntryId.SOUND:
@@ -287,40 +318,41 @@ def entry(spec: CellSpec, controls: Controls) -> Entry | None:
             assert_never(spec.entry)
 
 
-def activities(controls: Controls) -> tuple[Live, ...]:
-    return (Live("Recording", controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()
+def activities(controls: Controls, words: MenuWords) -> tuple[Live, ...]:
+    return (Live(words.recording, controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()
 
 
-def present_cells(controls: Controls, specs: tuple[CellSpec, ...]) -> tuple[tuple[CellSpec, Entry], ...]:
+def present_cells(controls: Controls, specs: tuple[CellSpec, ...], words: MenuWords) -> tuple[tuple[CellSpec, Entry], ...]:
     """A row's cells that show now, in order: a cell whose entry is absent leaves no gap."""
-    return tuple((each, present) for each in specs if (present := entry(each, controls)))
+    return tuple((each, present) for each in specs if (present := entry(each, controls, words)))
 
 
-def height(row: RowSpec, controls: Controls) -> int:
+def height(row: RowSpec, controls: Controls, words: MenuWords) -> int:
     """The tracks `row` takes now: an empty row takes none."""
     match row:
         case ActivitiesRow(tracks=tracks):
-            return tracks * len(activities(controls))
+            return tracks * len(activities(controls, words))
         case TrayRow(tracks=tracks):
             return tracks * ((len(controls.tray) + COLUMNS - 1) // COLUMNS)
         case CellsRow(tracks=tracks, cells=specs):
-            return tracks if present_cells(controls, specs) else 0
+            return tracks if present_cells(controls, specs, words) else 0
         case _:
             assert_never(row)
 
 
-def row_cells(row: RowSpec, controls: Controls, top: int) -> tuple[Cell, ...]:
+def row_cells(row: RowSpec, controls: Controls, top: int, words: MenuWords) -> tuple[Cell, ...]:
     """`row`'s cells from `top`, each following the one before it."""
     match row:
         case ActivitiesRow(tracks=tracks):
-            return tuple(Cell(activity, Face.CARD, 0, COLUMNS, top + tracks * index, tracks) for index, activity in enumerate(activities(controls)))
+            cards = enumerate(activities(controls, words))
+            return tuple(Cell(activity, Face.CARD, 0, COLUMNS, top + tracks * index, tracks) for index, activity in cards)
         case TrayRow(tracks=tracks):
             return tuple(
                 Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
                 for slot, name in enumerate(controls.tray)
             )
         case CellsRow(tracks=tracks, cells=specs):
-            shown = present_cells(controls, specs)
+            shown = present_cells(controls, specs, words)
             columns = accumulate((each.span for each, _ in shown), initial=0)
             return tuple(
                 Cell(present, each.face, column, each.span, top, tracks, each.caption)
@@ -333,8 +365,8 @@ def row_cells(row: RowSpec, controls: Controls, top: int) -> tuple[Cell, ...]:
 def entries(controls: Controls, spec: ControlsSpec) -> tuple[Cell, ...]:
     """The grid for what's happening now, flowed from the spec's rows: each row
     starts below the one before it, so no two cells overlap. Tracks include the gutters."""
-    tops = accumulate((height(row, controls) for row in spec.rows), initial=0)
-    return tuple(chain.from_iterable(row_cells(row, controls, top) for row, top in zip(spec.rows, tops, strict=False)))
+    tops = accumulate((height(row, controls, spec.words) for row in spec.rows), initial=0)
+    return tuple(chain.from_iterable(row_cells(row, controls, top, spec.words) for row, top in zip(spec.rows, tops, strict=False)))
 
 
 @dataclass(frozen=True, slots=True)

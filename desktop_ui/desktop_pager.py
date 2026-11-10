@@ -26,9 +26,15 @@ class PagerSpec:
     web_apps: WebApps
     letters: tuple[str | None, ...]
     """The chord letter for each desktop in order; desktops past the last have none."""
+    desktop: str
+    """A desktop's name, before its number..."""
+    current: str
+    """...the current one's mark..."""
+    empty: str
+    """...and what an empty desktop holds."""
 
 
-PAGER: Final = PagerSpec(WEB_APPS, tuple(CHORDS.get(tool) for tool in JUMPS))
+PAGER: Final = PagerSpec(WEB_APPS, tuple(CHORDS.get(tool) for tool in JUMPS), desktop="Desktop", current="current", empty="No placed apps")
 """Workspace's own pager; the bar passes it in, tests pass their own."""
 
 
@@ -77,9 +83,9 @@ def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, *, cho
     """
 
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:
-        listed = ", ".join(label(app, spec.web_apps) for app in apps) or "No placed apps"
-        here = " (current)" if index == current else ""
-        return PagerDesktop(str(index + 1), f"Desktop {index + 1}{here} · {listed}", current=index == current, apps=tuple(apps))
+        listed = ", ".join(label(app, spec.web_apps) for app in apps) or spec.empty
+        here = f" ({spec.current})" if index == current else ""
+        return PagerDesktop(str(index + 1), f"{spec.desktop} {index + 1}{here} · {listed}", current=index == current, apps=tuple(apps))
 
     desktops = tuple(desktop(index, apps) for index, apps in enumerate(placed))
     symbols = frozendict((app, web.glyph) for app, web in spec.web_apps.items())

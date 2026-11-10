@@ -5,7 +5,7 @@ from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import CODE, TERMINAL
 from tests.test_shell_items import WEB_APPS
 
-SPEC = PagerSpec(WEB_APPS, ("Q", "W", "E"))
+SPEC = PagerSpec(WEB_APPS, ("Q", "W", "E"), desktop="Space", current="here", empty="Nothing")
 """The test's own pager: three desktops reachable by a chord letter."""
 
 

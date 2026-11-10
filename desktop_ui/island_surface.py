@@ -27,7 +27,7 @@ from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.island_layout import Box, Cells, Content, Framed, Sizes, Spot, Tile, arrange, on_pixels, tiles
-from desktop_ui.island_menu import Face, Item, Live, Menu, Slider, Toggle, TrayIcon
+from desktop_ui.island_menu import Face, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
 from desktop_ui.qt_runtime import prepare
@@ -37,6 +37,7 @@ from desktop_ui.view_publication import log
 from winapi import windows
 from winapi.appearance import Frost
 from winapi.composition import DesktopComposition, GlassScene, borderless
+from winapi.machine_status import Speakers
 from winapi.shapes import Pane, Rect, Veil
 from winapi.tray_host import Click, Entry, Located
 
@@ -179,10 +180,10 @@ def track(bounds: QtCore.QRectF, cells: Cells) -> QtCore.QRectF:
     return QtCore.QRectF(cells.text_x, bounds.height() - cells.track_bottom, bounds.width() - cells.text_x - cells.track_right, cells.track)
 
 
-def sound_reading(slider: Slider) -> str:
+def sound_reading(slider: Slider, words: MenuWords) -> str:
     if slider.level is None:
-        return "unavailable"
-    return f"{round(slider.level * 100)}%" + (", muted" if slider.muted else "")
+        return words.unread
+    return f"{round(slider.level * 100)}%" + (f", {words.muted}" if slider.muted else "")
 
 
 class MenuCell(QtWidgets.QAbstractButton):
@@ -201,13 +202,13 @@ class MenuCell(QtWidgets.QAbstractButton):
     def describe(self) -> None:
         match self.tile.cell.entry:
             case Live(label=label, detail=detail):
-                name = " · ".join(part for part in (label, detail, "Stop recording") if part)
+                name = " · ".join(part for part in (label, detail, self.capsule.window_.spec.island.words.stop_recording) if part)
             case Item(label=label, key=key):
                 name = f"{label} · {key}" if key else label
             case Toggle(label=label, detail=detail):
                 name = f"{label}: {detail}"
             case Slider(label=label) as slider:
-                name = f"{label}: {sound_reading(slider)}"
+                name = f"{label}: {sound_reading(slider, self.capsule.window_.spec.controls.words)}"
             case TrayIcon(label=label):
                 name = label
             case _:
@@ -368,7 +369,8 @@ class MenuCell(QtWidgets.QAbstractButton):
         heading = QtCore.QRectF(cells.lead, cells.slider_label_top, bounds.width() - 2 * cells.lead, cells.slider_label)
         painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, slider.label)
         bar = track(bounds, cells)
-        symbol = "speaker-muted" if slider.muted else "speaker-on"
+        speakers = self.capsule.window_.spec.island.status.speakers
+        symbol = speakers[Speakers.MUTED if slider.muted else Speakers.AUDIBLE].icon
         self.paint_icon(painter, symbol, lettering.quiet, QtCore.QPointF(cells.lead, bar.center().y() - self.sizes.capsule.icon / 2))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color(Shade(lettering.ink.color, self.capsule.window_.washes.track)))

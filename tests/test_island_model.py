@@ -64,6 +64,9 @@ WORDS = Words(
     open_controls="Open",
     close_controls="Close",
     charger="Plugged in",
+    cpu="Chip",
+    memory="Ram",
+    unavailable="unread",
 )
 SPEC = IslandSpec(
     StatusSpec(
@@ -73,6 +76,7 @@ SPEC = IslandSpec(
         SYMBOLS,
         low_battery=20,
         unread="?",
+        mains="Mains",
         widest_percent="100%",
         widest_clock="00:00",
     ),

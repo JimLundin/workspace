@@ -5,6 +5,8 @@ import unittest
 from win32more.Windows.Win32.System.Power import SYSTEM_POWER_STATUS
 
 from desktop_ui.ambient import Ambient
+from desktop_ui.island_model import battery_text, describe
+from tests import test_island_model
 from winapi import ambient, system_status
 from winapi.machine_status import Battery, CpuTimes, PowerUnavailable, Wifi, cpu_load
 
@@ -13,8 +15,9 @@ def test_battery_percentage_remains_visible_when_plugged_in_or_full() -> None:
     # Defect: external power or a full battery hides the requested percentage.
     for percent in (0, 73, 95, 96, 100):
         for powered, charging in ((True, True), (True, False), (False, False)):
-            ambient = Ambient("09:41", Battery(percent, powered=powered, charging=charging))
-            assert str(percent) in ambient.battery_text and ambient.battery_text in ambient.text
+            observed = Ambient("09:41", Battery(percent, powered=powered, charging=charging))
+            shown = battery_text(observed, test_island_model.SPEC.status)
+            assert str(percent) in shown and shown in describe(observed, test_island_model.SPEC)
 
 
 def test_invalid_battery_is_not_presented_as_a_real_observation() -> None:
