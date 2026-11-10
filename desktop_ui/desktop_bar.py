@@ -70,7 +70,7 @@ lazy from desktop_ui.island_menu import CONTROLS, Menu
 lazy from desktop_ui.island_model import ISLAND, CapsuleView, Key, Marker, Observed, island, order
 lazy from desktop_ui.island_motion import SPRINGS, TIMING, Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
-lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
+lazy from desktop_ui.key_hint_overlay import BADGES, KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
 lazy from desktop_ui.navigation import AppKey, CycleApp, Order, ShowWindow
 lazy from desktop_ui.qt_ui import EventLoop, application
@@ -484,7 +484,7 @@ def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl) -> _Shell:
     except OSError as error:
         errors.put(f"Screens can't go dark when locked: {error}")
     worker = threading.Thread(target=_start_taskbar, args=(taskbar, errors), name="taskbar recovery", daemon=True)
-    built = _Shell(status, controls, away, TrayHost.start(), ApplicationObserver.start(errors.put), KeyHintOverlay(), worker)
+    built = _Shell(status, controls, away, TrayHost.start(), ApplicationObserver.start(errors.put), KeyHintOverlay(BADGES), worker)
     worker.start()
     return built
 
