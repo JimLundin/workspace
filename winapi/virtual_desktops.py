@@ -1,4 +1,4 @@
-"""Windows' virtual desktops, the ones Task View shows: list, create and switch them,
+"""Windows' virtual desktops, the ones Task View shows: list, create, remove and switch them,
 and read or move any program's window between them.
 
 Reading a window's desktop uses the documented IVirtualDesktopManager. Moving
@@ -36,7 +36,7 @@ _ARRAY_COUNT, _ARRAY_AT = 3, 4
 _WINDOW_DESKTOP_ID = 4
 _VIEW_FOR_WINDOW = 6
 _DESKTOP_ID = 4
-_MOVE_VIEW, _CURRENT, _DESKTOPS, _SWITCH, _CREATE, _FIND = 4, 6, 7, 9, 11, 14
+_MOVE_VIEW, _CURRENT, _DESKTOPS, _SWITCH, _CREATE, _REMOVE, _FIND = 4, 6, 7, 9, 11, 13, 14
 
 
 def _check(result: int, action: str) -> None:
@@ -144,6 +144,20 @@ class VirtualDesktops:
             return _desktop_id(desktop)
         finally:
             _release(desktop)
+
+    def remove(self, desktop: uuid.UUID, fallback: uuid.UUID) -> None:
+        """Remove `desktop`; its windows go to `fallback`, and so does the screen when it was showing."""
+        target, into = ctypes.c_void_p(), ctypes.c_void_p()
+        try:
+            self._find(desktop, target)
+            self._find(fallback, into)
+            _check(
+                com_method("A virtual desktop interface", self.internal, _REMOVE, ctypes.c_void_p, ctypes.c_void_p)(self.internal, target, into),
+                "remove a desktop",
+            )
+        finally:
+            _release(into)
+            _release(target)
 
     def window_desktop(self, hwnd: int) -> uuid.UUID | None:
         """The desktop a top-level window is on; None for windows on none, such as the shell's hidden hosts."""

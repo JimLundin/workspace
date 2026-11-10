@@ -20,9 +20,8 @@ from desktop_ui.navigation import (
 )
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import (
-    FULL,
-    NOWHERE,
     Group,
+    Layout,
     Position,
     Role,
     Screens,
@@ -33,7 +32,7 @@ from desktop_ui.window_layout import (
 )
 from protocol import App, Installed, PinnedWeb
 from tests import test_window_layout
-from tests.test_window_layout import ABOVE, CODE, EDGE, FOUR_K, LAPTOP, LEFT_HALF, LEFT_TWO_THIRDS, RIGHT_HALF, RIGHT_THIRD, SIDE, TERMINAL
+from tests.test_window_layout import ABOVE, CODE, EDGE, FOUR_K, FULL, LAPTOP, LEFT_HALF, LEFT_TWO_THIRDS, RIGHT_HALF, RIGHT_THIRD, SIDE, TERMINAL
 from winapi.screen import Monitor
 
 # The test's own arrangement: at home, terminals two thirds and Code a third across
@@ -43,24 +42,30 @@ SETUPS = Setups(
     externals=test_window_layout.SETUPS.externals,
     layouts=frozendict(
         {
-            Setup.LAPTOP_ONLY: frozendict(),
-            Setup.HOME: frozendict(
-                {
-                    TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
-                    CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
-                    EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
-                    PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
-                }
+            Setup.LAPTOP_ONLY: Layout(frozendict(), others=Position(0, Role.LAPTOP, FULL)),
+            Setup.HOME: Layout(
+                frozendict(
+                    {
+                        TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
+                        CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
+                        PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
+                        EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
+                        PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
+                    }
+                ),
+                others=Position(2, Role.LAPTOP, FULL),
             ),
-            Setup.WORK: frozendict(
-                {
-                    CODE: (Position(1, Role.SIDE, FULL),),
-                    TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
-                    EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-                }
+            Setup.WORK: Layout(
+                frozendict(
+                    {
+                        CODE: (Position(1, Role.SIDE, FULL),),
+                        TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
+                        EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
+                        PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                        PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
+                    }
+                ),
+                others=Position(2, Role.LAPTOP, FULL),
             ),
         }
     ),
@@ -82,8 +87,8 @@ TERMINAL_KEY = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
 
 
 def world(apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1) -> World:
-    placement = place(WORK if work else HOME, apps, NOWHERE)
-    # Desktop 1 is the canvas's; the apps start on the second.
+    placement = place(WORK if work else HOME, apps)
+    # The test's setups leave the first desktop empty; the apps start on the second.
     return World(
         4,
         1,

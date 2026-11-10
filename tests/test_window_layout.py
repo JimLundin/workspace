@@ -1,4 +1,4 @@
-"""Monitor setups, declared positions, splitting and overflow desktops.
+"""Monitor setups, declared positions, splitting and the place for others.
 
 The setups here are the test's own, so each test checks how windows are placed
 from whatever setups it is given, never Workspace's real layouts.
@@ -8,9 +8,9 @@ from fractions import Fraction
 
 from desktop_ui.shell_items import EMPTY_SHELF, PinnedApp, shelf
 from desktop_ui.window_layout import (
-    FULL,
     NOWHERE,
     Group,
+    Layout,
     Position,
     Program,
     Region,
@@ -36,6 +36,7 @@ LEFT_HALF = Region(Fraction(0), Fraction(0), Fraction(1, 2), Fraction(1))
 RIGHT_HALF = Region(Fraction(1, 2), Fraction(0), Fraction(1, 2), Fraction(1))
 LEFT_TWO_THIRDS = Region(Fraction(0), Fraction(0), Fraction(2, 3), Fraction(1))
 RIGHT_THIRD = Region(Fraction(2, 3), Fraction(0), Fraction(1, 3), Fraction(1))
+FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
 """The tests' own programs and regions to write setups with."""
 PYTHON, NOTEPAD, PAINT = Program("python.exe"), Program("notepad.exe"), Program("mspaint.exe")
 
@@ -49,25 +50,31 @@ SETUPS = Setups(
     ),
     layouts=frozendict(
         {
-            # Two shell places side by side on desktop 1, the editor alone on desktop 2.
-            Setup.LAPTOP_ONLY: frozendict(
-                {SHELL: (Position(1, Role.LAPTOP, LEFT_HALF), Position(1, Role.LAPTOP, RIGHT_HALF)), EDITOR: (Position(2, Role.LAPTOP, FULL),)}
+            # Two shell places side by side on desktop 0, the editor alone on desktop 1, others on desktop 2.
+            Setup.LAPTOP_ONLY: Layout(
+                frozendict(
+                    {SHELL: (Position(0, Role.LAPTOP, LEFT_HALF), Position(0, Role.LAPTOP, RIGHT_HALF)), EDITOR: (Position(1, Role.LAPTOP, FULL),)}
+                ),
+                others=Position(2, Role.LAPTOP, FULL),
             ),
-            Setup.HOME: frozendict({SHELL: (Position(1, Role.MAIN, FULL),)}),
-            Setup.WORK: frozendict(
-                {
-                    EDITOR: (Position(1, Role.SIDE, FULL),),
-                    SHELL: (Position(1, Role.ABOVE, LEFT_HALF),),
-                    BROWSER: (Position(1, Role.ABOVE, RIGHT_HALF),),
-                    CHAT: (Position(1, Role.LAPTOP, FULL),),
-                }
+            Setup.HOME: Layout(frozendict({SHELL: (Position(0, Role.MAIN, FULL),)}), others=Position(0, Role.LAPTOP, FULL)),
+            Setup.WORK: Layout(
+                frozendict(
+                    {
+                        EDITOR: (Position(0, Role.SIDE, FULL),),
+                        SHELL: (Position(0, Role.ABOVE, LEFT_HALF),),
+                        BROWSER: (Position(0, Role.ABOVE, RIGHT_HALF),),
+                        CHAT: (Position(0, Role.LAPTOP, FULL),),
+                    }
+                ),
+                others=Position(1, Role.LAPTOP, FULL),
             ),
         }
     ),
     dark_when_away=frozendict({Setup.HOME: frozenset({Role.MAIN})}),
 )
-OVERFLOW = 3
-"""The first desktop after the laptop setup's declared ones."""
+OTHERS = 2
+"""The laptop setup's desktop for undeclared apps."""
 
 LAPTOP = Monitor(Rect(0, 0, 1920, 1200), Rect(0, 0, 1920, 1200), primary=True, internal=True)
 FOUR_K = Monitor(Rect(1920, -269, 5760, 1891), Rect(1920, -269, 5760, 1891), primary=False, internal=False)
@@ -114,44 +121,38 @@ def test_windows_beyond_an_apps_places_share_its_last_place_and_fewer_leave_plac
     # window is stretched over places meant for others.
     alone = screens((LAPTOP,), SETUPS)
     assert alone is not None
-    assert targets(place(alone, (Group(SHELL, (3, 6, 7, 8)),), NOWHERE)) == {
-        3: (1, Rect(0, 0, 960, 1200)),
+    assert targets(place(alone, (Group(SHELL, (3, 6, 7, 8)),))) == {
+        3: (0, Rect(0, 0, 960, 1200)),
         # The half-width laptop place is portrait, so the three stack.
-        6: (1, Rect(960, 0, 1920, 400)),
-        7: (1, Rect(960, 400, 1920, 800)),
-        8: (1, Rect(960, 800, 1920, 1200)),
+        6: (0, Rect(960, 0, 1920, 400)),
+        7: (0, Rect(960, 400, 1920, 800)),
+        8: (0, Rect(960, 800, 1920, 1200)),
     }
-    assert targets(place(alone, (Group(SHELL, (3,)),), NOWHERE)) == {3: (1, Rect(0, 0, 960, 1200))}
+    assert targets(place(alone, (Group(SHELL, (3,)),))) == {3: (0, Rect(0, 0, 960, 1200))}
 
 
-def test_undeclared_apps_keep_their_own_desktops_while_others_come_and_go() -> None:
-    # Defects: a surviving app hops down when an earlier one closes, a newcomer
-    # doesn't reuse the freed desktop, or a desktop index left from another
-    # setup's overflow overrides a declared desktop.
+def test_undeclared_apps_share_the_place_for_others_and_add_no_desktops() -> None:
+    # Defects: an undeclared app gets a desktop of its own beyond the layout's,
+    # two undeclared apps overlap in the shared place, or a declared app's
+    # window is counted among the others.
     alone = screens((LAPTOP,), SETUPS)
     assert alone is not None
-    first = place(alone, (Group(PYTHON, (1, 2)), Group(NOTEPAD, (3,))), NOWHERE)
-    assert targets(first) == {
-        1: (OVERFLOW, Rect(0, 0, 960, 1200)),
-        2: (OVERFLOW, Rect(960, 0, 1920, 1200)),
-        3: (OVERFLOW + 1, Rect(0, 0, 1920, 1200)),
+    placed = place(alone, (Group(PYTHON, (1, 2)), Group(EDITOR, (5,)), Group(NOTEPAD, (3,))))
+    assert targets(placed) == {
+        5: (1, Rect(0, 0, 1920, 1200)),
+        1: (OTHERS, Rect(0, 0, 640, 1200)),
+        2: (OTHERS, Rect(640, 0, 1280, 1200)),
+        3: (OTHERS, Rect(1280, 0, 1920, 1200)),
     }
-    second = place(alone, (Group(PAINT, (4,)), Group(NOTEPAD, (3,))), first)
-    assert targets(second) == {4: (OVERFLOW, Rect(0, 0, 1920, 1200)), 3: (OVERFLOW + 1, Rect(0, 0, 1920, 1200))}
-    third = place(alone, (Group(PYTHON, (1, 2)), Group(PAINT, (4,))), first)
-    assert targets(third) == {
-        1: (OVERFLOW, Rect(0, 0, 960, 1200)),
-        2: (OVERFLOW, Rect(960, 0, 1920, 1200)),
-        4: (OVERFLOW + 1, Rect(0, 0, 1920, 1200)),
-    }
-    from_home = frozendict({3: Target(OVERFLOW - 1, Rect(0, 0, 1920, 1200))})
-    assert targets(place(alone, (Group(NOTEPAD, (3,)),), from_home)) == {3: (OVERFLOW, Rect(0, 0, 1920, 1200))}
+    assert alone.layout.desktops == OTHERS + 1
 
 
 def test_windows_stack_in_a_portrait_region() -> None:
     # Defect: windows sharing a tall region are squeezed side by side.
-    portrait = Screens(Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: Rect(0, 0, 1200, 1920)}), frozendict())
-    assert targets(place(portrait, (Group(PYTHON, (1, 2, 3)),), NOWHERE)) == {
+    portrait = Screens(
+        Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: Rect(0, 0, 1200, 1920)}), Layout(frozendict(), others=Position(0, Role.LAPTOP, FULL))
+    )
+    assert targets(place(portrait, (Group(PYTHON, (1, 2, 3)),))) == {
         1: (0, Rect(0, 0, 1200, 640)),
         2: (0, Rect(0, 640, 1200, 1280)),
         3: (0, Rect(0, 1280, 1200, 1920)),
@@ -188,13 +189,13 @@ def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() 
     work = screens((LAPTOP, ABOVE, SIDE), SETUPS)
     assert work is not None
     apps = (Group(BROWSER, (5,)), Group(EDITOR, (4,)), Group(SHELL, (3,)), Group(CHAT, (1,)))
-    placement = place(work, apps, NOWHERE)
+    placement = place(work, apps)
     windows = frozendict((group.app, group.windows) for group in apps)
     # SIDE's editor is leftmost, then ABOVE's shell, then the laptop's chat, then ABOVE's browser.
-    assert reading_order(work, windows, placement, 1) == (EDITOR, SHELL, CHAT, BROWSER)
-    assert reading_order(work, frozendict(), NOWHERE, 1) == (EDITOR, SHELL, CHAT, BROWSER)
+    assert reading_order(work, windows, placement, 0) == (EDITOR, SHELL, CHAT, BROWSER)
+    assert reading_order(work, frozendict(), NOWHERE, 0) == (EDITOR, SHELL, CHAT, BROWSER)
     alone = screens((LAPTOP,), SETUPS)
-    assert reading_order(alone, frozendict(), NOWHERE, 1) == (SHELL,)
-    assert reading_order(alone, frozendict(), NOWHERE, 2) == (EDITOR,)
-    assert reading_order(alone, frozendict(), NOWHERE, OVERFLOW) == ()
+    assert reading_order(alone, frozendict(), NOWHERE, 0) == (SHELL,)
+    assert reading_order(alone, frozendict(), NOWHERE, 1) == (EDITOR,)
+    assert reading_order(alone, frozendict(), NOWHERE, OTHERS) == ()
     assert reading_order(None, frozendict(), NOWHERE, 1) == ()

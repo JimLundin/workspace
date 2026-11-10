@@ -1,8 +1,9 @@
 # Window placement
 
 Workspace gives every managed window a declared place for the connected
-monitors. Windows never overlap. Apps that don't fit go on further Windows
-virtual desktops, which Workspace creates and never removes.
+monitors. Windows never overlap. Each setup uses exactly the Windows virtual
+desktops its layout names: Workspace creates any that are missing and removes
+any after them, whose leftover windows fall back to the last one kept.
 
 ## Setups and layouts
 
@@ -10,25 +11,25 @@ virtual desktops, which Workspace creates and never removes.
 is the monitor with a built-in output technology. External screens are matched
 by physical size. Any other set of monitors counts as the laptop alone.
 
-No setup declares an app on desktop 1. An app can have several places; its
-windows fill them in order and any beyond the last share that place.
+Desktops count from the first in Task View. An app can have several places;
+its windows fill them in order and any beyond the last share that place.
 
 | Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 | Desktop 5 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Laptop only | None | | Outlook, Teams | Terminal, Terminal | VS Code | Edge |
-| Home | 3840×2160 (MAIN) | | MAIN: Terminal ⅔, VS Code ⅓. Laptop: Teams | MAIN: Edge, Outlook | | |
-| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | | SIDE: VS Code. ABOVE: Terminal ⅔, Edge ⅓. Laptop: Teams, Outlook | | | |
+| Laptop only | None | Outlook, Teams | Terminal, Terminal | VS Code | Edge | Others |
+| Home | 3840×2160 (MAIN) | MAIN: Terminal ⅔, VS Code ⅓. Laptop: Edge | MAIN: Outlook, Teams. Laptop: others | | | |
+| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | SIDE: VS Code. ABOVE: Terminal. Laptop: Edge | ABOVE: Outlook, Teams. Laptop: others | | | |
 
-`LAYOUTS` declares these places. Every undeclared app gets its own desktop
-after the declared ones, filling the laptop, and keeps it while other apps come
-and go.
+`desktop/placement.py` declares these places. Every app a layout doesn't name
+goes to its place for others, where the windows of all such apps share the
+region in their stable order, so an undeclared app never adds a desktop.
 
 ## Rules
 
 - Workspace manages resizable top-level windows of other programs. Dialogs and
   fixed-size windows keep their places.
-- Nothing is ever minimized: every app has a place in every setup, on its own
-  desktop if need be. A minimized window is restored into its place, on
+- Nothing is ever minimized: every app has a place in every setup, in the
+  place for others if need be. A minimized window is restored into its place, on
   whichever desktop it belongs, so a change of monitors sorts every window.
   There is no minimize key.
 - Several windows of one app share its region equally.

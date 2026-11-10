@@ -8,7 +8,7 @@ from typing import Final
 from contracts.members import every_member
 from desktop_ui.application_observer import PlacementSpec
 from desktop_ui.shell_items import PinnedApp, WebApp
-from desktop_ui.window_layout import Position, Program, Region, Role, Setup, Setups
+from desktop_ui.window_layout import Layout, Position, Program, Region, Role, Setup, Setups
 from winapi.shapes import Size
 
 WEB_APPS: Final = every_member(
@@ -50,35 +50,45 @@ SETUPS: Final = Setups(
     ),
     layouts=frozendict(
         {
-            Setup.LAPTOP_ONLY: frozendict(
-                {
-                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-                    # Terminals side by side on desktop 3; Code's windows share all of desktop 4, so a lone one fills it.
-                    TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF), Position(2, Role.LAPTOP, RIGHT_HALF)),
-                    CODE: (Position(3, Role.LAPTOP, FULL),),
-                    EDGE: (Position(4, Role.LAPTOP, FULL),),
-                }
+            # Desktops count from 0, the first in Task View; a setup keeps exactly the desktops it names.
+            Setup.LAPTOP_ONLY: Layout(
+                frozendict(
+                    {
+                        PinnedApp.OUTLOOK: (Position(0, Role.LAPTOP, LEFT_HALF),),
+                        PinnedApp.TEAMS: (Position(0, Role.LAPTOP, RIGHT_HALF),),
+                        # Terminals side by side; Code's windows share all of their desktop, so a lone one fills it.
+                        TERMINAL: (Position(1, Role.LAPTOP, LEFT_HALF), Position(1, Role.LAPTOP, RIGHT_HALF)),
+                        CODE: (Position(2, Role.LAPTOP, FULL),),
+                        EDGE: (Position(3, Role.LAPTOP, FULL),),
+                    }
+                ),
+                others=Position(4, Role.LAPTOP, FULL),
             ),
-            Setup.HOME: frozendict(
-                {
-                    # Two terminals read Terminal | Terminal | Code across the 4K screen.
-                    TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
-                    CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
-                    EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
-                    PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
-                }
+            Setup.HOME: Layout(
+                frozendict(
+                    {
+                        # Two terminals read Terminal | Terminal | Code across the 4K screen, Edge on the laptop below.
+                        TERMINAL: (Position(0, Role.MAIN, LEFT_TWO_THIRDS),),
+                        CODE: (Position(0, Role.MAIN, RIGHT_THIRD),),
+                        EDGE: (Position(0, Role.LAPTOP, FULL),),
+                        PinnedApp.OUTLOOK: (Position(1, Role.MAIN, LEFT_HALF),),
+                        PinnedApp.TEAMS: (Position(1, Role.MAIN, RIGHT_HALF),),
+                    }
+                ),
+                others=Position(1, Role.LAPTOP, FULL),
             ),
-            Setup.WORK: frozendict(
-                {
-                    # Code takes the tall screen; terminals read Terminal | Terminal | Edge across the one above.
-                    CODE: (Position(1, Role.SIDE, FULL),),
-                    TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
-                    EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-                }
+            Setup.WORK: Layout(
+                frozendict(
+                    {
+                        # Code takes the tall screen, the terminals the one above, Edge the laptop.
+                        CODE: (Position(0, Role.SIDE, FULL),),
+                        TERMINAL: (Position(0, Role.ABOVE, FULL),),
+                        EDGE: (Position(0, Role.LAPTOP, FULL),),
+                        PinnedApp.OUTLOOK: (Position(1, Role.ABOVE, LEFT_HALF),),
+                        PinnedApp.TEAMS: (Position(1, Role.ABOVE, RIGHT_HALF),),
+                    }
+                ),
+                others=Position(1, Role.LAPTOP, FULL),
             ),
         }
     ),

@@ -161,8 +161,31 @@ def seats(observed: Observed, known: Shelf) -> Seats:
     )
 
 
+def fit(connection: Connection, observed: Observed, desktops: int) -> tuple[Connection, Observed]:
+    """Keep exactly `desktops` desktops: create the missing ones and remove those after them.
+
+    A removed desktop's windows fall back to the last one kept, and so does the
+    screen when it was showing; placing moves them on to their own desktops.
+    """
+    state = observed.state
+    if connection is None or state is None:
+        return connection, observed
+    try:
+        ids = state.ids
+        while len(ids) < desktops:
+            ids = (*ids, connection.create())
+    except OSError:
+        disconnected(connection)
+        return None, observed
+    kept = ids[:desktops]
+    for desktop in reversed(ids[desktops:]):
+        with suppress(OSError):  # A desktop the shell won't remove yet is tried again next poll.
+            connection.remove(desktop, kept[-1])
+    return connection, replace(observed, state=Desktops(kept, state.current if state.current in kept else kept[-1]))
+
+
 def arrange(connection: Connection, observed: Observed, placement: Placement, slots: frozenset[int], *, follow: int) -> Connection:
-    """Converge every placed window on its desktop and rectangle, creating only missing desktops.
+    """Converge every placed window on its desktop and rectangle, on desktops `fit` has made.
 
     The window in front, `follow`, takes the user along when it moves to another desktop:
     a window just opened or brought forward on the wrong desktop is the one being worked in.
@@ -170,13 +193,7 @@ def arrange(connection: Connection, observed: Observed, placement: Placement, sl
     state = observed.state
     if connection is None or state is None:
         return connection
-    try:
-        ids = state.ids
-        while len(ids) < 1 + max((target.desktop for target in placement.values()), default=-1):
-            ids = (*ids, connection.create())
-    except OSError:
-        disconnected(connection)
-        return None
+    ids = state.ids
     followed: int | None = None
     for handle, target in placement.items():
         with suppress(OSError):  # A window that closed or refuses a move is tried again next poll.
@@ -324,10 +341,11 @@ class Worker:
                 for window in observed.windows
                 if managed(window, resizable=windows.resizable(window.handle), own=windows.process_id(window.handle) == own)
             )
-            placement = place(where, groups(grouped, eligible), placement)
+            placement = place(where, groups(grouped, eligible))
             if not watched.paused and not windows.dragging():  # A window being dragged snaps back once it's let go.
                 kept = frozendict((handle, target) for handle, target in placement.items() if handle != zoomed)
-                connection = arrange(connection, observed, kept, current, follow=foreground)
+                connection, fitted = fit(connection, observed, where.layout.desktops)
+                connection = arrange(connection, fitted, kept, current, follow=foreground)
         for window in slots:
             if not window.minimized:
                 frame(window.handle)

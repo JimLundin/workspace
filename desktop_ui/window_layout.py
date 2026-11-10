@@ -5,9 +5,9 @@ pure placement of observed windows onto them.
 Each declared application has an ordered list of places: a region of one
 role's monitor on one desktop. Its windows fill the places in their stable
 order, and windows beyond the last place share that place equally: side by side
-in a landscape region, stacked in a portrait one. Every other application gets a desktop of its own
-after the declared ones, filling the laptop's work area, and keeps that desktop
-while others come and go. Regions are exact fractions, so
+in a landscape region, stacked in a portrait one. Every other application shares
+the setup's one place for others, so a setup has exactly the desktops its layout
+declares. Regions are exact fractions, so
 neighbours' pixel edges are computed from the same value and meet without
 overlapping.
 """
@@ -16,7 +16,6 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
-from itertools import count
 
 from contracts.members import every_member
 from desktop_ui.shell_items import PinnedApp, Shelf
@@ -110,8 +109,19 @@ class Position:
 type Places = tuple[Position, ...]
 """An application's places in order; its windows beyond the last share that one."""
 
-type Layout = frozendict[App, Places]
-"""One setup's applications and their places."""
+
+@dataclass(frozen=True, slots=True)
+class Layout:
+    """One setup's applications and their places, and where every other application goes."""
+
+    places: frozendict[App, Places]
+    others: Position
+    """The place every application the layout doesn't name shares, in their stable order."""
+
+    @property
+    def desktops(self) -> int:
+        """How many desktops the setup uses: exactly those its places name, counted from the first."""
+        return 1 + max(position.desktop for places in (*self.places.values(), (self.others,)) for position in places)
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,10 +148,6 @@ class Screens:
     setup: Setup
     roles: frozendict[Role, Rect]
     layout: Layout
-
-
-def declared_desktops(layout: Layout) -> int:
-    return 1 + max((position.desktop for places in layout.values() for position in places), default=-1)
 
 
 def managed(window: Window, *, resizable: bool, own: bool) -> bool:
@@ -175,27 +181,24 @@ class Target:
 
 
 type Placement = frozendict[int, Target]
-FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
-"""A monitor's whole work area, where an application no setup declares goes."""
-
 NOWHERE: Placement = frozendict()
 
 
-def place(where: Screens, apps: Sequence[Group], previous: Placement) -> Placement:
-    """Each managed window's desktop and rectangle; the previous placement keeps undeclared applications on their desktops."""
-    declared = where.layout
-    extra = overflow(tuple(group for group in apps if group.app not in declared), previous, declared_desktops(declared))
+def place(where: Screens, apps: Sequence[Group]) -> Placement:
+    """Each managed window's desktop and rectangle; undeclared applications' windows share the layout's place for others."""
+    declared = where.layout.places
+    others = tuple(handle for group in apps if group.app not in declared for handle in group.windows)
 
-    def targets(group: Group) -> Iterator[tuple[int, Target]]:
-        places = declared.get(group.app) or (Position(extra[group.app], Role.LAPTOP, FULL),)
+    def targets(windows: Sequence[int], places: Places) -> Iterator[tuple[int, Target]]:
         # Each place before the last holds one window; the last holds the rest, split equally.
-        alone, shared, last = group.windows[: len(places) - 1], group.windows[len(places) - 1 :], places[-1]
+        alone, shared, last = windows[: len(places) - 1], windows[len(places) - 1 :], places[-1]
         for handle, position in zip(alone, places, strict=False):
             yield handle, Target(position.desktop, pixels(where.roles[position.role], position.region))
         for handle, rect in zip(shared, split(where.roles[last.role], last.region, len(shared)), strict=True):
             yield handle, Target(last.desktop, rect)
 
-    return frozendict(pair for group in apps for pair in targets(group))
+    named = (pair for group in apps if (places := declared.get(group.app)) for pair in targets(group.windows, places))
+    return frozendict((*named, *targets(others, (where.layout.others,))))
 
 
 def _corner(rects: Iterable[Rect]) -> Point | None:
@@ -207,7 +210,7 @@ def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
     """Where each app the setup declares on this desktop first sits."""
     return frozendict(
         (app, corner)
-        for app, places in where.layout.items()
+        for app, places in where.layout.places.items()
         if (corner := _corner(pixels(where.roles[place.role], place.region) for place in places if place.desktop == desktop))
     )
 
@@ -226,20 +229,6 @@ def reading_order(where: Screens | None, windows: Mapping[App, Sequence[int]], p
     declared = _declared_corners(where, desktop) if where is not None else frozendict[App, Point]()
     corners = frozendict({**placed, **{app: corner for app, corner in declared.items() if app not in placed}})
     return tuple(sorted(corners, key=lambda app: (corners[app].x, corners[app].y)))
-
-
-def overflow(apps: Sequence[Group], previous: Placement, first: int) -> frozendict[App, int]:
-    """One desktop per undeclared application from `first` on: each keeps its previous one, and newcomers take the lowest free ones."""
-    claims = sorted(
-        (desktop, order, group.app)
-        for order, group in enumerate(apps)
-        if (desktop := next((previous[handle].desktop for handle in group.windows if handle in previous), None)) is not None and desktop >= first
-    )
-    kept = tuple(claim for index, claim in enumerate(claims) if index == 0 or claims[index - 1][0] != claim[0])
-    taken = frozenset(desktop for desktop, _, _ in kept)
-    newcomers = tuple(group.app for group in apps if all(app != group.app for _, _, app in kept))
-    free = (desktop for desktop in count(first) if desktop not in taken)
-    return frozendict({**{app: desktop for desktop, _, app in kept}, **dict(zip(newcomers, free, strict=False))})
 
 
 def split(work: Rect, region: Region, parts: int) -> tuple[Rect, ...]:
