@@ -7,7 +7,7 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from desktop_ui.components.appearance import Shade, Tokens, control_style, scheme, tokens
+from desktop_ui.components.appearance import KIT, Kit, Shade, Tokens, control_style, scheme, tokens
 from desktop_ui.components.typeface import TYPE
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
@@ -17,24 +17,25 @@ from winapi.shapes import Size
 prepare()
 
 
-def window_style(theme: Tokens) -> str:
+def window_style(theme: Tokens, kit: Kit) -> str:
     """The shared controls on the kit's solid window, and its segmented choices."""
-    segment = theme.segment
+    segment, choice = theme.segment, kit.choice
     return (
-        control_style(theme)
+        control_style(theme, kit)
         + f"""
 QWidget#workspaceWindow {{ background: {theme.window}; }}
-QFrame#segmented {{ background: {theme.hover.css}; border-radius: 10px; }}
-QFrame#segmented QToolButton {{ border-radius: 8px; padding: 4px 12px; min-height: 18px; {TYPE.label.css} }}
-QFrame#segmented QToolButton:focus {{ padding: 2px 10px; }}
+QFrame#segmented {{ background: {theme.hover.css}; border-radius: {kit.segmented_radius}px; }}
+QFrame#segmented QToolButton {{ border-radius: {kit.choice_radius}px; {choice.css()} min-height: {kit.choice_least}px; {TYPE.label.css} }}
+QFrame#segmented QToolButton:focus {{ {choice.css(kit.ring)} }}
 QFrame#segmented QToolButton:checked {{ background: {segment}; }}
 """
     )
 
 
-def surface_style(theme: Tokens, radius: int) -> str:
+def surface_style(theme: Tokens, radius: int, kit: Kit) -> str:
     """A solid surface from the kit: the window colour, a hairline edge and large concentric corners."""
-    return f"QFrame#surface {{ background: {theme.window}; border: 1px solid {theme.solid_edge.css}; border-radius: {radius}px; }}"
+    edge = f"{kit.hairline}px solid {theme.solid_edge.css}"
+    return f"QFrame#surface {{ background: {theme.window}; border: {edge}; border-radius: {radius}px; }}"
 
 
 def tool_window(window: QtWidgets.QWidget, title: str | None, *, on_top: bool) -> None:
@@ -52,22 +53,23 @@ def device_size(widget: QtWidgets.QWidget, scale: float) -> Size:
     return Size(round(widget.width() * scale), round(widget.height() * scale))
 
 
-def surface(window: QtWidgets.QWidget, theme: Tokens, radius: int) -> QtWidgets.QFrame:
+def surface(window: QtWidgets.QWidget, theme: Tokens, radius: int, kit: Kit) -> QtWidgets.QFrame:
     """Draw a `tool_window` as one rounded surface; its corners stay transparent."""
     frame = QtWidgets.QFrame(window)
     frame.setObjectName("surface")
-    frame.setStyleSheet(surface_style(theme, radius))
+    frame.setStyleSheet(surface_style(theme, radius, kit))
     column(window).addWidget(frame)
     return frame
 
 
-def segmented(buttons: Sequence[QtWidgets.QToolButton]) -> QtWidgets.QFrame:
+def segmented(buttons: Sequence[QtWidgets.QToolButton], kit: Kit) -> QtWidgets.QFrame:
     """Checkable choices in one well; the checked choice carries the thumb."""
     frame = QtWidgets.QFrame()
     frame.setObjectName("segmented")
     layout = row(frame)
-    layout.setContentsMargins(2, 2, 2, 2)
-    layout.setSpacing(2)
+    inset = kit.segmented_inset
+    layout.setContentsMargins(inset, inset, inset, inset)
+    layout.setSpacing(inset)
     for choice in buttons:
         layout.addWidget(choice)
     return frame
@@ -93,7 +95,7 @@ class Window(QtWidgets.QWidget):
         self.setObjectName("workspaceWindow")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.setWindowTitle(title)
-        self.setStyleSheet(window_style(tokens(scheme())))
+        self.setStyleSheet(window_style(tokens(scheme()), KIT))
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.resize(width, height)
         self.escape = QtGui.QShortcut(QtGui.QKeySequence("Escape"), self)

@@ -13,7 +13,7 @@ from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Offset, Point, Rect, Size
-lazy from desktop_ui.components.appearance import GLASS_ACCENT, ON_ACCENT, Scheme, Shade, Tokens, scheme, tokens
+lazy from desktop_ui.components.appearance import GLASS_ACCENT, KIT, ON_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.text import inter
 lazy from desktop_ui.components.typeface import TYPE, Font
@@ -318,8 +318,8 @@ class OverlayHandle(QtWidgets.QWidget):
         tool_window(self, "Workspace keyboard overlay handle", on_top=False)
         self.setAccessibleName("Drag to move the keyboard overlay")
         theme = tokens(scheme())
-        self.setStyleSheet(window_style(theme))
-        layout = row(surface(self, theme, round(spec.handle_radius)))
+        self.setStyleSheet(window_style(theme, KIT))
+        layout = row(surface(self, theme, round(spec.handle_radius), KIT))
         padding = round(spec.handle_padding)
         layout.setContentsMargins(round(spec.handle_leading), padding, round(spec.handle_trailing), padding)
         layout.setSpacing(round(spec.handle_spacing))
@@ -376,9 +376,9 @@ class KeymapOverlay:
         theme = tokens(scheme())
         window = QtWidgets.QWidget()
         tool_window(window, "Workspace keyboard overlay", on_top=False)
-        window.setStyleSheet(window_style(theme))
+        window.setStyleSheet(window_style(theme, KIT))
         window.setWindowOpacity(look.opacity)
-        layout = column(surface(window, theme, round(look.radius)))
+        layout = column(surface(window, theme, round(look.radius), KIT))
         layout.setContentsMargins(round(look.side), round(look.top), round(look.side), round(look.bottom))
         layout.setSpacing(round(look.spacing))
         heading = label("", "muted")
@@ -523,7 +523,7 @@ class KeymapWindow:
         for shortcut, layer in zip(shortcuts, _LAYERS, strict=True):
             shortcut.activated.connect(chooser(layer))
         buttons = row()
-        buttons.addWidget(segmented(list(keys)))
+        buttons.addWidget(segmented(list(keys), KIT))
         buttons.addStretch()
         layout.addLayout(buttons)
         canvas = KeymapCanvas(tokens(scheme()), spec.keys)

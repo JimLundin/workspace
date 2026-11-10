@@ -9,7 +9,7 @@ lazy from PySide6.QtCore import Qt
 
 import winapi.shapes
 from components import SWITCHER_TITLE
-from desktop_ui.components.appearance import GLASS_ACCENT, ON_ACCENT, Shade, Tokens, scheme, tokens
+from desktop_ui.components.appearance import GLASS_ACCENT, KIT, ON_ACCENT, Shade, Tokens, scheme, tokens
 from desktop_ui.components.text import inter
 from desktop_ui.components.typeface import TYPE
 from desktop_ui.components.widgets import column, glyph, row, surface_style, window_style
@@ -150,8 +150,8 @@ class _Rows(QtWidgets.QStyledItemDelegate):
 
 def _style(theme: Tokens, spec: SwitcherSpec) -> str:
     return (
-        window_style(theme)
-        + surface_style(theme, round(spec.radius))
+        window_style(theme, KIT)
+        + surface_style(theme, round(spec.radius), KIT)
         + f"""
 QLineEdit#query {{ background: transparent; border: none; padding: 0; {TYPE.query.css} }}
 QListWidget {{ background: transparent; border: none; outline: none; }}

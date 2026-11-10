@@ -83,46 +83,135 @@ def scheme() -> Scheme:
     return Scheme.LIGHT if appearance.light_apps() else Scheme.DARK
 
 
-def tooltip_style(theme: Tokens) -> str:
+@dataclass(frozen=True, slots=True)
+class Padding:
+    """Inside a control: above and below, and beside."""
+
+    vertical: int
+    horizontal: int
+
+    def css(self, ring: int = 0) -> str:
+        """The padding, less a focus ring's width on every side so the control keeps its size."""
+        return f"padding: {self.vertical - ring}px {self.horizontal - ring}px;"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Kit:
+    """The shared controls' metrics: every stylesheet number Workspace's windows use."""
+
+    ring: int
+    """A focused control's accent ring."""
+    tooltip_radius: int
+    tooltip: Padding
+    button_radius: int
+    button: Padding
+    button_least: int
+    """A button's least content height."""
+    field_radius: int
+    field: Padding
+    item_radius: int
+    item: Padding
+    menu_radius: int
+    menu_pad: int
+    menu_item: Padding
+    menu_separator: Padding
+    """A menu separator's margin."""
+    scrollbar: int
+    scrollbar_along: int
+    scrollbar_across: int
+    """A scroll bar's margin along and across it."""
+    thumb_radius: int
+    thumb_least: int
+    segmented_radius: int
+    segmented_inset: int
+    """Between the segmented well and its choices, and between choices."""
+    choice_radius: int
+    choice: Padding
+    choice_least: int
+    hairline: int
+    """A surface's and a menu's edge."""
+
+
+KIT: Final = Kit(
+    ring=2,
+    tooltip_radius=8,
+    tooltip=Padding(5, 8),
+    button_radius=14,
+    button=Padding(5, 11),
+    button_least=18,
+    field_radius=10,
+    field=Padding(7, 10),
+    item_radius=15,
+    item=Padding(8, 12),
+    menu_radius=12,
+    menu_pad=6,
+    menu_item=Padding(6, 14),
+    menu_separator=Padding(5, 10),
+    scrollbar=8,
+    scrollbar_along=4,
+    scrollbar_across=2,
+    thumb_radius=3,
+    thumb_least=24,
+    segmented_radius=10,
+    segmented_inset=2,
+    choice_radius=8,
+    choice=Padding(4, 12),
+    choice_least=18,
+    hairline=1,
+)
+"""Workspace's control metrics; owners pass them to the stylesheets."""
+
+
+def tooltip_style(theme: Tokens, kit: Kit) -> str:
     """Tooltips, the one rule the process shares: every other control takes its look from the window that owns it."""
-    line = theme.separator.css
-    return f"QToolTip {{ background: {theme.solid}; color: {theme.ink.css}; border: 1px solid {line}; border-radius: 8px; padding: 5px 8px; }}\n"
+    line, edge = theme.separator.css, kit.hairline
+    return (
+        f"QToolTip {{ background: {theme.solid}; color: {theme.ink.css}; border: {edge}px solid {line}; "
+        f"border-radius: {kit.tooltip_radius}px; {kit.tooltip.css()} }}\n"
+    )
 
 
-def control_style(theme: Tokens) -> str:
+def control_style(theme: Tokens, kit: Kit) -> str:
     """Workspace's dialogs and controls: Inter, capsule buttons, quiet wells and overlay scroll bars."""
     ink, ink2, ink3 = theme.ink.css, theme.ink2.css, theme.ink3.css
     fill, hover, press, line = theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
-    weight = int(typeface.TYPE.title.weight)
+    weight, ring, edge = int(typeface.TYPE.title.weight), kit.ring, kit.hairline
+    along, across = kit.scrollbar_along, kit.scrollbar_across
     return f"""
 QWidget {{ color: {ink}; font-family: '{typeface.FAMILY}'; {typeface.TYPE.body.css} }}
 QDialog {{ background: {theme.window}; }}
 QLabel {{ background: transparent; border: none; }}
 QLabel#muted {{ color: {ink2}; {typeface.TYPE.detail.css} }}
-QToolButton {{ border: none; border-radius: 14px; background: transparent; padding: 5px 11px; font-weight: {weight}; min-height: 18px; }}
+QToolButton {{
+ border: none; border-radius: {kit.button_radius}px; background: transparent; {kit.button.css()}
+ font-weight: {weight}; min-height: {kit.button_least}px;
+}}
 QToolButton:hover {{ background: {hover}; }}
 QToolButton:pressed {{ background: {press}; }}
-QToolButton:focus {{ outline: none; border: 2px solid {GLASS_ACCENT}; padding: 3px 9px; }}
+QToolButton:focus {{ outline: none; border: {ring}px solid {GLASS_ACCENT}; {kit.button.css(ring)} }}
 QToolButton:disabled {{ color: {ink3}; }}
 QToolButton:checked {{ background: {hover}; }}
 QLineEdit {{
- background: {fill}; border: none; border-radius: 10px; padding: 7px 10px; selection-background-color: {GLASS_ACCENT}; selection-color: {ON_ACCENT};
+ background: {fill}; border: none; border-radius: {kit.field_radius}px; {kit.field.css()}
+ selection-background-color: {GLASS_ACCENT}; selection-color: {ON_ACCENT};
 }}
-QLineEdit:focus {{ border: 2px solid {GLASS_ACCENT}; padding: 5px 8px; }}
+QLineEdit:focus {{ border: {ring}px solid {GLASS_ACCENT}; {kit.field.css(ring)} }}
 QListWidget {{ background: transparent; border: none; outline: none; }}
-QListWidget::item {{ padding: 8px 12px; border-radius: 15px; }}
+QListWidget::item {{ {kit.item.css()} border-radius: {kit.item_radius}px; }}
 QListWidget::item:hover {{ background: {hover}; }}
 QListWidget::item:selected {{ background: {GLASS_ACCENT}; color: {ON_ACCENT}; }}
-QMenu {{ background: {theme.solid}; border: 1px solid {line}; border-radius: 12px; padding: 6px; }}
-QMenu::item {{ padding: 6px 14px; border-radius: 15px; }}
+QMenu {{ background: {theme.solid}; border: {edge}px solid {line}; border-radius: {kit.menu_radius}px; padding: {kit.menu_pad}px; }}
+QMenu::item {{ {kit.menu_item.css()} border-radius: {kit.item_radius}px; }}
 QMenu::item:selected {{ background: {GLASS_ACCENT}; color: {ON_ACCENT}; }}
-QMenu::separator {{ height: 1px; background: {line}; margin: 5px 10px; }}
-QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
-QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: 3px; min-height: 24px; }}
-QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 2px 4px; }}
-QScrollBar::handle:horizontal {{ background: {theme.thumb.css}; border-radius: 3px; min-width: 24px; }}
+QMenu::separator {{
+ height: {edge}px; background: {line}; margin: {kit.menu_separator.vertical}px {kit.menu_separator.horizontal}px;
+}}
+QScrollBar:vertical {{ background: transparent; width: {kit.scrollbar}px; margin: {along}px {across}px; }}
+QScrollBar::handle:vertical {{ background: {theme.thumb.css}; border-radius: {kit.thumb_radius}px; min-height: {kit.thumb_least}px; }}
+QScrollBar:horizontal {{ background: transparent; height: {kit.scrollbar}px; margin: {across}px {along}px; }}
+QScrollBar::handle:horizontal {{ background: {theme.thumb.css}; border-radius: {kit.thumb_radius}px; min-width: {kit.thumb_least}px; }}
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ width: 0; height: 0; background: transparent; }}
-""" + tooltip_style(theme)
+""" + tooltip_style(theme, kit)
 
 
 # Every glass surface shares its ink and rim vocabulary.

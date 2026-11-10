@@ -12,7 +12,7 @@ from desktop_ui.island_layout import SIZES
 from desktop_ui.qt_runtime import prepare
 from winapi import windows
 from winapi.shapes import Rect
-lazy from desktop_ui.components.appearance import scheme, tokens
+lazy from desktop_ui.components.appearance import KIT, scheme, tokens
 lazy from desktop_ui.components.controls import label
 lazy from desktop_ui.components.widgets import device_size, row, surface, tool_window, window_style
 lazy from desktop_ui.qt_ui import cancel, later
@@ -72,9 +72,9 @@ class Indicator:
         theme = tokens(scheme())
         window = QtWidgets.QWidget()
         tool_window(window, None, on_top=False)
-        window.setStyleSheet(window_style(theme))
+        window.setStyleSheet(window_style(theme, KIT))
         window.setWindowOpacity(spec.opacity)
-        layout = row(surface(window, theme, round(spec.radius)))
+        layout = row(surface(window, theme, round(spec.radius), KIT))
         pad, lead = round(spec.padding), round(spec.leading)
         layout.setContentsMargins(pad, lead, pad, lead)
         text = label("")

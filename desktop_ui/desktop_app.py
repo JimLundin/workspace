@@ -84,7 +84,7 @@ from desktop_ui.voice import Voice
 from protocol import Message
 from winapi import screen, shell, system, windows
 from winapi.shapes import Rect
-lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
+lazy from desktop_ui.components.appearance import KIT, scheme, tokens, tooltip_style
 lazy from desktop_ui.components.widgets import near_pointer, show_window
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.keymap_views import KEYMAP, KeymapOverlay, KeymapWindow
@@ -451,7 +451,7 @@ def run() -> None:
         inbox = Inbox.open(components.DESKTOP.window)
         voice = Voice.open(settings_from(os.environ, components.GATEWAY_ENDPOINT), inbox.window.handle, inbox.report, log)
         root = application()
-        root.setStyleSheet(tooltip_style(tokens(scheme())))
+        root.setStyleSheet(tooltip_style(tokens(scheme()), KIT))
         app = DesktopApp.compose(root, voice, inbox)
         QtCore.QTimer.singleShot(0, app.start)
         try:
