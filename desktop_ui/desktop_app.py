@@ -91,7 +91,7 @@ lazy from desktop_ui.keymap_views import KEYMAP, KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import INDICATOR, Indicator
 lazy from desktop_ui.qt_ui import application
 lazy from desktop_ui.vector_icons import icon
-lazy from desktop_ui.window_switcher import WindowSwitcher
+lazy from desktop_ui.window_switcher import SWITCHER, WindowSwitcher
 
 prepare()
 
@@ -397,7 +397,7 @@ class DesktopApp:
             if bar := self.views.get().bar:
                 bar.navigate(ShowWindow(handle))
 
-        current = WindowSwitcher(choices, focus)
+        current = WindowSwitcher(choices, focus, SWITCHER)
         self.views.update(lambda views: replace(views, switcher=current))
 
         def cleared(_: int) -> None:
