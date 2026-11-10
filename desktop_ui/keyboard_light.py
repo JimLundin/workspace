@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from desktop_ui.kept import Kept
-from settings import layout
+from keyboard.layout import UsbIdentity
 from winapi import via
 
 
@@ -28,6 +28,8 @@ class Backlight(Protocol):
 class ViaBacklight:
     """The attached Charybdis's RGB matrix over its VIA interface."""
 
+    firmware: UsbIdentity
+
     def effect(self) -> via.Effect | via.Absent:
         return self.send(via.effect_message(read=True))
 
@@ -35,7 +37,7 @@ class ViaBacklight:
         return self.send(via.effect_message(read=False, effect=effect))
 
     def send(self, message: bytes) -> via.Effect | via.Absent:
-        reply = via.exchange(layout.LAYOUT.firmware.vendor, layout.LAYOUT.firmware.product, message)
+        reply = via.exchange(self.firmware.vendor, self.firmware.product, message)
         return via.Absent() if reply is None else via.effect_reply(message, reply)
 
 

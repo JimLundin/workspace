@@ -16,7 +16,6 @@ from enum import Enum, StrEnum, auto
 from itertools import accumulate, chain
 from typing import Final, assert_never
 
-from desktop_ui.keymap import shortcut, shortcut_hint
 from protocol import Tool
 
 
@@ -63,9 +62,9 @@ class Item:
     key: str = ""  # A shortcut hint, shown quietly at the trailing edge.
 
 
-def tool_item(label: str, icon: str, tool: Tool) -> Item:
+def tool_item(label: str, icon: str, tool: Tool, hints: frozendict[Tool, str]) -> Item:
     """Tool cells advertise the physical keys from the layout that triggers them."""
-    return Item(label, icon, ToolChoice(tool), shortcut_hint(shortcut(tool), compact=True))
+    return Item(label, icon, ToolChoice(tool), hints.get(tool, ""))
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +225,8 @@ class ControlsSpec:
     words: MenuWords
     columns: int
     """The grid's columns: tray icons take one each, the other tiles span several."""
+    hints: frozendict[Tool, str]
+    """Each tool's keys, from the layout the desktop is handed, at a tool cell's trailing edge."""
     volume_step: float
     """How far Left and Right move the sound slider."""
 
@@ -265,6 +266,7 @@ CONTROLS: Final = ControlsSpec(
         muted="muted",
     ),
     columns=8,
+    hints=frozendict(),
     volume_step=0.05,
 )
 """The controls menu (press the clock or battery), top to bottom.
@@ -286,8 +288,9 @@ def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
     return Toggle(spec.label, detail, spec.icon, choice, on=on)
 
 
-def entry(spec: CellSpec, controls: Controls, words: MenuWords) -> Entry | None:
+def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | None:
     """The entry `spec` places, as it reads now; None while it doesn't apply."""
+    words = menu.words
     match spec.entry:
         case EntryId.OVERLAY:
             return toggle(spec, words.on if controls.overlay else words.off, Command.OVERLAY, on=controls.overlay)
@@ -302,9 +305,9 @@ def entry(spec: CellSpec, controls: Controls, words: MenuWords) -> Entry | None:
         case EntryId.SOUND:
             return controls.sound
         case EntryId.SWITCH_WINDOWS:
-            return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER)
+            return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER, menu.hints)
         case EntryId.COPY_TRANSCRIPT:
-            return tool_item(spec.label, spec.icon, Tool.COPY_TRANSCRIPT)
+            return tool_item(spec.label, spec.icon, Tool.COPY_TRANSCRIPT, menu.hints)
         case EntryId.KEYMAP:
             return Item(spec.label, spec.icon, Command.KEYMAP)
         case EntryId.NOTIFICATIONS:
@@ -319,9 +322,9 @@ def activities(controls: Controls, words: MenuWords) -> tuple[Live, ...]:
     return (Live(words.recording, controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()
 
 
-def present_cells(controls: Controls, specs: tuple[CellSpec, ...], words: MenuWords) -> tuple[tuple[CellSpec, Entry], ...]:
+def present_cells(controls: Controls, specs: tuple[CellSpec, ...], menu: ControlsSpec) -> tuple[tuple[CellSpec, Entry], ...]:
     """A row's cells that show now, in order: a cell whose entry is absent leaves no gap."""
-    return tuple((each, present) for each in specs if (present := entry(each, controls, words)))
+    return tuple((each, present) for each in specs if (present := entry(each, controls, menu)))
 
 
 def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
@@ -332,7 +335,7 @@ def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
         case TrayRow(tracks=tracks):
             return tracks * ((len(controls.tray) + spec.columns - 1) // spec.columns)
         case CellsRow(tracks=tracks, cells=specs):
-            return tracks if present_cells(controls, specs, spec.words) else 0
+            return tracks if present_cells(controls, specs, spec) else 0
         case _:
             assert_never(row)
 
@@ -349,7 +352,7 @@ def row_cells(row: RowSpec, controls: Controls, top: int, spec: ControlsSpec) ->
                 for slot, name in enumerate(controls.tray)
             )
         case CellsRow(tracks=tracks, cells=specs):
-            shown = present_cells(controls, specs, spec.words)
+            shown = present_cells(controls, specs, spec)
             columns = accumulate((each.span for each, _ in shown), initial=0)
             return tuple(
                 Cell(present, each.face, column, each.span, top, tracks, each.caption)

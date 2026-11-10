@@ -23,6 +23,7 @@ from desktop_ui.kept import KeptFile
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
 from desktop_ui.window_layout import Setups, dark_when_away
+from keyboard.layout import UsbIdentity
 from winapi import screen, session
 from winapi.monitor_power import Applied, Detached, PhysicalMonitors, Power
 from winapi.screen import Monitor
@@ -98,12 +99,12 @@ class AwayScreens:
     """Replaced whole on the bar's thread."""
 
     @classmethod
-    def start(cls, directory: Path, setups: Setups) -> AwayScreens:
+    def start(cls, directory: Path, setups: Setups, firmware: UsbIdentity) -> AwayScreens:
         """Started, or restarted, behind the lock screen as well as in front of it.
 
         A previous Workspace may have left the light and the panel dark; what they
         should go back to is kept on disk in `directory`, and they go back now unless still locked."""
-        light = KeyboardLight.resume(ViaBacklight(), KeptFile(directory / "dark-keyboard-effect"))
+        light = KeyboardLight.resume(ViaBacklight(firmware), KeptFile(directory / "dark-keyboard-effect"))
         panel = LaptopPanel.resume(WmiBrightness(), KeptFile(directory / "dark-panel-brightness"))
         locked = session.locked() is True
         if not locked:

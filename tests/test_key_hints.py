@@ -5,6 +5,9 @@ from dataclasses import replace
 from desktop_ui.key_hints import ActionCap, AppCap, DirectionCap, Keycap, hints
 from desktop_ui.navigation import Direction, Focus, SpatialFocus, World, effect
 from desktop_ui.window_layout import CODE, EDGE, TERMINAL, Target
+from keyboard.bindings import Bindings
+from keyboard.firmware import Chords
+from tests import layouts
 from winapi.shapes import Rect
 
 # Two terminals stacked on the left, Edge and Code stacked on the right, a third
@@ -18,6 +21,9 @@ PLACEMENT = frozendict(
         4: Target(1, Rect(0, 0, 1920, 1200)),
     }
 )
+LETTERS = Chords.of(Bindings.of(layouts.LAYOUT)).letters
+"""Each request's chord letter on the tests' own layout."""
+
 WORLD = World(
     2,
     0,
@@ -31,7 +37,7 @@ WORLD = World(
 
 
 def badges(world: World) -> dict[int, tuple[Keycap, ...]]:
-    return {badge.window: badge.keycaps for badge in hints(world)}
+    return {badge.window: badge.keycaps for badge in hints(world, LETTERS)}
 
 
 def test_badges_carry_each_apps_letter_and_mark_the_window_its_next_press_reaches() -> None:

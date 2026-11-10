@@ -9,7 +9,9 @@ from desktop_ui.application_observer import PlacementSpec
 from desktop_ui.bar_events import BarSpec
 from desktop_ui.components.appearance import Design
 from desktop_ui.desktop_control import TrayMenuSpec
+from desktop_ui.desktop_pager import PagerSpec
 from desktop_ui.key_hint_overlay import BadgeSpec
+from desktop_ui.keymap import KeyboardView
 from desktop_ui.keymap_views import KeymapSpec
 from desktop_ui.layer_indicator import IndicatorSpec
 from desktop_ui.tray import TraySpec
@@ -23,6 +25,8 @@ class DesktopSettings:
     places: Places
     apps: tuple[App, ...]
     """The apps the chords reach, in chord-letter order."""
+    keyboard: KeyboardView
+    """The keyboard layout, as the key map, the key hints and the menu read it."""
     design: Design
     """How every window reads: its colours, glass, controls and type."""
     bar: BarSpec
@@ -34,3 +38,4 @@ class DesktopSettings:
     tray: TraySpec
     tray_menu: TrayMenuSpec
     placement: PlacementSpec
+    pager: PagerSpec

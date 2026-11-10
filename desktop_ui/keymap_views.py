@@ -31,7 +31,7 @@ lazy from desktop_ui.components.widgets import (
     tool_window,
     window_style,
 )
-lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
+lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, KeyboardView, Role
 lazy from desktop_ui.overlay import load_position, save_position
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
@@ -239,10 +239,11 @@ def keyboard_height(keys: KeysSpec) -> float:
 
 
 class KeymapCanvas(QtWidgets.QWidget):
-    def __init__(self, theme: Tokens, keys: KeysSpec) -> None:
+    def __init__(self, theme: Tokens, keys: KeysSpec, view: KeyboardView) -> None:
         super().__init__()
         self.theme: Tokens = theme
         self.keys = keys
+        self.view = view
         self.caps: dict[str, Cap] = {}
         self.boxes: dict[str, QtCore.QRectF] = {}
         self.highlighted: frozenset[str] = frozenset()
@@ -254,7 +255,7 @@ class KeymapCanvas(QtWidgets.QWidget):
         self.caps.clear()
         self.boxes.clear()
         keys = self.keys
-        for row_number, (caps, start) in enumerate(zip(keymap(layer), keys.rows, strict=True)):
+        for row_number, (caps, start) in enumerate(zip(self.view.keymap(layer), keys.rows, strict=True)):
             x, y = start * keys.unit * scale, row_number * (keys.height + keys.gap) * scale
             for cap in caps:
                 size = keys.widths.get(cap.physical, 1.0)
@@ -380,7 +381,7 @@ class KeymapOverlay:
     _state: Cell[_Overlaid]
 
     @classmethod
-    def open(cls, spec: KeymapSpec, position: Path, design: Design) -> KeymapOverlay:
+    def open(cls, spec: KeymapSpec, position: Path, design: Design, view: KeyboardView) -> KeymapOverlay:
         """The overlay, its dragged position kept at `position`."""
         shown, look = NativeOverlayDesktop(), spec.overlay
         theme = design.tokens()
@@ -394,7 +395,7 @@ class KeymapOverlay:
         heading = label("", "muted")
         heading.setContentsMargins(round(look.heading_inset), 0, 0, 0)
         layout.addWidget(heading)
-        canvas = KeymapCanvas(theme, spec.keys)
+        canvas = KeymapCanvas(theme, spec.keys, view)
         layout.addWidget(canvas)
         frame = shown.prepare(window, click_through=True)
 
@@ -513,7 +514,7 @@ class KeymapWindow:
     shortcuts: tuple[QtGui.QShortcut, ...]
 
     @classmethod
-    def open(cls, spec: KeymapSpec, design: Design) -> KeymapWindow:
+    def open(cls, spec: KeymapSpec, design: Design, view: KeyboardView) -> KeymapWindow:
         # The buttons and shortcuts act on the window record made just after them.
         def close() -> None:
             window.hide()
@@ -536,7 +537,7 @@ class KeymapWindow:
         buttons.addWidget(segmented(list(keys), design.kit))
         buttons.addStretch()
         layout.addLayout(buttons)
-        canvas = KeymapCanvas(design.tokens(), spec.keys)
+        canvas = KeymapCanvas(design.tokens(), spec.keys, view)
         layout.addWidget(canvas)
         layout.addWidget(label(size.hint, "muted"))
         shown = cls(window, canvas, keys, shortcuts)

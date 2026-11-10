@@ -363,7 +363,7 @@ class DesktopApp:
     def show_keymap(self) -> None:
         keymap = self.views.get().keymap
         if keymap is None or not shiboken6.isValid(keymap.window):
-            opened = KeymapWindow.open(self.settings.keymap, self.settings.design)
+            opened = KeymapWindow.open(self.settings.keymap, self.settings.design, self.settings.keyboard)
             self.views.update(lambda views: replace(views, keymap=opened))
         else:
             show_window(keymap.window, focus=True, target=keymap.canvas)
@@ -374,7 +374,9 @@ class DesktopApp:
         if shown is None:
             if not overlay.visible:
                 return
-            shown = KeymapOverlay.open(self.settings.keymap, self.settings.places.directory / "overlay-position.json", self.settings.design)
+            shown = KeymapOverlay.open(
+                self.settings.keymap, self.settings.places.directory / "overlay-position.json", self.settings.design, self.settings.keyboard
+            )
             opened = shown
             self.views.update(lambda views: replace(views, overlay=opened))
         shown.show(overlay.layer, overlay.title, indicator_area(), visible=overlay.visible, pressed=overlay.pressed)

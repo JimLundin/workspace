@@ -65,6 +65,7 @@ SPEC = ControlsSpec(
     ),
     MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed"),
     columns=8,
+    hints=frozendict({Tool.WINDOW_SWITCHER: "S"}),
     volume_step=0.1,
 )
 
