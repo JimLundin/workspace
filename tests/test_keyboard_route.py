@@ -2,13 +2,13 @@
 
 from dataclasses import replace
 
-from keyboard import settings
 from keyboard.bindings import Bindings
 from keyboard.engine import EngineState
 from keyboard.firmware import ConsumedKey, FirmwareKeyboard
-from keyboard.settings import APPS_KEY
 from keyboard.win import HookState, Route, Routing, identity, owes, route
 from protocol import Origin
+from tests import layouts
+from tests.layouts import APPS_KEY
 from winapi.inputs import LLKHF_EXTENDED, LLKHF_INJECTED, KeyEvent
 
 LETTER = KeyEvent(0x41, 0x1E, 0, 0, 0)
@@ -17,7 +17,7 @@ NUMPAD_ENTER = KeyEvent(0x0D, 0x1C, LLKHF_EXTENDED, 0, 0)
 TAB = KeyEvent(0x09, 0x0F, 0, 0, 0)
 ESCAPE_KEY = KeyEvent(0xC0, 0x29, 0, 0, 0)
 OFF = HookState(engine=EngineState(enabled=False))
-ROUTING = Routing.of(settings.LAYOUT, Bindings.of(settings.LAYOUT))
+ROUTING = Routing.of(layouts.LAYOUT, Bindings.of(layouts.LAYOUT))
 
 
 def test_our_own_output_and_keys_during_an_engine_step_are_never_routed() -> None:

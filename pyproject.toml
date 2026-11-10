@@ -260,7 +260,8 @@ ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
 # The layout tables are kept as a wide grid that reads across the keyboard.
-"keyboard/settings.py" = ["E501"]
+"settings/layout.py" = ["E501"]
+"tests/layouts.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
 "winapi/*.py" = ["E501", "N816", "PLR0917"]
 # Dependency stubs preserve the pinned SDK's actual method and structure field names.
@@ -270,7 +271,7 @@ ban-relative-imports = "all"
 py-modules = ["cell", "components", "config", "diagnostics", "launch", "protocol"]
 
 [tool.setuptools.packages.find]
-include = ["assistant*", "contracts*", "desktop_ui*", "gateway*", "keyboard*", "winapi*"]
+include = ["assistant*", "contracts*", "desktop_ui*", "gateway*", "keyboard*", "settings*", "winapi*"]
 
 [tool.setuptools.package-data]
 desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]

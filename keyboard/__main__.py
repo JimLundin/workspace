@@ -8,14 +8,14 @@ Both need the assistant, started by `launch.py`.
 
 import sys
 
-lazy from keyboard import settings
 lazy from keyboard.win import Exit, run, show_error
+lazy from settings import layout
 
 
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("keyboard only runs on Windows")
-    match run(settings.LAYOUT):
+    match run(layout.LAYOUT):
         case Exit.QUIT:
             sys.exit(0)  # a normal quit: the assistant doesn't restart the layout
         case Exit.ALREADY_RUNNING:

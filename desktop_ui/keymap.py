@@ -7,16 +7,15 @@ from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
-from keyboard import settings
 from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
 from keyboard.bindings import Bindings, Unmapped
 from keyboard.firmware import Chords
 from keyboard.keys import Key, Mod
 from keyboard.physical import Laptop
-from keyboard.settings import COPY, CUT, ESCAPE, PASTE, PHYSICAL, REDO, UNDO
 from protocol import App, Tool
+from settings import layout
 
-BINDINGS: Final = Bindings.of(settings.LAYOUT)
+BINDINGS: Final = Bindings.of(layout.LAYOUT)
 """The layout's lookups, until the desktop is handed its layout."""
 CHORDS: Final = Chords.of(BINDINGS).letters
 """Each request's chord letter, until the desktop is handed its layout."""
@@ -76,7 +75,7 @@ CHORD_HOLD: Final = "Apps"
 
 def shortcut(tool: Tool) -> Shortcut | None:
     """The first binding in the held layers' order, else the tool's firmware chord."""
-    physical = PHYSICAL.cells()
+    physical = layout.LAYOUT.physical.cells()
     for layer in Layer:
         held = _holding(layer)
         if held is None:
@@ -125,7 +124,9 @@ class Cap:
     role: Role
 
 
-_CHORD_NAMES: Final = frozendict({UNDO: "Undo", REDO: "Redo", COPY: "Copy", PASTE: "Paste", CUT: "Cut"})
+_CHORD_NAMES: Final = frozendict(
+    {Chord.ctrl(Key.Z): "Undo", Chord.ctrl(Key.Y): "Redo", Chord.ctrl(Key.C): "Copy", Chord.ctrl(Key.V): "Paste", Chord.ctrl(Key.X): "Cut"}
+)
 TOOL_NAMES: Final = every_member(Tool, {
     Tool.DICTATE: "Talk",
     Tool.ZOOM: "Zoom",
@@ -184,7 +185,7 @@ def _holding(layer: Layer) -> int | None:
 def _cap(layer: Layer, held: int | None, key: Laptop) -> Cap:
     """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
     name = key.legend
-    if key.scancode == ESCAPE:
+    if key.scancode == layout.LAYOUT.escape:
         return Cap(name, "On/off", "hold: quit", Role.SPECIAL)
     match BINDINGS.slot(key.scancode):
         case Unmapped():

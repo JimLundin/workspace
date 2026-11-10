@@ -127,7 +127,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
   is a `frozendict`, replaced rather than mutated. Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
 - Data declared once is a module of declarations, not a type with one
-  instance: `config.py`, `components.py` and `keyboard/settings.py` hold only
+  instance: `config.py`, `components.py` and `settings/layout.py` hold only
   imports and constants (the review recognises such a data module by its
   contents). Read another module's constant only as `module.NAME`, and only
   from a data module: a bare `NAME` is always the module's own. Never

@@ -3,9 +3,9 @@
 import unittest
 
 from desktop_ui.shell_controls import TaskbarControl
-from keyboard import settings
 from keyboard.win import Keyboard, maintain_keyboard
 from protocol import Message
+from tests import layouts
 from tests.keyboard_fixture import KeyboardFixture
 from winapi import keyboard_language
 from winapi.keyboard_language import Foreground
@@ -128,7 +128,7 @@ def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown()
     desktop.observations = iter(Foreground(*pair) for pair in ((11, 0x4090409), (11, 0xF002041D), (22, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
     languages = keyboard_language.KeyboardLanguages.load(desktop)
     driver = KeyboardFixture()
-    keyboard = Keyboard.open(settings.LAYOUT, driver)
+    keyboard = Keyboard.open(layouts.LAYOUT, driver)
     keyboard.on_message(Message.TOGGLE_LAYOUT)
     maintain_keyboard(keyboard, languages)
     driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#connected",)

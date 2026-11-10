@@ -1,7 +1,7 @@
-"""The keyboard's chosen values: its timings, the physical keys it uses, and the
-layout written on them. Only declarations, in the vocabulary of `keyboard.physical`,
-`keyboard.keys`, `keyboard.actions` and `keyboard.board`; `keyboard.bindings`
-builds the engine's lookups from these.
+"""The keyboard layout Workspace runs: its timings, the physical keys it uses, and
+the layers written on them. Only declarations, in the vocabulary of `keyboard.physical`,
+`keyboard.keys`, `keyboard.actions` and `keyboard.board`, gathered into one
+`keyboard.layout.Layout` that `keyboard.__main__` hands to the layout.
 """
 
 from typing import Final
@@ -92,7 +92,7 @@ _Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
 
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
-    # Every layer's board; `keyboard.bindings` rejects a missing layer or a hold of BASE at import.
+    # Every layer's board; `keyboard.bindings` rejects a missing layer or a hold of BASE.
     Layer.BASE: Board(
         # What each key does while no layer is held: Colemak-DH with home row mods (Win Alt Ctrl Shift).
         top=      Row((Key.Q,                          Key.W,                              Key.F,                         Key.P,                          Key.B),

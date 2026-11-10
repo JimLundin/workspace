@@ -5,7 +5,7 @@ import unittest
 from dataclasses import replace
 from typing import override
 
-from keyboard import engine, settings
+from keyboard import engine
 from keyboard.actions import Action, Chord, Layer
 from keyboard.bindings import Bindings
 from keyboard.engine import (
@@ -19,8 +19,9 @@ from keyboard.engine import (
 )
 from keyboard.keys import Key, Mod
 from keyboard.physical import Scancode
-from keyboard.settings import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS
 from protocol import LayoutState, Request, Tool
+from tests import layouts
+from tests.layouts import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS
 
 NAMES = {0xA0: "SFT", 0xA2: "CTL", 0xA4: "ALT", 0x20: "spc", 0x25: "left", 0x08: "bksp", 0xDB: "[", 0xC0: "`", 0xBE: "."}
 
@@ -35,7 +36,7 @@ PHYSICAL = {  # physical key by its QWERTY name
 }  # fmt: skip
 
 ESC = ESCAPE
-ENGINE = Engine.of(settings.LAYOUT, Bindings.of(settings.LAYOUT))
+ENGINE = Engine.of(layouts.LAYOUT, Bindings.of(layouts.LAYOUT))
 SPACEBAR = Scancode(0x39)
 
 

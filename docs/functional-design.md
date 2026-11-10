@@ -42,11 +42,13 @@ in reverse start order.
 The vocabulary is four modules: `physical.py` (the laptop's keys, their
 scancodes and keycaps), `keys.py` (the keys and modifiers sent to Windows),
 `actions.py` (what a key does on a layer) and `board.py` (the rows and thumbs
-layers are written in). `settings.py` declares the timings, the physical board
-and every layer in that vocabulary; `bindings.py` builds the engine's lookups
-from it and checks them at import. `engine.py` turns key events into actions. `win.py` owns the hook and message
+layers are written in). `layout.py` declares the shape of a `Layout` (its
+timings, physical board and every layer in that vocabulary) without declaring
+one: `settings/layout.py` holds the layout Workspace runs, and `__main__.py`
+hands it to `win.run`. `bindings.py` builds the engine's lookups from a layout
+and rejects an inconsistent one. `engine.py` turns key events into actions. `win.py` owns the hook and message
 loop. `firmware.py` recognizes the Charybdis keyboard and maps the
-Ctrl+Alt+Shift chords (`CHORDS`). `hook_watch.py` detects when Windows silently
+Ctrl+Alt+Shift chords (`Chords`). `hook_watch.py` detects when Windows silently
 removes the hook and reinstalls it. Measure latency with
 `scripts/benchmark_keyboard.py` before and after changing these.
 

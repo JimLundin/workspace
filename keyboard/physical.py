@@ -1,5 +1,5 @@
 """The laptop's physical keys: the scancode each sends and the Nordic keycap
-printed on it. The layout places them in `keyboard.settings.PHYSICAL`."""
+printed on it. A `keyboard.layout.Layout` places them on its board."""
 
 from dataclasses import dataclass
 from enum import Enum

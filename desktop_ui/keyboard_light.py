@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 
 from desktop_ui.kept import Kept
-from keyboard import settings
+from settings import layout
 from winapi import via
 
 
@@ -35,7 +35,7 @@ class ViaBacklight:
         return self.send(via.effect_message(read=False, effect=effect))
 
     def send(self, message: bytes) -> via.Effect | via.Absent:
-        reply = via.exchange(settings.FIRMWARE_VENDOR, settings.FIRMWARE_PRODUCT, message)
+        reply = via.exchange(layout.LAYOUT.firmware.vendor, layout.LAYOUT.firmware.product, message)
         return via.Absent() if reply is None else via.effect_reply(message, reply)
 
 

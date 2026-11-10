@@ -1,12 +1,12 @@
 """Detect selecting unrelated keyboards, losing the device across USB ports, or misreading its shortcuts."""
 
-from keyboard import settings
 from keyboard.bindings import Bindings
 from keyboard.firmware import Chords, connected
 from keyboard.layout import UsbIdentity
+from tests import layouts
 
 CHARYBDIS = UsbIdentity(0xA8F8, 0x1832)
-CHORDS = Chords.of(Bindings.of(settings.LAYOUT))
+CHORDS = Chords.of(Bindings.of(layouts.LAYOUT))
 
 
 def test_only_the_configured_firmware_keyboard_suspends_remapping() -> None:

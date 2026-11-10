@@ -19,12 +19,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
-lazy from keyboard import settings
 lazy from keyboard.bindings import Bindings
 lazy from keyboard.engine import Engine, EngineState, Indicator
 lazy from keyboard.keys import Key, Mod
 lazy from keyboard.physical import Scancode
 lazy from protocol import LayoutState, Request
+lazy from settings import layout
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +94,7 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
     )
     events = tuple((Scancode(key), down, index * 20) for index in range(count) for key, down in (pattern[index % len(pattern)],))
     host = Host()
-    rules = Engine.of(settings.LAYOUT, Bindings.of(settings.LAYOUT))
+    rules = Engine.of(layout.LAYOUT, Bindings.of(layout.LAYOUT))
     measurements, collections, pauses = measure_latencies(rules, host, events, rounds)
     gc.collect()
     tracemalloc.start()
@@ -111,7 +111,7 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         "keyboard/board.py",
         "keyboard/bindings.py",
         "keyboard/layout.py",
-        "keyboard/settings.py",
+        "settings/layout.py",
         "keyboard/win.py",
         "keyboard/__main__.py",
         "keyboard.pyw",
