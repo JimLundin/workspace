@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import type_check_only
 
 from win32more._win32 import ByReference
-from win32more.Windows.Win32.Foundation import RECT
+from win32more.Windows.Win32.Foundation import POINT, RECT
 
 CAPTUREBLT: int
 CLR_INVALID: int
@@ -67,3 +67,4 @@ def StretchBlt(
 def EnumDisplayMonitors(dc: None, clip: None, callback: MONITORENUMPROC, data: int) -> int: ...
 def GetMonitorInfoW(monitor: int, info: _MonitorInfo) -> int: ...
 def MonitorFromWindow(hwnd: int, flags: int) -> int | None: ...
+def ClientToScreen(hwnd: int, point: ByReference[POINT]) -> int: ...

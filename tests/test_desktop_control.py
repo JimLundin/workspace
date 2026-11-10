@@ -7,6 +7,7 @@ from contracts.recording_state import RecordingState
 from contracts.status import State
 from desktop_ui.bar_events import DictationShown, RecordingShown
 from desktop_ui.desktop_control import (
+    Anchored,
     Controlled,
     DesktopState,
     DictationFailed,
@@ -29,6 +30,7 @@ from desktop_ui.desktop_control import (
     RecordingChanged,
     ShowActivity,
     ShowIdle,
+    ShowMarker,
     SwitchWindows,
     ToggleMeeting,
     TrayNotify,
@@ -40,9 +42,12 @@ from desktop_ui.desktop_control import (
     recording_notice,
     transition,
 )
+from desktop_ui.dictation_marker import UNFOUND, FindAnchor
 from keyboard.physical import Scancode
 from protocol import LayoutState, Message, Tool
 from tests.layouts import APPS
+from winapi.caret import Caret
+from winapi.shapes import Rect
 
 
 def folded(events: Iterable[Event], state: DesktopState | None = None) -> tuple[DesktopState, tuple[Effect, ...]]:
@@ -63,10 +68,18 @@ def test_the_tray_shows_a_live_recording_before_the_voice_state() -> None:
     assert TrayShow(State.RECORDING) in recording
 
 
-def test_voice_state_shows_dictation_on_the_bar_only_while_listening() -> None:
-    # Defect: transcription keeps the bar's dictation lit, or listening doesn't light it.
-    assert ShowActivity(DictationShown(active=True)) in folded((VoiceShown(State.LISTENING),))[1]
-    assert ShowActivity(DictationShown(active=False)) in folded((VoiceShown(State.WORKING),))[1]
+def test_dictation_shows_on_the_bar_only_when_the_marker_has_nowhere_to_go() -> None:
+    # Defect: the bar and the marker both show a capture, a capture with nothing to mark shows nowhere,
+    # transcription keeps the bar's dictation lit, or a caret found at once is shown before the search starts
+    # and then hidden by it.
+    listening, effects = folded((VoiceShown(State.LISTENING),))
+    assert ShowActivity(DictationShown(active=False)) in effects
+    assert effects.index(ShowMarker(listening.marker)) < effects.index(FindAnchor(listening.marker.capture))
+    unfound, effects = folded((Anchored(listening.marker.capture, UNFOUND),), listening)
+    assert ShowActivity(DictationShown(active=True)) in effects
+    assert ShowActivity(DictationShown(active=False)) in folded((VoiceShown(State.WORKING),), unfound)[1]
+    _, effects = folded((Anchored(listening.marker.capture, Caret(Rect(10, 10, 12, 30))),), listening)
+    assert ShowActivity(DictationShown(active=False)) in effects
 
 
 def test_recording_warnings_only_announce_interruptions_and_failed_captures() -> None:
@@ -88,12 +101,9 @@ def test_a_problem_is_logged_and_shown_once_as_a_warning() -> None:
     # Defect: a problem from dictation or meetings is silent, shown twice, or never reaches the log.
     for fact in (Problem("The disk is full."), DictationFailed("The disk is full.")):
         _, effects = folded((fact,))
-        assert effects[0] == Log("The disk is full.")
-        match effects[1:]:
-            case (TrayNotify(text="The disk is full.", warning=True),):
-                pass
-            case other:
-                raise AssertionError(f"Expected one warning carrying {fact}, got {other}")
+        assert effects.count(Log("The disk is full.")) == 1
+        warnings = [effect for effect in effects if isinstance(effect, TrayNotify)]
+        assert warnings == [TrayNotify("Workspace", "The disk is full.", warning=True)], f"{fact}: {warnings}"
 
 
 def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_over_noise() -> None:

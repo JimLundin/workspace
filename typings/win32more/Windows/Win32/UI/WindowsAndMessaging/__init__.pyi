@@ -3,6 +3,7 @@ from collections.abc import Callable
 from typing import Final
 
 from win32more._win32 import ByReference
+from win32more.Windows.Win32.Foundation import RECT
 from win32more.Windows.Win32.UI.Accessibility import HIGHCONTRASTW
 
 LWA_ALPHA: Final[int]
@@ -98,3 +99,14 @@ def AppendMenuW(menu: int | None, flags: int, item: int, text: str | None) -> in
 def TrackPopupMenu(menu: int | None, flags: int, x: int, y: int, reserved: int, hwnd: int, rect: None) -> int: ...
 def DestroyMenu(menu: int | None) -> int: ...
 def SetProcessDPIAware() -> int: ...
+
+# The consumed fields of a thread's focus and caret: handles are None when null.
+OBJID_CARET: Final[int]
+
+class GUITHREADINFO(ctypes.Structure):
+    cbSize: int
+    hwndFocus: int | None
+    hwndCaret: int | None
+    rcCaret: RECT
+
+def GetGUIThreadInfo(thread: int, info: ByReference[GUITHREADINFO]) -> int: ...

@@ -48,6 +48,7 @@ def main() -> None:
             badges=windows.BADGES,
             keymap=windows.KEYMAP,
             indicator=windows.INDICATOR,
+            marker=windows.MARKER,
             switcher=windows.SWITCHER,
             tray=windows.TRAY_ICON,
             placement=placement.PLACEMENT,

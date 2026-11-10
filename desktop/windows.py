@@ -1,5 +1,5 @@
 """The desktop's other windows: the key map and its overlay, the layer indicator,
-the window switcher, the key-hint badges and the tray icon and its menu. Only
+the dictation marker, the window switcher, the key-hint badges and the tray icon and its menu. Only
 declarations; `desktop.__main__` hands them to the desktop.
 """
 
@@ -10,10 +10,12 @@ from contracts.status import State
 from desktop import bar, look
 from desktop_ui.colour import Rgb
 from desktop_ui.components.appearance import Scheme
+from desktop_ui.dictation_marker import Outcome, Step
 from desktop_ui.key_hint_overlay import BadgeSpec
 from desktop_ui.keymap import Role
 from desktop_ui.keymap_views import Bindings, KeymapSpec, KeysSpec, Lit, MapWindowSpec, OverlaySpec
 from desktop_ui.layer_indicator import IndicatorSpec
+from desktop_ui.marker_window import MarkerSpec
 from desktop_ui.navigation import Direction
 from desktop_ui.tray import TraySpec
 from desktop_ui.window_switcher import SwitcherSpec
@@ -31,6 +33,17 @@ BADGES: Final = BadgeSpec(
     palette=look.PALETTE,
 )
 """Workspace's badges; the bar passes them to the overlay."""
+
+
+MARKER: Final = MarkerSpec(
+    height=28,
+    gap=6,
+    flash=1.2,
+    steps=every_member(Step, {Step.LISTENING: "mic.fill", Step.TRANSCRIBING: None, Step.TYPING: "keyboard"}),
+    outcomes=every_member(Outcome, {Outcome.DONE: "check", Outcome.FAILED: "close"}),
+    scheme=Scheme.DARK,
+)
+"""The dictation marker beside the caret, in the bar's sizes and glass."""
 
 
 KEYMAP: Final = KeymapSpec(

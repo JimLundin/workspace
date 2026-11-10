@@ -27,6 +27,11 @@ class Beat:
     """A dot's opacity at rest, as a share of its ink's."""
 
 
+def level(value: float | None) -> float:
+    """A microphone level as a wave bar's height, on a perceptual scale."""
+    return min(1.0, math.log10(1 + max(0.0, value or 0.0) * 90) / math.log10(91))
+
+
 def paint_wave(painter: QtGui.QPainter, start: QtCore.QPointF, trace: Iterable[float], capsule: Capsule, markers: Markers) -> None:
     """One bar per sample from `start`, centred on its height, in the painter's brush."""
     painter.setPen(Qt.PenStyle.NoPen)

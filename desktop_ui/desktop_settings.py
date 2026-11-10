@@ -14,6 +14,7 @@ from desktop_ui.key_hint_overlay import BadgeSpec
 from desktop_ui.keymap import KeyboardView
 from desktop_ui.keymap_views import KeymapSpec
 from desktop_ui.layer_indicator import IndicatorSpec
+from desktop_ui.marker_window import MarkerSpec
 from desktop_ui.tray import TraySpec
 from desktop_ui.window_switcher import SwitcherSpec
 from protocol import App, Places, Programs
@@ -45,6 +46,8 @@ class DesktopSettings:
     """The key-hint badges the bar shows over windows."""
     keymap: KeymapSpec
     indicator: IndicatorSpec
+    marker: MarkerSpec
+    """The dictation marker beside the caret."""
     switcher: SwitcherSpec
     tray: TraySpec
     placement: PlacementSpec

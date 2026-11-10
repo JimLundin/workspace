@@ -25,3 +25,8 @@ class RECT(ctypes.Structure):
     top: int
     right: int
     bottom: int
+
+class POINT(ctypes.Structure):
+    x: int
+    y: int
+    def __init__(self, x: int = ..., y: int = ...) -> None: ...

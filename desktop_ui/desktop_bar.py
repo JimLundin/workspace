@@ -7,7 +7,6 @@ and `ui_components.appearance` how they read. This owner observes the desktop an
 publishes each result to the one bar window and its glass.
 """
 
-import math
 import queue
 import threading
 import time
@@ -73,6 +72,7 @@ lazy from desktop_ui.island_motion import Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
+lazy from desktop_ui.live_marks import level
 lazy from desktop_ui.navigation import AppKey, CycleApp, Order, ShowWindow
 lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.shell_controls import TaskbarControl
@@ -95,11 +95,6 @@ class BarActions:
     menu: Callable[[], None]
     problem: Callable[[str], None]
     tool: Callable[[Tool], None]
-
-
-def level(value: float | None) -> float:
-    """A microphone level as a wave bar's height, on a perceptual scale."""
-    return min(1.0, math.log10(1 + max(0.0, value or 0.0) * 90) / math.log10(91))
 
 
 @dataclass(frozen=True, slots=True)

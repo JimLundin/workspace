@@ -30,6 +30,7 @@ from assistant.llm import settings_from
 from cell import Cell
 from desktop_ui import bar_events
 from desktop_ui.desktop_control import (
+    Anchored,
     Chord,
     Controlled,
     DesktopState,
@@ -45,6 +46,7 @@ from desktop_ui.desktop_control import (
     LayoutReported,
     LayoutShown,
     Log,
+    MarkerFaded,
     MenuChosen,
     MenuRequested,
     Navigate,
@@ -59,6 +61,7 @@ from desktop_ui.desktop_control import (
     ShowActivity,
     ShowIdle,
     ShowKeymap,
+    ShowMarker,
     ShowMenu,
     ShowOverlay,
     ShowSwitcher,
@@ -75,19 +78,21 @@ from desktop_ui.desktop_control import (
     transition,
 )
 from desktop_ui.desktop_settings import DesktopSettings, Launcher
+from desktop_ui.dictation_marker import UNFOUND, FindAnchor, marked
 from desktop_ui.navigation import ShowWindow
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.tray import Tray
 from desktop_ui.voice import Voice
 from protocol import App, Message
-from winapi import processes, screen, shell, system, windows
+from winapi import caret, processes, screen, shell, system, windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import tooltip_style
 lazy from desktop_ui.components.widgets import near_pointer, show_window
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
 lazy from desktop_ui.layer_indicator import Indicator
+lazy from desktop_ui.marker_window import DictationMarker
 lazy from desktop_ui.qt_ui import application
 lazy from desktop_ui.vector_icons import icon
 lazy from desktop_ui.window_switcher import WindowSwitcher
@@ -100,6 +105,8 @@ WM_EVENTS: Final = system.WindowMessage.APP + 22
 """Any thread -> Qt thread: events are waiting in the inbox."""
 CAPTURE_TIMER_MS: Final = 1000
 """How often the control window checks a voice capture against its time limit."""
+ANCHOR_WAIT_MS: Final = 300
+"""How long the marker waits for an app to say where its caret is before marking its window."""
 
 
 def indicator_area() -> Rect:
@@ -194,6 +201,7 @@ class _Views:
     indicator: Indicator | None = None
     keymap: KeymapWindow | None = None
     overlay: KeymapOverlay | None = None
+    marker: DictationMarker | None = None
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -266,6 +274,10 @@ class DesktopApp:
             case ShowActivity() | Navigate() | Chord() | LayoutShown():
                 if bar := self.views.get().bar:
                     self._on_bar(bar, effect)
+            case ShowMarker(marker):
+                self._marker().show(marked(marker))
+            case FindAnchor(capture):
+                return self._find_anchor(capture)
             case SwitchWindows():
                 self._list_windows()
             case ShowSwitcher(choices):
@@ -386,6 +398,34 @@ class DesktopApp:
             self.views.update(lambda views: replace(views, indicator=built))
         return indicator
 
+    def _marker(self) -> DictationMarker:
+        if not (marker := self.views.get().marker):
+            report = self.inbox.report
+            marker = DictationMarker.build(self.settings.marker, self.settings.bar, self.voice.level, lambda: report(MarkerFaded()))
+            built = marker
+            self.views.update(lambda views: replace(views, marker=built))
+        return marker
+
+    def _find_anchor(self, capture: int) -> Event | None:
+        """Where `capture`'s text will go: the system caret at once, else what the app reports off the Qt thread,
+        else its window once the app has had `ANCHOR_WAIT_MS` to answer. Our own windows mark nothing."""
+        window = windows.foreground()
+        if not window or windows.process_id(window) == os.getpid():
+            return Anchored(capture, UNFOUND)
+        if found := caret.thread_caret(window):
+            return Anchored(capture, found)
+        fallback = Anchored(capture, caret.Window(windows.visible_rect(window)))
+        report = self.inbox.report
+
+        def ask() -> None:
+            with caret.com_thread() as ready:
+                reported = caret.accessible_anchor(window) if ready else None
+            report(Anchored(capture, reported) if reported else fallback)
+
+        threading.Thread(target=ask, name="caret", daemon=True).start()
+        QtCore.QTimer.singleShot(ANCHOR_WAIT_MS, lambda: report(fallback))
+        return None
+
     def _list_windows(self) -> None:
         """Read the window list off the Qt thread; the switcher shows it when it arrives."""
 
@@ -429,6 +469,8 @@ class DesktopApp:
     def quit(self) -> None:
         """Close the views and the tray, then end Qt's loop."""
         self.close_bar()
+        if marker := self.views.get().marker:
+            marker.close()
         self.tray.remove()
         self.inbox.window.destroy()
         self.root.quit()

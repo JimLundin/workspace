@@ -22,12 +22,14 @@ from contracts.hotkeys import ROUTES, Route
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job, State
 from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
+from desktop_ui.dictation_marker import UNFOUND, FindAnchor, MarkerState, anchored, faded, failed, found, job_changed, listened, on_bar
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, keyed
 from desktop_ui.overlay import OverlayState
 from keyboard.actions import Layer
 from keyboard.physical import Scancode
 from protocol import App, LayoutState, Target, Tool, decode_indicator
+from winapi.caret import Anchor
 lazy from winapi.shell import MenuItem
 
 # ---- the tray menu ------------------------------------------------------------------
@@ -169,6 +171,7 @@ class DesktopState:
     overlay: OverlayState = field(default_factory=OverlayState)
     layout: LayoutState | None = None
     """What the layout last reported; None until it does."""
+    marker: MarkerState = field(default_factory=MarkerState)
 
 
 # ---- facts --------------------------------------------------------------------------
@@ -242,6 +245,19 @@ class Problem:
 
 
 @dataclass(frozen=True, slots=True)
+class Anchored:
+    """Where a capture's text will go, or that nothing was found to mark it by."""
+
+    capture: int
+    where: Anchor | UNFOUND
+
+
+@dataclass(frozen=True, slots=True)
+class MarkerFaded:
+    """The marker's outcome has shown for long enough."""
+
+
+@dataclass(frozen=True, slots=True)
 class DictationFailed:
     """Dictation failed, which the user hears about where they dictated as well as in the tray."""
 
@@ -261,6 +277,8 @@ type Fact = (
     | OverlayToggled
     | Problem
     | DictationFailed
+    | Anchored
+    | MarkerFaded
 )
 
 # ---- requests: their own effect -----------------------------------------------------
@@ -334,6 +352,13 @@ class TrayNotify:
 @dataclass(frozen=True, slots=True)
 class TrayShow:
     state: State
+
+
+@dataclass(frozen=True, slots=True)
+class ShowMarker:
+    """The dictation marker shows `marker` beside the caret."""
+
+    marker: MarkerState
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,6 +470,8 @@ type Effect = (
     | TrayNotify
     | TrayShow
     | ShowActivity
+    | ShowMarker
+    | FindAnchor
     | HandleKey
     | ToggleMeeting
     | UseLayout
@@ -575,11 +602,11 @@ def _chosen(choice: int) -> Iterator[Effect]:
 def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[Effect]:
     """The effects of `fact`, given the state before it and after it."""
     match fact:
-        case VoiceShown(shown):
-            yield ShowActivity(DictationShown(active=shown is State.LISTENING))
+        case VoiceShown():
+            yield from _marked(state.marker, after.marker)
             yield TrayShow(tray_state(after.shown))
-        case JobChanged(job):
-            yield ShowActivity(JobShown(job))
+        case JobChanged() | Anchored() | MarkerFaded():
+            yield from _marked(state.marker, after.marker)
         case Notified(title, text):
             yield TrayNotify(title, text, warning=False)
         case RecordingChanged(recording):
@@ -609,17 +636,41 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
         case OverlayToggled():
             yield ShowOverlay(after.overlay)
             yield OverlayEnabled(enabled=after.overlay.enabled)
-        case Problem(message) | DictationFailed(message):
+        case Problem(message):
             yield Log(message)
             yield TrayNotify("Workspace", message, warning=True)
+        case DictationFailed(message):
+            yield Log(message)
+            yield TrayNotify("Workspace", message, warning=True)
+            yield from _marked(state.marker, after.marker)
         case _:
             assert_never(fact)
+
+
+def _marked(state: MarkerState, after: MarkerState) -> Iterator[Effect]:
+    """Dictation shows on the marker, or on the bar when nothing was found to anchor the marker to.
+
+    A new capture looks for its anchor last, so an answer found at once is shown after the search began."""
+    bar = on_bar(after)
+    yield ShowActivity(DictationShown(active=after.listening and bar))
+    yield ShowActivity(JobShown(after.job if bar else None))
+    yield ShowMarker(after)
+    if find := found(state, after):
+        yield find
 
 
 def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
     match fact:
         case VoiceShown(shown):
-            return replace(state, shown=replace(state.shown, state=shown))
+            return replace(state, shown=replace(state.shown, state=shown), marker=listened(state.marker, listening=shown is State.LISTENING))
+        case JobChanged(job):
+            return replace(state, marker=job_changed(state.marker, job))
+        case DictationFailed():
+            return replace(state, marker=failed(state.marker))
+        case Anchored(capture, where):
+            return replace(state, marker=anchored(state.marker, capture, where))
+        case MarkerFaded():
+            return replace(state, marker=faded(state.marker))
         case RecordingChanged(recording):
             return replace(state, shown=replace(state.shown, recording=recording))
         case Controlled(action):
@@ -631,7 +682,7 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
             return replace(state, layout=layout, overlay=state.overlay.set_layout(on=layout is LayoutState.ON))
         case OverlayToggled():
             return replace(state, overlay=replace(state.overlay, enabled=not state.overlay.enabled))
-        case JobChanged() | Notified() | MenuRequested() | MenuChosen() | Problem() | DictationFailed():
+        case Notified() | MenuRequested() | MenuChosen() | Problem():
             return state
         case _:
             assert_never(fact)
