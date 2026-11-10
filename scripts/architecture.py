@@ -96,14 +96,6 @@ class Report:
 
 
 @dataclass(frozen=True, slots=True)
-class Kept:
-    """Constants library modules keep, each as `module.NAME`, because they are facts or mechanics rather than choices."""
-
-    reason: Text
-    constants: tuple[Text, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class Program:
     """One of Workspace's programs and the packages that are its code."""
 
@@ -118,9 +110,6 @@ class Configuration:
     exceptions: tuple[ExceptionSpec, ...] = ()
     constants: tuple[Text, ...] = ()
     """Packages whose modules read other modules' constants only as `module.NAME`, and only from declarations-only modules."""
-    libraries: tuple[Text, ...] = ()
-    """Packages that declare shapes and no values: each constant a module there declares is a finding unless `kept` names it."""
-    kept: tuple[Kept, ...] = ()
     data: tuple[Text, ...] = ()
     """Packages of values that only entry points and each other import."""
     entries: tuple[Text, ...] = ()
@@ -260,41 +249,6 @@ def _declarations_only(tree: ast.Module) -> bool:
             case _:
                 return False
     return True
-
-
-VALUE: Final = re.compile(r"_?[A-Z][A-Z0-9_]*")
-"""A module-level value's name, public or private."""
-
-
-def _values(statement: ast.stmt) -> Iterator[str]:
-    """The values a module-level statement declares; a sentinel is a type, not a value."""
-    if isinstance(statement, ast.Assign | ast.AnnAssign) and not _sentinel(statement):
-        targets = (name for target in _targets(statement) for name in (target.elts if isinstance(target, ast.Tuple) else (target,)))
-        yield from (name.id for name in targets if isinstance(name, ast.Name) and VALUE.fullmatch(name.id))
-
-
-def library_constants(sources: Iterable[Source], libraries: Sequence[str], kept: Sequence[Kept]) -> Iterator[Finding]:
-    """A library module declares shapes, not values: its entry point builds the values and hands them in.
-
-    A fact or mechanic a library keeps (a Win32 message, a shipped font file, an empty
-    value of its type) is named under `kept` with its reason; a kept name no longer
-    declared is stale."""
-    allowed = frozenset(name for group in kept for name in group.constants)
-    declared = tuple(
-        (module, name, statement.lineno)
-        for source in sources
-        for module in (module_name(source.name),)
-        if any(_within(module, package) for package in libraries)
-        for statement in ast.parse(source.text).body
-        for name in _values(statement)
-    )
-    detail = "Declare the value in an entry point's data and hand it in, or keep it under [[tool.workspace.architecture.kept]] with its reason."
-    yield from (Finding("library-constant", module, name, name, line, detail) for module, name, line in declared if f"{module}.{name}" not in allowed)
-    present = frozenset(f"{module}.{name}" for module, name, _ in declared)
-    stale = (name.rpartition(".") for name in sorted(allowed - present))
-    yield from (
-        Finding("stale-kept", module, name, f"{module}.{name}", 0, "Remove it from kept: no library declares it.") for module, _, name in stale
-    )
 
 
 def entry_data(sources: Iterable[Source], data: Sequence[str], entries: Sequence[str], cache: Cache | None) -> Iterator[Finding]:
@@ -1267,7 +1221,6 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *duplicates(observations.values()),
         *redeclarations(observations.values()),
         *shared_constants(loaded, configuration.constants),
-        *library_constants(loaded, configuration.libraries, configuration.kept),
         *entry_data(all_source, configuration.data, configuration.entries, cache),
         *program_isolation(loaded, configuration.programs, cache),
         *enum_shapes(loaded),

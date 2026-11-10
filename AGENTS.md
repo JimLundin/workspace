@@ -136,22 +136,20 @@ their tests. Legacy data and backwards compatibility are not requirements.
   structures) are exempt from these rules. A mapping that leaves its owner
   is a `frozendict`, replaced rather than mutated. Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
-- Libraries declare shapes; entry points supply the values. A library module
-  (`keyboard/`, `desktop_ui/`) declares types and behaviour and no chosen
-  values: layout, timings, sizes, wording, colours, specs, apps and window
-  setups are records it is handed, so tests hand it their own. Each program's
-  `__main__` (and `launch.py`) builds them from data modules: `settings/` for
-  what the programs share (the apps, the programs and their windows, the
-  keyboard layout) and the program's own entry package for the rest (`desktop/look.py`,
-  `bar.py`, `windows.py`, `placement.py`). Only entry points and data modules
-  import data, tests included (`entry-data`); a constant a library declares is
-  rejected (`library-constant`) unless it is a fact or mechanic named with its
-  reason under `[[tool.workspace.architecture.kept]]`: a Win32 identifier, a
-  shipped font file, icon artwork, an empty value of its type, wiring between
-  enums, an algorithm's bound. What a value derives from the layout (the
-  menu's key hints, the pager's chord letters) the entry point derives and
-  passes in. UI wording is data; error and log messages stay beside the code
-  that raises them.
+- Entry points supply the choices; libraries declare their shapes. What you
+  would change to make Workspace yours (the keyboard layout, the apps, the
+  programs, the window setups and web apps, the look and the bar's sizes and
+  composition) is data: a record a library (`keyboard/`, `desktop_ui/`) is
+  handed, so tests hand it their own. Each program's `__main__` (and
+  `launch.py`) builds them from data modules: `settings/` for what the
+  programs share and the program's own entry package for the rest
+  (`desktop/look.py`, `bar.py`, `windows.py`, `placement.py`). Only entry
+  points and data modules import data, tests included (`entry-data`). A
+  library keeps its own wording, timings, limits and facts in code beside
+  what reads them; don't extract a value nobody chooses. Build a record whole:
+  what derives from other inputs (the menu's key hints, the pager's chord
+  letters) is computed by whoever has those inputs, never declared empty and
+  patched in.
 - A data module holds only imports and declarations (the review recognises
   one by its contents). Read another module's constant only as `module.NAME`,
   and only from a data module: a bare `NAME` is always the module's own. Never
@@ -211,8 +209,7 @@ a Win32 function declared in more than one module (`native-redeclaration`),
 two writes in a row to the same state (`piecemeal-state`), a private
 property that only returns one field of an owner's state (`mirrored-state`),
 constants read across modules other than as `data_module.NAME`
-(`constant-import`, `shared-constant`), a value declared in a library rather
-than handed in (`library-constant`), data imported by anything but an entry
+(`constant-import`, `shared-constant`), data imported by anything but an entry
 point (`entry-data`), one program importing another's code
 (`program-isolation`), a one-member enum (`single-member-enum`)
 and a table keyed by an enum in the enum's own module (`member-table`).

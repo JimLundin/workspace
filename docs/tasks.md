@@ -159,19 +159,10 @@ compare load alone (an editing check) against them.
 
 ## 4. Values handed in, not declared by libraries
 
-Done on 2026-11-10: libraries declare shapes, entry points supply the values
-(AGENTS.md; `library-constant` and `entry-data` enforce it for `keyboard` and
-`desktop_ui`). Left:
+Done on 2026-11-10: entry points supply the choices (AGENTS.md); `entry-data`
+and `program-isolation` keep the structure. The `library-constant` rule was
+dropped the same day: it pushed wording, timings and facts into data. Left:
 
-- **Migrate the other packages.** `assistant`, `gateway` and `winapi` still
-  declare tunings: `winapi.pcm.RATE` and its buffer sizes, the meeting store's
-  chunk sizes, `journal.BUSY_SECONDS`, `meetings.SPOOL_SECONDS` and
-  `PUBLISH_SECONDS`, `llm.MAX_SECONDS`/`MIN_SECONDS`, `gateway.proxy.TIMEOUT_S`
-  and its bind host. Hand each in from its entry point, then add the package to
-  `libraries`.
-- **Revisit the kept clocks.** `hook_watch`'s three thresholds, the desktop's
-  capture timer and resource sampling are kept as a mechanism's clocks; hand
-  them in if any proves worth tuning.
 - **Widen `constants` to `desktop_ui`.** 23 findings: the desktop reads kept
   facts across its modules (`EMPTY_SHELF`, `NOWHERE`, `ROUTES`,
   `PHYSICAL_NAMES`, the icon artwork, `pcm.RATE`) with bare names or out of

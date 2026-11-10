@@ -278,9 +278,8 @@ desktop_ui = ["fonts/*.ttf", "fonts/OFL.txt"]
 
 [tool.workspace.architecture]
 constants = ["keyboard", "settings", "desktop"]
-# Libraries declare shapes; the entry points (launch.py and each program's
-# __main__) build the values from the data packages and hand them in.
-libraries = ["keyboard", "desktop_ui"]
+# The entry points (launch.py and each program's __main__) build the chosen
+# values from the data packages and hand them in.
 data = ["settings", "desktop"]
 entries = ["launch", "scripts.benchmark_keyboard"]
 
@@ -301,75 +300,6 @@ packages = ["keyboard"]
 [[tool.workspace.architecture.programs]]
 name = "desktop"
 packages = ["desktop", "desktop_ui", "assistant"]
-
-[[tool.workspace.architecture.kept]]
-reason = "Windows' own identifiers: session locks, window messages, the keys the window switcher reads natively and a process creation flag."
-constants = [
-    "keyboard.win.LOCK_NAME",
-    "keyboard.win.SWITCHER_KEYS",
-    "desktop_ui.desktop_app.LOCK_NAME",
-    "desktop_ui.desktop_app.WM_TRAY",
-    "desktop_ui.desktop_app.WM_EVENTS",
-    "desktop_ui.application_observer._CREATE_NO_WINDOW",
-]
-
-[[tool.workspace.architecture.kept]]
-reason = "The typeface Workspace ships: its family and its font files."
-constants = ["desktop_ui.components.typeface.FAMILY", "desktop_ui.components.typeface.FONTS", "desktop_ui.components.typeface.CUTS"]
-
-[[tool.workspace.architecture.kept]]
-reason = "Icon artwork, generated or drawn for the icon library, and how the library composes and falls back."
-constants = [
-    "desktop_ui.fluent_icons.REGULAR",
-    "desktop_ui.fluent_icons.FILLED",
-    "desktop_ui.vector_icons.OWN",
-    "desktop_ui.vector_icons.BADGED",
-    "desktop_ui.vector_icons.BADGE_SCALE",
-    "desktop_ui.vector_icons.FALLBACK",
-    "desktop_ui.vector_icons._STOP",
-    "desktop_ui.vector_icons._CPU",
-    "desktop_ui.vector_icons._MEMORY",
-    "desktop_ui.vector_icons._QUESTION",
-    "desktop_ui.vector_icons._ABSENT",
-]
-
-[[tool.workspace.architecture.kept]]
-reason = "The laptop's physical keyboard, row by row, as the key map draws it: hardware, not a layout."
-constants = ["desktop_ui.keymap.ROWS", "desktop_ui.keymap.PHYSICAL_NAMES"]
-
-[[tool.workspace.architecture.kept]]
-reason = "Empty or whole values of their own types, which their owners start from."
-constants = [
-    "keyboard.engine.NO_KEYS",
-    "desktop_ui.application_observer.EMPTY_ARRANGEMENT",
-    "desktop_ui.bar_events.NO_SCREEN",
-    "desktop_ui.desktop_pager.NO_HINTS",
-    "desktop_ui.shell_items.EMPTY_SHELF",
-    "desktop_ui.window_layout.NOWHERE",
-    "desktop_ui.window_layout.FULL",
-]
-
-[[tool.workspace.architecture.kept]]
-reason = "Wiring between closed sets of codes: what each activity, tool and layer button reaches, in order."
-constants = ["desktop_ui.island_model.ACTIVITY_KEYS", "desktop_ui.navigation.KEYED", "desktop_ui.desktop_pager.JUMPS", "desktop_ui.keymap_views._LAYERS"]
-
-[[tool.workspace.architecture.kept]]
-reason = "Bounds of an algorithm: the layers held at once, the events one undecided key buffers, and when a spring rests."
-constants = ["keyboard.engine.MAX_LAYERS", "keyboard.engine.MAX_BUFFERED", "desktop_ui.motion.REST"]
-
-[[tool.workspace.architecture.kept]]
-reason = "Clocks of a mechanism rather than settings: the hook watchdog's thresholds, the capture time-limit check and resource sampling."
-constants = [
-    "keyboard.hook_watch.ANSWER_SLACK_MS",
-    "keyboard.hook_watch.SUSPECT_MS",
-    "keyboard.hook_watch.PROBE_MS",
-    "desktop_ui.desktop_app.CAPTURE_TIMER_MS",
-    "desktop_ui.bar_status.RESOURCES",
-]
-
-[[tool.workspace.architecture.kept]]
-reason = "Parsers and validators: a colour pattern and the overlay's file adapters."
-constants = ["desktop_ui.colour._HEX", "desktop_ui.overlay._PREFERENCE", "desktop_ui.overlay._POSITION"]
 
 [[tool.workspace.architecture.exceptions]]
 rule = "mutable-parameter"

@@ -7,14 +7,14 @@ lines are code lines. Product code averages 5.8 nodes a line.
 | | nodes | lines |
 |---|---:|---:|
 | **product** | 87,133 | 14,983 |
-| **support** | 57,889 | 8,604 |
+| **support** | 57,615 | 8,573 |
 
 | area | nodes | lines |
 |---|---:|---:|
 | desktop_ui | 44,200 | 7,473 |
 | tests | 42,144 | 6,154 |
 | winapi | 19,657 | 3,302 |
-| scripts | 12,136 | 1,744 |
+| scripts | 11,862 | 1,713 |
 | assistant | 6,962 | 1,196 |
 | keyboard | 6,466 | 1,072 |
 | contracts | 3,992 | 719 |
@@ -28,7 +28,7 @@ The 25 largest files:
 
 | file | nodes | lines |
 |---|---:|---:|
-| `scripts/architecture.py` | 7,175 | 985 |
+| `scripts/architecture.py` | 6,901 | 954 |
 | `desktop_ui/island_surface.py` | 5,825 | 716 |
 | `tests/test_keyboard_hook.py` | 4,006 | 479 |
 | `keyboard/win.py` | 3,782 | 624 |
