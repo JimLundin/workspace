@@ -19,7 +19,6 @@ from assistant.features import Assistant
 from assistant.llm import MAX_SECONDS, Missing, Settings
 from assistant.meeting_store import MeetingArchive
 from assistant.meetings import Meetings
-from components import DIRECTORY
 from contracts.recording_state import RecordingAction
 from contracts.status import State
 from desktop_ui.desktop_control import Event, JobChanged, Notified, Problem, RecordingChanged, ShowVoice, idle_state
@@ -58,8 +57,9 @@ class Voice:
     worker: threading.Thread
 
     @classmethod
-    def open(cls, settings: Settings | Missing, owner: int, report: Callable[[Event], None], log: Callable[[str], None]) -> Voice:
-        """The owners over the default microphone; `owner` is the desktop's control window, which owns the clipboard."""
+    def open(cls, settings: Settings | Missing, owner: int, report: Callable[[Event], None], log: Callable[[str], None], transcripts: Path) -> Voice:
+        """The owners over the default microphone; `owner` is the desktop's control window, which owns the clipboard,
+        and meeting transcripts go to `transcripts`."""
         mic_event = system.create_event()
         mic = audio.Microphone.open(RATE, MAX_SECONDS, mic_event)
         machine = WinDesktop.following(
@@ -74,7 +74,7 @@ class Voice:
         meetings = Meetings.open(
             usable,
             lambda source: recording.MeetingAudio(computer_audio=source == "both"),
-            archive=MeetingArchive(DIRECTORY / "meetings"),
+            archive=MeetingArchive(transcripts),
             on_update=lambda recorded: report(RecordingChanged(recorded)),
             log=log,
         )

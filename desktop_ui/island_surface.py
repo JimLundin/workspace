@@ -18,7 +18,6 @@ from typing import assert_never, override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from components import BAR_WINDOW
 from desktop_ui import island_menu
 from desktop_ui.bar_control import KeyboardFocus, paint_feedback
 from desktop_ui.bar_events import BarSpec, Deactivated, Event, Hovered, MenuKey, Picked, Pressed, Selected, TrayClicked, VolumeSet
@@ -33,7 +32,6 @@ from desktop_ui.island_motion import Timing
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.shell_surface import Pager, pixmap
 from desktop_ui.vector_icons import paint_icon
-from desktop_ui.view_publication import log
 from winapi import windows
 from winapi.appearance import Frost
 from winapi.composition import DesktopComposition, GlassScene, borderless
@@ -661,7 +659,7 @@ class Capsule(KeyboardFocus):
 class BarWindow(QtWidgets.QWidget):
     """The bar's one window: the full width of the primary screen, as tall as the capsules."""
 
-    def __init__(self, report: Callable[[Event], None], composition: DesktopComposition | None, spec: BarSpec) -> None:
+    def __init__(self, report: Callable[[Event], None], composition: DesktopComposition | None, spec: BarSpec, log: Callable[[str], None]) -> None:
         super().__init__()
         self.spec = spec
         sizes = self.sizes = spec.sizes
@@ -669,6 +667,7 @@ class BarWindow(QtWidgets.QWidget):
         self.washes = spec.washes
         self.report = report
         """Everything the person does in the bar, as the bar's events."""
+        self.log = log
         self.composition = composition
         self.menu: Menu | None = None
         self.capsules: Mapping[Key, Capsule] = frozendict()
@@ -687,7 +686,7 @@ class BarWindow(QtWidgets.QWidget):
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()
         self.glass = False
-        tool_window(self, BAR_WINDOW, on_top=True)
+        tool_window(self, spec.title, on_top=True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # The open menu takes the keyboard here.
         borderless(int(self.winId()))
         windows.allow_activation(int(self.winId()), allowed=False)
@@ -854,7 +853,7 @@ class BarWindow(QtWidgets.QWidget):
             try:
                 self.scene = self.composition.scene("Workspace · Island glass", self.spec.glass.lighting)
             except OSError as error:
-                log(f"Island glass unavailable; using the solid material: {error}")
+                self.log(f"Island glass unavailable; using the solid material: {error}")
         if self.scene is None:
             return
         outer = windows.outer_rect(int(self.winId()))

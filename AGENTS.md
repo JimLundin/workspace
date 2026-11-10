@@ -41,7 +41,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 - Keep the keyboard process isolated: `keyboard/` and everything it imports use
   only the standard library, `winapi` and the stdlib-only top-level modules
-  (`cell`, `config`, `protocol`, `components`, `diagnostics`), never
+  (`cell`, `protocol`, `diagnostics`) and the `settings` data package, never
   `assistant`, `desktop_ui` or third-party packages. Measure key-event latency, allocation
   and GC with `scripts/benchmark_keyboard.py` before and after changing the
   hook, the engine or their shared dependencies.
@@ -127,7 +127,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
   is a `frozendict`, replaced rather than mutated. Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
 - Data declared once is a module of declarations, not a type with one
-  instance: `config.py`, `components.py` and `settings/layout.py` hold only
+  instance: `settings/apps.py`, `settings/programs.py` and `settings/layout.py` hold only
   imports and constants (the review recognises such a data module by its
   contents). Read another module's constant only as `module.NAME`, and only
   from a data module: a bare `NAME` is always the module's own. Never

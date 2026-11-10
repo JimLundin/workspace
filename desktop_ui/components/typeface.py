@@ -5,6 +5,7 @@ Regular, Medium, SemiBold and Bold cuts ship in desktop_ui/fonts under the SIL O
 Font License 1.1 (desktop_ui/fonts/OFL.txt).
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
@@ -13,7 +14,6 @@ from typing import Final
 lazy from PySide6 import QtGui
 
 from desktop_ui.qt_runtime import prepare
-lazy from desktop_ui.view_publication import log
 
 prepare()
 
@@ -85,7 +85,7 @@ TYPE: Final = TypeScale(
 """Workspace's type scale; each surface reads its sizes from here or from what its owner passes in."""
 
 
-def load() -> None:
+def load(log: Callable[[str], None]) -> None:
     """Register the cuts with Qt's font database; views fall back to the system font if one is missing."""
     if FAMILY in QtGui.QFontDatabase.families():
         return

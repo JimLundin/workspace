@@ -6,44 +6,44 @@ lines are code lines. Product code averages 5.8 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 85,707 | 14,670 |
-| **support** | 56,942 | 8,492 |
+| **product** | 86,052 | 14,728 |
+| **support** | 56,981 | 8,494 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 45,225 | 7,825 |
-| tests | 41,788 | 6,110 |
+| desktop_ui | 45,386 | 7,838 |
+| tests | 41,827 | 6,112 |
 | winapi | 19,646 | 3,299 |
 | scripts | 11,545 | 1,676 |
-| keyboard | 8,677 | 1,446 |
-| assistant | 6,982 | 1,198 |
+| keyboard | 8,737 | 1,459 |
+| assistant | 6,962 | 1,196 |
 | typings | 3,609 | 706 |
 | contracts | 1,612 | 306 |
-| (top level) | 1,556 | 282 |
-| gateway | 1,065 | 186 |
-| settings | 913 | 120 |
-| desktop | 31 | 8 |
+| (top level) | 1,482 | 269 |
+| gateway | 1,074 | 187 |
+| settings | 1,066 | 149 |
+| desktop | 87 | 25 |
 
 The 25 largest files:
 
 | file | nodes | lines |
 |---|---:|---:|
 | `scripts/architecture.py` | 6,585 | 918 |
-| `desktop_ui/island_surface.py` | 5,765 | 709 |
-| `tests/test_keyboard_hook.py` | 3,992 | 480 |
-| `keyboard/win.py` | 3,738 | 612 |
+| `desktop_ui/island_surface.py` | 5,774 | 708 |
+| `tests/test_keyboard_hook.py` | 4,006 | 479 |
+| `keyboard/win.py` | 3,781 | 623 |
 | `tests/test_engine.py` | 3,464 | 568 |
 | `tests/test_meetings.py` | 3,106 | 474 |
-| `desktop_ui/keymap_views.py` | 2,835 | 467 |
-| `assistant/meetings.py` | 2,737 | 456 |
-| `desktop_ui/desktop_bar.py` | 2,383 | 425 |
+| `desktop_ui/keymap_views.py` | 2,848 | 471 |
+| `assistant/meetings.py` | 2,717 | 454 |
+| `desktop_ui/desktop_bar.py` | 2,404 | 432 |
 | `keyboard/engine.py` | 2,218 | 349 |
 | `desktop_ui/island_menu.py` | 2,121 | 362 |
 | `desktop_ui/application_observer.py` | 2,098 | 360 |
+| `desktop_ui/desktop_app.py` | 2,096 | 391 |
 | `desktop_ui/desktop_control.py` | 2,002 | 428 |
-| `desktop_ui/desktop_app.py` | 1,966 | 381 |
 | `desktop_ui/island_layout.py` | 1,941 | 368 |
-| `desktop_ui/bar_events.py` | 1,912 | 400 |
+| `desktop_ui/bar_events.py` | 1,917 | 402 |
 | `desktop_ui/island_model.py` | 1,846 | 318 |
 | `winapi/composition.py` | 1,845 | 314 |
 | `winapi/audio.py` | 1,826 | 277 |

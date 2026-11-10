@@ -8,4 +8,4 @@ quick **job** such as transcription (`contracts/status.py`), or a meeting
 recording. See [the island bar](docs/toolbar-design.md).
 
 **Component**: one of the programs `launch.py` starts (the gateway, the layout
-and the desktop), listed in the catalogue in `components.py`.
+and the desktop), declared in `settings/programs.py`.

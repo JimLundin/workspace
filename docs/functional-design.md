@@ -12,7 +12,7 @@ these.
 | Process | Entry | Owns |
 | --- | --- | --- |
 | Launcher | `StartWorkspace.cmd`, `launch.py` | Starts, stops and restarts the components from the checkout's `.venv`; it supervises nothing |
-| AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway` and `components` |
+| AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway`, `protocol` and `settings.programs` |
 | Layout | `keyboard.pyw`, `keyboard/` | The keyboard hook and remapping. Standard library and `winapi/` only |
 | Desktop | `desktop/__main__.py`, `desktop_ui/`, `assistant/` | The bar, tray, key map, overlay and window placement, dictation and meeting recording, on Qt's event loop, with worker threads for slow jobs |
 
@@ -30,9 +30,8 @@ in reverse start order.
 | Module | Role |
 | --- | --- |
 | `launch.py` | Starts, stops and restarts the components |
-| `components.py` | The component catalogue: the gateway, layout and desktop, their windows, quit messages and endpoint files |
-| `protocol.py` | Window messages between the layout and the desktop, and the `Tool` and `App` requests |
-| `config.py` | User settings: apps, dark-screen delay |
+| `protocol.py` | Window messages between the layout and the desktop, the `Tool` and `App` requests, and the shapes of the programs (`Programs`) and where they keep their state (`Places`) |
+| `settings/` | The values the programs share, imported only by entry points: the apps (`apps.py`), the programs and their windows (`programs.py`) and the keyboard layout (`layout.py`) |
 | `cell.py` | `Cell`, the one class that reassigns: an owner's changing state |
 | `diagnostics.py` | Failure details for the programs' own logs |
 | `winapi/` | Typed Win32 and COM bindings: the only `ctypes` code |
@@ -87,7 +86,7 @@ architecture review's `contract-isolation` rule enforces it.
 | `key_hints.py`, `key_hint_overlay.py` | The letters drawn while an Apps key is held |
 | `away_screens.py`, `keyboard_light.py`, `laptop_panel.py` | Dark screens, keyboard light and laptop panel while nobody is looking |
 | `keymap*.py`, `overlay*.py`, `layer_indicator.py` | The key map, keyboard overlay and layer indicator |
-| `tray.py`, `icons.py`, `view_publication.py` | The tray icon and the desktop's log |
+| `tray.py`, `icons.py` | The tray icon |
 | `components/`, `fonts/`, `colour.py`, `motion.py`, `*_icons.py` | Shared appearance, glass, controls, motion, icons and type |
 
 ## `scripts/`

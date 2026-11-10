@@ -16,9 +16,9 @@ owner turned off are turned back on.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum, auto
+from pathlib import Path
 
 from cell import Cell
-from components import DIRECTORY
 from desktop_ui.kept import KeptFile
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
@@ -96,13 +96,13 @@ class AwayScreens:
     """Replaced whole on the bar's thread."""
 
     @classmethod
-    def start(cls) -> AwayScreens:
+    def start(cls, directory: Path) -> AwayScreens:
         """Started, or restarted, behind the lock screen as well as in front of it.
 
         A previous Workspace may have left the light and the panel dark; what they
-        should go back to is kept on disk, and they go back now unless still locked."""
-        light = KeyboardLight.resume(ViaBacklight(), KeptFile(DIRECTORY / "dark-keyboard-effect"))
-        panel = LaptopPanel.resume(WmiBrightness(), KeptFile(DIRECTORY / "dark-panel-brightness"))
+        should go back to is kept on disk in `directory`, and they go back now unless still locked."""
+        light = KeyboardLight.resume(ViaBacklight(), KeptFile(directory / "dark-keyboard-effect"))
+        panel = LaptopPanel.resume(WmiBrightness(), KeptFile(directory / "dark-panel-brightness"))
         locked = session.locked() is True
         if not locked:
             light, panel = light.restore(), panel.restore()

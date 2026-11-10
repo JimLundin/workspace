@@ -3,14 +3,16 @@
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
-from components import DESKTOP
 from diagnostics import Detail
 from keyboard.keys import Key, Mod
 from keyboard.physical import Scancode
-from keyboard.win import Keyboard
+from keyboard.win import Keyboard, Peers
 from protocol import Message, Window
 from tests import layouts
 from winapi import inputs, system
+
+PEERS = Peers(Window("test desktop", "test desktop class"), layouts.APPS, "test window switcher")
+"""The tests' own desktop window, apps and window switcher title."""
 
 
 class KeyboardFixture:
@@ -60,7 +62,7 @@ class KeyboardFixture:
         return 7
 
     def find_window(self, window: Window) -> int | None:
-        return self.handle if window == DESKTOP.window else None
+        return self.handle if window == PEERS.desktop else None
 
     # Keep the native delivery fields together in the concrete driver fixture.
     def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool:
@@ -103,7 +105,7 @@ def hold_apps(keyboard: Keyboard, *, at: int) -> None:
 def observed_keyboard(*, platform: KeyboardFixture | None = None) -> Generator[tuple[Keyboard, list[tuple[int, int, int]]]]:
     """Use the same driver seam for input observations and captured notifications."""
     driver = platform if platform is not None else KeyboardFixture()
-    yield Keyboard.open(layouts.LAYOUT, driver), driver.messages
+    yield Keyboard.open(layouts.LAYOUT, PEERS, driver), driver.messages
 
 
 def assert_host_remapping_restored(keyboard: Keyboard) -> None:
@@ -113,7 +115,7 @@ def assert_host_remapping_restored(keyboard: Keyboard) -> None:
 def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
     driver = KeyboardFixture()
     driver.devices = (r"\\?\HID#VID_A8F8&PID_1832&MI_00#voice",)
-    keyboard = Keyboard.open(layouts.LAYOUT, driver)
+    keyboard = Keyboard.open(layouts.LAYOUT, PEERS, driver)
     keyboard.update_devices()
     driver.messages.clear()
     return keyboard, driver

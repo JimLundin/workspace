@@ -4,7 +4,7 @@
     pythonw launch.py restart [NAME]   ask each (or NAME) to quit, then start it again
     pythonw launch.py stop [NAME]      ask each (or NAME) to quit
 
-Each program is `python -m <module>` from `components.CATALOGUE`, started in its
+Each program is `python -m <module>` from `settings.programs.PROGRAMS`, started in its
 order and stopped in reverse. A program is running when its control window
 exists or the process this launcher started (`state/<name>.pid`) is alive; the
 gateway has no window. Stopping posts the quit message to the window, then ends
@@ -22,13 +22,11 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import Final
 
-from components import CATALOGUE, STATE_VARIABLE
-from protocol import Component, Entry
+from protocol import Component, Entry, Places, Programs
+from settings import programs
 from winapi._core import CloseHandle, FindWindowW, GetWindowThreadProcessId, OpenProcess, PostMessageW, WaitForSingleObject
 
 ROOT: Final = Path(__file__).resolve().parent
-STATE: Final = Path(os.environ.get("LOCALAPPDATA") or ROOT) / "workspace" / "state"
-"""Where the programs publish their endpoints and logs."""
 DETACHED: Final = 0x0000_0008 | 0x0800_0000  # DETACHED_PROCESS | CREATE_NO_WINDOW
 
 SYNCHRONIZE: Final = 0x0010_0000
@@ -45,10 +43,10 @@ def window(entry: Entry) -> int:
     return int(FindWindowW(entry.window.window_class, entry.window.title) or 0)
 
 
-def started(entry: Entry) -> int | None:
+def started(entry: Entry, state: Path) -> int | None:
     """The process this launcher started for the program, while it's alive."""
     try:
-        pid = int((STATE / f"{entry.name}.pid").read_text(encoding="ascii"))
+        pid = int((state / f"{entry.name}.pid").read_text(encoding="ascii"))
     except OSError, ValueError:
         return None
     handle = OpenProcess(SYNCHRONIZE, False, pid)
@@ -60,34 +58,35 @@ def started(entry: Entry) -> int | None:
         CloseHandle(handle)
 
 
-def running(entry: Entry) -> bool:
-    return bool(window(entry)) or started(entry) is not None
+def running(entry: Entry, state: Path) -> bool:
+    return bool(window(entry)) or started(entry, state) is not None
 
 
-def start(entry: Entry) -> None:
-    if running(entry):
+def start(entry: Entry, state: Path, variable: str) -> None:
+    """Start the program unless it runs, naming `state` in its environment as `variable`."""
+    if running(entry, state):
         return
-    STATE.mkdir(parents=True, exist_ok=True)
-    environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"} | {STATE_VARIABLE: str(STATE)}
-    with (STATE / f"{entry.name}.log").open("ab") as errors:
+    state.mkdir(parents=True, exist_ok=True)
+    environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"} | {variable: str(state)}
+    with (state / f"{entry.name}.log").open("ab") as errors:
         process = subprocess.Popen(
             [str(pythonw()), "-m", entry.module], cwd=ROOT, env=environment, stdout=errors, stderr=errors, creationflags=DETACHED
         )
-    (STATE / f"{entry.name}.pid").write_text(str(process.pid), encoding="ascii")
+    (state / f"{entry.name}.pid").write_text(str(process.pid), encoding="ascii")
 
 
-def stop(entry: Entry) -> None:
+def stop(entry: Entry, state: Path) -> None:
     """Ask the program to quit (the layout lets go of held keys first), then end it after its grace period."""
     if handle := window(entry):
         PostMessageW(handle, entry.quit_message, 0, 0)
     deadline = time.monotonic() + entry.shutdown_s
-    while running(entry) and time.monotonic() < deadline:
+    while running(entry, state) and time.monotonic() < deadline:
         time.sleep(0.1)
     if handle := window(entry):
         owner = wintypes.DWORD()
         GetWindowThreadProcessId(handle, ctypes.byref(owner))
         terminate(owner.value)
-    if (pid := started(entry)) is not None:
+    if (pid := started(entry, state)) is not None:
         terminate(pid)
 
 
@@ -96,26 +95,27 @@ def terminate(pid: int) -> None:
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, creationflags=0x0800_0000)
 
 
-def selected(names: Sequence[str]) -> tuple[Entry, ...]:
-    unknown = frozenset(names) - CATALOGUE.keys()
+def selected(names: Sequence[str], catalogue: frozendict[Component, Entry]) -> tuple[Entry, ...]:
+    unknown = frozenset(names) - catalogue.keys()
     if unknown:
-        raise SystemExit(f"Unknown program: {', '.join(sorted(unknown))}. Choose from {', '.join(CATALOGUE)}.")
-    chosen: frozenset[Component] = frozenset(name for name in CATALOGUE if name in names) if names else frozenset(CATALOGUE)
-    return tuple(entry for name, entry in CATALOGUE.items() if name in chosen)
+        raise SystemExit(f"Unknown program: {', '.join(sorted(unknown))}. Choose from {', '.join(catalogue)}.")
+    chosen: frozenset[Component] = frozenset(name for name in catalogue if name in names) if names else frozenset(catalogue)
+    return tuple(entry for name, entry in catalogue.items() if name in chosen)
 
 
-def main(arguments: Sequence[str]) -> None:
+def main(arguments: Sequence[str], workspace: Programs) -> None:
     command, *names = arguments or ["start"]
-    entries = selected(names)
+    entries = selected(names, workspace.catalogue)
     if command not in ("start", "stop", "restart"):
         raise SystemExit(__doc__)
+    state = Places.of(os.environ, workspace).directory / "state"  # where the programs publish their endpoints and logs
     if command in ("stop", "restart"):
         for entry in reversed(entries):
-            stop(entry)
+            stop(entry, state)
     if command in ("start", "restart"):
         for entry in entries:
-            start(entry)
+            start(entry, state, workspace.state_variable)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main(sys.argv[1:], programs.PROGRAMS)

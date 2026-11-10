@@ -6,16 +6,18 @@ key: tap it to switch between this layout and your plain keyboard, hold it for
 Both need the assistant, started by `launch.py`.
 """
 
+import os
 import sys
 
+from protocol import Places
+from settings import apps, layout, programs
 lazy from keyboard.win import Exit, run, show_error
-lazy from settings import layout
 
 
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("keyboard only runs on Windows")
-    match run(layout.LAYOUT):
+    match run(layout.LAYOUT, programs.PROGRAMS, apps.APPS, Places.of(os.environ, programs.PROGRAMS)):
         case Exit.QUIT:
             sys.exit(0)  # a normal quit: the assistant doesn't restart the layout
         case Exit.ALREADY_RUNNING:

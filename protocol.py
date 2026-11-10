@@ -4,9 +4,11 @@ requests, as window messages: they are queued, ordered, cost the layout nothing
 to send, and need no admin rights. Plain Python: importable anywhere.
 """
 
-from collections.abc import Sequence
+import tempfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, IntEnum
+from pathlib import Path
 from typing import Final, Literal
 
 
@@ -67,6 +69,45 @@ class Entry:
     """Posted to `window` to ask for a clean exit; the layout lets go of held keys first."""
     shutdown_s: float
     """How long the launcher waits for a clean exit before ending the process."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Programs:
+    """Workspace's programs, and the windows they find each other by."""
+
+    gateway: Entry
+    layout: Entry
+    desktop: Entry
+    switcher: str
+    """The window switcher's title; the layout passes Esc, Enter and Tab to it while it has focus."""
+    state_variable: str
+    """The environment variable naming the launcher's state folder, which it passes to every program."""
+
+    @property
+    def catalogue(self) -> frozendict[Component, Entry]:
+        """Every program by name, in startup order; shutdown reverses it."""
+        return frozendict({entry.name: entry for entry in (self.gateway, self.layout, self.desktop)})
+
+
+@dataclass(frozen=True, slots=True)
+class Places:
+    """Where the programs keep their logs and state, read from the environment they run in."""
+
+    directory: Path
+    """Logs, remembered preferences and meeting transcripts."""
+    state: Path | None
+    """The launcher's state folder, which it names in each program's environment; None outside the launcher."""
+
+    @classmethod
+    def of(cls, environ: Mapping[str, str], programs: Programs) -> Places:
+        directory = Path(environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace"
+        state = environ.get(programs.state_variable)
+        return cls(directory, Path(state) if state else None)
+
+    @property
+    def gateway_endpoint(self) -> Path | None:
+        """Where the gateway publishes how to reach it; None outside the launcher."""
+        return self.state / "endpoint-gateway" if self.state else None
 
 
 class LayoutState(Enum):

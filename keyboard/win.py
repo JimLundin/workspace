@@ -10,10 +10,9 @@ import traceback
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
+from pathlib import Path
 from typing import Final, Protocol, assert_never
 
-import components
-import config
 import diagnostics
 from cell import Cell
 from diagnostics import Detail, FailureInfo, failure_info
@@ -25,13 +24,11 @@ from keyboard.hook_watch import ANSWERED
 from keyboard.keys import Key, Mod
 from keyboard.layout import Layout, UsbIdentity
 from keyboard.physical import Scancode
-from protocol import LayoutState, Message, Origin, Request, Window, encode, encode_indicator
+from protocol import App, LayoutState, Message, Origin, Places, Programs, Request, Window, encode, encode_indicator
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 
 LOCK_NAME: Final = "Local\\keyboard"
 """Name of the lock that stops a second copy from running in this Windows session."""
-LOG: Final = components.DIRECTORY / "keyboard.log"
-"""The keyboard's own log: its input recoveries."""
 
 
 class KeyboardSystem(Protocol):
@@ -55,6 +52,9 @@ class KeyboardSystem(Protocol):
 class NativeKeyboardSystem:
     """The live Windows adapter; constructing it starts no hook or timer."""
 
+    log: Path
+    """The keyboard's own log: its input recoveries."""
+
     def send_key(self, key: Key | Mod, *, down: bool) -> None:
         inputs.send_key(key.vk, down=down, extended=key.extended, extra=Origin.LAYOUT)
 
@@ -74,7 +74,7 @@ class NativeKeyboardSystem:
     kill_timer = staticmethod(system.kill_timer)
 
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
-        diagnostics.append(LOG, diagnostics.evidence("input_recovery", details))
+        diagnostics.append(self.log, diagnostics.evidence("input_recovery", details))
 
     post_quit = staticmethod(system.post_quit)
 
@@ -90,12 +90,22 @@ class _Hosted:
 
 
 @dataclass(frozen=True, slots=True)
+class Peers:
+    """How the layout reaches the desktop: its control window, the apps a request names, and the window switcher's title."""
+
+    desktop: Window
+    apps: tuple[App, ...]
+    switcher: str
+
+
+@dataclass(frozen=True, slots=True)
 class WinHost:
     """What the engine needs, done with Windows calls. Only the hook thread uses it."""
 
     platform: KeyboardSystem
     tapping_term: int
     """Milliseconds before an undecided tap-hold key is held."""
+    peers: Peers
     _state: Cell[_Hosted] = field(default_factory=lambda: Cell(_Hosted()), init=False, repr=False)
 
     @property
@@ -135,7 +145,7 @@ class WinHost:
 
     def request(self, request: Request, *, down: bool) -> None:
         # Never replay a press the desktop missed: it could start an unwanted action later.
-        self.tell(Message.REQUEST, encode(request, config.APPS), int(down))
+        self.tell(Message.REQUEST, encode(request, self.peers.apps), int(down))
 
     def indicate(self, indicator: Indicator) -> None:
         self.tell(Message.INDICATOR, encode_indicator(indicator.layer.code, caps_word=indicator.caps_word), 0)
@@ -148,7 +158,7 @@ class WinHost:
         for _ in range(2):  # a cached window may be gone (the desktop restarted): look again
             handle = self.found
             if handle is None:
-                handle = self.platform.find_window(components.DESKTOP.window)
+                handle = self.platform.find_window(self.peers.desktop)
                 if handle is None:
                     return False
                 self.remember_window(handle)
@@ -334,11 +344,16 @@ class Keyboard:
     _state: Cell[HookState]
 
     @classmethod
-    def open(cls, layout: Layout, platform: KeyboardSystem | None = None) -> Keyboard:
+    def open(cls, layout: Layout, peers: Peers, platform: KeyboardSystem) -> Keyboard:
         """The keyboard for `layout`, or `LayoutError` if the layout is inconsistent."""
-        system = platform if platform is not None else NativeKeyboardSystem()
         bindings = Bindings.of(layout)
-        return cls(system, WinHost(system, layout.timings.tapping_term), Engine.of(layout, bindings), Routing.of(layout, bindings), Cell(HookState()))
+        return cls(
+            platform,
+            WinHost(platform, layout.timings.tapping_term, peers),
+            Engine.of(layout, bindings),
+            Routing.of(layout, bindings),
+            Cell(HookState()),
+        )
 
     @property
     def state(self) -> HookState:
@@ -591,7 +606,7 @@ class Keyboard:
         window = self.platform.foreground()
         if window == state.window:
             return state
-        switcher = self.platform.title(window) == components.SWITCHER_TITLE
+        switcher = self.platform.title(window) == self.host.peers.switcher
         return self._state.update(lambda state: replace(state, window=window, switcher=switcher))
 
     def swallow(self, key: inputs.KeyEvent, *, down: bool) -> bool:
@@ -668,16 +683,17 @@ class Keyboard:
         return verdict
 
 
-def run(layout: Layout) -> Exit:
+def run(layout: Layout, programs: Programs, apps: tuple[App, ...], places: Places) -> Exit:
     """Blocks until the layout quits."""
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
         return Exit.ALREADY_RUNNING
-    window = windows.create_hidden(components.LAYOUT.window.title)  # receives control requests from the assistant and keeper
+    window = windows.create_hidden(programs.layout.window.title)  # receives control requests from the assistant and keeper
     with contextlib.suppress(OSError):  # without it the hook still works, only more slowly under load
         system.keep_responsive()
     try:
-        keyboard = Keyboard.open(layout)
+        peers = Peers(programs.desktop.window, apps, programs.switcher)
+        keyboard = Keyboard.open(layout, peers, NativeKeyboardSystem(places.directory / "keyboard.log"))
         keyboard.update_devices()
         hook = inputs.set_keyboard_hook(keyboard.hook_proc)
         if hook is None:
@@ -685,14 +701,14 @@ def run(layout: Layout) -> Exit:
         with contextlib.suppress(OSError):  # without raw input the hook just goes unwatched
             keyboard_devices.watch_input(window)
         languages = open_languages(firmware_connected=keyboard.state.firmware is not None)
-        return serve(keyboard, hook, languages)
+        return serve(keyboard, hook, languages, programs.layout.quit_message)
     finally:
         keyboard_devices.stop_watching_input()
         windows.destroy(window)
         system.release_lock(lock)
 
 
-def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.KeyboardLanguages | None) -> Exit:
+def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.KeyboardLanguages | None, quit_message: Message) -> Exit:
     """Run the message loop, then remove whichever hook is installed by then."""
     outcome = Exit.QUIT
     language_timer = system.set_timer(200)
@@ -721,7 +737,7 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
                         keyboard.timeout(message.wparam)
                     except Exception as error:
                         keyboard.input_failed(error, phase="tap_hold_timer")
-            elif message.message == components.LAYOUT.quit_message:
+            elif message.message == quit_message:
                 break
             else:
                 keyboard.on_message(message.message)

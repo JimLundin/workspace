@@ -268,7 +268,7 @@ ban-relative-imports = "all"
 "typings/win32more/**/*.pyi" = ["N801", "N802", "N803", "N815"]
 
 [tool.setuptools]
-py-modules = ["cell", "components", "config", "diagnostics", "launch", "protocol"]
+py-modules = ["cell", "diagnostics", "launch", "protocol"]
 
 [tool.setuptools.packages.find]
 include = ["assistant*", "contracts*", "desktop_ui*", "gateway*", "keyboard*", "settings*", "winapi*"]

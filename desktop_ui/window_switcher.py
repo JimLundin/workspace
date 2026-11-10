@@ -8,7 +8,6 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 import winapi.shapes
-from components import SWITCHER_TITLE
 from desktop_ui.components.appearance import GLASS_ACCENT, KIT, ON_ACCENT, Shade, Tokens, scheme, tokens
 from desktop_ui.components.text import inter
 from desktop_ui.components.typeface import TYPE
@@ -181,13 +180,14 @@ def _field(panel: QtWidgets.QWidget, theme: Tokens, spec: SwitcherSpec) -> tuple
 class WindowSwitcher(QtWidgets.QDialog):
     """A Spotlight-like panel: a large search field over rows, on the kit's solid window."""
 
-    def __init__(self, windows: Sequence[winapi.shapes.Window], focus: Callable[[int], None], spec: SwitcherSpec) -> None:
+    def __init__(self, windows: Sequence[winapi.shapes.Window], focus: Callable[[int], None], spec: SwitcherSpec, title: str) -> None:
+        """The switcher over `windows`, titled `title`, which the layout recognises to pass it Esc, Enter and Tab."""
         super().__init__()
         self.spec = spec
         self.windows = tuple(windows)
         self.focus_window = focus
         theme = tokens(scheme())
-        self.setWindowTitle(SWITCHER_TITLE)
+        self.setWindowTitle(title)
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)

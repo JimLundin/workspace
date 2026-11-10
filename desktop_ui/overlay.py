@@ -4,19 +4,13 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final
 
 from pydantic import StrictBool, TypeAdapter
 
-from components import DIRECTORY
 from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
 from keyboard.actions import Layer
 from keyboard.physical import Scancode
 from winapi.shapes import Point, Rect, Size
-
-PREFERENCE: Final = DIRECTORY / "overlay.json"
-POSITION: Final = DIRECTORY / "overlay-position.json"
-"""Position is written by the UI thread, independently of the tray preference."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,22 +39,22 @@ def _save[T](data: T, path: Path, adapter: TypeAdapter[T]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def load_enabled(path: Path = PREFERENCE) -> bool:
+def load_enabled(path: Path) -> bool:
     """Start with the learning aid visible unless the user has hidden it."""
     preference = _read(path, _PREFERENCE)
     return preference.enabled if preference is not None else True
 
 
-def save_enabled(*, enabled: bool, path: Path = PREFERENCE) -> None:
+def save_enabled(*, enabled: bool, path: Path) -> None:
     _save(Preference(enabled=enabled), path, _PREFERENCE)
 
 
-def load_position(path: Path = POSITION) -> Point | None:
+def load_position(path: Path) -> Point | None:
     """The drag handle's horizontal centre and top, in physical screen pixels."""
     return _read(path, _POSITION)
 
 
-def save_position(position: Point, path: Path = POSITION) -> None:
+def save_position(position: Point, path: Path) -> None:
     _save(position, path, _POSITION)
 
 

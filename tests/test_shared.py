@@ -1,7 +1,7 @@
 """The message protocol both programs share."""
 
-from config import APPS
 from protocol import App, Installed, Request, Tool, decode, decode_indicator, encode, encode_indicator
+from tests.layouts import APPS
 
 # ---- protocol --------------------------------------------------------------------------
 

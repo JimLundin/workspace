@@ -11,17 +11,16 @@ lazy from PySide6.QtWidgets import QApplication
 
 from desktop_ui.qt_runtime import prepare
 lazy from desktop_ui.components import typeface
-lazy from desktop_ui.view_publication import log
 lazy from winapi.composition import DesktopComposition
 
 prepare()
 
 
-def application() -> QApplication:
+def application(log: Callable[[str], None]) -> QApplication:
     existing = QApplication.instance()
     app = existing if isinstance(existing, QApplication) else QApplication([])
     app.setQuitOnLastWindowClosed(False)
-    typeface.load()
+    typeface.load(log)
     return app
 
 
@@ -57,7 +56,7 @@ class EventLoop:
     _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
-    def start(cls, app: QApplication) -> EventLoop:
+    def start(cls, app: QApplication, log: Callable[[str], None]) -> EventLoop:
         timer = QtCore.QTimer(app)
         timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         timer.setInterval(16)

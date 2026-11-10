@@ -15,6 +15,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 from typing import assert_never
 lazy import os
 
@@ -23,8 +24,8 @@ lazy from PySide6 import QtCore, QtGui
 from cell import Cell
 from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
+lazy import protocol
 lazy import winapi.ambient
-lazy from config import APPS
 lazy from contracts.recording_state import RecordingAction
 lazy from desktop_ui.ambient import Ambient
 lazy from desktop_ui.application_observer import ApplicationObserver, Arrangement
@@ -62,13 +63,14 @@ lazy from desktop_ui.bar_events import (
     transition,
 )
 lazy from desktop_ui.bar_status import StatusObserver
-lazy from desktop_ui.components.appearance import GLASS, WASHES, Look, look
+lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.desktop_pager import PAGER, pager
-lazy from desktop_ui.island_layout import SIZES, Content, Metrics, expansion, frame, snap
-lazy from desktop_ui.island_menu import CONTROLS, Menu
-lazy from desktop_ui.island_model import ISLAND, CapsuleView, Key, Marker, Observed, island, order
-lazy from desktop_ui.island_motion import SPRINGS, TIMING, Shown, placed, retarget
+lazy from desktop_ui.desktop_settings import DesktopSettings
+lazy from desktop_ui.island_layout import Content, Metrics, expansion, frame, snap
+lazy from desktop_ui.island_menu import Menu
+lazy from desktop_ui.island_model import CapsuleView, Key, Marker, Observed, island, order
+lazy from desktop_ui.island_motion import Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
 lazy from desktop_ui.key_hint_overlay import BADGES, KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
@@ -132,18 +134,22 @@ class DesktopBar:
     """The 100 ms desktop observation tick."""
     audio_timer: QtCore.QTimer
     """The microphone trace's sampling while dictating."""
+    apps: tuple[protocol.App, ...]
+    """The apps the chords reach, which a pager click also starts."""
     _model: Cell[BarModel]
 
     @classmethod
-    def open(cls, actions: BarActions, *, audio_level: Callable[[], float | None] | None = None) -> DesktopBar:
+    def open(
+        cls, actions: BarActions, settings: DesktopSettings, log: Callable[[str], None], *, audio_level: Callable[[], float | None] | None = None
+    ) -> DesktopBar:
         # The window reports to the bar made just after it.
         def report(event: Event) -> None:
             bar.handle(event)
 
         errors: queue.Queue[str] = queue.Queue()
-        loop = EventLoop.start(application())
-        spec = BarSpec(ISLAND, CONTROLS, SPRINGS, TIMING, SIZES, GLASS, WASHES)
-        window = BarWindow(report, loop.composition, spec)
+        loop = EventLoop.start(application(log), log)
+        spec = settings.bar
+        window = BarWindow(report, loop.composition, spec, log)
         tick, audio = QtCore.QTimer(window), QtCore.QTimer(window)
         tick.setInterval(100)
         audio.setInterval(round(spec.timing.wave_sample * 1000))
@@ -153,7 +159,7 @@ class DesktopBar:
         bar = cls(
             actions,
             taskbar,
-            _start_shell(errors, taskbar),
+            _start_shell(errors, taskbar, settings.places.directory),
             None,
             errors,
             loop,
@@ -162,6 +168,7 @@ class DesktopBar:
             window,
             tick,
             audio,
+            settings.apps,
             Cell(BarModel(spec, seen=seen)),
         )
         try:
@@ -419,7 +426,7 @@ class DesktopBar:
                 elif click is not Click.RIGHT:
                     self.handle(Deactivated())
                     # A configured app key also starts the app when it isn't running.
-                    key = next((each for each in APPS if isinstance(each.target, Installed) and each.target.exe.lower() == exe), None)
+                    key = next((each for each in self.apps if isinstance(each.target, Installed) and each.target.exe.lower() == exe), None)
                     self.navigate(AppKey(key) if key is not None else CycleApp(app))
             case _:
                 assert_never(app)
@@ -469,9 +476,9 @@ class DesktopBar:
             self.loop.close()
 
 
-def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl) -> _Shell:
+def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl, directory: Path) -> _Shell:
     status = StatusObserver.start()
-    away = AwayScreens.start()
+    away = AwayScreens.start(directory)
 
     def message(_hwnd: int, message: int, wparam: int, _lparam: int) -> int | None:
         away.message(message, wparam)

@@ -6,13 +6,13 @@ the layers written on them. Only declarations, in the vocabulary of `keyboard.ph
 
 from typing import Final
 
-import config
 from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
 from keyboard.board import Board, Row, Thumbs
 from keyboard.keys import Key, Mod
 from keyboard.layout import Layout, Timings, UsbIdentity
 from keyboard.physical import Laptop
 from protocol import Tool
+from settings import apps
 
 # ---- Timings ---------------------------------------------------------------------
 
@@ -86,8 +86,8 @@ media keys, arrows, and the physical Shift, Ctrl and Windows keys."""
 
 # ---- The layers ------------------------------------------------------------------
 
-# The apps from config, ten slots named by their chord letters; slots past the end do nothing.
-_APPS: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[BLANK] * (10 - len(config.APPS[:10])))
+# The apps from settings.apps, ten slots named by their chord letters; slots past the end do nothing.
+_APPS: Final[tuple[Binding, ...]] = (*apps.APPS[:10], *[BLANK] * (10 - len(apps.APPS[:10])))
 _Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
 
 

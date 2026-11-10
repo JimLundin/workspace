@@ -21,7 +21,6 @@ from typing import Final, Protocol
 from assistant.llm import Failure, Settings, transcribe, wav
 from assistant.meeting_store import MeetingArchive, MeetingStore
 from cell import Cell
-from components import DIRECTORY
 from contracts.capture import AudioSource
 from contracts.recording_state import PAUSED, SOURCE_NAMES, Phase, Publication, RecordingState, RetryPolicy, capture_report, published
 from winapi.pcm import RATE, Problem
@@ -244,14 +243,13 @@ class Meetings:
         settings: Settings,
         factory: Callable[[AudioSource], Capture],
         *,
-        archive: MeetingArchive | None = None,
+        archive: MeetingArchive,
         on_update: Callable[[RecordingState], None] | None = None,
         transcribe_audio: Transcriber | None = None,
         retry_policy: RetryPolicy | None = None,
         log: Callable[[str], None] | None = None,
     ) -> Meetings:
         """The recorder over `archive`, with its unfinished journals found for recovery."""
-        archive = archive if archive is not None else MeetingArchive(DIRECTORY / "meetings")
 
         def configured_transcriber(audio: bytes, *, context: str) -> str | Failure:
             return transcribe(settings, audio, context=context)

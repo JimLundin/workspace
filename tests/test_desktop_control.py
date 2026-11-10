@@ -3,7 +3,6 @@
 from collections.abc import Iterable
 from functools import reduce
 
-from config import APPS
 from contracts.recording_state import RecordingState
 from contracts.status import State
 from desktop_ui.bar_events import DictationShown, RecordingShown
@@ -42,6 +41,7 @@ from desktop_ui.desktop_control import (
 )
 from keyboard.physical import Scancode
 from protocol import LayoutState, Message, Tool
+from tests.layouts import APPS
 
 
 def folded(events: Iterable[Event], state: DesktopState | None = None) -> tuple[DesktopState, tuple[Effect, ...]]:

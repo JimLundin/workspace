@@ -75,6 +75,8 @@ class BarSpec:
     sizes: Sizes
     glass: Glass
     washes: Washes
+    title: str
+    """The bar window's title."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -16,19 +16,19 @@ import time
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from functools import partial
+from pathlib import Path
 from typing import Final, assert_never
 
 lazy import shiboken6
 lazy from PySide6 import QtCore, QtWidgets
 
-import components
+import diagnostics
 import launch
 import protocol
 import winapi.shapes
 from assistant.llm import settings_from
 from cell import Cell
-from components import DIRECTORY
-from config import APPS
 from desktop_ui import bar_events
 from desktop_ui.desktop_control import (
     Chord,
@@ -75,13 +75,13 @@ from desktop_ui.desktop_control import (
     menu_items,
     transition,
 )
+from desktop_ui.desktop_settings import DesktopSettings
 from desktop_ui.navigation import ShowWindow
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.tray import TRAY_ICON, Tray
-from desktop_ui.view_publication import log
 from desktop_ui.voice import Voice
-from protocol import Message
+from protocol import App, Message
 from winapi import screen, shell, system, windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import KIT, scheme, tokens, tooltip_style
@@ -109,14 +109,14 @@ def indicator_area() -> Rect:
     return next((m.work for m in monitors if m.primary), monitors[0].work)
 
 
-def window_event(message: int, wparam: int, lparam: int) -> Event | None:
+def window_event(message: int, wparam: int, lparam: int, apps: tuple[App, ...]) -> Event | None:
     """What a message to the control window reports."""
     if message == shell.TASKBAR_CREATED:
         return RestoreTray()
     if message == WM_TRAY and lparam in (system.WindowMessage.LBUTTONUP, system.WindowMessage.RBUTTONUP):
         return MenuRequested()
     if message in (Message.KEY_STATE, Message.REQUEST):
-        return Controlled(control_event(message, wparam, lparam, APPS))
+        return Controlled(control_event(message, wparam, lparam, apps))
     if message == Message.INDICATOR:
         return Indicated(wparam)
     if message == Message.LAYOUT_STATE:
@@ -144,15 +144,16 @@ class Inbox:
     _handler: Cell[Callable[[Event], None] | None]
 
     @classmethod
-    def open(cls, window: protocol.Window) -> Inbox:
+    def open(cls, window: protocol.Window, apps: tuple[App, ...], log: Callable[[str], None]) -> Inbox:
+        """The control window, whose requests name `apps`; a handler's failure goes to `log`."""
         pending = queue.SimpleQueue[Event]()
         handler: Cell[Callable[[Event], None] | None] = Cell(None)
 
         def procedure(hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
             if message == WM_EVENTS:
-                _drain(pending, handler)
+                _drain(pending, handler, log)
                 return 0
-            if not (event := window_event(message, wparam, lparam)):
+            if not (event := window_event(message, wparam, lparam, apps)):
                 return None
             pending.put(event)
             system.post_message(hwnd, WM_EVENTS, 0, 0)
@@ -171,7 +172,7 @@ class Inbox:
         system.post_message(self.window.handle, WM_EVENTS, 0, 0)
 
 
-def _drain(pending: queue.SimpleQueue[Event], handler: Cell[Callable[[Event], None] | None]) -> None:
+def _drain(pending: queue.SimpleQueue[Event], handler: Cell[Callable[[Event], None] | None], log: Callable[[str], None]) -> None:
     if not (handle := handler.get()):
         return
     while True:
@@ -205,13 +206,16 @@ class DesktopApp:
     voice: Voice
     tray: Tray
     state: Cell[DesktopState]
+    settings: DesktopSettings
+    log: Callable[[str], None]
+    """The desktop's own log: its problems and crashes, and why a view could not open or fell back."""
     views: Cell[_Views] = field(default_factory=lambda: Cell(_Views()))
     """Replaced only on the Qt thread."""
 
     @classmethod
-    def compose(cls, root: QtWidgets.QApplication, voice: Voice, inbox: Inbox) -> DesktopApp:
-        state = Cell(DesktopState(overlay=OverlayState(enabled=load_enabled())))
-        app = cls(root, inbox, voice, Tray.add(inbox.window.handle, WM_TRAY, TRAY_ICON), state)
+    def compose(cls, root: QtWidgets.QApplication, voice: Voice, inbox: Inbox, settings: DesktopSettings, log: Callable[[str], None]) -> DesktopApp:
+        state = Cell(DesktopState(overlay=OverlayState(enabled=load_enabled(_preference(settings)))))
+        app = cls(root, inbox, voice, Tray.add(inbox.window.handle, WM_TRAY, TRAY_ICON), state, settings, log)
         inbox.connect(app.handle)
         return app
 
@@ -228,16 +232,18 @@ class DesktopApp:
                     problem=lambda message: report(Problem(message)),
                     tool=lambda tool: report(Controlled(FeatureRequest(tool, down=True))),
                 ),
+                self.settings,
+                self.log,
                 audio_level=self.voice.level,
             )
             self.views.update(lambda views: replace(views, bar=bar))
             bar.handle(bar_events.OverlayShown(self.state.get().overlay.enabled))
         except Exception:
-            log(traceback.format_exc())
+            self.log(traceback.format_exc())
             report(Problem("The Workspace bar could not start. The tray remains available."))
         system.set_window_timer(self.inbox.window.handle, CAPTURE_TIMER_MS)
         self.voice.start()
-        if (layout := windows.find(components.LAYOUT.window.title)) is not None:
+        if (layout := windows.find(self.settings.programs.layout.window.title)) is not None:
             system.post_message(layout, Message.QUERY_LAYOUT_STATE, 0, 0)
         self.handle(ShowIdle())
 
@@ -273,7 +279,7 @@ class DesktopApp:
                 if bar := self.views.get().bar:
                     bar.handle(bar_events.OverlayShown(enabled))
                 try:
-                    save_enabled(enabled=enabled)
+                    save_enabled(enabled=enabled, path=_preference(self.settings))
                 except OSError:
                     return Problem("The overlay changed, but its setting couldn't be saved.")
             case Flash(text):
@@ -284,7 +290,7 @@ class DesktopApp:
             case Indicate(text):
                 self._indicator().set(text, indicator_area())
             case ToggleLayout():
-                layout = windows.find(components.LAYOUT.window.title)
+                layout = windows.find(self.settings.programs.layout.window.title)
                 if layout is None or not system.post_message(layout, protocol.Message.TOGGLE_LAYOUT, 0, 0):
                     return Problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case ShowMenu(state):
@@ -304,12 +310,13 @@ class DesktopApp:
             case TrayShow(shown):
                 self.tray.show(shown)
             case Log(text):
-                log(text)
+                self.log(text)
             case Launch(command, names):
                 launched(command, *names)
             case OpenLogs():
-                DIRECTORY.mkdir(parents=True, exist_ok=True)
-                os.startfile(DIRECTORY)
+                directory = self.settings.places.directory
+                directory.mkdir(parents=True, exist_ok=True)
+                os.startfile(directory)
             case _:
                 assert_never(effect)
 
@@ -366,7 +373,7 @@ class DesktopApp:
         if shown is None:
             if not overlay.visible:
                 return
-            shown = KeymapOverlay.open(KEYMAP)
+            shown = KeymapOverlay.open(KEYMAP, self.settings.places.directory / "overlay-position.json")
             opened = shown
             self.views.update(lambda views: replace(views, overlay=opened))
         shown.show(overlay.layer, overlay.title, indicator_area(), visible=overlay.visible, pressed=overlay.pressed)
@@ -397,7 +404,7 @@ class DesktopApp:
             if bar := self.views.get().bar:
                 bar.navigate(ShowWindow(handle))
 
-        current = WindowSwitcher(choices, focus, SWITCHER)
+        current = WindowSwitcher(choices, focus, SWITCHER, self.settings.programs.switcher)
         self.views.update(lambda views: replace(views, switcher=current))
 
         def cleared(_: int) -> None:
@@ -415,7 +422,7 @@ class DesktopApp:
             try:
                 bar.close()
             except Exception as error:
-                log(f"The Workspace bar did not close cleanly: {error}")
+                self.log(f"The Workspace bar did not close cleanly: {error}")
             self.views.update(lambda views: replace(views, bar=None))
 
     def quit(self) -> None:
@@ -441,18 +448,25 @@ def _dispose(root: QtWidgets.QApplication) -> None:
     shiboken6.delete(root)
 
 
-def run() -> None:
+def _preference(settings: DesktopSettings) -> Path:
+    """Where the overlay's on/off preference is kept."""
+    return settings.places.directory / "overlay.json"
+
+
+def run(settings: DesktopSettings) -> None:
     """Blocks until the desktop quits."""
     screen.use_physical_pixels()  # before any window exists
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
         return
     try:
-        inbox = Inbox.open(components.DESKTOP.window)
-        voice = Voice.open(settings_from(os.environ, components.GATEWAY_ENDPOINT), inbox.window.handle, inbox.report, log)
-        root = application()
+        places = settings.places
+        log = partial(diagnostics.append, places.directory / "desktop.log")
+        inbox = Inbox.open(settings.programs.desktop.window, settings.apps, log)
+        voice = Voice.open(settings_from(os.environ, places.gateway_endpoint), inbox.window.handle, inbox.report, log, places.directory / "meetings")
+        root = application(log)
         root.setStyleSheet(tooltip_style(tokens(scheme()), KIT))
-        app = DesktopApp.compose(root, voice, inbox)
+        app = DesktopApp.compose(root, voice, inbox, settings, log)
         QtCore.QTimer.singleShot(0, app.start)
         try:
             try:

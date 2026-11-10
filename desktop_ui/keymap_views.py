@@ -3,6 +3,7 @@
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -31,6 +32,7 @@ lazy from desktop_ui.components.widgets import (
     window_style,
 )
 lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
+lazy from desktop_ui.overlay import load_position, save_position
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
 lazy from keyboard.actions import Layer
@@ -367,10 +369,13 @@ class KeymapOverlay:
     _frame: int
     _handle: OverlayHandle
     _handle_frame: int
+    _position: Path
+    """Where the dragged position is kept; the UI thread writes it, independently of the tray preference."""
     _state: Cell[_Overlaid]
 
     @classmethod
-    def open(cls, spec: KeymapSpec) -> KeymapOverlay:
+    def open(cls, spec: KeymapSpec, position: Path) -> KeymapOverlay:
+        """The overlay, its dragged position kept at `position`."""
         shown, look = NativeOverlayDesktop(), spec.overlay
         theme = tokens(scheme())
         window = QtWidgets.QWidget()
@@ -400,7 +405,7 @@ class KeymapOverlay:
         drag = OverlayDrag(start, move, end)
         handle = OverlayHandle(drag, shown.cursor, look)
         handle_frame = shown.prepare(handle, click_through=False)
-        overlay = cls(spec, shown, window, heading, canvas, frame, handle, handle_frame, Cell(_Overlaid(shown.load_position())))
+        overlay = cls(spec, shown, window, heading, canvas, frame, handle, handle_frame, position, Cell(_Overlaid(load_position(position))))
         return overlay
 
     def show(self, layer: Layer, title: str, work: Rect, *, visible: bool, pressed: frozenset[Scancode] = frozenset()) -> None:
@@ -489,7 +494,7 @@ class KeymapOverlay:
                 )
                 self._move(placed)
             try:
-                self._desktop.save_position(placed)
+                save_position(placed, self._position)
             except OSError:
                 traceback.print_exc()
 

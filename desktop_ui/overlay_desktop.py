@@ -1,7 +1,7 @@
 """Desktop observations and effects consumed by the keyboard overlay.
 
 The overlay owns rendering and drag policy; this adapter owns native placement,
-physical cursor observations and its persisted position.
+and physical cursor observations; the overlay keeps its own position.
 """
 
 import time
@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 lazy from PySide6 import QtWidgets
 
-from desktop_ui.overlay import load_position, save_position
 from desktop_ui.qt_runtime import prepare
 from winapi import inputs, screen, windows
 from winapi.shapes import Point, Rect
@@ -27,12 +26,6 @@ class NativeOverlayDesktop:
 
     def work_areas(self) -> tuple[Rect, ...]:
         return tuple(monitor.work for monitor in screen.monitors())
-
-    def load_position(self) -> Point | None:
-        return load_position()
-
-    def save_position(self, position: Point) -> None:
-        save_position(position)
 
     def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int:
         frame = int(window.winId())
