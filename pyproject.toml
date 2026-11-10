@@ -283,23 +283,73 @@ constants = ["keyboard", "settings", "desktop"]
 data = ["settings", "desktop"]
 entries = ["launch", "scripts.benchmark_keyboard"]
 
-# Each program's code imports only its own packages and the shared ones
-# (protocol, contracts, winapi, cell, diagnostics, and its data through its entry).
-[[tool.workspace.architecture.programs]]
-name = "launcher"
-packages = ["launch"]
+# The big modules, bottom first. Each imports only the modules below it, and from
+# one that declares an API, only that API (layer-order, module-api); entry points
+# (each __main__, launch.py) compose them and may reach anything below.
 
-[[tool.workspace.architecture.programs]]
+[[tool.workspace.architecture.layers]]
+name = "cell"
+packages = ["cell"]
+
+[[tool.workspace.architecture.layers]]
+name = "protocol"
+packages = ["protocol"]
+
+[[tool.workspace.architecture.layers]]
+name = "winapi"
+packages = ["winapi"]
+
+[[tool.workspace.architecture.layers]]
+name = "diagnostics"
+packages = ["diagnostics"]
+
+[[tool.workspace.architecture.layers]]
+name = "contracts"
+packages = ["contracts"]
+
+[[tool.workspace.architecture.layers]]
+name = "keyboard"
+packages = ["keyboard"]
+api = [
+    "keyboard.physical",
+    "keyboard.keys",
+    "keyboard.actions",
+    "keyboard.board",
+    "keyboard.layout",
+    "keyboard.bindings",
+    "keyboard.chords",
+]
+
+[[tool.workspace.architecture.layers]]
+name = "settings"
+packages = ["settings"]
+
+[[tool.workspace.architecture.layers]]
 name = "gateway"
 packages = ["gateway"]
 
-[[tool.workspace.architecture.programs]]
-name = "layout"
-packages = ["keyboard"]
+[[tool.workspace.architecture.layers]]
+name = "assistant"
+packages = ["assistant"]
+api = [
+    "assistant.desktop",
+    "assistant.features",
+    "assistant.llm",
+    "assistant.meeting_store",
+    "assistant.meetings",
+]
 
-[[tool.workspace.architecture.programs]]
+[[tool.workspace.architecture.layers]]
+name = "desktop_ui"
+packages = ["desktop_ui"]
+
+[[tool.workspace.architecture.layers]]
 name = "desktop"
-packages = ["desktop", "desktop_ui", "assistant"]
+packages = ["desktop"]
+
+[[tool.workspace.architecture.layers]]
+name = "launch"
+packages = ["launch"]
 
 [[tool.workspace.architecture.exceptions]]
 rule = "mutable-parameter"

@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from contracts.keyboard.layout import UsbIdentity
+from keyboard.layout import UsbIdentity
 from protocol import Request
 
 

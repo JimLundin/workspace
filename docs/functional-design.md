@@ -42,14 +42,15 @@ in reverse start order.
 
 ## `keyboard/`
 
-The layout program. The layout's model it runs on is shared with the desktop
-in `contracts/keyboard/`: the vocabulary (`physical.py`, the laptop's keys,
-scancodes and keycaps; `keys.py`, the keys and modifiers sent to Windows;
-`actions.py`, what a key does on a layer; `board.py`, the rows and thumbs
-layers are written in), `layout.py` (the shape of a `Layout`: its timings,
-physical board and every layer, declaring none), `bindings.py` (the lookups
-built from a layout, rejecting an inconsistent one) and `chords.py` (each Apps
-request by its base key). `settings/layout.py` holds the layout Workspace runs,
+The layout program, near the bottom of the layers: it uses only the
+foundations. Its API, the layout's model the desktop draws, is the vocabulary
+(`physical.py`, the laptop's keys, scancodes and keycaps; `keys.py`, the keys
+and modifiers sent to Windows; `actions.py`, what a key does on a layer, its
+app keys being slots the desktop fills; `board.py`, the rows and thumbs layers
+are written in), `layout.py` (the shape of a `Layout`: its timings, physical
+board and every layer, declaring none), `bindings.py` (the lookups built from a
+layout, rejecting an inconsistent one) and `chords.py` (each Apps request by
+its base key). `settings/layout.py` holds the layout Workspace runs,
 and `__main__.py` hands it to `win.run`. `engine.py` turns key events into
 actions. `win.py` owns the hook and message loop. `firmware.py` recognizes the
 Charybdis keyboard and tracks its shortcuts. `hook_watch.py` detects when
@@ -77,7 +78,6 @@ architecture review's `contract-isolation` rule enforces it.
 | `status.py` | The tray's state and the bar's quick job |
 | `recording_state.py`, `meetings.py`, `capture.py` | Meeting recording values, events and transcripts, and what a recording captures |
 | `geometry.py`, `hotkeys.py` | Rectangle arithmetic, and every tool key's behaviour |
-| `keyboard/` | The keyboard layout's model, which the layout runs and the desktop draws |
 | `endpoint.py` | The gateway's endpoint file, which the gateway writes and dictation reads |
 | `members.py` | Enum and `Literal` translation tables checked to name every value |
 

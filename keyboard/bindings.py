@@ -1,4 +1,4 @@
-"""What each physical key does on each layer, built from a `contracts.keyboard.layout.Layout`
+"""What each physical key does on each layer, built from a `keyboard.layout.Layout`
 and checked as it is built: a key used twice, a layer without a board or a hold of
 BASE raises `LayoutError`, so a broken layout never starts.
 """
@@ -6,10 +6,10 @@ BASE raises `LayoutError`, so a broken layout never starts.
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from contracts.keyboard.actions import Binding, Layer, TapHold
-from contracts.keyboard.board import Hand
-from contracts.keyboard.layout import Layout, LayoutError
-from contracts.keyboard.physical import Scancode
+from keyboard.actions import Binding, Layer, TapHold
+from keyboard.board import Hand
+from keyboard.layout import Layout, LayoutError
+from keyboard.physical import Scancode
 
 
 class Unmapped(Enum):

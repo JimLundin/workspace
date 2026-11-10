@@ -1,5 +1,5 @@
-"""The values two sides share: what each publishes and asks of the other, the keyboard
-layout's model the layout and the desktop both read, and the gateway's endpoint file.
+"""The values two sides share: what each publishes and asks of the other, and the
+gateway's endpoint file.
 
 Every module here is immutable data and pure decisions over it, so either side can
 import it without the other's effects: no threads, files, windows, network or Qt.

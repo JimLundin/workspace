@@ -13,8 +13,6 @@ from cell import Cell
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Offset, Point, Rect, Size
-lazy from contracts.keyboard.actions import Layer
-lazy from contracts.keyboard.physical import Scancode
 lazy from desktop_ui.components.appearance import Design, Scheme, Shade, Tokens
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.text import inter
@@ -36,6 +34,8 @@ lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, KeyboardView, Role
 lazy from desktop_ui.overlay import load_position, save_position
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
+lazy from keyboard.actions import Layer
+lazy from keyboard.physical import Scancode
 
 prepare()
 

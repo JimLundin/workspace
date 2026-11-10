@@ -2,7 +2,7 @@
 into, in Windows terms (virtual keys, modifiers). It makes no Win32 calls itself;
 those go through a `Host`, so the logic can be tested without Windows. Each
 step takes the keyboard's `EngineState` and returns the next one; its caller
-keeps it. The layout's rules are an `Engine`, built from a `contracts.keyboard.layout.Layout`.
+keeps it. The layout's rules are an `Engine`, built from a `keyboard.layout.Layout`.
 
 Tap-hold rule (like KMonad's tap-hold-next-release): a tap-hold key becomes
 "hold" if another key is pressed AND released while it is down, or if it is
@@ -32,12 +32,12 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
 
-from contracts.keyboard.actions import BLANK, Action, Chord, Layer, Output, TapHold
-from contracts.keyboard.bindings import Bindings, Unmapped
-from contracts.keyboard.board import Board
-from contracts.keyboard.keys import Key, Mod
-from contracts.keyboard.layout import Layout, Timings
-from contracts.keyboard.physical import Scancode
+from keyboard.actions import BLANK, Action, Chord, Layer, Output, TapHold
+from keyboard.bindings import Bindings, Unmapped
+from keyboard.board import Board
+from keyboard.keys import Key, Mod
+from keyboard.layout import Layout, Timings
+from keyboard.physical import Scancode
 from protocol import LayoutState, Request, Slot, Tool
 
 

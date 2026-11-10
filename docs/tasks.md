@@ -160,7 +160,7 @@ compare load alone (an editing check) against them.
 ## 4. Values handed in, not declared by libraries
 
 Done on 2026-11-10: entry points supply the choices (AGENTS.md); `entry-data`
-and `program-isolation` keep the structure. The `library-constant` rule was
+and the declared layers (`layer-order`, `module-api`) keep the structure. The `library-constant` rule was
 dropped the same day: it pushed wording, timings and facts into data. Left:
 
 - **Widen `constants` to `desktop_ui`.** 23 findings: the desktop reads kept

@@ -19,10 +19,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter_ns
 
-lazy from contracts.keyboard.bindings import Bindings
-lazy from contracts.keyboard.keys import Key, Mod
-lazy from contracts.keyboard.physical import Scancode
+lazy from keyboard.bindings import Bindings
 lazy from keyboard.engine import Engine, EngineState, Indicator
+lazy from keyboard.keys import Key, Mod
+lazy from keyboard.physical import Scancode
 lazy from protocol import LayoutState, Request
 lazy from settings import layout
 
@@ -105,13 +105,13 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         tracemalloc.stop()
     names = (
         "keyboard/engine.py",
-        "contracts/keyboard/physical.py",
-        "contracts/keyboard/keys.py",
-        "contracts/keyboard/actions.py",
-        "contracts/keyboard/board.py",
-        "contracts/keyboard/bindings.py",
-        "contracts/keyboard/layout.py",
-        "contracts/keyboard/chords.py",
+        "keyboard/physical.py",
+        "keyboard/keys.py",
+        "keyboard/actions.py",
+        "keyboard/board.py",
+        "keyboard/bindings.py",
+        "keyboard/layout.py",
+        "keyboard/chords.py",
         "settings/layout.py",
         "keyboard/win.py",
         "keyboard/__main__.py",

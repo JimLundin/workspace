@@ -3,9 +3,9 @@
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
-from contracts.keyboard.keys import Key, Mod
-from contracts.keyboard.physical import Scancode
 from diagnostics import Detail
+from keyboard.keys import Key, Mod
+from keyboard.physical import Scancode
 from keyboard.win import Keyboard, Peers
 from protocol import Message, Window
 from tests import layouts

@@ -96,11 +96,13 @@ class Report:
 
 
 @dataclass(frozen=True, slots=True)
-class Program:
-    """One of Workspace's programs and the packages that are its code."""
+class Layer:
+    """One big module: its packages and, if it keeps insides, the modules others may import from it."""
 
     name: Text
     packages: tuple[Text, ...]
+    api: tuple[Text, ...] = ()
+    """The modules (or packages) others may import; empty: all of it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,8 +116,8 @@ class Configuration:
     """Packages of values that only entry points and each other import."""
     entries: tuple[Text, ...] = ()
     """Modules besides each program's `__main__` that may import `data`."""
-    programs: tuple[Program, ...] = ()
-    """Each program's packages; one program's code never imports another's."""
+    layers: tuple[Layer, ...] = ()
+    """The big modules, bottom first: each imports only those below it, and only their APIs."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,25 +267,47 @@ def entry_data(sources: Iterable[Source], data: Sequence[str], entries: Sequence
             yield Finding("entry-data", module, "", target, 0, "Take the values as inputs: only entry points and data modules import data.")
 
 
-def program_isolation(sources: Iterable[Source], programs: Sequence[Program], cache: Cache | None) -> Iterator[Finding]:
-    """Each program's code imports only its own packages and the shared ones, so each starts and changes on its own.
+def _owner(module: str, layers: Sequence[Layer]) -> tuple[int, Layer] | None:
+    """The declared module a source module belongs to, with its place bottom first: the one whose package holds it most closely."""
+    held = ((len(package), place, layer) for place, layer in enumerate(layers) for package in layer.packages if _within(module, package))
+    closest = max(held, key=lambda found: found[0], default=None)
+    return None if closest is None else (closest[1], closest[2])
 
-    What two programs share (a message, a file's shape, the keyboard layout's model)
-    lives in a shared package (`protocol`, `contracts`) that both import."""
-    owner = {package: program.name for program in programs for package in program.packages}
+
+def layering(sources: Iterable[Source], layers: Sequence[Layer], entries: Sequence[str], cache: Cache | None) -> Iterator[Finding]:
+    """Each module imports only modules declared below its own, and from one that declares an API, only that API.
+
+    Entry points (each `__main__`, and `entries`) compose the modules, so only they
+    reach across; tests aren't sources here."""
     for source in sources:
         module = module_name(source.name)
-        if (mine := owner.get(module.split(".")[0])) is None:
+        if module.endswith(".__main__") or module in entries or (mine := _owner(module, layers)) is None:
             continue
-        reached = frozendict(
-            (target, theirs)
-            for target in dependencies(source.name, source.text, cache=cache)
-            if (theirs := owner.get(target.split(".")[0])) is not None and theirs != mine
-        )
-        # Importing a module also loads its packages; name only the module.
+        place, layer = mine
+        reached = frozenset(dependencies(source.name, source.text, cache=cache))
+        # Importing a module also loads its packages; judge only the deepest names.
         for target in sorted(target for target in reached if not any(other.startswith(target + ".") for other in reached)):
-            detail = f"The {mine} program imports the {reached[target]} program's code: move what both need to a shared package."
-            yield Finding("program-isolation", module, "", target, 0, detail)
+            if (theirs := _owner(target, layers)) is None or theirs[1] is layer:
+                continue
+            below, other = theirs
+            if below > place:
+                yield Finding(
+                    "layer-order",
+                    module,
+                    "",
+                    target,
+                    0,
+                    f"{layer.name} sits below {other.name}: move what both need down, or declare {layer.name} higher.",
+                )
+            elif other.api and not any(_within(target, api) for api in other.api):
+                yield Finding(
+                    "module-api",
+                    module,
+                    "",
+                    target,
+                    0,
+                    f"{target} is inside {other.name}: use its API ({', '.join(other.api)}), or add the module to it.",
+                )
 
 
 def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterator[Finding]:
@@ -1222,7 +1246,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *redeclarations(observations.values()),
         *shared_constants(loaded, configuration.constants),
         *entry_data(all_source, configuration.data, configuration.entries, cache),
-        *program_isolation(loaded, configuration.programs, cache),
+        *layering(loaded, configuration.layers, configuration.entries, cache),
         *enum_shapes(loaded),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))

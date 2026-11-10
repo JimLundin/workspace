@@ -1,14 +1,14 @@
 """What a key can do on a layer, and what a layer is. A bare Key, Mod or Layer is
 itself an action: a Key is tapped, a Mod or Layer is held while the key is held.
 Only the actions that need more than that get a type of their own. The layers
-written in this vocabulary make up a `contracts.keyboard.layout.Layout`; `contracts.keyboard.bindings`
+written in this vocabulary make up a `keyboard.layout.Layout`; `keyboard.bindings`
 looks them up."""
 
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import ClassVar
 
-from contracts.keyboard.keys import Key, Mod
+from keyboard.keys import Key, Mod
 from protocol import Slot, Tool
 
 

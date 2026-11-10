@@ -3,11 +3,11 @@ draws and the shortcuts the Charybdis sends, from one layout's bindings."""
 
 from dataclasses import dataclass
 
-from contracts.keyboard.actions import Layer, TapHold
-from contracts.keyboard.bindings import Bindings
-from contracts.keyboard.board import Board
-from contracts.keyboard.keys import Key
-from contracts.keyboard.layout import LayoutError
+from keyboard.actions import Layer, TapHold
+from keyboard.bindings import Bindings
+from keyboard.board import Board
+from keyboard.keys import Key
+from keyboard.layout import LayoutError
 from protocol import Request, Slot, Tool
 
 

@@ -7,13 +7,13 @@ from enum import Enum, auto
 from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
-from contracts.keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
-from contracts.keyboard.bindings import Bindings, Unmapped
-from contracts.keyboard.chords import Chords
-from contracts.keyboard.keys import Key, Mod
-from contracts.keyboard.layout import Layout
-from contracts.keyboard.physical import Laptop
 from contracts.members import every_member
+from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
+from keyboard.bindings import Bindings, Unmapped
+from keyboard.chords import Chords
+from keyboard.keys import Key, Mod
+from keyboard.layout import Layout
+from keyboard.physical import Laptop
 from protocol import App, Slot, Target, Tool, reaching
 
 ROWS: Final = (

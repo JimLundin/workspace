@@ -39,18 +39,19 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 # Design
 
-- Keep the programs' code apart: the launcher (`launch`), the gateway
-  (`gateway/`), the layout (`keyboard/`) and the desktop (`desktop/`,
-  `desktop_ui/`, `assistant/`) each import only their own packages and the
-  shared ones, never another program's (`program-isolation`). What two
-  programs share lives in a shared package both import: messages and the
-  programs' shapes in `protocol`, the keyboard layout's model in
-  `contracts.keyboard`, the gateway's endpoint file in `contracts.endpoint`.
-  Anything one program needs to run another (the launcher's command) is
-  handed in by its entry point.
+- Layer the big modules, each behind a small API. `pyproject.toml` declares
+  them bottom first (`[[tool.workspace.architecture.layers]]`): the
+  foundations (`cell`, `protocol`, `winapi`, `diagnostics`, `contracts`), then
+  `keyboard`, `settings`, `gateway`, `assistant`, `desktop_ui`, and the entry
+  points on top. A module imports only modules below it (`layer-order`), and
+  from one that declares an API only that API (`module-api`): the desktop
+  draws the layout from the keyboard's model (`keyboard.layout`, `bindings`,
+  `chords` and their vocabulary), never its hook or engine. Entry points (each
+  `__main__`, `launch.py`) compose the modules and may reach anything below.
+  Keep an API small; widen it only for what a module above truly needs.
 - Keep the keyboard process isolated: `keyboard/` and everything it imports use
   only the standard library, `winapi`, the stdlib-only top-level modules
-  (`cell`, `protocol`, `diagnostics`), `contracts.keyboard` and the `settings` data package, never
+  (`cell`, `protocol`, `diagnostics`) and the `settings` data package, never
   `assistant`, `desktop_ui` or third-party packages. Measure key-event latency, allocation
   and GC with `scripts/benchmark_keyboard.py` before and after changing the
   hook, the engine or their shared dependencies.
@@ -210,8 +211,8 @@ two writes in a row to the same state (`piecemeal-state`), a private
 property that only returns one field of an owner's state (`mirrored-state`),
 constants read across modules other than as `data_module.NAME`
 (`constant-import`, `shared-constant`), data imported by anything but an entry
-point (`entry-data`), one program importing another's code
-(`program-isolation`), a one-member enum (`single-member-enum`)
+point (`entry-data`), an import of a module declared above its importer
+(`layer-order`) or of a module's insides from outside it (`module-api`), a one-member enum (`single-member-enum`)
 and a table keyed by an enum in the enum's own module (`member-table`).
 
 # Committing and running
