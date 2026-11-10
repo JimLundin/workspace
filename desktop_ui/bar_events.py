@@ -112,7 +112,7 @@ class BarModel:
 
 def menu(model: BarModel) -> Menu:
     """The menu for what's happening now, keeping the current selection."""
-    recorded = capture(model.recording) if model.recording.capturing else None
+    recorded = capture(model.recording, model.spec.island.words.phases) if model.recording.capturing else None
     seen = model.seen
     sound = Slider("Sound", seen.system.volume, muted=seen.system.speakers is Speakers.MUTED)
     built = Menu(

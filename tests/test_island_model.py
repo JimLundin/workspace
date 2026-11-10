@@ -6,24 +6,30 @@ test checks how the model composes readings, never which glyphs or words they us
 
 from dataclasses import replace
 
-from contracts.recording_state import Phase, RecordingState
+from contracts.recording_state import RecordingState
 from contracts.status import TRANSCRIBING
 from desktop_ui import ambient
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.island_model import (
+    ELAPSED,
     Action,
     ActivitiesSpec,
     Activity,
     CapsuleView,
+    Capture,
     Control,
     IslandSpec,
     Key,
     Marker,
     Observed,
     Part,
+    Phased,
+    Phases,
     Reading,
     StatusSpec,
+    Symbols,
     Text,
+    Words,
     Zone,
     capture,
     island,
@@ -34,13 +40,44 @@ from winapi.machine_status import Battery, Speakers, Wifi
 
 SPEAKERS = frozendict((state, ambient.Reading(f"speaker {state.name}", f"speakers {state.name}")) for state in Speakers)
 WIFI = frozendict((state, ambient.Reading(f"wifi {state.name}", f"wifi {state.name}")) for state in Wifi)
+SYMBOLS = Symbols(keyboard="keys", clock="time", charger="plug", battery="cell", cpu="chip", memory="ram")
+PHASES: Phases = frozendict(
+    {
+        "idle": None,
+        "starting": Phased("Warming", can_stop=True, attention=False),
+        "recording": Phased(ELAPSED, can_stop=True, attention=False),
+        "stopping": Phased("Halting", can_stop=False, attention=False),
+        "finishing": Phased("Filing", can_stop=False, attention=False),
+        "paused": Phased("Look", can_stop=False, attention=True),
+        "interrupted": Phased("Look", can_stop=False, attention=True),
+        "saved": None,
+    }
+)
+WORDS = Words(
+    jobs=frozendict({TRANSCRIBING: "Working"}),
+    phases=PHASES,
+    stop="halt",
+    microphone="mic",
+    stop_recording="Halt recording",
+    stop_dictation="Halt dictation",
+    listening="Hearing",
+    open_controls="Open",
+    close_controls="Close",
+    charger="Plugged in",
+)
 SPEC = IslandSpec(
     StatusSpec(
         ((Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI), (Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY), (Reading.CLOCK,)),
         SPEAKERS,
         WIFI,
+        SYMBOLS,
+        low_battery=20,
+        unread="?",
+        widest_percent="100%",
+        widest_clock="00:00",
     ),
     ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
+    WORDS,
 )
 RESTING = Observed(None, RecordingState(), Ambient("10:22", Battery(73, powered=False, charging=False)), SystemStatus(), dictating=False)
 RECORDING = RecordingState(phase="recording", seconds=125)
@@ -71,7 +108,7 @@ def test_a_plain_keyboard_joins_its_group_and_an_empty_group_takes_no_slot() -> 
     assert reading(Reading.KEYBOARD, RESTING, SPEC.status) == () and reading(Reading.KEYBOARD, plain, SPEC.status) != ()
     assert view(plain, Key.STATUS).slots[0] == parts(plain, Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI)
     assert view(RESTING, Key.STATUS).slots[0] == parts(RESTING, Reading.SPEAKER, Reading.WIFI)
-    alone = replace(SPEC, status=StatusSpec(((Reading.KEYBOARD,), (Reading.CLOCK,)), SPEAKERS, WIFI))
+    alone = replace(SPEC, status=replace(SPEC.status, groups=((Reading.KEYBOARD,), (Reading.CLOCK,))))
     assert len(view(RESTING, Key.STATUS, spec=alone).slots) == 1
     assert len(view(plain, Key.STATUS, spec=alone).slots) == 2
 
@@ -145,7 +182,7 @@ def test_dictation_takes_the_island_and_detaches_every_other_activity_beside_it(
     assert centre.action is Action.STOP_DICTATION
     shown = {part for slot in centre.slots for part in slot}
     assert Marker.WAVE in shown and not shown & {Marker.DOTS, Marker.DOT}
-    moved = IslandSpec(SPEC.status, ActivitiesSpec(lead=(Activity.RECORDING, Activity.JOB), trail=()))
+    moved = replace(SPEC, activities=ActivitiesSpec(lead=(Activity.RECORDING, Activity.JOB), trail=()))
     assert [each.key for each in island(observed, moved)][:3] == [Key.RECORDING, Key.JOB, Key.ISLAND]
 
 
@@ -158,20 +195,10 @@ def test_the_status_capsule_expands_into_the_menu() -> None:
     assert (opened.key, opened.zone, opened.slots, opened.action) == (Key.STATUS, Zone.RIGHT, view(busy, Key.STATUS).slots, Action.CLOSE_MENU)
 
 
-def test_recording_phases_read_and_stop_as_capture_allows() -> None:
-    # Defects: an hour-long recording loses its hours, a phase that can't stop
-    # offers Stop, a stalled recording asks for no attention, or a saved one lingers.
-    long = capture(RecordingState(phase="recording", seconds=3725))
-    assert long is not None and long.title == "1:02:05"
-    phases: tuple[Phase, ...] = ("starting", "recording", "stopping", "finishing", "paused", "interrupted")
-    flags = {phase: (found.can_stop, found.attention) for phase in phases if (found := capture(RecordingState(phase=phase))) is not None}
-    assert flags == {
-        "starting": (True, False),
-        "recording": (True, False),
-        "stopping": (False, False),
-        "finishing": (False, False),
-        "paused": (False, True),
-        "interrupted": (False, True),
-    }
-    assert capture(RecordingState(phase="saved", seconds=900)) is None
-    assert capture(RecordingState(phase="idle")) is None
+def test_a_recording_reads_as_its_phase_says_and_its_elapsed_time_keeps_its_hours() -> None:
+    # Defects: an hour-long recording loses its hours, a phase's title or flags are
+    # lost on the way to the bar, or a phase that doesn't show lingers.
+    assert capture(RecordingState(phase="recording", seconds=3725), PHASES) == Capture("1:02:05", can_stop=True, attention=False)
+    assert capture(RecordingState(phase="recording", seconds=65), PHASES) == Capture("01:05", can_stop=True, attention=False)
+    assert capture(RecordingState(phase="paused", seconds=65), PHASES) == Capture("Look", can_stop=False, attention=True)
+    assert capture(RecordingState(phase="saved", seconds=900), PHASES) is None

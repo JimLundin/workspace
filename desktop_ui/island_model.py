@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
 
-from contracts.members import every_member
-from contracts.recording_state import RecordingState
+from contracts.members import every_literal, every_member
+from contracts.recording_state import Phase, RecordingState
 from contracts.status import TRANSCRIBING, Job
 from desktop_ui import ambient
 from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
@@ -118,25 +118,32 @@ class Capture:
     attention: bool = field(kw_only=True)
 
 
-def capture(recording: RecordingState) -> Capture | None:
+ELAPSED = sentinel("ELAPSED")
+"""A phase that reads as the recording's elapsed time."""
+
+
+@dataclass(frozen=True, slots=True)
+class Phased:
+    """How a recording phase shows: its title, or its elapsed time, and whether it can stop or needs you."""
+
+    title: str | ELAPSED
+    can_stop: bool = field(kw_only=True)
+    attention: bool = field(kw_only=True)
+
+
+type Phases = frozendict[Phase, Phased | None]
+"""Each phase's look; a phase that maps to None doesn't show."""
+
+
+def capture(recording: RecordingState, phases: Phases) -> Capture | None:
+    phased = phases[recording.phase]
+    if phased is None:
+        return None
     seconds = max(0, int(recording.seconds))
     hours, minutes, rest = seconds // 3600, seconds // 60 % 60, seconds % 60
     clock = f"{hours}:{minutes:02}:{rest:02}" if hours else f"{minutes:02}:{rest:02}"
-    match recording.phase:
-        case "starting":
-            return Capture("Starting…", can_stop=True, attention=False)
-        case "recording":
-            return Capture(clock, can_stop=True, attention=False)
-        case "stopping":
-            return Capture("Stopping…", can_stop=False, attention=False)
-        case "finishing":
-            return Capture("Saving…", can_stop=False, attention=False)
-        case "paused" | "interrupted":
-            return Capture("Check recording", can_stop=False, attention=True)
-        case "idle" | "saved":
-            return None
-        case _:
-            assert_never(recording.phase)
+    title = clock if phased.title is ELAPSED else phased.title
+    return Capture(title, can_stop=phased.can_stop, attention=phased.attention)
 
 
 # ---- the bar's composition as data: `ISLAND` ---------------------------------------------
@@ -162,6 +169,39 @@ class Activity(StrEnum):
     RECORDING = auto()
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Symbols:
+    """The status readings' symbols."""
+
+    keyboard: str
+    clock: str
+    charger: str
+    battery: str
+    cpu: str
+    memory: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Words:
+    """What the island's activities say and show."""
+
+    jobs: frozendict[Job, str]
+    phases: Phases
+    stop: str
+    """The Stop control's symbol."""
+    microphone: str
+    stop_recording: str
+    stop_dictation: str
+    listening: str
+    """Dictation's accessible name."""
+    open_controls: str
+    """After a capsule's description: pressing it opens the controls."""
+    close_controls: str
+    """The expanded status capsule's name."""
+    charger: str
+    """Said of a connected charger."""
+
+
 @dataclass(frozen=True, slots=True)
 class StatusSpec:
     groups: tuple[tuple[Reading, ...], ...]
@@ -170,6 +210,14 @@ class StatusSpec:
     """The speakers' symbol and words in each state."""
     wifi: frozendict[Wifi, ambient.Reading]
     """Wi-Fi's symbol and words in each state."""
+    symbols: Symbols
+    low_battery: int
+    """The battery percentage at or below which, on its own power, the reading warns."""
+    unread: str
+    """A reading not yet read, rather than a healthy-looking 0%."""
+    widest_percent: str
+    widest_clock: str
+    """The widest reading of each kind, which its room keeps, so a changing value never shifts the capsule."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +234,7 @@ class IslandSpec:
 
     status: StatusSpec
     activities: ActivitiesSpec
+    words: Words
 
 
 ISLAND: Final = IslandSpec(
@@ -200,11 +249,40 @@ ISLAND: Final = IslandSpec(
         ),
         SPEAKERS,
         WIFI,
+        Symbols(keyboard="keyboard", clock="clock", charger="charger", battery="battery", cpu="cpu", memory="memory"),
+        low_battery=20,
+        unread="—",
+        widest_percent="100%",
+        widest_clock="00:00",
     ),
     # Where activities sit beside the island, left to right. A transcription
     # and a recording step out of the island while you dictate. Each activity is
     # placed exactly once.
     activities=ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
+    words=Words(
+        jobs=frozendict({TRANSCRIBING: "Transcribing"}),
+        phases=every_literal(
+            Phase,
+            {
+                "idle": None,
+                "starting": Phased("Starting…", can_stop=True, attention=False),
+                "recording": Phased(ELAPSED, can_stop=True, attention=False),
+                "stopping": Phased("Stopping…", can_stop=False, attention=False),
+                "finishing": Phased("Saving…", can_stop=False, attention=False),
+                "paused": Phased("Check recording", can_stop=False, attention=True),
+                "interrupted": Phased("Check recording", can_stop=False, attention=True),
+                "saved": None,
+            },
+        ),
+        stop="stop",
+        microphone="mic.fill",
+        stop_recording="Stop recording",
+        stop_dictation="Stop dictation",
+        listening="Listening · press to stop",
+        open_controls="Open Workspace controls",
+        close_controls="Workspace controls · Escape closes",
+        charger="Charger connected",
+    ),
 )
 """The island bar's composition."""
 
@@ -231,44 +309,40 @@ def zone(key: Key, spec: IslandSpec) -> Zone:
             assert_never(key)
 
 
-def job_label(job: Job) -> str:
-    return {TRANSCRIBING: "Transcribing"}[job]
-
-
-def usage(percent: int | None) -> Text:
+def usage(percent: int | None, status: StatusSpec) -> Text:
     """One resource's value, reserving its widest form so a changing value never shifts the cluster."""
-    return Text("—" if percent is None else f"{percent}%", reserve="100%")
+    return Text(status.unread if percent is None else f"{percent}%", reserve=status.widest_percent)
 
 
 def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
     """One reading's parts. Each reserves its widest form, and power keeps one glyph,
     so a changing reading never shifts the fixed cluster."""
-    ambient, system = observed.ambient, observed.system
+    ambient, system, symbols = observed.ambient, observed.system, status.symbols
     match each:
         case Reading.KEYBOARD:
-            return (Glyph("keyboard"),) if observed.plain_keyboard else ()
+            return (Glyph(symbols.keyboard),) if observed.plain_keyboard else ()
         case Reading.SPEAKER:
             return (Glyph(status.speakers[system.speakers].icon),)
         case Reading.WIFI:
             return (Glyph(status.wifi[system.wifi].icon),)
         case Reading.CLOCK:
-            return (Glyph("clock"), Text(ambient.clock, reserve="00:00"))
+            return (Glyph(symbols.clock), Text(ambient.clock, reserve=status.widest_clock))
         case Reading.POWER:
             match ambient.power:
                 case Battery(powered=True) | PowerUnavailable.NO_BATTERY:
-                    return (Glyph("charger"),)
+                    return (Glyph(symbols.charger),)
                 case _:
-                    return (Glyph("battery"),)
+                    return (Glyph(symbols.battery),)
         case Reading.BATTERY:
             match ambient.power:
-                case Battery(percent=percent, powered=False) if percent <= 20:
-                    return (Text(ambient.battery_text, meaning.Tone.LOW, reserve="100%"),)
+                case Battery(percent=percent, powered=False) if percent <= status.low_battery:
+                    return (Text(ambient.battery_text, meaning.Tone.LOW, reserve=status.widest_percent),)
                 case _:
-                    return (Text(ambient.battery_text, reserve="100%"),)
+                    return (Text(ambient.battery_text, reserve=status.widest_percent),)
         case Reading.CPU:
-            return (Glyph("cpu"), usage(system.cpu))
+            return (Glyph(symbols.cpu), usage(system.cpu, status))
         case Reading.MEMORY:
-            return (Glyph("memory"), usage(system.memory))
+            return (Glyph(symbols.memory), usage(system.memory, status))
         case _:
             assert_never(each)
 
@@ -277,18 +351,18 @@ def devices(system: SystemStatus, status: StatusSpec) -> str:
     return status.speakers[system.speakers].description + ". " + status.wifi[system.wifi].description
 
 
-def describe(ambient: Ambient) -> str:
+def describe(ambient: Ambient, words: Words) -> str:
     match ambient.power:
         case Battery(powered=True):
-            charger = "Charger connected"
+            charger = words.charger
         case _:
             charger = ""
     return ". ".join(value for value in (ambient.text, charger) if value)
 
 
-def recording_slot(recorded: Capture, *, hovered: bool) -> Slot:
+def recording_slot(recorded: Capture, words: Words, *, hovered: bool) -> Slot:
     tone = meaning.Tone.LOW if recorded.attention else meaning.Tone.INK
-    stop = (Control("stop", "Stop recording", Action.STOP_RECORDING),) if hovered and recorded.can_stop else ()
+    stop = (Control(words.stop, words.stop_recording, Action.STOP_RECORDING),) if hovered and recorded.can_stop else ()
     return (Marker.DOT, Text(recorded.title, tone), *stop)
 
 
@@ -298,50 +372,51 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
     The right-hand readings expand into the controls menu (`expanded`), where
     ongoing activities become live rows, so they leave the bar.
     """
-    job, recorded = observed.job, capture(observed.recording)
+    words = spec.words
+    job, recorded = observed.job, capture(observed.recording, words.phases)
     detached = observed.dictating and not expanded
     lead: tuple[CapsuleView, ...] = ()
     if detached and job is not None:
-        lead += (CapsuleView(Key.JOB, zone(Key.JOB, spec), ((Marker.DOTS,),), job_label(job), Action.OPEN_MENU),)
+        lead += (CapsuleView(Key.JOB, zone(Key.JOB, spec), ((Marker.DOTS,),), words.jobs[job], Action.OPEN_MENU),)
     trail: tuple[CapsuleView, ...] = ()
     if detached and recorded is not None:
         tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
-        slot = recording_slot(recorded, hovered=hovered is Key.RECORDING)
+        slot = recording_slot(recorded, words, hovered=hovered is Key.RECORDING)
         trail += (
-            CapsuleView(Key.RECORDING, zone(Key.RECORDING, spec), (slot,), f"{recorded.title} · Open Workspace controls", Action.OPEN_MENU, tint),
+            CapsuleView(Key.RECORDING, zone(Key.RECORDING, spec), (slot,), f"{recorded.title} · {words.open_controls}", Action.OPEN_MENU, tint),
         )
     # The readings stay the top row while their capsule expands into the menu; a
     # group whose readings are all absent (a keyboard typing normally) takes no space.
     groups = (tuple(part for each in group for part in reading(each, observed, spec.status)) for group in spec.status.groups)
     readings: tuple[Slot, ...] = tuple(group for group in groups if group)
     persistent = (
-        CapsuleView(Key.STATUS, Zone.RIGHT, readings, "Workspace controls · Escape closes", Action.CLOSE_MENU)
+        CapsuleView(Key.STATUS, Zone.RIGHT, readings, words.close_controls, Action.CLOSE_MENU)
         if expanded
         else CapsuleView(
             Key.STATUS,
             Zone.RIGHT,
             readings,
-            ". ".join((observed.system.resource_description, devices(observed.system, spec.status), describe(observed.ambient)))
-            + " · Open Workspace controls",
+            ". ".join((observed.system.resource_description, devices(observed.system, spec.status), describe(observed.ambient, words)))
+            + f" · {words.open_controls}",
             Action.OPEN_MENU,
         ),
     )
     active = observed.dictating or job is not None or recorded is not None
-    middle = (centre(observed, recorded, hovered=hovered),) if active and not expanded else ()
+    middle = (centre(observed, recorded, words, hovered=hovered),) if active and not expanded else ()
     ranks = order(spec)
     return tuple(sorted((*lead, *middle, *trail, *persistent), key=lambda view: ranks.index(view.key)))
 
 
-def centre(observed: Observed, recorded: Capture | None, *, hovered: Key | None) -> CapsuleView:
+def centre(observed: Observed, recorded: Capture | None, words: Words, *, hovered: Key | None) -> CapsuleView:
     """Only live activity belongs here; persistent readings have fixed right anchors. `recorded` is the recording as captured."""
     revealed = hovered is Key.ISLAND
     job = observed.job
     if observed.dictating:
-        stop: Slot = (Control("stop", "Stop dictation", Action.STOP_DICTATION),) if revealed else ()
-        slots: tuple[Slot, ...] = ((Glyph("mic.fill", meaning.Tone.MICROPHONE), Marker.WAVE, *stop),)
-        return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, "Listening · press to stop", Action.STOP_DICTATION)
+        stop: Slot = (Control(words.stop, words.stop_dictation, Action.STOP_DICTATION),) if revealed else ()
+        slots: tuple[Slot, ...] = ((Glyph(words.microphone, meaning.Tone.MICROPHONE), Marker.WAVE, *stop),)
+        return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, words.listening, Action.STOP_DICTATION)
     leading: tuple[Slot, ...] = ((Marker.DOTS,),) if job is not None else ()
-    trailing: tuple[Slot, ...] = (recording_slot(recorded, hovered=revealed),) if recorded is not None else ()
-    described = (job_label(job) if job is not None else "", recorded.title if recorded is not None else "")
+    trailing: tuple[Slot, ...] = (recording_slot(recorded, words, hovered=revealed),) if recorded is not None else ()
+    described = (words.jobs[job] if job is not None else "", recorded.title if recorded is not None else "")
     label = ". ".join(value for value in described if value)
-    return CapsuleView(Key.ISLAND, Zone.ISLAND, (*leading, *trailing), f"{label} · Open Workspace controls", Action.OPEN_MENU)
+    return CapsuleView(Key.ISLAND, Zone.ISLAND, (*leading, *trailing), f"{label} · {words.open_controls}", Action.OPEN_MENU)
