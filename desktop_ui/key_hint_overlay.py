@@ -52,8 +52,8 @@ ARROWS: Final = {Direction.LEFT: "←", Direction.DOWN: "↓", Direction.UP: "�
 
 
 def rim_gradient(bounds: QtCore.QRectF, rim: Rim, glass: Glass) -> QtGui.QLinearGradient:
-    """CSS's 160deg gradient: brightest where light catches the upper-leading curve."""
-    angle = math.radians(160)
+    """The rim's CSS-angled gradient: brightest where light catches the upper-leading curve."""
+    angle = math.radians(glass.lighting.rim_angle)
     dx, dy = math.sin(angle), -math.cos(angle)
     half = (abs(bounds.width() * dx) + abs(bounds.height() * dy)) / 2
     center = bounds.center()

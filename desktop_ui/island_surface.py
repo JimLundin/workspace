@@ -845,7 +845,7 @@ class BarWindow(QtWidgets.QWidget):
             return
         if self.scene is None and self.composition is not None:
             try:
-                self.scene = self.composition.scene("Workspace · Island glass")
+                self.scene = self.composition.scene("Workspace · Island glass", self.spec.glass.lighting)
             except OSError as error:
                 log(f"Island glass unavailable; using the solid material: {error}")
         if self.scene is None:

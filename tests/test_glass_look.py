@@ -21,6 +21,7 @@ from desktop_ui.components.appearance import (
 )
 from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance
+from winapi.shapes import Lighting
 
 
 def scheme_tokens(scheme: Scheme, ink: str, solid: str) -> Tokens:
@@ -65,6 +66,7 @@ GLASS = Glass(
     menu_veil=0.7,
     contrast_hover=0.25,
     contrast_press=0.4,
+    lighting=Lighting(shadow_blur=20, shadow_drop=6, shadow_color="#000000", rim_stroke=2, rim_angle=150),
     rim_light="#ffffff",
     rim_fall=0.3,
     rim_rise=0.7,

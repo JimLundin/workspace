@@ -7,6 +7,7 @@ composes several panes in one window, so panes move without moving any window.
 """
 
 import ctypes
+import math
 import threading
 import time
 from collections.abc import Callable
@@ -56,7 +57,7 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import (
 from cell import Cell
 from winapi import windows
 from winapi._core import NativeFunction, com_method
-from winapi.shapes import Pane, Rect
+from winapi.shapes import Lighting, Pane, Rect
 
 
 def _check(result: object) -> None:
@@ -121,8 +122,8 @@ class DesktopComposition:
     def closed(self) -> bool:
         return self._closed.is_set()
 
-    def scene(self, title: str) -> GlassScene:
-        return GlassScene.create(self, title)
+    def scene(self, title: str, lighting: Lighting) -> GlassScene:
+        return GlassScene.create(self, title, lighting)
 
     def close(self, pump: Callable[[], None]) -> None:
         """Drain the native dispatcher before its owning UI thread can exit."""
@@ -210,7 +211,7 @@ class PaneGroup:
     _published: Cell[Pane | None] = field(default_factory=lambda: Cell[Pane | None](None), init=False, repr=False)
 
     @classmethod
-    def create(cls, compositor: Compositor, root: ContainerVisual) -> PaneGroup:
+    def create(cls, compositor: Compositor, root: ContainerVisual, lighting: Lighting) -> PaneGroup:
         group = compositor.CreateContainerVisual()
         geometry = compositor.CreateRoundedRectangleGeometry()
         group.Clip = compositor.CreateGeometricClipWithGeometry(geometry)
@@ -220,10 +221,14 @@ class PaneGroup:
         tint = compositor.CreateSpriteVisual()
         tint.Brush = tint_brush
         rim_brush: CompositionLinearGradientBrush = compositor.CreateLinearGradientBrush()
-        rim_brush.StartPoint, rim_brush.EndPoint = Vector2(0.3, 0), Vector2(0.7, 1)
+        # The gradient runs along the rim's angle, from one edge of the pane's unit square to the opposite one.
+        direction = math.radians(lighting.rim_angle)
+        dx, dy = math.sin(direction), -math.cos(direction)
+        reach = 0.5 / max(abs(dx), abs(dy))
+        rim_brush.StartPoint, rim_brush.EndPoint = Vector2(0.5 - dx * reach, 0.5 - dy * reach), Vector2(0.5 + dx * reach, 0.5 + dy * reach)
         stroke = compositor.CreateSpriteShapeWithGeometry(geometry)
         stroke.StrokeBrush = rim_brush
-        stroke.StrokeThickness = 2  # Half lies outside the clip: one pixel of rim inside the edge.
+        stroke.StrokeThickness = lighting.rim_stroke
         rim = compositor.CreateShapeVisual()
         rim.Shapes.Append(stroke)
         for child in (backdrop, tint, rim):
@@ -236,7 +241,7 @@ class PaneGroup:
         surface = compositor.CreateVisualSurface()
         surface.SourceVisual = mask
         drop: DropShadow = compositor.CreateDropShadow()
-        drop.Color = _color("#000000", 1)
+        drop.Color = _color(lighting.shadow_color, 1)
         drop.Mask = compositor.CreateSurfaceBrushWithSurface(surface)
         shadow = compositor.CreateSpriteVisual()
         shadow.Shadow = drop
@@ -315,10 +320,11 @@ class GlassScene:
     target: DesktopWindowTarget
     compositor: Compositor
     root: ContainerVisual
+    lighting: Lighting
     _composed: Cell[_Composed] = field(default_factory=lambda: Cell(_Composed()), init=False, repr=False)
 
     @classmethod
-    def create(cls, owner: DesktopComposition, title: str, *, stack: Callable[[int, int], None] = stack_behind) -> GlassScene:
+    def create(cls, owner: DesktopComposition, title: str, lighting: Lighting, *, stack: Callable[[int, int], None] = stack_behind) -> GlassScene:
         handle = glass_host(title)
         try:
             enabled = ctypes.c_int(1)
@@ -332,7 +338,7 @@ class GlassScene:
         except BaseException:
             windows.destroy(handle)
             raise
-        return cls(stack, handle, target, compositor, root)
+        return cls(stack, handle, target, compositor, root, lighting)
 
     @property
     def bounds(self) -> Rect | None:
@@ -350,9 +356,13 @@ class GlassScene:
             self.root.as_(IVisual).Size = Vector2(bounds.width, bounds.height)
         if composed.scale != scale:
             for group in composed.groups.values():
-                group.shadow.BlurRadius = 24 * scale
-                group.shadow.Offset = Vector3(0, 8 * scale, 0)
+                self.cast(group, scale)
         self._composed.set(replace(composed, bounds=bounds, scale=scale))
+
+    def cast(self, group: PaneGroup, scale: float) -> None:
+        """The group's shadow at the scene's scale."""
+        group.shadow.BlurRadius = self.lighting.shadow_blur * scale
+        group.shadow.Offset = Vector3(0, self.lighting.shadow_drop * scale, 0)
 
     def publish(self, panes: tuple[Pane, ...]) -> None:
         """Show exactly these panes; any other pooled pane hides until its key returns."""
@@ -361,9 +371,8 @@ class GlassScene:
             composed = self._composed.get()
             group = composed.groups.get(pane.key)
             if group is None:
-                group = PaneGroup.create(self.compositor, self.root)
-                group.shadow.BlurRadius = 24 * composed.scale
-                group.shadow.Offset = Vector3(0, 8 * composed.scale, 0)
+                group = PaneGroup.create(self.compositor, self.root, self.lighting)
+                self.cast(group, composed.scale)
                 self._composed.set(replace(composed, groups=frozendict(composed.groups | {pane.key: group})))
             if group.published != pane:
                 group.publish(pane)

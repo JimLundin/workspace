@@ -81,6 +81,20 @@ class Stop:
     opacity: float
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Lighting:
+    """How light falls on every pane of a glass scene."""
+
+    shadow_blur: float
+    shadow_drop: float
+    """The shadow's blur and how far it falls below the pane, in DIPs."""
+    shadow_color: str
+    rim_stroke: float
+    """Twice the visible rim: half of the stroke lies outside the pane's clip."""
+    rim_angle: float
+    """The rim gradient's direction in CSS degrees (0 up, 90 right), brightest where it starts."""
+
+
 @dataclass(frozen=True, slots=True)
 class Veil:
     """How a pane's glass reads: its tint over the blurred desktop, its rim light and its shadow."""

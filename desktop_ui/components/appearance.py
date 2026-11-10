@@ -15,7 +15,7 @@ from contracts.members import every_member
 from desktop_ui.components import typeface
 from desktop_ui.components.meaning import Tint, Tone
 from winapi import appearance
-from winapi.shapes import Stop
+from winapi.shapes import Lighting, Stop
 
 GLASS_ACCENT: Final = "#4b8fe8"  # a soft blue, lighter and less saturated than system blue
 ATTENTION: Final = "#f08a00"  # something needs you
@@ -222,6 +222,7 @@ class Glass:
     contrast_hover: float
     contrast_press: float
     """High contrast's pointer feedback: the system foreground at these opacities."""
+    lighting: Lighting
     rim_light: str
     rim_fall: float
     """Where the rim has fallen from its high at the upper-leading curve..."""
@@ -301,6 +302,7 @@ GLASS: Final = Glass(
     menu_veil=0.64,
     contrast_hover=0.2,
     contrast_press=0.35,
+    lighting=Lighting(shadow_blur=24, shadow_drop=8, shadow_color=_BLACK, rim_stroke=2, rim_angle=160),
     rim_light=_WHITE,
     rim_fall=0.34,
     rim_rise=0.72,
