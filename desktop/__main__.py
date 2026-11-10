@@ -13,9 +13,9 @@ from dataclasses import replace
 from protocol import Places, Tool
 from settings import apps, layout, programs
 lazy from desktop import bar, look, placement, windows
+lazy from desktop_ui import desktop_pager
 lazy from desktop_ui.bar_events import BarSpec
 lazy from desktop_ui.desktop_app import run
-lazy from desktop_ui.desktop_pager import JUMPS
 lazy from desktop_ui.desktop_settings import DesktopSettings
 lazy from desktop_ui.keymap import KeyboardView, shortcut_hint
 
@@ -51,7 +51,7 @@ def main() -> None:
             tray=windows.TRAY_ICON,
             tray_menu=windows.TRAY_MENU,
             placement=placement.PLACEMENT,
-            pager=replace(bar.PAGER, letters=tuple(keyboard.letters.get(tool) for tool in JUMPS)),
+            pager=replace(bar.PAGER, letters=desktop_pager.jump_letters(keyboard.letters)),
         )
     )
 

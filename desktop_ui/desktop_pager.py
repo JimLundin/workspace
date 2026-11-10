@@ -7,15 +7,20 @@ never cycled. Its names list the applications placed on each desktop. While eith
 its Apps key, each desktop carries its letter, read from the chord table.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, assert_never
 
 from desktop_ui.shell_items import PinnedApp, WebApps
 from desktop_ui.window_layout import App, Program
-from protocol import Tool
+from protocol import Request, Tool
 
 JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4, Tool.DESKTOP_5)
+
+
+def jump_letters(letters: Mapping[Request, str]) -> tuple[str | None, ...]:
+    """The chord letter for each desktop in order, from each request's letter on the layout."""
+    return tuple(letters.get(tool) for tool in JUMPS)
 
 
 @dataclass(frozen=True, slots=True)

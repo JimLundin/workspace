@@ -14,7 +14,7 @@ these.
 | Launcher | `StartWorkspace.cmd`, `launch.py` | Starts, stops and restarts the components from the checkout's `.venv`; it supervises nothing |
 | AI connection | `gateway/__main__.py` | A loopback pass-through to the model provider; holds the key. Imports only `gateway`, `protocol` and `settings.programs` |
 | Layout | `keyboard.pyw`, `keyboard/` | The keyboard hook and remapping. Standard library and `winapi/` only |
-| Desktop | `desktop/__main__.py`, `desktop_ui/`, `assistant/` | The bar, tray, key map, overlay and window placement, dictation and meeting recording, on Qt's event loop, with worker threads for slow jobs |
+| Desktop | `desktop/__main__.py`, `desktop_ui/`, `assistant/` | The bar, tray, key map, overlay and window placement, dictation and meeting recording, on Qt's event loop, with worker threads for slow jobs. `desktop/` declares its values (`look.py`, `bar.py`, `windows.py`, `placement.py`) and `__main__.py` hands them, with `settings/`, to `desktop_ui` as one `DesktopSettings` |
 
 The layout posts every request, what the desktop shows (layer, chord, pressed
 keys) and its state to the desktop's control window. The desktop's fold
@@ -78,7 +78,7 @@ architecture review's `contract-isolation` rule enforces it.
 
 | Modules | Role |
 | --- | --- |
-| `desktop_app.py`, `desktop_control.py`, `voice.py` | Composition and the views, the desktop's control decisions and tray menu, and dictation, meetings and the microphone |
+| `desktop_app.py`, `desktop_settings.py`, `desktop_control.py`, `voice.py` | Composition and the views, the shape of what the desktop is handed, the desktop's control decisions and tray menu, and dictation, meetings and the microphone |
 | `qt_ui.py`, `qt_runtime.py` | The Qt application, one-shot timers and the bar's frame loop |
 | `desktop_bar.py`, `bar_*.py`, `island_*.py`, `ambient.py`, `audio_meter.py` | The bar ([policy](toolbar-design.md)) and the readings it shows |
 | `shell_*.py`, `desktop_pager.py`, `taskbar_guard.py` | The pager and app shelf, and the Windows taskbar |

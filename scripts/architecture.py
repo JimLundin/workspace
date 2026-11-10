@@ -96,12 +96,27 @@ class Report:
 
 
 @dataclass(frozen=True, slots=True)
+class Kept:
+    """Constants library modules keep, each as `module.NAME`, because they are facts or mechanics rather than choices."""
+
+    reason: Text
+    constants: tuple[Text, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Configuration:
     """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
 
     exceptions: tuple[ExceptionSpec, ...] = ()
     constants: tuple[Text, ...] = ()
     """Packages whose modules read other modules' constants only as `module.NAME`, and only from declarations-only modules."""
+    libraries: tuple[Text, ...] = ()
+    """Packages that declare shapes and no values: each constant a module there declares is a finding unless `kept` names it."""
+    kept: tuple[Kept, ...] = ()
+    data: tuple[Text, ...] = ()
+    """Packages of values that only entry points and each other import."""
+    entries: tuple[Text, ...] = ()
+    """Modules besides each program's `__main__` that may import `data`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +250,55 @@ def _declarations_only(tree: ast.Module) -> bool:
             case _:
                 return False
     return True
+
+
+VALUE: Final = re.compile(r"_?[A-Z][A-Z0-9_]*")
+"""A module-level value's name, public or private."""
+
+
+def _values(statement: ast.stmt) -> Iterator[str]:
+    """The values a module-level statement declares; a sentinel is a type, not a value."""
+    if isinstance(statement, ast.Assign | ast.AnnAssign) and not _sentinel(statement):
+        targets = (name for target in _targets(statement) for name in (target.elts if isinstance(target, ast.Tuple) else (target,)))
+        yield from (name.id for name in targets if isinstance(name, ast.Name) and VALUE.fullmatch(name.id))
+
+
+def library_constants(sources: Iterable[Source], libraries: Sequence[str], kept: Sequence[Kept]) -> Iterator[Finding]:
+    """A library module declares shapes, not values: its entry point builds the values and hands them in.
+
+    A fact or mechanic a library keeps (a Win32 message, a shipped font file, an empty
+    value of its type) is named under `kept` with its reason; a kept name no longer
+    declared is stale."""
+    allowed = frozenset(name for group in kept for name in group.constants)
+    declared = tuple(
+        (module, name, statement.lineno)
+        for source in sources
+        for module in (module_name(source.name),)
+        if any(_within(module, package) for package in libraries)
+        for statement in ast.parse(source.text).body
+        for name in _values(statement)
+    )
+    detail = "Declare the value in an entry point's data and hand it in, or keep it under [[tool.workspace.architecture.kept]] with its reason."
+    yield from (Finding("library-constant", module, name, name, line, detail) for module, name, line in declared if f"{module}.{name}" not in allowed)
+    present = frozenset(f"{module}.{name}" for module, name, _ in declared)
+    stale = (name.rpartition(".") for name in sorted(allowed - present))
+    yield from (
+        Finding("stale-kept", module, name, f"{module}.{name}", 0, "Remove it from kept: no library declares it.") for module, _, name in stale
+    )
+
+
+def entry_data(sources: Iterable[Source], data: Sequence[str], entries: Sequence[str], cache: Cache | None) -> Iterator[Finding]:
+    """Only entry points, and data modules themselves, import the data packages; everything else, tests included, is handed its values."""
+    for source in sources:
+        module = module_name(source.name)
+        if module.endswith(".__main__") or module in entries or any(_within(module, package) for package in data):
+            continue
+        reached = frozenset(
+            target for target in dependencies(source.name, source.text, cache=cache) if any(_within(target, package) for package in data)
+        )
+        # Importing a module also loads its packages; name only the module.
+        for target in sorted(target for target in reached if not any(other.startswith(target + ".") for other in reached)):
+            yield Finding("entry-data", module, "", target, 0, "Take the values as inputs: only entry points and data modules import data.")
 
 
 def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterator[Finding]:
@@ -1172,6 +1236,8 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *duplicates(observations.values()),
         *redeclarations(observations.values()),
         *shared_constants(loaded, configuration.constants),
+        *library_constants(loaded, configuration.libraries, configuration.kept),
+        *entry_data(all_source, configuration.data, configuration.entries, cache),
         *enum_shapes(loaded),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))

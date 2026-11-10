@@ -28,7 +28,7 @@ or quality review wherever a rule can be checked mechanically:
   not `tuple[int, int, int]`.
 - **Translate an enum with a mapping or a value on its members, not a `match`.**
   Use `Final[frozendict[Enum, Value]]` or the member's value. Example:
-  `desktop_ui.icons.COLOURS`.
+  `desktop_ui.tray.TraySpec.colours`.
 - **No append-to-a-mutable-container-in-a-loop.** Prefer comprehensions, tuples
   and generator expressions, and immutable data. Use `frozendict`, not `dict`,
   for mappings that leave their owner, with replacement instead of mutation.
@@ -157,35 +157,29 @@ keyboard's hub) 18:33–18:34, then four editing checks 18:35–18:38. Worth
 testing next: run the native audio tests alone with `via_watch` on, and
 compare load alone (an editing check) against them.
 
-## 4. Keyboard data structure (on hold)
+## 4. Values handed in, not declared by libraries
 
-Paused on 2026-11-09 to let the user think it over; resumed on 2026-11-10 as
-the move of chosen values into entry points.
+Done on 2026-11-10: libraries declare shapes, entry points supply the values
+(AGENTS.md; `library-constant` and `entry-data` enforce it for `keyboard` and
+`desktop_ui`). Left:
 
-Done: the layers are a name enum again (`keyboard.actions.Layer`) with their
-boards in `settings.LAYERS`.
-
-Still to decide, raised in the same session:
-
-- **The logic reads `settings` as a global.** The engine, `bindings`,
-  `firmware` and the key map import it, so tests run against the real layout
-  and import `settings` themselves. Proposed: a `keyboard.layout.Layout`
-  protocol that the `settings` module satisfies (mypy accepts a module for a
-  protocol). Only startup code imports `settings`, tests pass their own
-  layout modules, and a review rule rejects a test that imports a data module.
-- **Inject every module-level keyboard table, not just `settings`** (user,
-  2026-11-09: make the pivot to passing data in; a follow-up after the
-  window-layout tables). Tables built at import from the real layout:
-  `bindings._TABLE`, `_HANDS` and `_SLOTS`; `firmware._KEYS`, `CHORDS` and
-  `CHORD_KEYS`; and in `desktop_ui/keymap.py`, `ROWS`, `PHYSICAL_NAMES` and
-  `shortcut()`. `CHORDS` also reaches `desktop_ui/key_hints.py` and the
-  pager's jump hints. Tests that can't use their own tables until this is
-  done: `test_keymap::test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first`
-  (it pins the keymap's legends) and the chord letters behind key hints.
+- **Migrate the other packages.** `assistant`, `gateway` and `winapi` still
+  declare tunings: `winapi.pcm.RATE` and its buffer sizes, the meeting store's
+  chunk sizes, `journal.BUSY_SECONDS`, `meetings.SPOOL_SECONDS` and
+  `PUBLISH_SECONDS`, `llm.MAX_SECONDS`/`MIN_SECONDS`, `gateway.proxy.TIMEOUT_S`
+  and its bind host. Hand each in from its entry point, then add the package to
+  `libraries`.
+- **Revisit the kept clocks.** `hook_watch`'s three thresholds, the desktop's
+  capture timer and resource sampling are kept as a mechanism's clocks; hand
+  them in if any proves worth tuning.
+- **Widen `constants` to `desktop_ui`.** 23 findings: the desktop reads kept
+  facts across its modules (`EMPTY_SHELF`, `NOWHERE`, `ROUTES`,
+  `PHYSICAL_NAMES`, the icon artwork, `pcm.RATE`) with bare names or out of
+  behaviour modules.
 - **`Scancode` is applied midway, not where scancodes come from.** Either type
   it at the source (`KeyEvent.scancode`, `Keycap.scancode`) or drop it and use
   `Laptop` past the hook. Leaning towards dropping it.
 - **Separate Windows' facts, our layout and the Charybdis.** Move `Key` and
   `Mod` to `winapi` (their keycap names may stay in `keyboard`), and move the
-  Charybdis's USB identity and Apps key out of `settings` into
-  `keyboard/charybdis.py`.
+  Charybdis's USB identity and Apps key out of `settings.layout`'s `Layout`
+  into a firmware record of their own.

@@ -63,10 +63,11 @@ their tests. Legacy data and backwards compatibility are not requirements.
   records, enums, callables and handles to objects. Keep `is not None` where a
   falsy value is a real value: numbers, strings and collections.
 - Translate an enum or a `Literal` alias to values with a
-  `Final[frozendict[Enum, Value]]` or a value on its members (see
-  `desktop_ui.icons.COLOURS`), not a `match` that only returns one constant per
-  member or literal. Build a total table with `contracts.members.every_member`
-  or `every_literal`, which fail at import unless they name every value; the
+  `frozendict[Enum, Value]` or a value on its members, not a `match` that only
+  returns one constant per member or literal. Check a table names every value
+  with `contracts.members.every_member` or `every_literal`; where the values are
+  choices, the table is a field of a spec that checks itself in `__post_init__`
+  (`desktop_ui.tray.TraySpec.colours`), and its values are data. The
   architecture review enforces the rule. A `match` on classes stays a `match`:
   it keeps the type checker's exhaustiveness check, which a type-keyed table loses.
 - When the enum's own module owns the values and each member has its own, make
@@ -84,7 +85,7 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Don't reach into a sequence by position (`row[0]`, `pair[1]`, `items[-1]`):
   that value deserves a name. Unpack it, read a named field, or model the record
   (a typed row adapter instead of SQLite tuples). Looking up a key in a table
-  (`COLOURS[state]`) is fine, and so is a slice that bounds a length.
+  (`spec.colours[state]`) is fine, and so is a slice that bounds a length.
 - Use domain types with their bounds, not bare tuples: `desktop_ui.colour.Rgb`,
   `winapi.shapes.Point` and `Size`, not `tuple[int, int, int]`. The architecture
   review rejects a fixed tuple of only ints and floats.
@@ -126,16 +127,29 @@ their tests. Legacy data and backwards compatibility are not requirements.
   structures) are exempt from these rules. A mapping that leaves its owner
   is a `frozendict`, replaced rather than mutated. Put decisions in pure functions and keep
   threads, files, network and UI in the modules that own those effects.
-- Data declared once is a module of declarations, not a type with one
-  instance: `settings/apps.py`, `settings/programs.py` and `settings/layout.py` hold only
-  imports and constants (the review recognises such a data module by its
-  contents). Read another module's constant only as `module.NAME`, and only
-  from a data module: a bare `NAME` is always the module's own. Never
+- Libraries declare shapes; entry points supply the values. A library module
+  (`keyboard/`, `desktop_ui/`) declares types and behaviour and no chosen
+  values: layout, timings, sizes, wording, colours, specs, apps and window
+  setups are records it is handed, so tests hand it their own. Each program's
+  `__main__` (and `launch.py`) builds them from data modules: `settings/` for
+  what the programs share (the apps, the programs and their windows, the
+  keyboard layout) and the program's own entry package for the rest (`desktop/look.py`,
+  `bar.py`, `windows.py`, `placement.py`). Only entry points and data modules
+  import data, tests included (`entry-data`); a constant a library declares is
+  rejected (`library-constant`) unless it is a fact or mechanic named with its
+  reason under `[[tool.workspace.architecture.kept]]`: a Win32 identifier, a
+  shipped font file, icon artwork, an empty value of its type, wiring between
+  enums, an algorithm's bound. What a value derives from the layout (the
+  menu's key hints, the pager's chord letters) the entry point derives and
+  passes in. UI wording is data; error and log messages stay beside the code
+  that raises them.
+- A data module holds only imports and declarations (the review recognises
+  one by its contents). Read another module's constant only as `module.NAME`,
+  and only from a data module: a bare `NAME` is always the module's own. Never
   `from x import NAME` for a constant (`constant-import`), and never read a
   constant out of a module with behaviour (`shared-constant`); share that as an
   enum (a closed set of codes, like `protocol.Message`), a function, or a
-  type's property. A type for such data earns its place only when something
-  substitutes a second value. The rule covers the packages in
+  type's property. The rule covers the packages in
   `[tool.workspace.architecture] constants`, widening as each one migrates.
 - Satisfy a rule by changing the design, never by its letter. A frozen record
   in a `Cell` is not a set of attributes: decide from one snapshot
@@ -188,7 +202,9 @@ a Win32 function declared in more than one module (`native-redeclaration`),
 two writes in a row to the same state (`piecemeal-state`), a private
 property that only returns one field of an owner's state (`mirrored-state`),
 constants read across modules other than as `data_module.NAME`
-(`constant-import`, `shared-constant`), a one-member enum (`single-member-enum`)
+(`constant-import`, `shared-constant`), a value declared in a library rather
+than handed in (`library-constant`), data imported by anything but an entry
+point (`entry-data`), a one-member enum (`single-member-enum`)
 and a table keyed by an enum in the enum's own module (`member-table`).
 
 # Committing and running
