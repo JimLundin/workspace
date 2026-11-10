@@ -27,7 +27,7 @@ from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, keyed
 from desktop_ui.overlay import OverlayState
-from protocol import App, LayoutState, Request, Tool, decode_indicator
+from protocol import App, LayoutState, Target, Tool, decode_indicator
 lazy from winapi.shell import MenuItem
 
 # ---- the tray menu ------------------------------------------------------------------
@@ -135,7 +135,7 @@ class PhysicalKey:
 class FeatureRequest:
     """A key edge from the layout, or a press (`down`) from a Workspace menu."""
 
-    request: Request
+    request: Target
     down: bool = field(kw_only=True)
 
 
@@ -146,8 +146,8 @@ def control_event(message: int, wparam: int, lparam: int, apps: Sequence[App]) -
     """A key state or request message to the control window, keeping key edges and requests' presses and releases."""
     if message == protocol.Message.KEY_STATE:
         return PhysicalKey(Scancode(wparam), down=bool(lparam))
-    if message == protocol.Message.REQUEST and (request := protocol.decode(wparam, apps)):
-        return FeatureRequest(request, down=bool(lparam))
+    if message == protocol.Message.REQUEST and (request := protocol.decode(wparam)) and (target := protocol.reaching(request, apps)):
+        return FeatureRequest(target, down=bool(lparam))
     return None
 
 
@@ -473,7 +473,7 @@ def recording_notice(prior: RecordingState, recording: RecordingState) -> Notifi
     return None
 
 
-def _requested(request: Request, *, down: bool) -> Iterator[Effect]:
+def _requested(request: Target, *, down: bool) -> Iterator[Effect]:
     """A key edge or a menu press: the desktop's own keys act on press, dictation's keys get both edges."""
     match request:
         case App():

@@ -27,7 +27,7 @@ class Message(IntEnum):
     CLOSE = 0x0010
     """Windows' own WM_CLOSE: the gateway and the desktop take it as quit."""
     REQUEST = 0x8000 + 1
-    """Layout -> desktop: a key went down (lparam 1) or up (lparam 0); wparam is `encode(request)`."""
+    """Layout -> desktop: a key went down (lparam 1) or up (lparam 0); wparam is `encode(request)`, a tool or a slot."""
     LAYOUT_STATE = 0x8000 + 2
     """Layout -> desktop: wparam is a `LayoutState` value."""
     QUIT_LAYOUT = 0x8000 + 3
@@ -176,30 +176,50 @@ class App:
     target: Installed | PinnedWeb
 
 
-type Request = Tool | App
+@dataclass(frozen=True, slots=True)
+class Slot:
+    """One of the Apps layer's app keys, by its place in chord-letter order. The layout
+    knows only the slot; the desktop decides which app, if any, is in it."""
+
+    index: int
 
 
-_APP_BASE: Final = 1000
+type Request = Tool | Slot
+"""What a key asks of the desktop, as the layout sends it."""
+
+type Target = Tool | App
+"""What a request reaches on the desktop: a tool, or the app in a slot."""
 
 
-def encode(request: Request, apps: Sequence[App]) -> int:
-    """The request as a message's wparam. Apps are sent by their place in the list."""
+_SLOT_BASE: Final = 1000
+
+
+def encode(request: Request) -> int:
+    """The request as a message's wparam. A slot is sent by its place."""
     match request:
         case Tool():
             value: int = request.value
             return value
-        case App():
-            return _APP_BASE + apps.index(request)  # ValueError if it isn't in the list
+        case Slot(index=index):
+            return _SLOT_BASE + index
 
 
-def decode(code: int, apps: Sequence[App]) -> Request | None:
-    if code >= _APP_BASE:
-        index = code - _APP_BASE
-        return apps[index] if index < len(apps) else None
+def decode(code: int) -> Request | None:
+    if code >= _SLOT_BASE:
+        return Slot(code - _SLOT_BASE)
     try:
         return Tool(code)
     except ValueError:
         return None
+
+
+def reaching(request: Request, apps: Sequence[App]) -> Target | None:
+    """What `request` reaches among `apps`, in slot order; None for a slot with no app in it."""
+    match request:
+        case Tool():
+            return request
+        case Slot(index=index):
+            return apps[index] if 0 <= index < len(apps) else None
 
 
 def encode_indicator(layer: int, *, caps_word: bool) -> int:

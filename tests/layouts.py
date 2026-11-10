@@ -9,7 +9,7 @@ from contracts.keyboard.board import Board, Row, Thumbs
 from contracts.keyboard.keys import Key, Mod
 from contracts.keyboard.layout import Layout, Timings, UsbIdentity
 from contracts.keyboard.physical import Laptop
-from protocol import App, Installed, PinnedWeb, Tool
+from protocol import App, Installed, PinnedWeb, Slot, Tool
 
 # ---- Timings ---------------------------------------------------------------------
 
@@ -90,13 +90,12 @@ APPS: Final[tuple[App, ...]] = (
     App("code", Installed("code.exe", "code")),
     App("notepad", Installed("notepad.exe", "notepad.exe")),
 )
-"""The apps the Apps layer reaches, in chord-letter order."""
+"""The apps the tests' desktop puts in the slots, in chord-letter order."""
 
 # ---- The layers ------------------------------------------------------------------
 
-# Ten slots named by their chord letters; slots past the end do nothing.
-_APPS: Final[tuple[Binding, ...]] = (*APPS, *[BLANK] * (10 - len(APPS)))
-_Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
+# Ten app slots, named by their chord letters; the tests' desktop fills them from APPS.
+_Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = (Slot(index) for index in range(10))
 
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({

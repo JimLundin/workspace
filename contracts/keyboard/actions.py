@@ -9,7 +9,7 @@ from enum import Enum, auto
 from typing import ClassVar
 
 from contracts.keyboard.keys import Key, Mod
-from protocol import App, Tool
+from protocol import Slot, Tool
 
 
 class Layer(Enum):
@@ -80,9 +80,9 @@ class TapHold:
     hold: Hold
 
 
-type Action = Output | Mod | Layer | TapHold | Tool | App
+type Action = Output | Mod | Layer | TapHold | Tool | Slot
 """What one key on one layer does. A Key or Chord is sent; a Mod or Layer is held
-while the key is held; a Tool or App is a request to the assistant (see `protocol`)."""
+while the key is held; a Tool or Slot is a request to the desktop (see `protocol`)."""
 
 BLANK = sentinel("BLANK")
 """A key with no action on a layer: pressing it does nothing."""

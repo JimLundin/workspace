@@ -436,7 +436,7 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
     assert keyboard.swallow(letter, down=True)
     assert keyboard.swallow(letter, down=False)
     assert keyboard.swallow(APPS_KEY, down=False)
-    requests = [control_event(*message, PEERS.apps) for message in driver.messages if message[0] == Message.REQUEST]
+    requests = [control_event(*message, layouts.APPS) for message in driver.messages if message[0] == Message.REQUEST]
     assert requests == [FeatureRequest(Tool.DESKTOP_1, down=True), FeatureRequest(Tool.DESKTOP_1, down=False)]
     assert [message for message in driver.messages if message[0] == Message.CHORD] == [(Message.CHORD, 1, 0), (Message.CHORD, 0, 0)]
     assert not keyboard.state.shortcuts and not keyboard.state.owed and not driver.output
@@ -447,7 +447,7 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
     keyboard.update_devices()
     shortcuts = [message for message in driver.messages if message[0] in (Message.REQUEST, Message.CHORD)]
     assert shortcuts[-3:] == [(Message.REQUEST, 1000, 1), (Message.CHORD, 0, 0), (Message.REQUEST, 1000, 0)]
-    assert control_event(*shortcuts[-3], PEERS.apps) == FeatureRequest(PEERS.apps[0], down=True)
+    assert control_event(*shortcuts[-3], layouts.APPS) == FeatureRequest(layouts.APPS[0], down=True)
     assert keyboard.swallow(app, down=False)
 
 
@@ -460,7 +460,7 @@ def test_laptop_apps_layer_reaches_navigation_and_publishes_the_chord_like_firmw
         assert keyboard.swallow(letter, down=True)
         assert keyboard.swallow(letter, down=False)
         assert keyboard.swallow(inputs.KeyEvent(0, APPS_THUMB, 0, 30, 0), down=False)
-        requests = [control_event(*message, PEERS.apps) for message in messages if message[0] == Message.REQUEST]
+        requests = [control_event(*message, layouts.APPS) for message in messages if message[0] == Message.REQUEST]
         assert requests == [FeatureRequest(Tool.DESKTOP_1, down=True), FeatureRequest(Tool.DESKTOP_1, down=False)]
         assert [message for message in messages if message[0] == Message.CHORD] == [(Message.CHORD, 1, 0), (Message.CHORD, 0, 0)]
         assert not driver.output

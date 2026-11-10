@@ -11,8 +11,8 @@ from protocol import Message, Window
 from tests import layouts
 from winapi import inputs, system
 
-PEERS = Peers(Window("test desktop", "test desktop class"), layouts.APPS, "test window switcher")
-"""The tests' own desktop window, apps and window switcher title."""
+PEERS = Peers(Window("test desktop", "test desktop class"), "test window switcher")
+"""The tests' own desktop window and window switcher title."""
 
 
 class KeyboardFixture:

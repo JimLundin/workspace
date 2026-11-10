@@ -2,12 +2,12 @@
 
 from desktop_ui.desktop_pager import NO_HINTS, PagerSpec, pager
 from desktop_ui.shell_items import PinnedApp
-from protocol import Request, Tool
+from protocol import Target, Tool
 from tests.test_shell_items import WEB_APPS
 from tests.test_window_layout import CODE, TERMINAL
 
 SPEC = PagerSpec(WEB_APPS, desktop="Space", current="here", empty="Nothing")
-LETTERS: frozendict[Request, str] = frozendict({Tool.DESKTOP_1: "Q", Tool.DESKTOP_2: "W", Tool.DESKTOP_3: "E"})
+LETTERS: frozendict[Target, str] = frozendict({Tool.DESKTOP_1: "Q", Tool.DESKTOP_2: "W", Tool.DESKTOP_3: "E"})
 """The test's own pager: three desktops reachable by a chord letter."""
 
 

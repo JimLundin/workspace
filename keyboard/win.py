@@ -25,7 +25,7 @@ from keyboard import hook_watch
 from keyboard.engine import Engine, EngineState, Indicator, UnreleasedError, Verdict, release_all, toggle
 from keyboard.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected
 from keyboard.hook_watch import ANSWERED
-from protocol import App, LayoutState, Message, Origin, Places, Programs, Request, Window, encode, encode_indicator
+from protocol import LayoutState, Message, Origin, Places, Programs, Request, Window, encode, encode_indicator
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 
 LOCK_NAME: Final = "Local\\keyboard"
@@ -92,10 +92,9 @@ class _Hosted:
 
 @dataclass(frozen=True, slots=True)
 class Peers:
-    """How the layout reaches the desktop: its control window, the apps a request names, and the window switcher's title."""
+    """How the layout reaches the desktop: its control window and the window switcher's title."""
 
     desktop: Window
-    apps: tuple[App, ...]
     switcher: str
 
 
@@ -146,7 +145,7 @@ class WinHost:
 
     def request(self, request: Request, *, down: bool) -> None:
         # Never replay a press the desktop missed: it could start an unwanted action later.
-        self.tell(Message.REQUEST, encode(request, self.peers.apps), int(down))
+        self.tell(Message.REQUEST, encode(request), int(down))
 
     def indicate(self, indicator: Indicator) -> None:
         self.tell(Message.INDICATOR, encode_indicator(indicator.layer.code, caps_word=indicator.caps_word), 0)
@@ -684,7 +683,7 @@ class Keyboard:
         return verdict
 
 
-def run(layout: Layout, programs: Programs, apps: tuple[App, ...], places: Places) -> Exit:
+def run(layout: Layout, programs: Programs, places: Places) -> Exit:
     """Blocks until the layout quits."""
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
@@ -693,7 +692,7 @@ def run(layout: Layout, programs: Programs, apps: tuple[App, ...], places: Place
     with contextlib.suppress(OSError):  # without it the hook still works, only more slowly under load
         system.keep_responsive()
     try:
-        peers = Peers(programs.desktop.window, apps, programs.switcher)
+        peers = Peers(programs.desktop.window, programs.switcher)
         keyboard = Keyboard.open(layout, peers, NativeKeyboardSystem(places.directory / "keyboard.log"))
         keyboard.update_devices()
         hook = inputs.set_keyboard_hook(keyboard.hook_proc)

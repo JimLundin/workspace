@@ -4,7 +4,7 @@ from desktop_ui.keymap import KeyboardView, Shortcut
 from protocol import Tool
 from tests import layouts
 
-VIEW = KeyboardView.of(layouts.LAYOUT)
+VIEW = KeyboardView.of(layouts.LAYOUT, layouts.APPS)
 """The tests' own layout, as the desktop reads it."""
 
 

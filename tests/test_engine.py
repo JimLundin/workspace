@@ -73,7 +73,7 @@ class FakeHost:
         self.log.append(f"!{state.name}")
 
     def request(self, request: Request, *, down: bool) -> None:
-        name = request.name.lower() if isinstance(request, Tool) else f"app:{request.name}"
+        name = request.name.lower() if isinstance(request, Tool) else f"slot:{request.index}"
         self.log.append(f"?{name}{'+' if down else '-'}")
 
     def indicate(self, indicator: Indicator) -> None:
@@ -713,7 +713,7 @@ def test_an_apps_layer_key_makes_its_request_and_shows_the_chord_hints() -> None
     t.tap("8")  # J
     t.tap("w")  # R: the second app
     t.u("x")
-    assert t.take() == "?desktop_1+ ?desktop_1- ?app:notepad+ ?app:notepad-"
+    assert t.take() == "?desktop_1+ ?desktop_1- ?slot:6+ ?slot:6-"
     assert t.h.indicated == ["apps chord", "-"]
 
 

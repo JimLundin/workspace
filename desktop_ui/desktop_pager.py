@@ -13,12 +13,12 @@ from typing import Final, assert_never
 
 from desktop_ui.shell_items import PinnedApp, WebApps
 from desktop_ui.window_layout import App, Program
-from protocol import Request, Tool
+from protocol import Target, Tool
 
 JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4, Tool.DESKTOP_5)
 
 
-def _jump_letters(letters: Mapping[Request, str]) -> tuple[str | None, ...]:
+def _jump_letters(letters: Mapping[Target, str]) -> tuple[str | None, ...]:
     """The chord letter for each desktop in order, from each request's letter on the layout."""
     return tuple(letters.get(tool) for tool in JUMPS)
 
@@ -77,7 +77,7 @@ def label(app: App, web_apps: WebApps) -> str:
             assert_never(app)
 
 
-def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, letters: Mapping[Request, str], *, chord: bool) -> PagerView:
+def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, letters: Mapping[Target, str], *, chord: bool) -> PagerView:
     """The pager for these desktops, each with the applications placed on it.
 
     The hints show while an Apps key is held, so the letter alone completes the request.

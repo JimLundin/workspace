@@ -8,7 +8,7 @@ from contracts.keyboard.bindings import Bindings
 from contracts.keyboard.board import Board
 from contracts.keyboard.keys import Key
 from contracts.keyboard.layout import LayoutError
-from protocol import App, Request, Tool
+from protocol import Request, Slot, Tool
 
 
 def _base_key(bindings: Bindings, cell: int) -> Key | None:
@@ -34,7 +34,7 @@ class Chords:
     @classmethod
     def of(cls, bindings: Bindings) -> Chords:
         """The layout's chords, or `LayoutError` if a request has no base key under it or two share one."""
-        requests = tuple((cell, request) for cell in range(Board.SIZE) if isinstance(request := bindings.action(Layer.APPS, cell), Tool | App))
+        requests = tuple((cell, request) for cell in range(Board.SIZE) if isinstance(request := bindings.action(Layer.APPS, cell), Tool | Slot))
         chorded = tuple((key, request) for cell, request in requests if (key := _base_key(bindings, cell)))
         if len(chorded) != len(requests):
             raise LayoutError("an Apps layer request sits where the base layer has no key to chord")

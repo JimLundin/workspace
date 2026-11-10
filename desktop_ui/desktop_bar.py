@@ -78,7 +78,7 @@ lazy from desktop_ui.qt_ui import EventLoop, application
 lazy from desktop_ui.shell_controls import TaskbarControl
 lazy from desktop_ui.shell_items import Application, Item, Pinned, PinnedApp
 lazy from desktop_ui.window_layout import App, Program
-lazy from protocol import Installed, Request, Tool
+lazy from protocol import Installed, Target, Tool
 lazy from winapi import appearance, inputs, session, shell, windows
 lazy from winapi.machine_status import PowerUnavailable
 lazy from winapi.shapes import Rect
@@ -136,7 +136,7 @@ class DesktopBar:
     apps: tuple[protocol.App, ...]
     """The apps the chords reach, which a pager click also starts."""
     pager: PagerSpec
-    letters: frozendict[Request, str]
+    letters: frozendict[Target, str]
     """Each request's chord letter, which the pager and the key hints show while the chord is held."""
     _model: Cell[BarModel]
 

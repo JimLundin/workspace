@@ -38,7 +38,7 @@ from contracts.keyboard.board import Board
 from contracts.keyboard.keys import Key, Mod
 from contracts.keyboard.layout import Layout, Timings
 from contracts.keyboard.physical import Scancode
-from protocol import App, LayoutState, Request, Tool
+from protocol import LayoutState, Request, Slot, Tool
 
 
 class Host(Protocol):
@@ -437,7 +437,7 @@ def apply_caps_word(state: EngineState, a: Action) -> tuple[EngineState, Action]
             return state, a
         case Key() | Chord():
             return replace(state, caps_word=False), a
-        case Mod() | Layer() | TapHold() | Tool() | App():
+        case Mod() | Layer() | TapHold() | Tool() | Slot():
             return state, a
 
 
@@ -459,7 +459,7 @@ def press(state: EngineState, host: Host, a: Action, now: int) -> EngineState:
             # A layer beyond MAX_LAYERS is ignored rather than stored.
             if len(state.active_layers) < MAX_LAYERS:
                 state = replace(state, active_layers=(*state.active_layers, a))
-        case Tool() | App():
+        case Tool() | Slot():
             if Mod.ALT in state.mods.counts:
                 # Applications see Alt pressed alone; tapping an unassigned key
                 # keeps its release from opening a menu.
@@ -490,7 +490,7 @@ def release(state: EngineState, host: Host, a: Action) -> EngineState:
                 # Remove the most recently added copy.
                 index = len(layers) - 1 - layers[::-1].index(a)
                 return replace(state, active_layers=layers[:index] + layers[index + 1 :])
-        case Tool() | App():
+        case Tool() | Slot():
             host.request(a, down=False)
         case TapHold():
             pass

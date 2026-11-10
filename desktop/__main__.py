@@ -23,7 +23,7 @@ def main() -> None:
     if sys.platform != "win32":
         sys.exit("Workspace only runs on Windows")
     root = Path(__file__).resolve().parent.parent
-    keyboard = KeyboardView.of(layout.LAYOUT)
+    keyboard = KeyboardView.of(layout.LAYOUT, apps.APPS)
     hints = frozendict({tool: shortcut_hint(keyboard.shortcut(tool), compact=True) for tool in Tool})
     island = BarSpec(
         island=bar.ISLAND,

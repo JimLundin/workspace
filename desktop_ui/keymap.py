@@ -14,7 +14,7 @@ from contracts.keyboard.keys import Key, Mod
 from contracts.keyboard.layout import Layout
 from contracts.keyboard.physical import Laptop
 from contracts.members import every_member
-from protocol import App, Request, Tool
+from protocol import App, Slot, Target, Tool, reaching
 
 ROWS: Final = (
     (
@@ -122,18 +122,21 @@ TOOL_NAMES: Final = every_member(Tool, {
 
 @dataclass(frozen=True, slots=True)
 class KeyboardView:
-    """The layout as the desktop draws and names it: its lookups and each request's chord letter."""
+    """The layout as the desktop draws and names it, with its apps in the slots: its lookups and each target's chord letter."""
 
     layout: Layout
     bindings: Bindings
-    letters: frozendict[Request, str]
-    """Each request's key under the Apps hold."""
+    apps: tuple[App, ...]
+    """The apps in the Apps layer's slots, in slot order."""
+    letters: frozendict[Target, str]
+    """Each target's key under the Apps hold; an empty slot has none."""
 
     @classmethod
-    def of(cls, layout: Layout) -> KeyboardView:
-        """`layout` as the desktop reads it, or `LayoutError` if it is inconsistent."""
+    def of(cls, layout: Layout, apps: tuple[App, ...]) -> KeyboardView:
+        """`layout` as the desktop reads it with `apps` in its slots, or `LayoutError` if the layout is inconsistent."""
         bindings = Bindings.of(layout)
-        return cls(layout, bindings, Chords.of(bindings).letters)
+        reached = ((reaching(request, apps), letter) for request, letter in Chords.of(bindings).letters.items())
+        return cls(layout, bindings, apps, frozendict((target, letter) for target, letter in reached if target is not None))
 
     def shortcut(self, tool: Tool) -> Shortcut | None:
         """The first binding in the held layers' order, else the tool's firmware chord."""
@@ -169,8 +172,12 @@ class KeyboardView:
                 return a.name.title(), Role.LAYER
             case Tool():
                 return TOOL_NAMES[a], Role.TOOL
-            case App():
-                return a.name[:1].upper() + a.name[1:], Role.APP
+            case Slot():
+                match reaching(a, self.apps):
+                    case App(name=name):
+                        return name[:1].upper() + name[1:], Role.APP
+                    case _:
+                        return "", Role.BLANK
 
     def _hold(self, a: Binding) -> str:
         match a:

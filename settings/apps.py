@@ -1,4 +1,4 @@
-"""Your apps: the ones the chords reach, in chord-letter order.
+"""Your apps: the ones the Apps layer's slots reach, in chord-letter order.
 Edit freely; it's checked when Workspace starts.
 (Secrets and the AI endpoint are environment variables instead; see the README.)
 """

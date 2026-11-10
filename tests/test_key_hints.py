@@ -2,9 +2,8 @@
 
 from dataclasses import replace
 
-from contracts.keyboard.bindings import Bindings
-from contracts.keyboard.chords import Chords
 from desktop_ui.key_hints import ActionCap, AppCap, DirectionCap, Keycap, hints
+from desktop_ui.keymap import KeyboardView
 from desktop_ui.navigation import Direction, Focus, SpatialFocus, World, effect
 from desktop_ui.window_layout import Target
 from tests import layouts
@@ -22,8 +21,8 @@ PLACEMENT = frozendict(
         4: Target(1, Rect(0, 0, 1920, 1200)),
     }
 )
-LETTERS = Chords.of(Bindings.of(layouts.LAYOUT)).letters
-"""Each request's chord letter on the tests' own layout."""
+LETTERS = KeyboardView.of(layouts.LAYOUT, layouts.APPS).letters
+"""Each target's chord letter on the tests' own layout, with its apps in the slots."""
 
 WORLD = World(
     2,

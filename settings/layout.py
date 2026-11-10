@@ -11,8 +11,7 @@ from contracts.keyboard.board import Board, Row, Thumbs
 from contracts.keyboard.keys import Key, Mod
 from contracts.keyboard.layout import Layout, Timings, UsbIdentity
 from contracts.keyboard.physical import Laptop
-from protocol import Tool
-from settings import apps
+from protocol import Slot, Tool
 
 # ---- Timings ---------------------------------------------------------------------
 
@@ -86,9 +85,8 @@ media keys, arrows, and the physical Shift, Ctrl and Windows keys."""
 
 # ---- The layers ------------------------------------------------------------------
 
-# The apps from settings.apps, ten slots named by their chord letters; slots past the end do nothing.
-_APPS: Final[tuple[Binding, ...]] = (*apps.APPS[:10], *[BLANK] * (10 - len(apps.APPS[:10])))
-_Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
+# Ten app slots, named by their chord letters; the desktop fills them from settings.apps.
+_Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = (Slot(index) for index in range(10))
 
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({

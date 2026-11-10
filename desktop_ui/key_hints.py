@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import protocol
 from desktop_ui.navigation import AppKey, Direction, Focus, SpatialFocus, World, effect, identity, keyed, launcher
-from protocol import Request, Tool
+from protocol import Target, Tool
 from winapi.shapes import Rect
 
 
@@ -49,7 +49,7 @@ class Badge:
     keycaps: tuple[Keycap, ...]
 
 
-def reached(world: World, request: Request) -> int | None:
+def reached(world: World, request: Target) -> int | None:
     """The window this chord focuses now, as the navigation decision carries it out."""
     match request:
         case protocol.App():
@@ -67,7 +67,7 @@ def reached(world: World, request: Request) -> int | None:
             return None
 
 
-def placed(world: World, request: Request, letter: str) -> Iterator[tuple[int, Keycap]]:
+def placed(world: World, request: Target, letter: str) -> Iterator[tuple[int, Keycap]]:
     """The windows this chord's letter is drawn on, each with its keycap."""
     match request:
         case protocol.App(target=target):
@@ -95,7 +95,7 @@ def rank(keycap: Keycap) -> int:
             return 2
 
 
-def hints(world: World, letters: frozendict[Request, str]) -> tuple[Badge, ...]:
+def hints(world: World, letters: frozendict[Target, str]) -> tuple[Badge, ...]:
     """The badges while the chord is held, each request's at its chord letter."""
     drawn = tuple(each for request, letter in letters.items() for each in placed(world, request, letter))
     badges = (
