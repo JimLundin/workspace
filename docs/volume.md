@@ -6,12 +6,12 @@ lines are code lines. Product code averages 5.9 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 83,511 | 14,164 |
+| **product** | 83,611 | 14,193 |
 | **support** | 55,826 | 8,317 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 43,289 | 7,378 |
+| desktop_ui | 43,389 | 7,407 |
 | tests | 40,661 | 5,930 |
 | winapi | 19,744 | 3,317 |
 | scripts | 11,556 | 1,681 |
@@ -40,7 +40,7 @@ The 25 largest files:
 | `desktop_ui/application_observer.py` | 2,098 | 360 |
 | `desktop_ui/island_menu.py` | 2,050 | 339 |
 | `desktop_ui/desktop_control.py` | 2,004 | 428 |
-| `desktop_ui/desktop_app.py` | 1,956 | 381 |
+| `desktop_ui/desktop_app.py` | 1,957 | 381 |
 | `desktop_ui/island_layout.py` | 1,941 | 368 |
 | `desktop_ui/bar_events.py` | 1,905 | 401 |
 | `winapi/composition.py` | 1,845 | 314 |

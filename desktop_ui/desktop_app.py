@@ -88,7 +88,7 @@ lazy from desktop_ui.components.appearance import scheme, tokens, tooltip_style
 lazy from desktop_ui.components.widgets import near_pointer, show_window
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
 lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
-lazy from desktop_ui.layer_indicator import Indicator
+lazy from desktop_ui.layer_indicator import INDICATOR, Indicator
 lazy from desktop_ui.qt_ui import application
 lazy from desktop_ui.vector_icons import icon
 lazy from desktop_ui.window_switcher import WindowSwitcher
@@ -277,7 +277,7 @@ class DesktopApp:
                 except OSError:
                     return Problem("The overlay changed, but its setting couldn't be saved.")
             case Flash(text):
-                self._indicator().flash(text, indicator_area(), 1.2)
+                self._indicator().flash(text, indicator_area())
             case PressedKeys(pressed, reset):
                 if keymap := self.views.get().overlay:
                     keymap.set_pressed(pressed, reset=reset)
@@ -373,7 +373,7 @@ class DesktopApp:
 
     def _indicator(self) -> Indicator:
         if not (indicator := self.views.get().indicator):
-            indicator = Indicator.build()
+            indicator = Indicator.build(INDICATOR)
             built = indicator
             self.views.update(lambda views: replace(views, indicator=built))
         return indicator
