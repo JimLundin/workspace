@@ -79,7 +79,7 @@ from desktop_ui.desktop_settings import DesktopSettings
 from desktop_ui.navigation import ShowWindow
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
-from desktop_ui.tray import TRAY_ICON, Tray
+from desktop_ui.tray import Tray
 from desktop_ui.voice import Voice
 from protocol import App, Message
 from winapi import screen, shell, system, windows
@@ -87,11 +87,11 @@ from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import tooltip_style
 lazy from desktop_ui.components.widgets import near_pointer, show_window
 lazy from desktop_ui.desktop_bar import BarActions, DesktopBar
-lazy from desktop_ui.keymap_views import KEYMAP, KeymapOverlay, KeymapWindow
-lazy from desktop_ui.layer_indicator import INDICATOR, Indicator
+lazy from desktop_ui.keymap_views import KeymapOverlay, KeymapWindow
+lazy from desktop_ui.layer_indicator import Indicator
 lazy from desktop_ui.qt_ui import application
 lazy from desktop_ui.vector_icons import icon
-lazy from desktop_ui.window_switcher import SWITCHER, WindowSwitcher
+lazy from desktop_ui.window_switcher import WindowSwitcher
 
 prepare()
 
@@ -215,7 +215,7 @@ class DesktopApp:
     @classmethod
     def compose(cls, root: QtWidgets.QApplication, voice: Voice, inbox: Inbox, settings: DesktopSettings, log: Callable[[str], None]) -> DesktopApp:
         state = Cell(DesktopState(overlay=OverlayState(enabled=load_enabled(_preference(settings)))))
-        app = cls(root, inbox, voice, Tray.add(inbox.window.handle, WM_TRAY, TRAY_ICON), state, settings, log)
+        app = cls(root, inbox, voice, Tray.add(inbox.window.handle, WM_TRAY, settings.tray), state, settings, log)
         inbox.connect(app.handle)
         return app
 
@@ -282,8 +282,9 @@ class DesktopApp:
                     save_enabled(enabled=enabled, path=_preference(self.settings))
                 except OSError:
                     return Problem("The overlay changed, but its setting couldn't be saved.")
-            case Flash(text):
-                self._indicator().flash(text, indicator_area())
+            case Flash(on=on):
+                words = self.settings.indicator
+                self._indicator().flash(words.layout_on if on else words.layout_off, indicator_area())
             case PressedKeys(pressed, reset):
                 if keymap := self.views.get().overlay:
                     keymap.set_pressed(pressed, reset=reset)
@@ -294,7 +295,7 @@ class DesktopApp:
                 if layout is None or not system.post_message(layout, protocol.Message.TOGGLE_LAYOUT, 0, 0):
                     return Problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case ShowMenu(state):
-                return MenuChosen(shell.show_menu(self.inbox.window.handle, tuple(menu_items(state))))
+                return MenuChosen(shell.show_menu(self.inbox.window.handle, tuple(menu_items(state, self.settings.tray_menu))))
             case Quit():
                 self.quit()
             case _:
@@ -362,7 +363,7 @@ class DesktopApp:
     def show_keymap(self) -> None:
         keymap = self.views.get().keymap
         if keymap is None or not shiboken6.isValid(keymap.window):
-            opened = KeymapWindow.open(KEYMAP, self.settings.design)
+            opened = KeymapWindow.open(self.settings.keymap, self.settings.design)
             self.views.update(lambda views: replace(views, keymap=opened))
         else:
             show_window(keymap.window, focus=True, target=keymap.canvas)
@@ -373,14 +374,14 @@ class DesktopApp:
         if shown is None:
             if not overlay.visible:
                 return
-            shown = KeymapOverlay.open(KEYMAP, self.settings.places.directory / "overlay-position.json", self.settings.design)
+            shown = KeymapOverlay.open(self.settings.keymap, self.settings.places.directory / "overlay-position.json", self.settings.design)
             opened = shown
             self.views.update(lambda views: replace(views, overlay=opened))
         shown.show(overlay.layer, overlay.title, indicator_area(), visible=overlay.visible, pressed=overlay.pressed)
 
     def _indicator(self) -> Indicator:
         if not (indicator := self.views.get().indicator):
-            indicator = Indicator.build(INDICATOR, self.settings.design)
+            indicator = Indicator.build(self.settings.indicator, self.settings.design)
             built = indicator
             self.views.update(lambda views: replace(views, indicator=built))
         return indicator
@@ -404,7 +405,7 @@ class DesktopApp:
             if bar := self.views.get().bar:
                 bar.navigate(ShowWindow(handle))
 
-        current = WindowSwitcher(choices, focus, SWITCHER, self.settings.programs.switcher, self.settings.design)
+        current = WindowSwitcher(choices, focus, self.settings.switcher, self.settings.programs.switcher, self.settings.design)
         self.views.update(lambda views: replace(views, switcher=current))
 
         def cleared(_: int) -> None:

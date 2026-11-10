@@ -122,6 +122,8 @@ class OverlaySpec:
     handle_spacing: float
     handle_glyph: str
     handle_text: str
+    handle_name: str
+    """The handle's accessible name."""
     handle_gap: int
     """Between the handle and the overlay below it."""
     tap: float
@@ -130,6 +132,7 @@ class OverlaySpec:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MapWindowSpec:
+    title: str
     width: int
     height: int
     side: float
@@ -198,10 +201,13 @@ KEYMAP: Final = KeymapSpec(
         handle_spacing=6,
         handle_glyph="menu",
         handle_text="Drag to move",
+        handle_name="Drag to move the keyboard overlay",
         handle_gap=4,
         tap=0.12,
     ),
-    window=MapWindowSpec(width=940, height=390, side=20, top=16, hint="Hold . for Apps: L dictate · ' dictation toggle · S windows"),
+    window=MapWindowSpec(
+        title="Workspace key map", width=940, height=390, side=20, top=16, hint="Hold . for Apps: L dictate · ' dictation toggle · S windows"
+    ),
 )
 """Workspace's key map and overlay; the desktop app opens them with it."""
 
@@ -317,7 +323,7 @@ class OverlayHandle(QtWidgets.QWidget):
         self.drag: OverlayDrag = drag
         self.read_cursor: Callable[[], Point] = cursor
         tool_window(self, "Workspace keyboard overlay handle", on_top=False)
-        self.setAccessibleName("Drag to move the keyboard overlay")
+        self.setAccessibleName(spec.handle_name)
         theme = design.tokens()
         self.setStyleSheet(window_style(theme, design))
         layout = row(surface(self, theme, round(spec.handle_radius), design.kit))
@@ -517,7 +523,7 @@ class KeymapWindow:
             return lambda: shown.draw(layer)
 
         size = spec.window
-        window = Window("Workspace key map", close, design, width=size.width, height=size.height)
+        window = Window(size.title, close, design, width=size.width, height=size.height)
         layout = column(window)
         layout.setContentsMargins(round(size.side), round(size.top), round(size.side), round(size.top))
         keys = tuple(button(layer.name.title(), chooser(layer)) for layer in _LAYERS)

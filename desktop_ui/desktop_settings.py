@@ -7,6 +7,12 @@ from dataclasses import dataclass
 
 from desktop_ui.bar_events import BarSpec
 from desktop_ui.components.appearance import Design
+from desktop_ui.desktop_control import TrayMenuSpec
+from desktop_ui.key_hint_overlay import BadgeSpec
+from desktop_ui.keymap_views import KeymapSpec
+from desktop_ui.layer_indicator import IndicatorSpec
+from desktop_ui.tray import TraySpec
+from desktop_ui.window_switcher import SwitcherSpec
 from protocol import App, Places, Programs
 
 
@@ -19,3 +25,10 @@ class DesktopSettings:
     design: Design
     """How every window reads: its colours, glass, controls and type."""
     bar: BarSpec
+    badges: BadgeSpec
+    """The key-hint badges the bar shows over windows."""
+    keymap: KeymapSpec
+    indicator: IndicatorSpec
+    switcher: SwitcherSpec
+    tray: TraySpec
+    tray_menu: TrayMenuSpec

@@ -6,13 +6,13 @@ lines are code lines. Product code averages 5.8 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 86,379 | 14,786 |
-| **support** | 57,059 | 8,502 |
+| **product** | 86,583 | 14,869 |
+| **support** | 57,140 | 8,524 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 45,680 | 7,893 |
-| tests | 41,905 | 6,120 |
+| desktop_ui | 45,860 | 7,951 |
+| tests | 41,986 | 6,142 |
 | winapi | 19,646 | 3,299 |
 | scripts | 11,545 | 1,676 |
 | keyboard | 8,737 | 1,459 |
@@ -22,7 +22,7 @@ lines are code lines. Product code averages 5.8 nodes a line.
 | (top level) | 1,482 | 269 |
 | gateway | 1,074 | 187 |
 | settings | 1,066 | 149 |
-| desktop | 120 | 28 |
+| desktop | 144 | 53 |
 
 The 25 largest files:
 
@@ -34,14 +34,14 @@ The 25 largest files:
 | `keyboard/win.py` | 3,781 | 623 |
 | `tests/test_engine.py` | 3,464 | 568 |
 | `tests/test_meetings.py` | 3,106 | 474 |
-| `desktop_ui/keymap_views.py` | 2,855 | 471 |
+| `desktop_ui/keymap_views.py` | 2,869 | 477 |
 | `assistant/meetings.py` | 2,717 | 454 |
-| `desktop_ui/desktop_bar.py` | 2,421 | 433 |
+| `desktop_ui/desktop_bar.py` | 2,419 | 432 |
 | `keyboard/engine.py` | 2,218 | 349 |
 | `desktop_ui/island_menu.py` | 2,140 | 366 |
-| `desktop_ui/desktop_app.py` | 2,107 | 391 |
+| `desktop_ui/desktop_app.py` | 2,125 | 392 |
+| `desktop_ui/desktop_control.py` | 2,104 | 459 |
 | `desktop_ui/application_observer.py` | 2,098 | 360 |
-| `desktop_ui/desktop_control.py` | 2,002 | 428 |
 | `desktop_ui/island_layout.py` | 1,949 | 371 |
 | `desktop_ui/bar_events.py` | 1,926 | 403 |
 | `desktop_ui/components/appearance.py` | 1,846 | 412 |

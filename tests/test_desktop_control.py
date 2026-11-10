@@ -26,12 +26,16 @@ from desktop_ui.desktop_control import (
     Problem,
     Record,
     RecordingChanged,
+    Separator,
     ShowActivity,
     ShowIdle,
     SwitchWindows,
     ToggleMeeting,
+    TrayAction,
+    TrayMenuSpec,
     TrayNotify,
     TrayShow,
+    TrayWords,
     UseLayout,
     VoiceShown,
     control_event,
@@ -143,17 +147,37 @@ def test_physical_key_messages_become_key_actions_with_a_reset_marker() -> None:
     assert tuple(action.reset for action in actions) == (False, False, False, True)
 
 
+TRAY_MENU = TrayMenuSpec(
+    items=(
+        TrayAction(Menu.TOGGLE_LAYOUT),
+        TrayAction(Menu.RESTART_LAYOUT),
+        Separator(),
+        TrayAction(Menu.OVERLAY, "Overlay"),
+        TrayAction(Menu.KEYMAP, "Map"),
+        TrayAction(Menu.MEETING),
+        TrayAction(Menu.TRANSCRIPTS, "Transcripts"),
+        TrayAction(Menu.LOGS, "Logs"),
+        TrayAction(Menu.RESTART_DESKTOP, "Again"),
+        TrayAction(Menu.QUIT, "Bye"),
+    ),
+    words=TrayWords(
+        layout="Keys", on="yes", off="no", not_running="gone", toggle_key="Tap", restart="Again", start="Go", record="Tape", stop_recording="Halt"
+    ),
+)
+"""The test's own tray menu."""
+
+
 def test_layout_status_is_the_toggle_and_is_checked_while_on() -> None:
     for layout in (LayoutState.ON, LayoutState.OFF):
         state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
-        item = next(each for each in menu_items(state) if each.id == Menu.TOGGLE_LAYOUT.value)
+        item = next(each for each in menu_items(state, TRAY_MENU) if each.id == Menu.TOGGLE_LAYOUT.value)
         assert item.enabled and item.checked == (layout is LayoutState.ON)
 
 
 def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> None:
     for layout in (None, LayoutState.QUIT):
         state = MenuState(layout=layout, overlay_enabled=True, capturing=False)
-        items = {item.id: item for item in menu_items(state)}
+        items = {item.id: item for item in menu_items(state, TRAY_MENU)}
         toggle, restart = items[Menu.TOGGLE_LAYOUT.value], items[Menu.RESTART_LAYOUT.value]
         assert not toggle.enabled and not toggle.checked and restart.enabled
 
@@ -163,7 +187,7 @@ def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle(
     # only way to browse saved meetings.
     for capturing in (False, True):
         state = MenuState(layout=LayoutState.ON, overlay_enabled=True, capturing=capturing)
-        item = next(item for item in menu_items(state) if item.id == Menu.TRANSCRIPTS.value)
+        item = next(item for item in menu_items(state, TRAY_MENU) if item.id == Menu.TRANSCRIPTS.value)
         assert item.enabled
 
 
@@ -171,7 +195,7 @@ def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> N
     # Defect: the tray shows the overlay as on after the user turned it off, or the reverse.
     for enabled in (False, True):
         state = MenuState(layout=LayoutState.ON, overlay_enabled=enabled, capturing=False)
-        item = next(item for item in menu_items(state) if item.id == Menu.OVERLAY.value)
+        item = next(item for item in menu_items(state, TRAY_MENU) if item.id == Menu.OVERLAY.value)
         assert item.checked is enabled
 
 

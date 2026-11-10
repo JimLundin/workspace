@@ -36,6 +36,9 @@ class IndicatorSpec:
     flash: float
     """Seconds a change of layout stays lit before the steady layer returns."""
     flash_ink: str
+    layout_on: str
+    layout_off: str
+    """What the indicator flashes as the layout switches on or off."""
 
 
 INDICATOR: Final = IndicatorSpec(
@@ -47,6 +50,8 @@ INDICATOR: Final = IndicatorSpec(
     bottom=28,
     flash=1.2,
     flash_ink=PALETTE.accent,
+    layout_on="Layout on",
+    layout_off="Layout off",
 )
 
 

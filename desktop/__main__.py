@@ -9,7 +9,18 @@ import sys
 
 from protocol import Places
 from settings import apps, programs
-lazy from desktop_ui import island_layout, island_menu, island_model, island_motion
+lazy from desktop_ui import (
+    desktop_control,
+    island_layout,
+    island_menu,
+    island_model,
+    island_motion,
+    key_hint_overlay,
+    keymap_views,
+    layer_indicator,
+    tray,
+    window_switcher,
+)
 lazy from desktop_ui.bar_events import BarSpec
 lazy from desktop_ui.components import appearance, typeface
 lazy from desktop_ui.desktop_app import run
@@ -32,7 +43,21 @@ def main() -> None:
         title="Workspace floating bar",
     )
     places = Places.of(os.environ, programs.PROGRAMS)
-    run(DesktopSettings(programs=programs.PROGRAMS, places=places, apps=apps.APPS, design=design, bar=bar))
+    run(
+        DesktopSettings(
+            programs=programs.PROGRAMS,
+            places=places,
+            apps=apps.APPS,
+            design=design,
+            bar=bar,
+            badges=key_hint_overlay.BADGES,
+            keymap=keymap_views.KEYMAP,
+            indicator=layer_indicator.INDICATOR,
+            switcher=window_switcher.SWITCHER,
+            tray=tray.TRAY_ICON,
+            tray_menu=desktop_control.TRAY_MENU,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -15,7 +15,6 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
-from pathlib import Path
 from typing import assert_never
 lazy import os
 
@@ -72,7 +71,7 @@ lazy from desktop_ui.island_menu import Menu
 lazy from desktop_ui.island_model import CapsuleView, Key, Marker, Observed, island, order
 lazy from desktop_ui.island_motion import Shown, placed, retarget
 lazy from desktop_ui.island_surface import BarWindow, Drawn, Presented, expanded
-lazy from desktop_ui.key_hint_overlay import BADGES, KeyHintOverlay
+lazy from desktop_ui.key_hint_overlay import KeyHintOverlay
 lazy from desktop_ui.key_hints import hints
 lazy from desktop_ui.navigation import AppKey, CycleApp, Order, ShowWindow
 lazy from desktop_ui.qt_ui import EventLoop, application
@@ -159,7 +158,7 @@ class DesktopBar:
         bar = cls(
             actions,
             taskbar,
-            _start_shell(errors, taskbar, settings.places.directory),
+            _start_shell(errors, taskbar, settings),
             None,
             errors,
             loop,
@@ -477,9 +476,9 @@ class DesktopBar:
             self.loop.close()
 
 
-def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl, directory: Path) -> _Shell:
+def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl, settings: DesktopSettings) -> _Shell:
     status = StatusObserver.start()
-    away = AwayScreens.start(directory)
+    away = AwayScreens.start(settings.places.directory)
 
     def message(_hwnd: int, message: int, wparam: int, _lparam: int) -> int | None:
         away.message(message, wparam)
@@ -491,7 +490,7 @@ def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl, directory: P
     except OSError as error:
         errors.put(f"Screens can't go dark when locked: {error}")
     worker = threading.Thread(target=_start_taskbar, args=(taskbar, errors), name="taskbar recovery", daemon=True)
-    built = _Shell(status, controls, away, TrayHost.start(), ApplicationObserver.start(errors.put), KeyHintOverlay(BADGES), worker)
+    built = _Shell(status, controls, away, TrayHost.start(), ApplicationObserver.start(errors.put), KeyHintOverlay(settings.badges), worker)
     worker.start()
     return built
 
