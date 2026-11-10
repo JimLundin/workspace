@@ -29,6 +29,7 @@ from desktop_ui.island_layout import Box, Cells, Content, Framed, Sizes, Spot, T
 from desktop_ui.island_menu import Face, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
+from desktop_ui.live_marks import Beat, paint_dots, paint_wave
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.shell_surface import Pager, pixmap
 from desktop_ui.vector_icons import paint_icon
@@ -632,15 +633,11 @@ class Capsule(KeyboardFocus):
             case Control():
                 pass  # A child button paints it.
             case Marker.WAVE:
-                trace = color(reading(lettering, Tone.INK, self.window_.spec.palette, contrast=self.contrast))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(trace)
-                pitch, corner = capsule.wave_bar + capsule.wave_gap, markers.wave_corner
-                for index, sample in enumerate(self.window_.trace()):
-                    height = markers.wave_floor + sample * markers.wave_reach
-                    painter.drawRoundedRect(QtCore.QRectF(spot.x + index * pitch, middle - height / 2, capsule.wave_bar, height), corner, corner)
+                painter.setBrush(color(reading(lettering, Tone.INK, self.window_.spec.palette, contrast=self.contrast)))
+                paint_wave(painter, QtCore.QPointF(spot.x, middle), self.window_.trace(), capsule, markers)
             case Marker.DOTS:
-                self.paint_dots(painter, spot, middle)
+                beat = Beat(self.window_.pulse, self.window_.spec.timing.lag, self.window_.washes.resting)
+                paint_dots(painter, QtCore.QRectF(spot.x, middle, spot.width, 0), beat, markers, lettering.ink)
             case Marker.DOT:
                 red = color(self.signal(self.window_.spec.palette.red, lettering.ink))
                 halo = QtGui.QColor(red)
@@ -650,18 +647,6 @@ class Capsule(KeyboardFocus):
                 paint_dot(painter, red, centre, spot.width / 2)
             case _:
                 assert_never(spot.part)
-
-    def paint_dots(self, painter: QtGui.QPainter, spot: Spot, middle: float) -> None:
-        """A quick job: dots pulsing in turn, each centred in an equal share of its room."""
-        ink, markers = self.drawn.look.lettering.ink, self.window_.sizes.markers
-        cycle, lag = self.window_.pulse, self.window_.spec.timing.lag
-        pitch, radius = spot.width / markers.dot_count, markers.dots_radius
-        painter.setPen(Qt.PenStyle.NoPen)
-        for index in range(markers.dot_count):
-            lift = max(0.0, math.sin((cycle - index * lag) * 2 * math.pi))
-            resting = self.window_.washes.resting
-            painter.setBrush(color(Shade(ink.color, ink.opacity * (resting + (1 - resting) * lift))))
-            painter.drawEllipse(QtCore.QPointF(spot.x + pitch * (index + 0.5), middle - lift * markers.dots_lift), radius, radius)
 
 
 class BarWindow(QtWidgets.QWidget):
