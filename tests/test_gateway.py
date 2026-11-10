@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 
 from assistant.llm import Failure, Settings, transcribe, wav
-from gateway.endpoint import Endpoint, publish
+from contracts.endpoint import Endpoint, publish
 from gateway.proxy import Gateway
 from gateway.upstream import Unconfigured, Upstream
 from tests.fake_endpoint import FakeEndpoint, Received, fake_endpoint

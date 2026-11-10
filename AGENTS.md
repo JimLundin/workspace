@@ -39,9 +39,18 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 # Design
 
+- Keep the programs' code apart: the launcher (`launch`), the gateway
+  (`gateway/`), the layout (`keyboard/`) and the desktop (`desktop/`,
+  `desktop_ui/`, `assistant/`) each import only their own packages and the
+  shared ones, never another program's (`program-isolation`). What two
+  programs share lives in a shared package both import: messages and the
+  programs' shapes in `protocol`, the keyboard layout's model in
+  `contracts.keyboard`, the gateway's endpoint file in `contracts.endpoint`.
+  Anything one program needs to run another (the launcher's command) is
+  handed in by its entry point.
 - Keep the keyboard process isolated: `keyboard/` and everything it imports use
-  only the standard library, `winapi` and the stdlib-only top-level modules
-  (`cell`, `protocol`, `diagnostics`) and the `settings` data package, never
+  only the standard library, `winapi`, the stdlib-only top-level modules
+  (`cell`, `protocol`, `diagnostics`), `contracts.keyboard` and the `settings` data package, never
   `assistant`, `desktop_ui` or third-party packages. Measure key-event latency, allocation
   and GC with `scripts/benchmark_keyboard.py` before and after changing the
   hook, the engine or their shared dependencies.
@@ -204,7 +213,8 @@ property that only returns one field of an owner's state (`mirrored-state`),
 constants read across modules other than as `data_module.NAME`
 (`constant-import`, `shared-constant`), a value declared in a library rather
 than handed in (`library-constant`), data imported by anything but an entry
-point (`entry-data`), a one-member enum (`single-member-enum`)
+point (`entry-data`), one program importing another's code
+(`program-isolation`), a one-member enum (`single-member-enum`)
 and a table keyed by an enum in the enum's own module (`member-table`).
 
 # Committing and running

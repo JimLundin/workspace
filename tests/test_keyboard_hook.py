@@ -4,12 +4,12 @@ import unittest
 from collections.abc import Callable
 from dataclasses import replace
 
+from contracts.keyboard.actions import Layer
+from contracts.keyboard.keys import Key, Mod
+from contracts.keyboard.physical import Scancode
 from desktop_ui.desktop_control import FeatureRequest, control_event
 from keyboard import hook_watch
-from keyboard.actions import Layer
 from keyboard.engine import Indicator
-from keyboard.keys import Key, Mod
-from keyboard.physical import Scancode
 from keyboard.win import Keyboard, WinHost, release_keyboard
 from protocol import LayoutState, Message, Origin, Tool, decode_indicator
 from tests import layouts

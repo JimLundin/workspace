@@ -9,20 +9,22 @@ is handed: the values the programs share (`settings`) and the desktop's own
 import os
 import sys
 from dataclasses import replace
+from pathlib import Path
 
-from protocol import Places, Tool
+from protocol import Places, Tool, interpreter
 from settings import apps, layout, programs
 lazy from desktop import bar, look, placement, windows
 lazy from desktop_ui import desktop_pager
 lazy from desktop_ui.bar_events import BarSpec
 lazy from desktop_ui.desktop_app import run
-lazy from desktop_ui.desktop_settings import DesktopSettings
+lazy from desktop_ui.desktop_settings import DesktopSettings, Launcher
 lazy from desktop_ui.keymap import KeyboardView, shortcut_hint
 
 
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("Workspace only runs on Windows")
+    root = Path(__file__).resolve().parent.parent
     keyboard = KeyboardView.of(layout.LAYOUT, windows.KEYMAP_WORDS)
     hints = frozendict({tool: shortcut_hint(keyboard.shortcut(tool), compact=True) for tool in Tool})
     island = BarSpec(
@@ -40,6 +42,7 @@ def main() -> None:
         DesktopSettings(
             programs=programs.PROGRAMS,
             places=Places.of(os.environ, programs.PROGRAMS),
+            launcher=Launcher((str(interpreter(root)), str(root / "launch.py")), root),
             apps=apps.APPS,
             keyboard=keyboard,
             design=look.DESIGN,

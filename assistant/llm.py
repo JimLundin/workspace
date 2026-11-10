@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from pydantic import TypeAdapter, ValidationError
 lazy from openai import APIConnectionError, APIStatusError, OpenAI, omit
 
-from gateway.endpoint import read
+from contracts.endpoint import read
 from winapi.pcm import RATE
 
 MAX_SECONDS: Final = 300

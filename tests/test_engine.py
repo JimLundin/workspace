@@ -5,9 +5,11 @@ import unittest
 from dataclasses import replace
 from typing import override
 
+from contracts.keyboard.actions import Action, Chord, Layer
+from contracts.keyboard.bindings import Bindings
+from contracts.keyboard.keys import Key, Mod
+from contracts.keyboard.physical import Scancode
 from keyboard import engine
-from keyboard.actions import Action, Chord, Layer
-from keyboard.bindings import Bindings
 from keyboard.engine import (
     MAX_BUFFERED,
     Engine,
@@ -17,8 +19,6 @@ from keyboard.engine import (
     UnreleasedError,
     Verdict,
 )
-from keyboard.keys import Key, Mod
-from keyboard.physical import Scancode
 from protocol import LayoutState, Request, Tool
 from tests import layouts
 from tests.layouts import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS

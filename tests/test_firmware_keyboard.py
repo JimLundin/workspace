@@ -1,8 +1,9 @@
 """Detect selecting unrelated keyboards, losing the device across USB ports, or misreading its shortcuts."""
 
-from keyboard.bindings import Bindings
-from keyboard.firmware import Chords, connected
-from keyboard.layout import UsbIdentity
+from contracts.keyboard.bindings import Bindings
+from contracts.keyboard.chords import Chords
+from contracts.keyboard.layout import UsbIdentity
+from keyboard.firmware import connected
 from tests import layouts
 
 CHARYBDIS = UsbIdentity(0xA8F8, 0x1832)

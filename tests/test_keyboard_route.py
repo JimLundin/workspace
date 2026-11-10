@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from keyboard.bindings import Bindings
+from contracts.keyboard.bindings import Bindings
 from keyboard.engine import EngineState
 from keyboard.firmware import ConsumedKey, FirmwareKeyboard
 from keyboard.win import HookState, Route, Routing, identity, owes, route

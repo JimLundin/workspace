@@ -42,17 +42,18 @@ in reverse start order.
 
 ## `keyboard/`
 
-The vocabulary is four modules: `physical.py` (the laptop's keys, their
-scancodes and keycaps), `keys.py` (the keys and modifiers sent to Windows),
-`actions.py` (what a key does on a layer) and `board.py` (the rows and thumbs
-layers are written in). `layout.py` declares the shape of a `Layout` (its
-timings, physical board and every layer in that vocabulary) without declaring
-one: `settings/layout.py` holds the layout Workspace runs, and `__main__.py`
-hands it to `win.run`. `bindings.py` builds the engine's lookups from a layout
-and rejects an inconsistent one. `engine.py` turns key events into actions. `win.py` owns the hook and message
-loop. `firmware.py` recognizes the Charybdis keyboard and maps the
-Ctrl+Alt+Shift chords (`Chords`). `hook_watch.py` detects when Windows silently
-removes the hook and reinstalls it. Measure latency with
+The layout program. The layout's model it runs on is shared with the desktop
+in `contracts/keyboard/`: the vocabulary (`physical.py`, the laptop's keys,
+scancodes and keycaps; `keys.py`, the keys and modifiers sent to Windows;
+`actions.py`, what a key does on a layer; `board.py`, the rows and thumbs
+layers are written in), `layout.py` (the shape of a `Layout`: its timings,
+physical board and every layer, declaring none), `bindings.py` (the lookups
+built from a layout, rejecting an inconsistent one) and `chords.py` (each Apps
+request by its base key). `settings/layout.py` holds the layout Workspace runs,
+and `__main__.py` hands it to `win.run`. `engine.py` turns key events into
+actions. `win.py` owns the hook and message loop. `firmware.py` recognizes the
+Charybdis keyboard and tracks its shortcuts. `hook_watch.py` detects when
+Windows silently removes the hook and reinstalls it. Measure latency with
 `scripts/benchmark_keyboard.py` before and after changing these.
 
 ## `assistant/`
@@ -76,6 +77,8 @@ architecture review's `contract-isolation` rule enforces it.
 | `status.py` | The tray's state and the bar's quick job |
 | `recording_state.py`, `meetings.py`, `capture.py` | Meeting recording values, events and transcripts, and what a recording captures |
 | `geometry.py`, `hotkeys.py` | Rectangle arithmetic, and every tool key's behaviour |
+| `keyboard/` | The keyboard layout's model, which the layout runs and the desktop draws |
+| `endpoint.py` | The gateway's endpoint file, which the gateway writes and dictation reads |
 | `members.py` | Enum and `Literal` translation tables checked to name every value |
 
 ## `desktop_ui/`

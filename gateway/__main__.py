@@ -11,7 +11,7 @@ import secrets
 
 from protocol import Places
 from settings import programs
-lazy from gateway.endpoint import Endpoint, publish, read
+lazy from contracts.endpoint import Endpoint, publish, read
 lazy from gateway.proxy import Gateway
 lazy from gateway.upstream import upstream_from
 

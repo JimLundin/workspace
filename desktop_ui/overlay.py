@@ -7,9 +7,9 @@ from pathlib import Path
 
 from pydantic import StrictBool, TypeAdapter
 
+from contracts.keyboard.actions import Layer
+from contracts.keyboard.physical import Scancode
 from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
-from keyboard.actions import Layer
-from keyboard.physical import Scancode
 from winapi.shapes import Point, Rect, Size
 
 

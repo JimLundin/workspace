@@ -89,6 +89,11 @@ class Programs:
         return frozendict({entry.name: entry for entry in (self.gateway, self.layout, self.desktop)})
 
 
+def interpreter(root: Path) -> Path:
+    """The checkout's environment interpreter, without a console, which runs every program and the launcher."""
+    return root / ".venv" / "Scripts" / "pythonw.exe"
+
+
 @dataclass(frozen=True, slots=True)
 class Places:
     """Where the programs keep their logs and state, read from the environment they run in."""

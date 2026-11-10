@@ -19,11 +19,11 @@ from enum import Enum, auto
 from pathlib import Path
 
 from cell import Cell
+from contracts.keyboard.layout import UsbIdentity
 from desktop_ui.kept import KeptFile
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
 from desktop_ui.window_layout import Setups, dark_when_away
-from keyboard.layout import UsbIdentity
 from winapi import screen, session
 from winapi.monitor_power import Applied, Detached, PhysicalMonitors, Power
 from winapi.screen import Monitor

@@ -2,11 +2,11 @@
 
 from dataclasses import replace
 
+from contracts.keyboard.bindings import Bindings
+from contracts.keyboard.chords import Chords
 from desktop_ui.key_hints import ActionCap, AppCap, DirectionCap, Keycap, hints
 from desktop_ui.navigation import Direction, Focus, SpatialFocus, World, effect
 from desktop_ui.window_layout import Target
-from keyboard.bindings import Bindings
-from keyboard.firmware import Chords
 from tests import layouts
 from tests.test_window_layout import CODE, EDGE, TERMINAL
 from winapi.shapes import Rect

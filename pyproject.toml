@@ -284,6 +284,24 @@ libraries = ["keyboard", "desktop_ui"]
 data = ["settings", "desktop"]
 entries = ["launch", "scripts.benchmark_keyboard"]
 
+# Each program's code imports only its own packages and the shared ones
+# (protocol, contracts, winapi, cell, diagnostics, and its data through its entry).
+[[tool.workspace.architecture.programs]]
+name = "launcher"
+packages = ["launch"]
+
+[[tool.workspace.architecture.programs]]
+name = "gateway"
+packages = ["gateway"]
+
+[[tool.workspace.architecture.programs]]
+name = "layout"
+packages = ["keyboard"]
+
+[[tool.workspace.architecture.programs]]
+name = "desktop"
+packages = ["desktop", "desktop_ui", "assistant"]
+
 [[tool.workspace.architecture.kept]]
 reason = "Windows' own identifiers: session locks, window messages, the keys the window switcher reads natively and a process creation flag."
 constants = [

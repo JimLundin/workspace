@@ -19,14 +19,14 @@ from typing import assert_never
 import protocol
 import winapi.shapes
 from contracts.hotkeys import ROUTES, Route
+from contracts.keyboard.actions import Layer
+from contracts.keyboard.physical import Scancode
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job, State
 from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, keyed
 from desktop_ui.overlay import OverlayState
-from keyboard.actions import Layer
-from keyboard.physical import Scancode
 from protocol import App, LayoutState, Request, Tool, decode_indicator
 lazy from winapi.shell import MenuItem
 

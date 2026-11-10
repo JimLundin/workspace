@@ -4,6 +4,7 @@ the others, the apps the chords reach, and its own views' specs. Declares no val
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from desktop_ui.application_observer import PlacementSpec
 from desktop_ui.bar_events import BarSpec
@@ -19,10 +20,21 @@ from desktop_ui.window_switcher import SwitcherSpec
 from protocol import App, Places, Programs
 
 
+@dataclass(frozen=True, slots=True)
+class Launcher:
+    """How the desktop runs the launcher on its own, for the tray's Restart and Quit."""
+
+    command: tuple[str, ...]
+    """The interpreter and the launcher's script."""
+    root: Path
+    """The checkout the launcher runs in."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DesktopSettings:
     programs: Programs
     places: Places
+    launcher: Launcher
     apps: tuple[App, ...]
     """The apps the chords reach, in chord-letter order."""
     keyboard: KeyboardView

@@ -5,6 +5,8 @@ declarations; `desktop.__main__` hands them to the desktop.
 
 from typing import Final
 
+from contracts.keyboard.actions import Chord
+from contracts.keyboard.keys import Key
 from contracts.members import every_member
 from contracts.status import State
 from desktop import bar, look
@@ -18,8 +20,6 @@ from desktop_ui.layer_indicator import IndicatorSpec
 from desktop_ui.navigation import Direction
 from desktop_ui.tray import TraySpec
 from desktop_ui.window_switcher import SwitcherSpec
-from keyboard.actions import Chord
-from keyboard.keys import Key
 from protocol import Tool
 
 BADGES: Final = BadgeSpec(

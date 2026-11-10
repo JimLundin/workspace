@@ -15,15 +15,16 @@ from typing import Final, Protocol, assert_never
 
 import diagnostics
 from cell import Cell
+from contracts.keyboard.bindings import Bindings
+from contracts.keyboard.chords import Chords
+from contracts.keyboard.keys import Key, Mod
+from contracts.keyboard.layout import Layout, UsbIdentity
+from contracts.keyboard.physical import Scancode
 from diagnostics import Detail, FailureInfo, failure_info
 from keyboard import hook_watch
-from keyboard.bindings import Bindings
 from keyboard.engine import Engine, EngineState, Indicator, UnreleasedError, Verdict, release_all, toggle
-from keyboard.firmware import CapturedKey, Chords, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected
+from keyboard.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected
 from keyboard.hook_watch import ANSWERED
-from keyboard.keys import Key, Mod
-from keyboard.layout import Layout, UsbIdentity
-from keyboard.physical import Scancode
 from protocol import App, LayoutState, Message, Origin, Places, Programs, Request, Window, encode, encode_indicator
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 

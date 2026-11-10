@@ -4,11 +4,11 @@ values, so a change to the layout Workspace runs never breaks a test.
 
 from typing import Final
 
-from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
-from keyboard.board import Board, Row, Thumbs
-from keyboard.keys import Key, Mod
-from keyboard.layout import Layout, Timings, UsbIdentity
-from keyboard.physical import Laptop
+from contracts.keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
+from contracts.keyboard.board import Board, Row, Thumbs
+from contracts.keyboard.keys import Key, Mod
+from contracts.keyboard.layout import Layout, Timings, UsbIdentity
+from contracts.keyboard.physical import Laptop
 from protocol import App, Installed, PinnedWeb, Tool
 
 # ---- Timings ---------------------------------------------------------------------
@@ -100,7 +100,7 @@ _Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
 
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
-    # Every layer's board; `keyboard.bindings` rejects a missing layer or a hold of BASE.
+    # Every layer's board; `contracts.keyboard.bindings` rejects a missing layer or a hold of BASE.
     Layer.BASE: Board(
         # What each key does while no layer is held: Colemak-DH with home row mods (Win Alt Ctrl Shift).
         top=      Row((Key.Q,                          Key.W,                              Key.F,                         Key.P,                          Key.B),

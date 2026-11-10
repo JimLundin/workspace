@@ -22,20 +22,15 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import Final
 
-from protocol import Component, Entry, Places, Programs
+from protocol import Component, Entry, Places, Programs, interpreter
 from settings import programs
 from winapi._core import CloseHandle, FindWindowW, GetWindowThreadProcessId, OpenProcess, PostMessageW, WaitForSingleObject
+from winapi.processes import DETACHED
 
 ROOT: Final = Path(__file__).resolve().parent
-DETACHED: Final = 0x0000_0008 | 0x0800_0000  # DETACHED_PROCESS | CREATE_NO_WINDOW
 
 SYNCHRONIZE: Final = 0x0010_0000
 WAIT_TIMEOUT: Final = 0x0000_0102
-
-
-def pythonw() -> Path:
-    """The checkout's environment interpreter, without a console."""
-    return ROOT / ".venv" / "Scripts" / "pythonw.exe"
 
 
 def window(entry: Entry) -> int:
@@ -70,7 +65,7 @@ def start(entry: Entry, state: Path, variable: str) -> None:
     environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"} | {variable: str(state)}
     with (state / f"{entry.name}.log").open("ab") as errors:
         process = subprocess.Popen(
-            [str(pythonw()), "-m", entry.module], cwd=ROOT, env=environment, stdout=errors, stderr=errors, creationflags=DETACHED
+            [str(interpreter(ROOT)), "-m", entry.module], cwd=ROOT, env=environment, stdout=errors, stderr=errors, creationflags=DETACHED
         )
     (state / f"{entry.name}.pid").write_text(str(process.pid), encoding="ascii")
 

@@ -24,7 +24,6 @@ lazy import shiboken6
 lazy from PySide6 import QtCore, QtWidgets
 
 import diagnostics
-import launch
 import protocol
 import winapi.shapes
 from assistant.llm import settings_from
@@ -75,14 +74,14 @@ from desktop_ui.desktop_control import (
     menu_items,
     transition,
 )
-from desktop_ui.desktop_settings import DesktopSettings
+from desktop_ui.desktop_settings import DesktopSettings, Launcher
 from desktop_ui.navigation import ShowWindow
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.tray import Tray
 from desktop_ui.voice import Voice
 from protocol import App, Message
-from winapi import screen, shell, system, windows
+from winapi import processes, screen, shell, system, windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import tooltip_style
 lazy from desktop_ui.components.widgets import near_pointer, show_window
@@ -313,7 +312,7 @@ class DesktopApp:
             case Log(text):
                 self.log(text)
             case Launch(command, names):
-                launched(command, *names)
+                launched(self.settings.launcher, command, *names)
             case OpenLogs():
                 directory = self.settings.places.directory
                 directory.mkdir(parents=True, exist_ok=True)
@@ -436,9 +435,9 @@ class DesktopApp:
         self.root.quit()
 
 
-def launched(command: str, *names: str) -> None:
+def launched(launcher: Launcher, command: str, *names: str) -> None:
     """Run the launcher on its own, so it outlives this program when it restarts or stops the desktop."""
-    subprocess.Popen([str(launch.pythonw()), str(launch.ROOT / "launch.py"), command, *names], cwd=launch.ROOT, creationflags=launch.DETACHED)
+    subprocess.Popen([*launcher.command, command, *names], cwd=launcher.root, creationflags=processes.DETACHED)
 
 
 def _dispose(root: QtWidgets.QApplication) -> None:

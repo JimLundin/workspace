@@ -5,9 +5,9 @@ builds one and hands it in, and tests build their own.
 
 from dataclasses import dataclass
 
-from keyboard.actions import Binding, Layer
-from keyboard.board import Board
-from keyboard.physical import Laptop, Scancode
+from contracts.keyboard.actions import Binding, Layer
+from contracts.keyboard.board import Board
+from contracts.keyboard.physical import Laptop, Scancode
 
 
 class LayoutError(Exception):

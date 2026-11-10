@@ -13,8 +13,8 @@ still restores it.
 from dataclasses import dataclass, replace
 from typing import Protocol
 
+from contracts.keyboard.layout import UsbIdentity
 from desktop_ui.kept import Kept
-from keyboard.layout import UsbIdentity
 from winapi import via
 
 

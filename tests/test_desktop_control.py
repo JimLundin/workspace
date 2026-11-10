@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 from functools import reduce
 
+from contracts.keyboard.physical import Scancode
 from contracts.recording_state import RecordingState
 from contracts.status import State
 from desktop_ui.bar_events import DictationShown, RecordingShown
@@ -43,7 +44,6 @@ from desktop_ui.desktop_control import (
     recording_notice,
     transition,
 )
-from keyboard.physical import Scancode
 from protocol import LayoutState, Message, Tool
 from tests.layouts import APPS
 

@@ -104,6 +104,14 @@ class Kept:
 
 
 @dataclass(frozen=True, slots=True)
+class Program:
+    """One of Workspace's programs and the packages that are its code."""
+
+    name: Text
+    packages: tuple[Text, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Configuration:
     """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
 
@@ -117,6 +125,8 @@ class Configuration:
     """Packages of values that only entry points and each other import."""
     entries: tuple[Text, ...] = ()
     """Modules besides each program's `__main__` that may import `data`."""
+    programs: tuple[Program, ...] = ()
+    """Each program's packages; one program's code never imports another's."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +309,27 @@ def entry_data(sources: Iterable[Source], data: Sequence[str], entries: Sequence
         # Importing a module also loads its packages; name only the module.
         for target in sorted(target for target in reached if not any(other.startswith(target + ".") for other in reached)):
             yield Finding("entry-data", module, "", target, 0, "Take the values as inputs: only entry points and data modules import data.")
+
+
+def program_isolation(sources: Iterable[Source], programs: Sequence[Program], cache: Cache | None) -> Iterator[Finding]:
+    """Each program's code imports only its own packages and the shared ones, so each starts and changes on its own.
+
+    What two programs share (a message, a file's shape, the keyboard layout's model)
+    lives in a shared package (`protocol`, `contracts`) that both import."""
+    owner = {package: program.name for program in programs for package in program.packages}
+    for source in sources:
+        module = module_name(source.name)
+        if (mine := owner.get(module.split(".")[0])) is None:
+            continue
+        reached = frozendict(
+            (target, theirs)
+            for target in dependencies(source.name, source.text, cache=cache)
+            if (theirs := owner.get(target.split(".")[0])) is not None and theirs != mine
+        )
+        # Importing a module also loads its packages; name only the module.
+        for target in sorted(target for target in reached if not any(other.startswith(target + ".") for other in reached)):
+            detail = f"The {mine} program imports the {reached[target]} program's code: move what both need to a shared package."
+            yield Finding("program-isolation", module, "", target, 0, detail)
 
 
 def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterator[Finding]:
@@ -1238,6 +1269,7 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
         *shared_constants(loaded, configuration.constants),
         *library_constants(loaded, configuration.libraries, configuration.kept),
         *entry_data(all_source, configuration.data, configuration.entries, cache),
+        *program_isolation(loaded, configuration.programs, cache),
         *enum_shapes(loaded),
     )
     accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
