@@ -1,5 +1,9 @@
 # Module map
 
+[architecture.html](architecture.html) draws this map: open it in a browser to zoom
+from the programs to each part and its code (a snapshot; the code it embeds
+is from the commit that wrote it).
+
 Domain alternatives are unions of frozen, slotted dataclasses handled with
 `match` and `assert_never`. Decisions are pure functions. Each effect (a
 thread, file, network call or window) has one owner module. Logic reaches
