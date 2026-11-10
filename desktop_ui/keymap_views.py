@@ -10,14 +10,13 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Offset, Point, Rect, Size
-lazy from desktop_ui.components.appearance import PALETTE, Design, Scheme, Shade, Tokens
+lazy from desktop_ui.components.appearance import Design, Scheme, Shade, Tokens
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.text import inter
-lazy from desktop_ui.components.typeface import TYPE, Font
+lazy from desktop_ui.components.typeface import Font
 lazy from desktop_ui.components.widgets import (
     Window,
     column,
@@ -145,71 +144,6 @@ class KeymapSpec:
     keys: KeysSpec
     overlay: OverlaySpec
     window: MapWindowSpec
-
-
-KEYMAP: Final = KeymapSpec(
-    keys=KeysSpec(
-        unit=64,
-        gap=5,
-        height=56,
-        rows=(0.0, 1.5, 0.0, 1.25, 3.5),
-        columns=14,
-        widths=frozendict({"Space": 6.25, "Caps": 1.75}),
-        corner=9,
-        corner_least=4,
-        name=TYPE.keycap_name,
-        name_least=8,
-        name_inset=3,
-        hold_bottom=3,
-        legend=TYPE.keycap,
-        legend_long=TYPE.keycap_long,
-        legend_short=5,
-        legend_least=7,
-        legend_fit=6,
-        held=Lit(PALETTE.accent, PALETTE.on_accent),
-        bindings=every_member(
-            Scheme,
-            {
-                Scheme.DARK: Bindings(
-                    0.16, frozendict({Role.MOD: "#64d2ff", Role.LAYER: "#7ab0f2", Role.TOOL: "#ffb340", Role.APP: "#30d158", Role.SPECIAL: "#da8fff"})
-                ),
-                Scheme.LIGHT: Bindings(
-                    0.12, frozendict({Role.MOD: "#0071a4", Role.LAYER: "#2f6fc4", Role.TOOL: "#b25000", Role.APP: "#248a3d", Role.SPECIAL: "#8944ab"})
-                ),
-            },
-        ),
-        pressed=every_member(Scheme, {Scheme.DARK: Lit("#f5f5f7", "#161618"), Scheme.LIGHT: Lit("#1d1d1f", "#ffffff")}),
-    ),
-    overlay=OverlaySpec(
-        opacity=0.55,
-        radius=20,
-        side=12,
-        top=10,
-        bottom=12,
-        spacing=8,
-        heading_inset=4,
-        heading="Workspace keyboard",
-        smallest=0.2,
-        largest=0.85,
-        margin=32,
-        reserve=180,
-        rest=90,
-        handle_radius=14,
-        handle_leading=12,
-        handle_trailing=14,
-        handle_padding=6,
-        handle_spacing=6,
-        handle_glyph="menu",
-        handle_text="Drag to move",
-        handle_name="Drag to move the keyboard overlay",
-        handle_gap=4,
-        tap=0.12,
-    ),
-    window=MapWindowSpec(
-        title="Workspace key map", width=940, height=390, side=20, top=16, hint="Hold . for Apps: L dictate · ' dictation toggle · S windows"
-    ),
-)
-"""Workspace's key map and overlay; the desktop app opens them with it."""
 
 
 def _keycap(role: Role, theme: Tokens, keys: KeysSpec) -> Lit:

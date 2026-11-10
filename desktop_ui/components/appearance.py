@@ -9,7 +9,7 @@ selection, orange for attention, red for recording and errors.
 from dataclasses import dataclass
 from enum import Enum, auto
 from functools import lru_cache
-from typing import Final, assert_never
+from typing import assert_never
 
 from contracts.members import every_member
 from desktop_ui.components import typeface
@@ -32,15 +32,6 @@ class Palette:
     """The microphone is live."""
     on_accent: str
     """Ink and knobs over the accent or another signal hue."""
-
-
-PALETTE: Final = Palette(
-    accent="#4b8fe8",  # a soft blue, lighter and less saturated than system blue
-    attention="#f08a00",
-    red="#ff453a",
-    microphone="#ff9f0a",  # as Apple's privacy indicator
-    on_accent="#ffffff",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,36 +140,6 @@ class Kit:
     choice_least: int
     hairline: int
     """A surface's and a menu's edge."""
-
-
-KIT: Final = Kit(
-    ring=2,
-    tooltip_radius=8,
-    tooltip=Padding(5, 8),
-    button_radius=14,
-    button=Padding(5, 11),
-    button_least=18,
-    field_radius=10,
-    field=Padding(7, 10),
-    item_radius=15,
-    item=Padding(8, 12),
-    menu_radius=12,
-    menu_pad=6,
-    menu_item=Padding(6, 14),
-    menu_separator=Padding(5, 10),
-    scrollbar=8,
-    scrollbar_along=4,
-    scrollbar_across=2,
-    thumb_radius=3,
-    thumb_least=24,
-    segmented_radius=10,
-    segmented_inset=2,
-    choice_radius=8,
-    choice=Padding(4, 12),
-    choice_least=18,
-    hairline=1,
-)
-"""Workspace's control metrics; owners pass them to the stylesheets."""
 
 
 def tooltip_style(theme: Tokens, kit: Kit) -> str:
@@ -349,76 +310,6 @@ def rim_stops(rim: Rim, glass: Glass) -> tuple[Stop, ...]:
     return (Stop(0, light, rim.high), Stop(glass.rim_fall, light, rim.low), Stop(glass.rim_rise, light, rim.low), Stop(1, light, rim.end))
 
 
-_WHITE, _BLACK = "#ffffff", "#000000"
-
-GLASS: Final = Glass(
-    tokens=every_member(
-        Scheme,
-        {
-            Scheme.DARK: Tokens(
-                scheme=Scheme.DARK,
-                ink=Shade(_WHITE, 0.94),
-                ink2=Shade(_WHITE, 0.58),
-                ink3=Shade(_WHITE, 0.30),
-                fill=Shade(_WHITE, 0.06),
-                hover=Shade(_WHITE, 0.08),
-                press=Shade(_WHITE, 0.14),
-                separator=Shade(_WHITE, 0.12),
-                solid="#26262a",
-                solid_edge=Shade(_WHITE, 0.07),
-                window="#161618",
-                thumb=Shade(_WHITE, 0.40),
-                canvas_bar_veil=Shade("#1e1e22", 0.84),
-                rim=Rim(0.55, 0.06, 0.22),
-                segment="rgba(255,255,255,56)",
-            ),
-            Scheme.LIGHT: Tokens(
-                scheme=Scheme.LIGHT,
-                ink=Shade(_BLACK, 0.86),
-                ink2=Shade(_BLACK, 0.54),
-                ink3=Shade(_BLACK, 0.28),
-                fill=Shade(_BLACK, 0.05),
-                hover=Shade(_BLACK, 0.06),
-                press=Shade(_BLACK, 0.10),
-                separator=Shade(_BLACK, 0.10),
-                solid="#ffffff",
-                solid_edge=Shade(_BLACK, 0.07),
-                window="#f3f3f6",
-                thumb=Shade(_BLACK, 0.36),
-                canvas_bar_veil=Shade("#fbfbfd", 0.86),
-                rim=Rim(0.95, 0.16, 0.42),
-                segment="#ffffff",
-            ),
-        },
-    ),
-    frosts=every_member(
-        appearance.Frost,
-        {
-            appearance.Frost.BRIGHT: FrostLook(Scheme.LIGHT, Shade(_WHITE, 0.2), 0.14),
-            appearance.Frost.LIGHT: FrostLook(Scheme.DARK, Shade("#1c1c20", 0.26), 0.36),
-            # A mixed desktop needs a heavier veil to keep small text legible.
-            appearance.Frost.SMOKED: FrostLook(Scheme.DARK, Shade("#1c1c20", 0.62), 0.36),
-        },
-    ),
-    attention=Attention(
-        hue=PALETTE.attention,
-        veil=0.9,
-        canvas_veil=0.94,
-        rim=Rim(0.55, 0.06, 0.10),
-        lettering=Lettering(Shade(_WHITE, 0.96), Shade(_WHITE, 0.8), Shade(_WHITE, 0.16), Shade(_WHITE, 0.26)),
-        solid_edge=Shade(_WHITE, 0.18),
-    ),
-    menu_veil=0.64,
-    contrast_hover=0.2,
-    contrast_press=0.35,
-    lighting=Lighting(shadow_blur=24, shadow_drop=8, shadow_color=_BLACK, rim_stroke=2, rim_angle=160),
-    rim_light=_WHITE,
-    rim_fall=0.34,
-    rim_rise=0.72,
-)
-"""Workspace's material; owners pass it in, tests pass their own."""
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Design:
     """Workspace's look as its windows read it: the colours that carry meaning, the
@@ -448,9 +339,6 @@ class Washes:
     """The glow around a signal's dot."""
     resting: float
     """A pulsing dot between pulses."""
-
-
-WASHES: Final = Washes(well=0.07, off=0.12, track=0.16, halo=0.25, resting=0.35)
 
 
 def _scheme(pane: Pane, material: appearance.Material, glass: Glass) -> Scheme:

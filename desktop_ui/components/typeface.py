@@ -70,21 +70,6 @@ class TypeScale:
     """...and one longer than five characters."""
 
 
-TYPE: Final = TypeScale(
-    reading=Font(12, Weight.MEDIUM, tabular=True),
-    strong=Font(12, Weight.SEMIBOLD, tabular=True),
-    detail=Font(11, Weight.REGULAR),
-    body=Font(13, Weight.REGULAR),
-    title=Font(13, Weight.MEDIUM),
-    label=Font(12, Weight.MEDIUM),
-    query=Font(19, Weight.REGULAR),
-    keycap_name=Font(10, Weight.REGULAR),
-    keycap=Font(15, Weight.SEMIBOLD),
-    keycap_long=Font(12, Weight.SEMIBOLD),
-)
-"""Workspace's type scale; each surface reads its sizes from here or from what its owner passes in."""
-
-
 def load(log: Callable[[str], None]) -> None:
     """Register the cuts with Qt's font database; views fall back to the system font if one is missing."""
     if FAMILY in QtGui.QFontDatabase.families():

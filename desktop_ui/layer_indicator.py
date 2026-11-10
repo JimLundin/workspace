@@ -1,14 +1,11 @@
 """The quiet layer indicator and its timed feedback capsule."""
 
 from dataclasses import dataclass, field, replace
-from typing import Final
 
 lazy from PySide6 import QtCore, QtWidgets
 
 from cell import Cell
-from desktop_ui.components.appearance import PALETTE
-from desktop_ui.components.typeface import TYPE, Font
-from desktop_ui.island_layout import SIZES
+from desktop_ui.components.typeface import Font
 from desktop_ui.qt_runtime import prepare
 from winapi import windows
 from winapi.shapes import Rect
@@ -39,20 +36,6 @@ class IndicatorSpec:
     layout_on: str
     layout_off: str
     """What the indicator flashes as the layout switches on or off."""
-
-
-INDICATOR: Final = IndicatorSpec(
-    radius=SIZES.bar.radius,  # The island's capsule, so the two read as one family.
-    padding=16,
-    leading=8,
-    opacity=0.9,
-    font=TYPE.title,
-    bottom=28,
-    flash=1.2,
-    flash_ink=PALETTE.accent,
-    layout_on="Layout on",
-    layout_off="Layout off",
-)
 
 
 @dataclass(frozen=True, slots=True)

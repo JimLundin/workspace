@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from fractions import Fraction
 from itertools import count
-from typing import Final
 
 from contracts.members import every_member
 from desktop_ui.shell_items import PinnedApp, Shelf
@@ -89,9 +88,6 @@ class Program:
 
 type App = PinnedApp | Program
 
-TERMINAL, CODE, EDGE = Program("windowsterminal.exe"), Program("code.exe"), Program("msedge.exe")
-"""Ordinary Edge is every Edge window that isn't a pinned web app's."""
-
 
 @dataclass(frozen=True, slots=True)
 class Region:
@@ -101,13 +97,6 @@ class Region:
     top: Fraction
     width: Fraction
     height: Fraction
-
-
-FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
-LEFT_HALF = Region(Fraction(0), Fraction(0), Fraction(1, 2), Fraction(1))
-RIGHT_HALF = Region(Fraction(1, 2), Fraction(0), Fraction(1, 2), Fraction(1))
-LEFT_TWO_THIRDS = Region(Fraction(0), Fraction(0), Fraction(2, 3), Fraction(1))
-RIGHT_THIRD = Region(Fraction(2, 3), Fraction(0), Fraction(1, 3), Fraction(1))
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,55 +140,6 @@ class Screens:
     layout: Layout
 
 
-SETUPS: Final = Setups(
-    externals=frozendict(
-        {
-            Setup.LAPTOP_ONLY: frozendict(),
-            Setup.HOME: frozendict({Size(3840, 2160): Role.MAIN}),
-            # Orientation, not arrangement, tells the two work screens apart.
-            Setup.WORK: frozendict({Size(2560, 1440): Role.ABOVE, Size(1440, 2560): Role.SIDE}),
-        }
-    ),
-    layouts=frozendict(
-        {
-            Setup.LAPTOP_ONLY: frozendict(
-                {
-                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-                    # Terminals side by side on desktop 3; Code's windows share all of desktop 4, so a lone one fills it.
-                    TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF), Position(2, Role.LAPTOP, RIGHT_HALF)),
-                    CODE: (Position(3, Role.LAPTOP, FULL),),
-                    EDGE: (Position(4, Role.LAPTOP, FULL),),
-                }
-            ),
-            Setup.HOME: frozendict(
-                {
-                    # Two terminals read Terminal | Terminal | Code across the 4K screen.
-                    TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
-                    CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
-                    EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
-                    PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
-                }
-            ),
-            Setup.WORK: frozendict(
-                {
-                    # Code takes the tall screen; terminals read Terminal | Terminal | Edge across the one above.
-                    CODE: (Position(1, Role.SIDE, FULL),),
-                    TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
-                    EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
-                    PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                    PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
-                }
-            ),
-        }
-    ),
-    # The home 4K screen is an OLED.
-    dark_when_away=frozendict({Setup.HOME: frozenset({Role.MAIN})}),
-)
-"""Workspace's own setups; startup code passes them in, tests pass their own."""
-
-
 def declared_desktops(layout: Layout) -> int:
     return 1 + max((position.desktop for places in layout.values() for position in places), default=-1)
 
@@ -235,6 +175,9 @@ class Target:
 
 
 type Placement = frozendict[int, Target]
+FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
+"""A monitor's whole work area, where an application no setup declares goes."""
+
 NOWHERE: Placement = frozendict()
 
 

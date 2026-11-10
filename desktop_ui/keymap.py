@@ -213,40 +213,6 @@ class KeyboardView:
         return tuple(tuple(self._cap(layer, held, key) for key in row) for row in ROWS)
 
 
-KEYMAP_WORDS: Final = KeymapWords(
-    tools=frozendict(
-        {
-            Tool.DICTATE: "Talk",
-            Tool.ZOOM: "Zoom",
-            Tool.FOCUS_LEFT: "Focus ←",
-            Tool.FOCUS_DOWN: "Focus ↓",
-            Tool.FOCUS_UP: "Focus ↑",
-            Tool.FOCUS_RIGHT: "Focus →",
-            Tool.DESKTOP_1: "Desk 1",
-            Tool.DESKTOP_2: "Desk 2",
-            Tool.DESKTOP_3: "Desk 3",
-            Tool.DESKTOP_4: "Desk 4",
-            Tool.DESKTOP_5: "Desk 5",
-            Tool.PLACEMENT_PAUSE: "Pause place",
-            Tool.PLACE_NOW: "Re-place",
-            Tool.MEETING_TOGGLE: "Record",
-            Tool.COPY_TRANSCRIPT: "Copy speech",
-            Tool.DICTATE_TOGGLE: "Dictate toggle",
-            Tool.WINDOW_SWITCHER: "Windows",
-        }
-    ),
-    chords=frozendict(
-        {Chord.ctrl(Key.Z): "Undo", Chord.ctrl(Key.Y): "Redo", Chord.ctrl(Key.C): "Copy", Chord.ctrl(Key.V): "Paste", Chord.ctrl(Key.X): "Cut"}
-    ),
-    chord_hold="Apps",
-    hold="hold",
-    escape="On/off",
-    escape_hold="hold: quit",
-    held="held",
-)
-"""The key map's words."""
-
-
 def indicator_text(layer: Layer, *, caps_word: bool) -> str | None:
     """What the layer indicator says; None: nothing to show. The base layer says nothing."""
     parts = [layer.name] if layer is not Layer.BASE else []

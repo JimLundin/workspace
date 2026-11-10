@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Final, override
+from typing import override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -63,43 +63,6 @@ class SwitcherSpec:
     shadow_step: int
     shadow_alpha: float
     """...in rings this far apart, the innermost at this alpha out of 255, fading outwards."""
-
-
-SWITCHER: Final = SwitcherSpec(
-    width=640,
-    tallest=560,
-    chrome=104,
-    fewest=1,
-    most=7,
-    radius=26,
-    inset=12,
-    row=52,
-    text_side=14,
-    text_top=7,
-    selected_detail=0.75,
-    field_side=10,
-    field_top=16,
-    field_bottom=14,
-    field_spacing=10,
-    symbol="search",
-    symbol_size=20,
-    placeholder="Find a window…",
-    field_name="Find an open window",
-    list_name="Open windows",
-    separator=1,
-    separator_gap=8,
-    bottom=10,
-    hint="↑ ↓ select · Enter switch · Escape close",
-    hint_side=10,
-    hint_top=8,
-    minimized=" · minimized",
-    shadow=24,
-    shadow_lift=8,
-    shadow_drop=10,
-    shadow_step=2,
-    shadow_alpha=6,
-)
-"""Workspace's switcher; the desktop app opens it with this."""
 
 
 def matching(windows: Sequence[winapi.shapes.Window], query: str) -> tuple[winapi.shapes.Window, ...]:

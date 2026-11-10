@@ -4,16 +4,16 @@ The setups here are the test's own, so each test checks how windows are placed
 from whatever setups it is given, never Workspace's real layouts.
 """
 
+from fractions import Fraction
+
 from desktop_ui.shell_items import EMPTY_SHELF, PinnedApp, shelf
 from desktop_ui.window_layout import (
-    EDGE,
     FULL,
-    LEFT_HALF,
     NOWHERE,
-    RIGHT_HALF,
     Group,
     Position,
     Program,
+    Region,
     Role,
     Screens,
     Setup,
@@ -31,6 +31,12 @@ from winapi.screen import Monitor
 from winapi.shapes import Rect, Size, Window
 
 SHELL, EDITOR, BROWSER, CHAT = Program("shell.exe"), Program("editor.exe"), Program("browser.exe"), Program("chat.exe")
+TERMINAL, CODE, EDGE = Program("windowsterminal.exe"), Program("code.exe"), Program("msedge.exe")
+LEFT_HALF = Region(Fraction(0), Fraction(0), Fraction(1, 2), Fraction(1))
+RIGHT_HALF = Region(Fraction(1, 2), Fraction(0), Fraction(1, 2), Fraction(1))
+LEFT_TWO_THIRDS = Region(Fraction(0), Fraction(0), Fraction(2, 3), Fraction(1))
+RIGHT_THIRD = Region(Fraction(2, 3), Fraction(0), Fraction(1, 3), Fraction(1))
+"""The tests' own programs and regions to write setups with."""
 PYTHON, NOTEPAD, PAINT = Program("python.exe"), Program("notepad.exe"), Program("mspaint.exe")
 
 SETUPS = Setups(

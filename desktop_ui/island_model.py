@@ -20,11 +20,11 @@ from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
 
-from contracts.members import every_literal, every_member
+from contracts.members import every_member
 from contracts.recording_state import Phase, RecordingState
-from contracts.status import TRANSCRIBING, Job
+from contracts.status import Job
 from desktop_ui import ambient
-from desktop_ui.ambient import SPEAKERS, WIFI, Ambient, SystemStatus
+from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
 from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
 
@@ -146,7 +146,7 @@ def capture(recording: RecordingState, phases: Phases) -> Capture | None:
     return Capture(title, can_stop=phased.can_stop, attention=phased.attention)
 
 
-# ---- the bar's composition as data: `ISLAND` ---------------------------------------------
+# ---- the bar's composition's shape: `desktop.bar.ISLAND` declares one ----------------------
 
 
 class Reading(StrEnum):
@@ -241,60 +241,6 @@ class IslandSpec:
     status: StatusSpec
     activities: ActivitiesSpec
     words: Words
-
-
-ISLAND: Final = IslandSpec(
-    # The fixed capsule at the screen's right edge, which opens the controls menu:
-    # its readings left to right, in groups. Readings in a group sit close together;
-    # groups sit further apart. Leave a reading out to hide it. The keyboard shows
-    # only while it types plainly.
-    status=StatusSpec(
-        (
-            (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI),
-            (Reading.POWER, Reading.BATTERY, Reading.CPU, Reading.MEMORY, Reading.CLOCK),
-        ),
-        SPEAKERS,
-        WIFI,
-        Symbols(keyboard="keyboard", clock="clock", charger="charger", battery="battery", cpu="cpu", memory="memory"),
-        low_battery=20,
-        unread="—",
-        mains="AC",
-        widest_percent="100%",
-        widest_clock="00:00",
-    ),
-    # Where activities sit beside the island, left to right. A transcription
-    # and a recording step out of the island while you dictate. Each activity is
-    # placed exactly once.
-    activities=ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
-    words=Words(
-        jobs=frozendict({TRANSCRIBING: "Transcribing"}),
-        phases=every_literal(
-            Phase,
-            {
-                "idle": None,
-                "starting": Phased("Starting…", can_stop=True, attention=False),
-                "recording": Phased(ELAPSED, can_stop=True, attention=False),
-                "stopping": Phased("Stopping…", can_stop=False, attention=False),
-                "finishing": Phased("Saving…", can_stop=False, attention=False),
-                "paused": Phased("Check recording", can_stop=False, attention=True),
-                "interrupted": Phased("Check recording", can_stop=False, attention=True),
-                "saved": None,
-            },
-        ),
-        stop="stop",
-        microphone="mic.fill",
-        stop_recording="Stop recording",
-        stop_dictation="Stop dictation",
-        listening="Listening · press to stop",
-        open_controls="Open Workspace controls",
-        close_controls="Workspace controls · Escape closes",
-        charger="Charger connected",
-        cpu="CPU",
-        memory="memory",
-        unavailable="unavailable",
-    ),
-)
-"""The island bar's composition."""
 
 
 ACTIVITY_KEYS: Final = every_member(Activity, {Activity.JOB: Key.JOB, Activity.RECORDING: Key.RECORDING})

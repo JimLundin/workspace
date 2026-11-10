@@ -4,9 +4,7 @@ executable, each with stable window ordering and cycling."""
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final
 
-from contracts.members import every_member
 from winapi.icon_pixels import Pixels
 from winapi.shapes import Rect, Window
 
@@ -25,13 +23,6 @@ class WebApp:
     glyph: str
 
 
-WEB_APPS: Final = every_member(
-    PinnedApp,
-    {
-        PinnedApp.OUTLOOK: WebApp("Outlook", "https://outlook.cloud.microsoft/mail/", "MSEdge.outlook.cloud.microsoft_/mail/", "mail"),
-        PinnedApp.TEAMS: WebApp("Teams", "https://teams.cloud.microsoft/", "MSEdge.teams.cloud.microsoft_/", "chat"),
-    },
-)
 type WebApps = frozendict[PinnedApp, WebApp]
 
 """Seconds a launch may take to show its window before another click launches again."""

@@ -9,7 +9,6 @@ morphs between them.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import Final
 
 from desktop_ui.island_layout import Content, Placed
 from desktop_ui.island_model import CapsuleView, Key, Part, Text
@@ -28,15 +27,6 @@ class Springs:
     """A capsule leaving; critically damped, so it never passes zero."""
     fade: Spring
     """Content crossing over at its measured size."""
-
-
-SPRINGS: Final = Springs(
-    morph=Spring(0.86, 0.42),
-    appear=Spring(0.78, 0.42),  # A little overshoot.
-    leave=Spring(1.0, 0.3),
-    fade=Spring(1.0, 0.2),
-)
-"""The bar's own springs; its owner passes them in, tests pass their own."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -61,9 +51,6 @@ class Timing:
     """...and of the material Windows asks for."""
     dismiss: float
     """Seconds the open menu waits, inactive, before it closes; native activation can briefly report inactive while Qt settles."""
-
-
-TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05, tick=0.1, frame=0.016, power=15, material=0.75, dismiss=0.016)
 
 
 @dataclass(frozen=True, slots=True)

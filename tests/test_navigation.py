@@ -20,15 +20,8 @@ from desktop_ui.navigation import (
 )
 from desktop_ui.shell_items import PinnedApp
 from desktop_ui.window_layout import (
-    CODE,
-    EDGE,
     FULL,
-    LEFT_HALF,
-    LEFT_TWO_THIRDS,
     NOWHERE,
-    RIGHT_HALF,
-    RIGHT_THIRD,
-    TERMINAL,
     Group,
     Position,
     Role,
@@ -40,7 +33,7 @@ from desktop_ui.window_layout import (
 )
 from protocol import App, Installed, PinnedWeb
 from tests import test_window_layout
-from tests.test_window_layout import ABOVE, FOUR_K, LAPTOP, SIDE
+from tests.test_window_layout import ABOVE, CODE, EDGE, FOUR_K, LAPTOP, LEFT_HALF, LEFT_TWO_THIRDS, RIGHT_HALF, RIGHT_THIRD, SIDE, TERMINAL
 from winapi.screen import Monitor
 
 # The test's own arrangement: at home, terminals two thirds and Code a third across

@@ -4,10 +4,11 @@ from dataclasses import replace
 
 from desktop_ui.key_hints import ActionCap, AppCap, DirectionCap, Keycap, hints
 from desktop_ui.navigation import Direction, Focus, SpatialFocus, World, effect
-from desktop_ui.window_layout import CODE, EDGE, TERMINAL, Target
+from desktop_ui.window_layout import Target
 from keyboard.bindings import Bindings
 from keyboard.firmware import Chords
 from tests import layouts
+from tests.test_window_layout import CODE, EDGE, TERMINAL
 from winapi.shapes import Rect
 
 # Two terminals stacked on the left, Edge and Code stacked on the right, a third

@@ -14,7 +14,7 @@ its application.
 from dataclasses import dataclass, field, replace
 from enum import Enum, StrEnum, auto
 from itertools import accumulate, chain
-from typing import Final, assert_never
+from typing import assert_never
 
 from protocol import Tool
 
@@ -144,7 +144,7 @@ class Controls:
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
 
 
-# ---- the menu as data: `CONTROLS` -------------------------------------------------------
+# ---- the menu's shape: `desktop.bar.CONTROLS` declares one ---------------------------------
 
 
 class EntryId(StrEnum):
@@ -229,59 +229,6 @@ class ControlsSpec:
     """Each tool's keys, from the layout the desktop is handed, at a tool cell's trailing edge."""
     volume_step: float
     """How far Left and Right move the sound slider."""
-
-
-CONTROLS: Final = ControlsSpec(
-    (
-        ActivitiesRow(5),
-        CellsRow(
-            4,
-            (
-                CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
-                CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
-            ),
-        ),
-        CellsRow(4, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark when away", "lock"),)),
-        CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
-        CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-        CellsRow(
-            7,
-            (
-                CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
-                CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
-                CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
-            ),
-        ),
-        TrayRow(4),
-        CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
-        CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
-    ),
-    MenuWords(
-        on="On",
-        off="Off",
-        paused="Paused",
-        recording="Recording",
-        sound="Sound",
-        unread="unavailable",
-        muted="muted",
-    ),
-    columns=8,
-    hints=frozendict(),
-    volume_step=0.05,
-)
-"""The controls menu (press the clock or battery), top to bottom.
-
-The menu is a grid of `columns` columns. Each row is a band `tracks` tall (a track is
-`menu.track` in `SIZES`, gutter included):
-
-- `CellsRow`: entries placed left to right; `span` is their width in columns. An
-  entry that doesn't apply now (Record a meeting while one records) gives its
-  place to the next; an empty row takes no space.
-- `ActivitiesRow`: a full-width card with its Stop for each running activity.
-- `TrayRow`: the system tray's icons, a column each, wrapping onto new lines.
-
-Each entry is placed once; the sound slider takes Windows' own name.
-"""
 
 
 def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:

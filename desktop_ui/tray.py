@@ -1,7 +1,6 @@
 """Workspace notification-area presentation and native icon lifetimes."""
 
 from dataclasses import dataclass
-from typing import Final
 
 from contracts.members import every_member
 from contracts.status import State
@@ -20,21 +19,6 @@ class TraySpec:
 
     def __post_init__(self) -> None:
         every_member(State, self.colours)
-
-
-TRAY_ICON: Final = TraySpec(
-    name="Workspace",
-    size=32,
-    colours=frozendict(
-        {
-            State.READY: Rgb(46, 160, 120),
-            State.LAYOUT_OFF: Rgb(140, 140, 140),
-            State.LISTENING: Rgb(220, 50, 50),
-            State.RECORDING: Rgb(230, 64, 85),
-            State.WORKING: Rgb(235, 160, 30),
-        }
-    ),
-)
 
 
 @dataclass(frozen=True, slots=True)

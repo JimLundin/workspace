@@ -50,15 +50,17 @@ Pressing the clock or battery opens the menu in place. It holds a card per
 running activity, toggles (keyboard overlay, window
 placement, dark when away), **Record a meeting**, a volume slider, small tools (switch windows, copy transcript, key
 map), the system tray icons, and links to Windows notification settings and the
-tray menu. `CONTROLS` in `desktop_ui/island_menu.py` is the source of truth: its rows, their order, each cell's span, label and symbol. Arrows move between
+tray menu. `CONTROLS` in `desktop/bar.py` is the source of truth: its rows, their order, each cell's span, label and symbol. Arrows move between
 cells, Enter chooses, and Escape closes.
 
 ## Code
 
 What the status capsule shows and in what order, and which side of the
-island each activity steps aside to, are `ISLAND` in `desktop_ui/island_model.py`.
-Every size the bar lays out and paints is `SIZES` in `desktop_ui/island_layout.py`.
-Each is one frozen constant that mypy checks, beside the code that reads it.
+island each activity steps aside to, are `ISLAND` in `desktop/bar.py`.
+Every size the bar lays out and paints is `SIZES` there too. Each is one frozen
+constant that mypy checks, in the shape the code that reads it declares
+(`desktop_ui/island_model.py`, `island_menu.py`, `island_layout.py`), and
+`desktop/__main__.py` hands them to the bar.
 
 `island_model`, `island_menu`, `island_layout`, `island_motion` and
 `bar_events` in `desktop_ui/` are pure decisions. `DesktopBar` owns

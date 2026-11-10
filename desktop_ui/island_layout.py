@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from functools import reduce
 from itertools import chain
 from operator import add
-from typing import Final, assert_never
+from typing import assert_never
 
-from desktop_ui.components.typeface import TYPE, Font
+from desktop_ui.components.typeface import Font
 from desktop_ui.island_menu import Cell, Menu
 from desktop_ui.island_model import Control, Glyph, Key, Marker, Part, Slot, Text, Zone
 from winapi.shapes import Rect
@@ -179,57 +179,6 @@ class Sizes:
     markers: Markers
     cells: Cells
     type: BarType
-
-
-SIZES: Final = Sizes(
-    bar=Bar(top=8, edge=12, gap=6, radius=17, shadow=40, pager_gap=12),
-    capsule=Capsule(
-        height=34,
-        control=28,
-        icon=16,
-        dot=8,
-        dots=18,
-        wave_bars=18,
-        wave_bar=2,
-        wave_gap=2,
-        part_gap=6,
-        slot_gap=12,
-        text_pad=12,
-        icon_pad=10,
-        stack=12,  # each 16 px icon overlaps the next by a quarter
-        ring_inset=1.5,
-    ),
-    menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
-    markers=Markers(wave_floor=3, wave_reach=13, wave_corner=1, halo=7, dot_count=3, dots_radius=2.2, dots_lift=1.5),
-    cells=Cells(
-        corner=12,
-        lead=12,
-        trail=12,
-        symbol_x=4,
-        text_x=38,
-        text_right=4,
-        label_x=36,
-        label_right=10,
-        tool_top=12,
-        caption_side=2,
-        caption_bottom=9,
-        slider_label_top=8,
-        slider_label=16,
-        track_bottom=20,
-        track_right=14,
-        track=6,
-        track_corner=3,
-        knob=7,
-        live_dot_x=20,
-        live_dot=5,
-        live_text_x=40,
-        live_text_right=40,
-        live_elide=84,
-        stop_right=6,
-        tray_image=22,
-    ),
-    type=BarType(reading=TYPE.reading, strong=TYPE.strong, detail=TYPE.detail),
-)
 
 
 @dataclass(frozen=True, slots=True)

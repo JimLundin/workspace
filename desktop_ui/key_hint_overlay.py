@@ -8,16 +8,13 @@ they're hidden.
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import Final, assert_never, override
+from typing import assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from contracts.members import every_member
 from desktop_ui.components.appearance import (
-    GLASS,
-    PALETTE,
     CanvasBar,
     Glass,
     GlassLook,
@@ -32,7 +29,7 @@ from desktop_ui.components.appearance import (
 )
 from desktop_ui.components.meaning import Tint
 from desktop_ui.components.text import color, inter, outline, paint_capsule
-from desktop_ui.components.typeface import TYPE, Font
+from desktop_ui.components.typeface import Font
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.key_hints import ActionCap, AppCap, Badge, DirectionCap, Keycap
 from desktop_ui.navigation import Direction
@@ -65,21 +62,6 @@ class BadgeSpec:
     glass: Glass
     palette: Palette
     """The accent marks the window a chord's next press reaches."""
-
-
-BADGES: Final = BadgeSpec(
-    height=26,
-    cap=20,
-    gap=4,
-    pad=6,
-    corner=8,
-    font=TYPE.label,
-    arrows=every_member(Direction, {Direction.LEFT: "←", Direction.DOWN: "↓", Direction.UP: "↑", Direction.RIGHT: "→"}),
-    scheme=Scheme.DARK,
-    glass=GLASS,
-    palette=PALETTE,
-)
-"""Workspace's badges; the bar passes them to the overlay."""
 
 
 def rim_gradient(bounds: QtCore.QRectF, rim: Rim, glass: Glass) -> QtGui.QLinearGradient:

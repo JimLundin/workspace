@@ -14,7 +14,7 @@ is its own effect and passes straight through.
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Final, assert_never
+from typing import assert_never
 
 import protocol
 import winapi.shapes
@@ -92,36 +92,6 @@ class TrayMenuSpec:
 
     items: tuple[TrayAction | Separator, ...]
     words: TrayWords
-
-
-TRAY_MENU: Final = TrayMenuSpec(
-    items=(
-        TrayAction(Menu.TOGGLE_LAYOUT),
-        TrayAction(Menu.RESTART_LAYOUT),
-        TrayAction(Menu.OVERLAY, "Keyboard overlay"),
-        TrayAction(Menu.KEYMAP, "Key map"),
-        Separator(),
-        TrayAction(Menu.MEETING),
-        TrayAction(Menu.TRANSCRIPTS, "Open meeting transcripts"),
-        Separator(),
-        TrayAction(Menu.LOGS, "Open logs folder"),
-        Separator(),
-        TrayAction(Menu.RESTART_DESKTOP, "Restart desktop"),
-        TrayAction(Menu.QUIT, "Quit Workspace"),
-    ),
-    words=TrayWords(
-        layout="Layout",
-        on="on",
-        off="off",
-        not_running="not running",
-        toggle_key="Tap §",
-        restart="Restart layout",
-        start="Start layout",
-        record="Record a meeting",
-        stop_recording="Stop recording",
-    ),
-)
-"""The tray icon's menu. The layout and meeting items word their own state."""
 
 
 def tray_item(item: TrayAction, state: MenuState, words: TrayWords) -> MenuItem:
