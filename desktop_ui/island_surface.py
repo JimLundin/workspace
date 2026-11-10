@@ -758,6 +758,11 @@ class BarWindow(QtWidgets.QWidget):
         area = presented.screen
         sizes = self.sizes
         height = round(sizes.bar.top) + math.ceil(presented.height)
+        # Qt puts a new window on the screen under the pointer and keeps that screen's scale when
+        # it moves, so a bar started with the pointer on another screen would draw at its scale.
+        primary = QtGui.QGuiApplication.primaryScreen()
+        if self.screen() is not primary:
+            self.setScreen(primary)
         if self.geometry() != QtCore.QRect(area.left, area.top, area.width, height):
             self.setGeometry(area.left, area.top, area.width, height)
         self.menu = presented.opened
