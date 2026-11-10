@@ -28,8 +28,11 @@ desktops.
 
 ## What the bar shows
 
-1. **The island is your point of attention.** Only dictation, live from you,
-   takes it over, as the live microphone trace. Pressing it stops dictation.
+1. **The island is your point of attention.** Dictation shows where you
+   dictate: the dictation marker beside the caret (see
+   [GLOSSARY](../GLOSSARY.md)). Only when there is nothing to mark, as when
+   you dictate from Workspace's own windows, does dictation take over the
+   island as the live microphone trace. Pressing it stops dictation.
 2. **Activities run concurrently, each with one look.** Transcription is three
    pulsing dots. A meeting recording is a red dot with its timer. While you
    dictate they detach beside the island as compact capsules.

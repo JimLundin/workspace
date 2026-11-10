@@ -87,7 +87,8 @@ architecture review's `contract-isolation` rule enforces it.
 | --- | --- |
 | `desktop_app.py`, `desktop_settings.py`, `desktop_control.py`, `voice.py` | Composition and the views, the shape of what the desktop is handed, the desktop's control decisions and tray menu, and dictation, meetings and the microphone |
 | `qt_ui.py`, `qt_runtime.py` | The Qt application, one-shot timers and the bar's frame loop |
-| `desktop_bar.py`, `bar_*.py`, `island_*.py`, `ambient.py`, `audio_meter.py` | The bar ([policy](toolbar-design.md)) and the readings it shows |
+| `desktop_bar.py`, `bar_*.py`, `island_*.py`, `ambient.py`, `audio_meter.py`, `live_marks.py` | The bar ([policy](toolbar-design.md)) and the readings it shows |
+| `dictation_marker.py`, `marker_window.py` | The dictation marker beside the caret: its steps, placement and window |
 | `shell_*.py`, `desktop_pager.py`, `taskbar_guard.py` | The pager and app shelf, and the Windows taskbar |
 | `application_observer.py`, `window_layout.py`, `navigation.py`, `window_switcher.py` | [Window placement](window-placement.md) and navigation |
 | `key_hints.py`, `key_hint_overlay.py` | The letters drawn while an Apps key is held |

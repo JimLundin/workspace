@@ -7,5 +7,10 @@ recording's `session.sqlite3` (`assistant/journal.py`).
 quick **job** such as transcription (`contracts/status.py`), or a meeting
 recording. See [the island bar](docs/toolbar-design.md).
 
+**Dictation marker**: the small capsule beside the caret of the app you dictate
+into, which shows listening, transcribing, typing and the outcome. It stays
+where the capture started; the bar shows dictation only when there is nothing
+to mark (`desktop_ui/dictation_marker.py`, `winapi/caret.py`).
+
 **Component**: one of the programs `launch.py` starts (the gateway, the layout
 and the desktop), declared in `settings/programs.py`.
