@@ -17,7 +17,7 @@ from assistant.llm import MAX_SECONDS, Failure, Missing, Settings, long_enough, 
 from assistant.text import typed_text
 from cell import Cell
 from contracts.hotkeys import NEEDS_SETTINGS, ROUTES, Route
-from contracts.status import TRANSCRIBING, Job, State
+from contracts.status import TRANSCRIBING, TYPING, Job, State
 from diagnostics import Detail, failure_info
 from protocol import Tool
 from winapi.pcm import RATE
@@ -309,6 +309,7 @@ class Assistant:
         self.remember_transcript(transcript)
         match tool:
             case Tool.DICTATE:
+                self.desktop.busy(TYPING)
                 submit_voice_text(typed_text(transcript), self.desktop.type_text, progress)
             case _:
                 raise AssertionError(f"{tool} doesn't listen")

@@ -241,6 +241,13 @@ class Problem:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class DictationFailed:
+    """Dictation failed, which the user hears about where they dictated as well as in the tray."""
+
+    message: str
+
+
 type Fact = (
     VoiceShown
     | JobChanged
@@ -253,6 +260,7 @@ type Fact = (
     | LayoutReported
     | OverlayToggled
     | Problem
+    | DictationFailed
 )
 
 # ---- requests: their own effect -----------------------------------------------------
@@ -601,7 +609,7 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
         case OverlayToggled():
             yield ShowOverlay(after.overlay)
             yield OverlayEnabled(enabled=after.overlay.enabled)
-        case Problem(message):
+        case Problem(message) | DictationFailed(message):
             yield Log(message)
             yield TrayNotify("Workspace", message, warning=True)
         case _:
@@ -623,7 +631,7 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
             return replace(state, layout=layout, overlay=state.overlay.set_layout(on=layout is LayoutState.ON))
         case OverlayToggled():
             return replace(state, overlay=replace(state.overlay, enabled=not state.overlay.enabled))
-        case JobChanged() | Notified() | MenuRequested() | MenuChosen() | Problem():
+        case JobChanged() | Notified() | MenuRequested() | MenuChosen() | Problem() | DictationFailed():
             return state
         case _:
             assert_never(fact)

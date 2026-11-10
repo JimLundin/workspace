@@ -19,5 +19,8 @@ class State(Enum):
 TRANSCRIBING = sentinel("TRANSCRIBING")
 """Speech to text after dictation."""
 
-type Job = TRANSCRIBING
+TYPING = sentinel("TYPING")
+"""Typing the transcript into the app that had the keyboard."""
+
+type Job = TRANSCRIBING | TYPING
 """A quick job Workspace runs for you after a key press."""

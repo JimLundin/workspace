@@ -9,6 +9,7 @@ from desktop_ui.bar_events import DictationShown, RecordingShown
 from desktop_ui.desktop_control import (
     Controlled,
     DesktopState,
+    DictationFailed,
     Effect,
     Event,
     FeatureRequest,
@@ -85,13 +86,14 @@ def test_recording_warnings_only_announce_interruptions_and_failed_captures() ->
 
 def test_a_problem_is_logged_and_shown_once_as_a_warning() -> None:
     # Defect: a problem from dictation or meetings is silent, shown twice, or never reaches the log.
-    _, effects = folded((Problem("The disk is full."),))
-    assert effects[0] == Log("The disk is full.")
-    match effects[1:]:
-        case (TrayNotify(text="The disk is full.", warning=True),):
-            return
-        case other:
-            raise AssertionError(f"Expected one warning carrying the problem, got {other}")
+    for fact in (Problem("The disk is full."), DictationFailed("The disk is full.")):
+        _, effects = folded((fact,))
+        assert effects[0] == Log("The disk is full.")
+        match effects[1:]:
+            case (TrayNotify(text="The disk is full.", warning=True),):
+                pass
+            case other:
+                raise AssertionError(f"Expected one warning carrying {fact}, got {other}")
 
 
 def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_over_noise() -> None:

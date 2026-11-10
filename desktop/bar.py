@@ -6,7 +6,7 @@ from typing import Final
 
 from contracts.members import every_literal, every_member
 from contracts.recording_state import Phase
-from contracts.status import TRANSCRIBING
+from contracts.status import TRANSCRIBING, TYPING
 from desktop import look, placement
 from desktop_ui import ambient
 from desktop_ui.desktop_pager import PagerSpec
@@ -162,7 +162,7 @@ ISLAND: Final = IslandSpec(
     # placed exactly once.
     activities=ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
     words=Words(
-        jobs=frozendict({TRANSCRIBING: "Transcribing"}),
+        jobs=frozendict({TRANSCRIBING: "Transcribing", TYPING: "Typing"}),
         phases=every_literal(
             Phase,
             {

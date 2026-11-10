@@ -21,7 +21,7 @@ from assistant.meeting_store import MeetingArchive
 from assistant.meetings import Meetings
 from contracts.recording_state import RecordingAction
 from contracts.status import State
-from desktop_ui.desktop_control import Event, JobChanged, Notified, Problem, RecordingChanged, ShowVoice, idle_state
+from desktop_ui.desktop_control import DictationFailed, Event, JobChanged, Notified, RecordingChanged, ShowVoice, idle_state
 from winapi import audio, recording, system
 from winapi.pcm import RATE
 
@@ -42,7 +42,7 @@ def _run_jobs(jobs: queue.Queue[Callable[[], None] | None], report: Callable[[Ev
             job()
         except Exception:
             log(traceback.format_exc())
-            report(Problem("Something went wrong; it's in the desktop's log."))
+            report(DictationFailed("Something went wrong; it's in the desktop's log."))
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +68,7 @@ class Voice:
             on_state=lambda shown: report(ShowVoice(shown)),
             on_job=lambda job: report(JobChanged(job)),
             on_notify=lambda title, text: report(Notified(title, text)),
-            on_problem=lambda message: report(Problem(message)),
+            on_problem=lambda message: report(DictationFailed(message)),
         )
         usable, missing = configured(settings)
         meetings = Meetings.open(
