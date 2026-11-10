@@ -159,21 +159,11 @@ compare load alone (an editing check) against them.
 
 ## 4. Keyboard data structure (on hold)
 
-Paused on 2026-11-09 to let the user think it over. Agreed so far:
+Paused on 2026-11-09 to let the user think it over; resumed on 2026-11-10 as
+the move of chosen values into entry points.
 
-- **Revert the layers to a name enum plus a table.** `e778db8` made
-  `settings.Layers` an enum whose members are their boards, and it bends to
-  fit: a hold names a board that `bindings` resolves back to its member at
-  import, held layers must come before BASE, `@unique` forbids two identical
-  boards, every member needs `Board[Binding](...)`, and the architecture
-  review was loosened so a class counts as data. A layer is a name that has a
-  board, and boards refer to other layers by name, so go back to
-  `class Layer(Enum)` with names only in `keyboard/actions.py` and
-  `LAYERS = every_member(Layer, {...})` in `settings.py`. This time BASE is a
-  member, and `bindings` rejects a hold of `Layer.BASE` at import. Undo the
-  `_declarations_only` class allowance in `scripts/architecture.py` with it.
-  Keep the enum-with-values pattern where it fits: `Key`, `Mod`, `Laptop`,
-  `Tool`.
+Done: the layers are a name enum again (`keyboard.actions.Layer`) with their
+boards in `settings.LAYERS`.
 
 Still to decide, raised in the same session:
 

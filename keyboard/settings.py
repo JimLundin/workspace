@@ -4,7 +4,6 @@ layout written on them. Only declarations, in the vocabulary of `keyboard.physic
 builds the engine's lookups from these.
 """
 
-from enum import unique
 from typing import Final
 
 import config
@@ -91,13 +90,20 @@ _APPS: Final[tuple[Binding, ...]] = (*config.APPS[:10], *[BLANK] * (10 - len(con
 _Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = _APPS
 
 
-@unique
-class Layers(Layer):
-    """Every layer, each declared by its board. The held layers come first, so the
-    base layer's thumbs can name them: a hold names the layer's board, and
-    `keyboard.bindings` finds its member. Two layers with the same board fail the import."""
-
-    NAV = Board[Binding](
+LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
+    # Every layer's board; `keyboard.bindings` rejects a missing layer or a hold of BASE at import.
+    Layer.BASE: Board(
+        # What each key does while no layer is held: Colemak-DH with home row mods (Win Alt Ctrl Shift).
+        top=      Row((Key.Q,                          Key.W,                              Key.F,                         Key.P,                          Key.B),
+                      (Key.J,                          Key.L,                              Key.U,                         Key.Y,                          Key.QUOTE)),
+        home=     Row((TapHold(Key.A, Mod.GUI),        TapHold(Key.R, Mod.ALT),            TapHold(Key.S, Mod.CTRL),      TapHold(Key.T, Mod.SHIFT),      Key.G),
+                      (Key.M,                          TapHold(Key.N, Mod.SHIFT),          TapHold(Key.E, Mod.CTRL),      TapHold(Key.I, Mod.ALT),        TapHold(Key.O, Mod.GUI))),
+        bottom=   Row((Key.Z,                          Key.X,                              Key.C,                         Key.D,                          Key.V),
+                      (Key.K,                          Key.H,                              Key.COMMA,                     Key.PERIOD,                     Key.SLASH)),
+        thumbs=Thumbs((                                                                    TapHold(Key.ESC, Layer.APPS),  TapHold(Key.SPACE, Layer.NAV),  Key.TAB),
+                      (TapHold(Key.ENTER, Layer.SYM),  TapHold(Key.BACKSPACE, Layer.NUM),  Key.DELETE)),
+    ),
+    Layer.NAV: Board(
         # Hold the Space thumb.
         top=      Row((BLANK,          BLANK,          BLANK,          BLANK,        BLANK),
                       (REDO,           PASTE,          COPY,           CUT,          UNDO)),
@@ -107,8 +113,8 @@ class Layers(Layer):
                       (Key.INSERT,     Key.HOME,       Key.PAGE_DOWN,  Key.PAGE_UP,  Key.END)),
         thumbs=Thumbs((                                BLANK,          BLANK,        BLANK),
                       (Key.ENTER,      Key.BACKSPACE,  Key.DELETE)),
-    )
-    NUM = Board[Binding](
+    ),
+    Layer.NUM: Board(
         # Hold the Backspace thumb.
         top=      Row((Key.LBRACKET,   Key.N7,     Key.N8,      Key.N9,   Key.RBRACKET),   # [ 7 8 9 ]
                       (BLANK,          BLANK,      BLANK,       BLANK,    BLANK)),
@@ -118,8 +124,8 @@ class Layers(Layer):
                       (BLANK,          BLANK,      BLANK,       BLANK,    BLANK)),
         thumbs=Thumbs((                            Key.PERIOD,  Key.N0,   Key.MINUS),      # . 0 -
                       (BLANK,          BLANK,      BLANK)),
-    )
-    SYM = Board[Binding](
+    ),
+    Layer.SYM: Board(
         # Hold the Enter thumb.
         top=      Row((Chord.shifted(Key.LBRACKET),   Chord.shifted(Key.N7),  Chord.shifted(Key.N8),  Chord.shifted(Key.N9),  Chord.shifted(Key.RBRACKET)),   # { & * ( }
                       (BLANK,                         BLANK,                  BLANK,                  BLANK,                  BLANK)),
@@ -129,8 +135,8 @@ class Layers(Layer):
                       (BLANK,                         BLANK,                  BLANK,                  BLANK,                  BLANK)),
         thumbs=Thumbs((                                                       Chord.shifted(Key.N9),  Chord.shifted(Key.N0),  Chord.shifted(Key.MINUS)),      # ( ) _
                       (BLANK,                         BLANK,                  BLANK)),
-    )
-    APPS = Board[Binding](
+    ),
+    Layer.APPS: Board(
         # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
         # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
         # The Tab thumb stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
@@ -142,16 +148,6 @@ class Layers(Layer):
                       (BLANK,           Tool.DICTATE,          BLANK,                 Tool.COPY_TRANSCRIPT,  Tool.DICTATE_TOGGLE)),
         thumbs=Thumbs((                                        BLANK,                 Tool.MEETING_TOGGLE,   BLANK),
                       (BLANK,           BLANK,                 BLANK)),
-    )
-    BASE = Board[Binding](
-        # What each key does while no layer is held: Colemak-DH with home row mods (Win Alt Ctrl Shift).
-        top=      Row((Key.Q,                          Key.W,                              Key.F,                         Key.P,                          Key.B),
-                      (Key.J,                          Key.L,                              Key.U,                         Key.Y,                          Key.QUOTE)),
-        home=     Row((TapHold(Key.A, Mod.GUI),        TapHold(Key.R, Mod.ALT),            TapHold(Key.S, Mod.CTRL),      TapHold(Key.T, Mod.SHIFT),      Key.G),
-                      (Key.M,                          TapHold(Key.N, Mod.SHIFT),          TapHold(Key.E, Mod.CTRL),      TapHold(Key.I, Mod.ALT),        TapHold(Key.O, Mod.GUI))),
-        bottom=   Row((Key.Z,                          Key.X,                              Key.C,                         Key.D,                          Key.V),
-                      (Key.K,                          Key.H,                              Key.COMMA,                     Key.PERIOD,                     Key.SLASH)),
-        thumbs=Thumbs((                                                                    TapHold(Key.ESC, APPS),        TapHold(Key.SPACE, NAV),        Key.TAB),
-                      (TapHold(Key.ENTER, SYM),        TapHold(Key.BACKSPACE, NUM),        Key.DELETE)),
-    )
+    ),
+})
 # fmt: on

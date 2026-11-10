@@ -8,8 +8,7 @@ from typing import Final
 
 from keyboard import settings
 from keyboard.actions import Binding, Layer, TapHold
-from keyboard.board import Board, Hand
-from keyboard.keys import Mod
+from keyboard.board import Hand
 from keyboard.physical import Scancode
 
 
@@ -17,32 +16,22 @@ class LayoutError(Exception):
     """The layout is inconsistent; raised at import, never at runtime."""
 
 
-_TABLE: Final[frozendict[Layer, tuple[Binding, ...]]] = frozendict((layer, layer.board.cells()) for layer in settings.Layers)
-"""Every layer flattened, by layer then cell."""
-
-
-def layer_of(board: Board[Binding]) -> Layer:
-    """The layer whose board a hold names. Every hold is checked at import, so this always finds one."""
-    return next(each for each in settings.Layers if each.board is board)
-
-
-def held(hold: Mod | Board[Binding]) -> Mod | Layer:
-    """What a tap-hold key holds: its modifier, or the layer its board belongs to."""
-    return hold if isinstance(hold, Mod) else layer_of(hold)
-
-
-def _check_holds() -> None:
-    boards = tuple(each.board for each in settings.Layers)
-    for each in settings.Layers:
-        for cell, bound in enumerate(_TABLE[each]):
+def _build_table() -> frozendict[Layer, tuple[Binding, ...]]:
+    if missing := tuple(layer.name for layer in Layer if layer not in settings.LAYERS):
+        raise LayoutError(f"settings.LAYERS has no board for: {', '.join(missing)}")
+    table = frozendict((layer, board.cells()) for layer, board in settings.LAYERS.items())
+    for layer, cells in table.items():
+        for cell, bound in enumerate(cells):
             match bound:
-                case TapHold(hold=Board() as board) if not any(board is known for known in boards):
-                    raise LayoutError(f"{each.name} cell {cell} holds a board that is no member of settings.Layers")
+                case TapHold(hold=Layer.BASE):
+                    raise LayoutError(f"{layer.name} cell {cell} holds BASE, which is where keys are read while no layer is held")
                 case _:
                     pass
+    return table
 
 
-_check_holds()
+_TABLE: Final = _build_table()
+"""Every layer flattened, by layer then cell."""
 
 
 _HANDS: Final = tuple(side for side, _ in settings.PHYSICAL.placed())

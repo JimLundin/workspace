@@ -8,10 +8,11 @@ from components import SWITCHER_TITLE
 from config import APPS
 from desktop_ui.desktop_control import FeatureRequest, control_event
 from keyboard import hook_watch
+from keyboard.actions import Layer
 from keyboard.engine import Indicator
 from keyboard.keys import Key, Mod
 from keyboard.physical import Scancode
-from keyboard.settings import ESCAPE, Layers
+from keyboard.settings import ESCAPE
 from keyboard.win import Keyboard, WinHost, release_keyboard
 from protocol import LayoutState, Message, Origin, Tool, decode_indicator
 from tests.keyboard_fixture import (
@@ -42,7 +43,7 @@ def test_physical_press_is_reported_before_a_tap_hold_is_resolved() -> None:
         key = inputs.KeyEvent(0x4D, 0x32, 0, 10, 0)  # M: Enter/Symbols thumb
         assert keyboard.swallow(key, down=True)
         assert messages == [(Message.KEY_STATE, 0x32, 1)]
-        assert keyboard.engine_state.layer() is Layers.BASE
+        assert keyboard.engine_state.layer() is Layer.BASE
         assert keyboard.state.pressed == {Scancode(0x32)}
         keyboard.swallow(key, down=True)  # auto-repeat must not refresh the highlight
         assert messages == [(Message.KEY_STATE, 0x32, 1)]
@@ -260,7 +261,7 @@ def test_rejected_chord_releases_its_added_modifier_and_defers_diagnostics() -> 
     driver.key = inputs.KeyEvent(0x32, 0x03, 0, 10, 0)
     driver.reject_down = Key.LBRACKET
     keyboard = Keyboard.open(driver)
-    keyboard.set_keys(replace(keyboard.engine_state, active_layers=(Layers.SYM,)))
+    keyboard.set_keys(replace(keyboard.engine_state, active_layers=(Layer.SYM,)))
     assert keyboard.hook_proc(0, 0x0100, 1) == 7
     assert not bool(keyboard.engine_state.enabled) and not keyboard.host.owned
     assert (Mod.SHIFT, False) in driver.output
@@ -558,7 +559,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> N
 def test_layout_query_includes_the_current_layer_for_a_new_overlay() -> None:
     driver = KeyboardFixture()
     keyboard = Keyboard.open(driver)
-    keyboard.set_keys(replace(keyboard.engine_state, shown=Indicator(Layers.SYM, caps_word=True, chord=False)))
+    keyboard.set_keys(replace(keyboard.engine_state, shown=Indicator(Layer.SYM, caps_word=True, chord=False)))
     keyboard.on_message(Message.QUERY_LAYOUT_STATE)
     layers = [decode_indicator(wparam) for message, wparam, _ in driver.messages if message == Message.INDICATOR]
-    assert layers == [(Layers.SYM.code, True)]
+    assert layers == [(Layer.SYM.code, True)]

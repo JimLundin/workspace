@@ -34,7 +34,7 @@ from typing import Final, Protocol, assert_never
 
 from keyboard import settings
 from keyboard.actions import BLANK, Action, Chord, Layer, Output, TapHold
-from keyboard.bindings import Unmapped, action, hand, held, slot
+from keyboard.bindings import Unmapped, action, hand, slot
 from keyboard.board import Board
 from keyboard.keys import Key, Mod
 from keyboard.physical import Scancode
@@ -88,7 +88,7 @@ beyond that decides the key as a hold rather than growing."""
 class Indicator:
     """State the user can't see on the keys: the layer keys come from, and caps word."""
 
-    layer: Layer = settings.Layers.BASE
+    layer: Layer = Layer.BASE
     caps_word: bool = field(default=False, kw_only=True)
     chord: bool = field(default=False, kw_only=True)
     """The Apps layer is held, so a key makes its request, as a firmware chord would."""
@@ -206,7 +206,7 @@ class EngineState:
 
     def layer(self) -> Layer:
         """The layer keys are read from: the top held layer, else the base layer."""
-        return self.active_layers[-1] if self.active_layers else settings.Layers.BASE
+        return self.active_layers[-1] if self.active_layers else Layer.BASE
 
     def failed_open(self) -> EngineState:
         """Input failed: stop remapping and forget the escape press."""
@@ -230,7 +230,7 @@ def on_key(state: EngineState, host: Host, scancode: Scancode, *, down: bool, no
 def refresh(state: EngineState, host: Host) -> EngineState:
     """Tells the indicator if what it should show has changed; every key event refreshes, so it builds a record only for a change."""
     layer, shown = state.layer(), state.shown
-    chord = layer is settings.Layers.APPS
+    chord = layer is Layer.APPS
     if layer is not shown.layer or state.caps_word is not shown.caps_word or chord is not shown.chord:
         indicated = Indicator(layer, caps_word=state.caps_word, chord=chord)
         host.indicate(indicated)
@@ -299,7 +299,7 @@ def event(state: EngineState, host: Host, e: Event) -> EngineState:
                 case TapHold(tap, Mod() as mod) if mod != Mod.SHIFT and in_streak(state, now):
                     a = tap
                 case TapHold(tap, hold):
-                    return replace(state, pending=Pending(cell, tap, held(hold), host.start_timer(), now), buffer=())
+                    return replace(state, pending=Pending(cell, tap, hold, host.start_timer(), now), buffer=())
                 case other:
                     a = other
             return press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)

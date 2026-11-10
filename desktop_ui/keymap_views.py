@@ -33,7 +33,6 @@ lazy from desktop_ui.components.widgets import (
 lazy from desktop_ui.keymap import PHYSICAL_NAMES, Cap, Role, keymap
 lazy from desktop_ui.overlay_desktop import NativeOverlayDesktop
 lazy from desktop_ui.qt_ui import cancel, later
-lazy from keyboard import settings
 lazy from keyboard.actions import Layer
 lazy from keyboard.physical import Scancode
 
@@ -222,7 +221,7 @@ def _keycap(role: Role, theme: Tokens, keys: KeysSpec) -> Lit:
             assert_never(role)
 
 
-_LAYERS: Final[tuple[Layer, ...]] = (settings.Layers.BASE, *(layer for layer in settings.Layers if layer is not settings.Layers.BASE))
+_LAYERS: Final[tuple[Layer, ...]] = tuple(Layer)
 """The key map's tabs: the base layer first, then the held layers."""
 
 
@@ -530,7 +529,7 @@ class KeymapWindow:
         layout.addWidget(canvas)
         layout.addWidget(label(size.hint, "muted"))
         shown = cls(window, canvas, keys, shortcuts)
-        shown.draw(settings.Layers.BASE)
+        shown.draw(Layer.BASE)
         near_pointer(window, size.width, size.height)
         show_window(window, focus=True, target=canvas)
         return shown

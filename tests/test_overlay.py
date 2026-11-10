@@ -4,8 +4,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from desktop_ui.overlay import KeyHighlights, OverlayState, fit_position, load_enabled, load_position, nearest_work_area, save_enabled, save_position
+from keyboard.actions import Layer
 from keyboard.physical import Scancode
-from keyboard.settings import Layers
 from winapi.shapes import Point, Rect, Size
 
 Q, M = Scancode(0x10), Scancode(0x32)
@@ -81,7 +81,7 @@ def test_reset_clears_both_held_keys_and_tap_flashes_immediately() -> None:
 def test_overlay_tracks_physical_keys_across_layers_and_while_hidden() -> None:
     overlay = OverlayState(layout_on=True)
     overlay = overlay.key(M, down=True)
-    overlay = overlay.indicate(Layers.SYM, caps_word=False)
+    overlay = overlay.indicate(Layer.SYM, caps_word=False)
     assert overlay.pressed == frozenset({M})
     overlay = replace(overlay, enabled=False)
     overlay = overlay.key(Q, down=True)
@@ -115,28 +115,28 @@ def test_overlay_stays_visible_on_the_base_and_held_layers() -> None:
     assert not bool(overlay.visible)
     overlay = overlay.set_layout(on=True)
     assert bool(overlay.visible)
-    overlay = overlay.indicate(Layers.APPS, caps_word=False)
+    overlay = overlay.indicate(Layer.APPS, caps_word=False)
     assert bool(overlay.visible)
-    assert overlay.layer is Layers.APPS
-    overlay = overlay.indicate(Layers.BASE, caps_word=False)
+    assert overlay.layer is Layer.APPS
+    overlay = overlay.indicate(Layer.BASE, caps_word=False)
     assert bool(overlay.visible)
-    assert overlay.layer is Layers.BASE
+    assert overlay.layer is Layer.BASE
 
 
 def test_overlay_tracks_layers_and_clears_them_when_layout_turns_off() -> None:
     overlay = OverlayState(layout_on=True)
-    overlay = overlay.indicate(Layers.NAV, caps_word=True)
-    assert overlay.layer is Layers.NAV and overlay.caps_word
+    overlay = overlay.indicate(Layer.NAV, caps_word=True)
+    assert overlay.layer is Layer.NAV and overlay.caps_word
     overlay = overlay.set_layout(on=False)
     assert not bool(overlay.visible)
     overlay = overlay.set_layout(on=True)
     assert bool(overlay.visible)
-    assert overlay.layer is Layers.BASE and not overlay.caps_word
+    assert overlay.layer is Layer.BASE and not overlay.caps_word
 
 
 def test_hiding_overlay_survives_layer_changes_and_switching_layout_on() -> None:
     overlay = OverlayState(enabled=False, layout_on=True)
-    overlay = overlay.indicate(Layers.NUM, caps_word=False)
+    overlay = overlay.indicate(Layer.NUM, caps_word=False)
     assert not bool(overlay.visible)
     overlay = overlay.set_layout(on=False)
     overlay = overlay.set_layout(on=True)

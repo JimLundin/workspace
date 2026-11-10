@@ -7,10 +7,8 @@ from typing import Final
 
 from contracts.hotkeys import ROUTES, Route
 from contracts.members import every_member
-from keyboard import settings
 from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
-from keyboard.bindings import Unmapped, action, actions, layer_of, slot
-from keyboard.board import Board
+from keyboard.bindings import Unmapped, action, actions, slot
 from keyboard.firmware import CHORDS
 from keyboard.keys import Key, Mod
 from keyboard.physical import Laptop
@@ -73,7 +71,7 @@ CHORD_HOLD: Final = "Apps"
 def shortcut(tool: Tool) -> Shortcut | None:
     """The first binding in the held layers' order, else the tool's firmware chord."""
     physical = PHYSICAL.cells()
-    for layer in settings.Layers:
+    for layer in Layer:
         held = _holding(layer)
         if held is None:
             continue
@@ -165,16 +163,16 @@ def _hold(a: Binding) -> str:
             return "hold"
         case TapHold(hold=Mod() as modifier):
             return modifier.legend
-        case TapHold(hold=Board() as board):
-            return layer_of(board).name.title()
+        case TapHold(hold=Layer() as layer):
+            return layer.name.title()
         case _:
             return ""
 
 
 def _holding(layer: Layer) -> int | None:
     """The cell of the base layer's thumb that holds `layer`; None for the base layer itself."""
-    base = actions(settings.Layers.BASE)
-    return next((cell for cell, a in enumerate(base) if isinstance(a, TapHold) and a.hold is layer.board), None)
+    base = actions(Layer.BASE)
+    return next((cell for cell, a in enumerate(base) if isinstance(a, TapHold) and a.hold is layer), None)
 
 
 def _cap(layer: Layer, held: int | None, key: Laptop) -> Cap:
@@ -201,7 +199,7 @@ def keymap(layer: Layer) -> tuple[tuple[Cap, ...], ...]:
 
 def indicator_text(layer: Layer, *, caps_word: bool) -> str | None:
     """What the layer indicator says; None: nothing to show. The base layer says nothing."""
-    parts = [layer.name] if layer is not settings.Layers.BASE else []
+    parts = [layer.name] if layer is not Layer.BASE else []
     if caps_word:
         parts.append("CAPS WORD")
     return " · ".join(parts) or None

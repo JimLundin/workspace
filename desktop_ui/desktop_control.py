@@ -25,7 +25,7 @@ from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, keyed
 from desktop_ui.overlay import OverlayState
-from keyboard import settings
+from keyboard.actions import Layer
 from keyboard.physical import Scancode
 from protocol import App, LayoutState, Request, Tool, decode_indicator
 lazy from winapi.shell import MenuItem
@@ -520,7 +520,7 @@ def _overlay_after(action: ControlAction | None, overlay: OverlayState) -> Overl
 def indicated(code: int, overlay: OverlayState) -> tuple[str | None, OverlayState]:
     """The indicator's words and the overlay after the layout's indicator word."""
     index, caps_word = decode_indicator(code)
-    layer = settings.Layers.coded(index) or settings.Layers.BASE
+    layer = Layer.coded(index) or Layer.BASE
     return indicator_text(layer, caps_word=caps_word), overlay.indicate(layer, caps_word=caps_word)
 
 

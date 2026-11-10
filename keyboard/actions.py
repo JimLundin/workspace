@@ -1,44 +1,41 @@
 """What a key can do on a layer, and what a layer is. A bare Key, Mod or Layer is
 itself an action: a Key is tapped, a Mod or Layer is held while the key is held.
 Only the actions that need more than that get a type of their own. The layers
-written in this vocabulary are `keyboard.settings.Layers`; `keyboard.bindings`
+written in this vocabulary are `keyboard.settings.LAYERS`; `keyboard.bindings`
 looks them up."""
 
 from dataclasses import dataclass
-from enum import Enum
-from typing import ClassVar, Self
+from enum import Enum, auto
+from typing import ClassVar
 
-from keyboard.board import Board
 from keyboard.keys import Key, Mod
 from protocol import App, Tool
 
 
 class Layer(Enum):
-    """A layer: a member whose value is its board. Declares no members, so
-    `keyboard.settings.Layers` can: one per layer, the base layer among them."""
+    """A layer, by name; the layout gives each its board. BASE is where keys are
+    read while no layer is held, and APPS holds Workspace's requests."""
 
-    _value_: Board[Binding]
-
-    @property
-    def board(self) -> Board[Binding]:
-        return self.value
+    BASE = auto()
+    NAV = auto()
+    NUM = auto()
+    SYM = auto()
+    APPS = auto()
 
     @property
     def code(self) -> int:
-        """The layer's place among its enum's members, as the indicator message sends it."""
-        return tuple(type(self)).index(self)
+        """The layer's place among the members, as the indicator message sends it."""
+        return tuple(Layer).index(self)
 
     @classmethod
-    def coded(cls, code: int) -> Self | None:
+    def coded(cls, code: int) -> Layer | None:
         """The layer the indicator message names, or None for a code no layer has."""
         layers = tuple(cls)
         return layers[code] if 0 <= code < len(layers) else None
 
 
-type Hold = Mod | Board[Binding]
-"""What a tap-hold key does while held: hold a modifier, or turn on the layer
-whose board this is. A layer's board is how `keyboard.settings.Layers` names the
-layers declared before it; `keyboard.bindings` finds the member."""
+type Hold = Mod | Layer
+"""What a tap-hold key does while held: hold a modifier, or turn on a layer."""
 
 
 @dataclass(frozen=True, slots=True)
