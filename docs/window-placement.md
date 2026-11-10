@@ -42,7 +42,7 @@ region in their stable order, so an undeclared app never adds a desktop.
   new Teams window), Workspace switches there with it. A
   dragged window snaps back when the button is released. A maximized or minimized
   window is restored and placed.
-- **⌃⌥⇧ X** pauses or resumes placement, and **⌃⌥⇧ D** places every window now.
+- **⌃⌥⇧ J** pauses or resumes placement, and **⌃⌥⇧ D** places every window now.
 - Zoom (**⌃⌥⇧ M**) fills the monitor with the focused window until you press it
   again or focus another window.
 

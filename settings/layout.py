@@ -139,12 +139,12 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
         # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
         # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
         # The Tab thumb stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
-        # Desktops 1-4 sit under the index, middle, ring and pinky; the inner index stretch reaches the fifth.
+        # Desktops 1-4 sit under the index, middle, ring and pinky; the inner index stretch pauses placement.
         top=      Row((_Q,              _W,                    _F,                    _P,                    _B),
-                      (Tool.DESKTOP_5,  Tool.DESKTOP_1,        Tool.DESKTOP_2,        Tool.DESKTOP_3,        Tool.DESKTOP_4)),
+                      (Tool.PLACEMENT_PAUSE, Tool.DESKTOP_1,   Tool.DESKTOP_2,        Tool.DESKTOP_3,        Tool.DESKTOP_4)),
         home=     Row((_A,              _R,                    _S,                    _T,                    _G),
                       (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,       Tool.FOCUS_UP,         Tool.FOCUS_RIGHT)),
-        bottom=   Row((BLANK,           Tool.PLACEMENT_PAUSE,  Tool.WINDOW_SWITCHER,  Tool.PLACE_NOW,        BLANK),
+        bottom=   Row((BLANK,           BLANK,                 Tool.WINDOW_SWITCHER,  Tool.PLACE_NOW,        BLANK),
                       (BLANK,           Tool.DICTATE,          BLANK,                 Tool.COPY_TRANSCRIPT,  Tool.DICTATE_TOGGLE)),
         thumbs=Thumbs((                                        BLANK,                 Tool.MEETING_TOGGLE,   BLANK),
                       (BLANK,           BLANK,                 BLANK)),
