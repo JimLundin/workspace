@@ -5,6 +5,7 @@ the others, the apps the chords reach, and its own views' specs. Declares no val
 
 from dataclasses import dataclass
 
+from desktop_ui.application_observer import PlacementSpec
 from desktop_ui.bar_events import BarSpec
 from desktop_ui.components.appearance import Design
 from desktop_ui.desktop_control import TrayMenuSpec
@@ -32,3 +33,4 @@ class DesktopSettings:
     switcher: SwitcherSpec
     tray: TraySpec
     tray_menu: TrayMenuSpec
+    placement: PlacementSpec

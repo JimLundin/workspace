@@ -18,9 +18,12 @@ lazy from desktop_ui import (
     key_hint_overlay,
     keymap_views,
     layer_indicator,
+    shell_items,
     tray,
+    window_layout,
     window_switcher,
 )
+lazy from desktop_ui.application_observer import PlacementSpec
 lazy from desktop_ui.bar_events import BarSpec
 lazy from desktop_ui.components import appearance, typeface
 lazy from desktop_ui.desktop_app import run
@@ -56,6 +59,7 @@ def main() -> None:
             switcher=window_switcher.SWITCHER,
             tray=tray.TRAY_ICON,
             tray_menu=desktop_control.TRAY_MENU,
+            placement=PlacementSpec(setups=window_layout.SETUPS, web_apps=shell_items.WEB_APPS, launch_grace=15.0, recent=32),
         )
     )
 

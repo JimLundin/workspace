@@ -478,7 +478,7 @@ class DesktopBar:
 
 def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl, settings: DesktopSettings) -> _Shell:
     status = StatusObserver.start()
-    away = AwayScreens.start(settings.places.directory)
+    away = AwayScreens.start(settings.places.directory, settings.placement.setups)
 
     def message(_hwnd: int, message: int, wparam: int, _lparam: int) -> int | None:
         away.message(message, wparam)
@@ -490,7 +490,9 @@ def _start_shell(errors: queue.Queue[str], taskbar: TaskbarControl, settings: De
     except OSError as error:
         errors.put(f"Screens can't go dark when locked: {error}")
     worker = threading.Thread(target=_start_taskbar, args=(taskbar, errors), name="taskbar recovery", daemon=True)
-    built = _Shell(status, controls, away, TrayHost.start(), ApplicationObserver.start(errors.put), KeyHintOverlay(settings.badges), worker)
+    built = _Shell(
+        status, controls, away, TrayHost.start(), ApplicationObserver.start(errors.put, settings.placement), KeyHintOverlay(settings.badges), worker
+    )
     worker.start()
     return built
 

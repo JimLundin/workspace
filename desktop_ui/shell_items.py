@@ -34,7 +34,6 @@ WEB_APPS: Final = every_member(
 )
 type WebApps = frozendict[PinnedApp, WebApp]
 
-LAUNCH_GRACE: Final = 15.0
 """Seconds a launch may take to show its window before another click launches again."""
 
 type Launches = frozendict[PinnedApp, float]

@@ -22,13 +22,12 @@ from contracts.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, destination, effect, zoom_after
 from desktop_ui.shell_items import (
     EMPTY_SHELF,
-    LAUNCH_GRACE,
-    WEB_APPS,
     Launches,
     PinnedApp,
     Seat,
     Seats,
     Shelf,
+    WebApps,
     caption_clip,
     launch,
     outstanding,
@@ -36,10 +35,10 @@ from desktop_ui.shell_items import (
 )
 from desktop_ui.window_layout import (
     NOWHERE,
-    SETUPS,
     App,
     Placement,
     Screens,
+    Setups,
     Target,
     groups,
     managed,
@@ -54,8 +53,18 @@ from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
 
 _CREATE_NO_WINDOW = 0x0800_0000
-RECENT = 32
-"""Windows remembered as last in front, for landing on a desktop."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PlacementSpec:
+    """Where windows go on each setup of screens, the web apps pinned beside them, and how the observer keeps track."""
+
+    setups: Setups
+    web_apps: WebApps
+    launch_grace: float
+    """Seconds a started app's new window has to appear before the launch is forgotten."""
+    recent: int
+    """Windows remembered as last in front, for landing on a desktop."""
 
 
 def frame(window: int) -> None:
@@ -230,6 +239,7 @@ class ApplicationObserver:
     """One worker owns native polling, placement, desktops, navigation and slot-window regions; callers receive immutable snapshots."""
 
     problem: Callable[[str], None]
+    spec: PlacementSpec
     results: queue.Queue[Arrangement] = field(default_factory=lambda: queue.Queue[Arrangement](maxsize=1))
     requests: queue.Queue[Order | None] = field(default_factory=queue.Queue[Order | None])
     """Navigation and placement orders; None only wakes the worker to stop."""
@@ -238,8 +248,8 @@ class ApplicationObserver:
     """Set when the worker thread exits."""
 
     @classmethod
-    def start(cls, problem: Callable[[str], None]) -> ApplicationObserver:
-        observer = cls(problem)
+    def start(cls, problem: Callable[[str], None], spec: PlacementSpec) -> ApplicationObserver:
+        observer = cls(problem, spec)
         threading.Thread(target=observer.run, name="application icons", daemon=True).start()
         return observer
 
@@ -301,13 +311,13 @@ class Worker:
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
         own = os.getpid()
-        grouped = shelf(observed.windows, app_ids, watched.previous.shelf, seats(observed, watched.previous.shelf), WEB_APPS)
+        grouped = shelf(observed.windows, app_ids, watched.previous.shelf, seats(observed, watched.previous.shelf), self.observer.spec.web_apps)
         slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
         current = frozenset(window.handle for window in slots)
         foreground = windows.foreground()
         zoomed = zoom_after(watched.zoomed, foreground)
         state = observed.state
-        where = screens(screen.monitors(), SETUPS)
+        where = screens(screen.monitors(), self.observer.spec.setups)
         placement = watched.placement
         if where is not None and state is not None:
             eligible = frozenset(
@@ -325,7 +335,7 @@ class Worker:
         release(watched.framed - current)
         live = frozenset(window.handle for window in observed.windows)
         candidates = tuple(handle for handle in (foreground, *watched.recent) if handle in placement and handle in live)
-        recent = tuple(handle for index, handle in enumerate(candidates) if handle not in candidates[:index])[:RECENT]
+        recent = tuple(handle for index, handle in enumerate(candidates) if handle not in candidates[:index])[: self.observer.spec.recent]
         world = World(
             len(state.ids) if state is not None else 1,
             state.ids.index(state.current) if state is not None else 0,
@@ -431,16 +441,16 @@ class Worker:
 
     def open_web_app(self, watched: _Watched, app: PinnedApp) -> _Watched:
         """Edge opens the slot's app window in the user's own profile; a repeated launch waits for it."""
-        pending = launch(watched.launches, app, time.monotonic(), LAUNCH_GRACE)
+        pending = launch(watched.launches, app, time.monotonic(), self.observer.spec.launch_grace)
         if pending is None:
             return watched
         edge = edge_path()
         if edge is None:
-            self.observer.problem(f"Microsoft Edge is needed to open {WEB_APPS[app].label}.")
+            self.observer.problem(f"Microsoft Edge is needed to open {self.observer.spec.web_apps[app].label}.")
             return watched
         try:
-            os.startfile(edge, arguments=f"--app={WEB_APPS[app].url}")
+            os.startfile(edge, arguments=f"--app={self.observer.spec.web_apps[app].url}")
         except OSError as error:
-            self.observer.problem(f"Could not open {WEB_APPS[app].label}: {error}")
+            self.observer.problem(f"Could not open {self.observer.spec.web_apps[app].label}: {error}")
             return watched
         return replace(watched, launches=pending)

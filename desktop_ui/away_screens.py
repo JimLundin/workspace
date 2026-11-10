@@ -22,7 +22,7 @@ from cell import Cell
 from desktop_ui.kept import KeptFile
 from desktop_ui.keyboard_light import KeyboardLight, ViaBacklight
 from desktop_ui.laptop_panel import LaptopPanel, WmiBrightness
-from desktop_ui.window_layout import SETUPS, dark_when_away
+from desktop_ui.window_layout import Setups, dark_when_away
 from winapi import screen, session
 from winapi.monitor_power import Applied, Detached, PhysicalMonitors, Power
 from winapi.screen import Monitor
@@ -92,11 +92,13 @@ class AwayScreens:
     Each DDC/CI request took about 65 ms on the home 4K screen, so only a lock
     or unlock costs one request per protected screen on that thread."""
 
+    setups: Setups
+    """Which screens each setup darkens while away."""
     _state: Cell[_Away]
     """Replaced whole on the bar's thread."""
 
     @classmethod
-    def start(cls, directory: Path) -> AwayScreens:
+    def start(cls, directory: Path, setups: Setups) -> AwayScreens:
         """Started, or restarted, behind the lock screen as well as in front of it.
 
         A previous Workspace may have left the light and the panel dark; what they
@@ -106,7 +108,7 @@ class AwayScreens:
         locked = session.locked() is True
         if not locked:
             light, panel = light.restore(), panel.restore()
-        screens = cls(Cell(_Away(light, panel, PhysicalMonitors.open(), locked=locked)))
+        screens = cls(setups, Cell(_Away(light, panel, PhysicalMonitors.open(), locked=locked)))
         screens.settle()
         return screens
 
@@ -140,7 +142,7 @@ class AwayScreens:
         match step(dark=away.darkened, locked=away.locked, enabled=away.enabled):
             case Change.DARKEN:
                 self._state.set(replace(away, darkened=True))
-                self.apply(dark_when_away(screen.monitors(), SETUPS) - away.dark, Power.OFF)
+                self.apply(dark_when_away(screen.monitors(), self.setups) - away.dark, Power.OFF)
                 self._state.update(lambda current: replace(current, light=current.light.darken(), panel=current.panel.darken()))
             case Change.RESTORE:
                 self._state.set(replace(away, darkened=False))
