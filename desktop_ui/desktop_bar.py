@@ -62,10 +62,10 @@ lazy from desktop_ui.bar_events import (
     transition,
 )
 lazy from desktop_ui.bar_status import StatusObserver
-lazy from desktop_ui.components.appearance import Look, look
+lazy from desktop_ui.components.appearance import GLASS, WASHES, Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.desktop_pager import PAGER, pager
-lazy from desktop_ui.island_layout import SIZES, Content, Metrics, Sizes, expansion, frame, snap
+lazy from desktop_ui.island_layout import SIZES, Content, Metrics, expansion, frame, snap
 lazy from desktop_ui.island_menu import CONTROLS, Menu
 lazy from desktop_ui.island_model import ISLAND, CapsuleView, Key, Marker, Observed, island, order
 lazy from desktop_ui.island_motion import SPRINGS, Shown, placed, retarget
@@ -142,8 +142,8 @@ class DesktopBar:
 
         errors: queue.Queue[str] = queue.Queue()
         loop = EventLoop.start(application())
-        spec = BarSpec(ISLAND, CONTROLS, SPRINGS, SIZES)
-        window = BarWindow(report, loop.composition, spec.sizes)
+        spec = BarSpec(ISLAND, CONTROLS, SPRINGS, SIZES, GLASS, WASHES)
+        window = BarWindow(report, loop.composition, spec)
         tick, audio = QtCore.QTimer(window), QtCore.QTimer(window)
         tick.setInterval(100)
         audio.setInterval(50)
@@ -293,7 +293,7 @@ class DesktopBar:
                 moving.content,
                 moving.previous,
                 moving.fade.value,
-                _style(seen, moving.view.tint, moving.content.height, sizes),
+                _style(seen, moving.view.tint, moving.content.height, model.spec),
                 framed[moving.key],
             )
             for moving in model.motion.capsules
@@ -311,7 +311,7 @@ class DesktopBar:
                 frost=seen.frost,
                 contrast=contrast,
                 glass=seen.preference is appearance.Material.GLASS,
-                shell_look=_style(seen, Tint.NONE, sizes.capsule.height, sizes),
+                shell_look=_style(seen, Tint.NONE, sizes.capsule.height, model.spec),
             )
         )
         # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
@@ -496,6 +496,7 @@ def _start_taskbar(taskbar: TaskbarControl, errors: queue.Queue[str]) -> None:
         errors.put(str(error))
 
 
-def _style(seen: Surroundings, tint: Tint, height: float, sizes: Sizes) -> Look:
-    pane = desktop_ui.components.appearance.Menu(seen.frost) if expanded(height, sizes) else desktop_ui.components.appearance.Capsule(seen.frost)
-    return look(seen.preference, pane, tint)
+def _style(seen: Surroundings, tint: Tint, height: float, spec: BarSpec) -> Look:
+    menu = expanded(height, spec.sizes)
+    pane = desktop_ui.components.appearance.Menu(seen.frost) if menu else desktop_ui.components.appearance.Capsule(seen.frost)
+    return look(seen.preference, pane, tint, spec.glass)

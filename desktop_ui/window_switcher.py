@@ -8,7 +8,7 @@ lazy from PySide6.QtCore import Qt
 
 import winapi.shapes
 from components import SWITCHER_TITLE
-from desktop_ui.components.appearance import GLASS_ACCENT, Shade, Tokens, scheme, tokens
+from desktop_ui.components.appearance import GLASS_ACCENT, ON_ACCENT, Shade, Tokens, scheme, tokens
 from desktop_ui.components.text import inter
 from desktop_ui.components.typeface import TYPE
 from desktop_ui.components.widgets import column, glyph, row, surface_style, window_style
@@ -56,13 +56,13 @@ class _Rows(QtWidgets.QStyledItemDelegate):
             painter.drawRoundedRect(bounds, _RADIUS - _INSET, _RADIUS - _INSET)
         text = bounds.adjusted(14, 7, -14, -7)
         painter.setFont(inter(TYPE.title))
-        painter.setPen(QtGui.QColor("#ffffff" if selected else self.theme.ink.argb))
+        painter.setPen(QtGui.QColor(ON_ACCENT if selected else self.theme.ink.argb))
         line = QtGui.QFontMetrics(inter(TYPE.title))
         painter.drawText(
             text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line.elidedText(title, Qt.TextElideMode.ElideRight, round(text.width()))
         )
         painter.setFont(inter(TYPE.detail))
-        painter.setPen(QtGui.QColor(Shade("#ffffff", 0.75).argb if selected else self.theme.ink2.argb))
+        painter.setPen(QtGui.QColor(Shade(ON_ACCENT, 0.75).argb if selected else self.theme.ink2.argb))
         painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, detail)
         painter.restore()
 

@@ -13,7 +13,7 @@ from contracts.members import every_member
 from desktop_ui.overlay import KeyHighlights, fit_position, nearest_work_area
 from desktop_ui.qt_runtime import prepare
 from winapi.shapes import Offset, Point, Rect, Size
-lazy from desktop_ui.components.appearance import GLASS_ACCENT, Scheme, Shade, Tokens, scheme, tokens
+lazy from desktop_ui.components.appearance import GLASS_ACCENT, ON_ACCENT, Scheme, Shade, Tokens, scheme, tokens
 lazy from desktop_ui.components.controls import button, label
 lazy from desktop_ui.components.text import inter
 lazy from desktop_ui.components.typeface import TYPE, Font
@@ -67,7 +67,7 @@ def _keycap(role: Role, theme: Tokens) -> tuple[str, str]:
         case Role.KEY:
             return theme.solid, theme.ink.argb
         case Role.HELD:
-            return GLASS_ACCENT, "#ffffff"
+            return GLASS_ACCENT, ON_ACCENT
         case Role.BLANK:
             return theme.fill.argb, theme.ink3.argb
         case Role.MOD | Role.LAYER | Role.TOOL | Role.APP | Role.SPECIAL:

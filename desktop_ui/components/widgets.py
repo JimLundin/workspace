@@ -19,7 +19,7 @@ prepare()
 
 def window_style(theme: Tokens) -> str:
     """The shared controls on the kit's solid window, and its segmented choices."""
-    segment = theme.scheme.value.segment
+    segment = theme.segment
     return (
         control_style(theme)
         + f"""

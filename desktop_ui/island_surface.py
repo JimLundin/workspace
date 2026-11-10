@@ -21,9 +21,8 @@ lazy from PySide6.QtCore import Qt
 from components import BAR_WINDOW
 from desktop_ui import island_menu
 from desktop_ui.bar_control import KeyboardFocus, paint_feedback
-from desktop_ui.bar_events import Deactivated, Event, Hovered, MenuKey, Picked, Pressed, Selected, TrayClicked, VolumeSet
-from desktop_ui.components import appearance
-from desktop_ui.components.appearance import GLASS_ACCENT, RED, GlassLook, Look, Shade, SolidLook, reading, rim_stops
+from desktop_ui.bar_events import BarSpec, Deactivated, Event, Hovered, MenuKey, Picked, Pressed, Selected, TrayClicked, VolumeSet
+from desktop_ui.components.appearance import GLASS_ACCENT, ON_ACCENT, RED, Glass, GlassLook, Look, Shade, SolidLook, reading, rim_stops
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
@@ -111,25 +110,25 @@ def controls(content: Content) -> tuple[tuple[Control, float], ...]:
 
 
 @lru_cache(maxsize=32)
-def _veil(look: GlassLook, frost: Frost) -> Veil:
+def _veil(look: GlassLook, frost: Frost, glass: Glass) -> Veil:
     """The bar owner retains bounded immutable composition publication values.
 
     Rebuilding their stops and veil added 1.50 KB at p95 per frame in the
     island benchmark; geometry still changes independently on every frame.
     """
-    return Veil(look.veil.color, look.veil.opacity, rim_stops(look.rim), appearance.FROSTS[frost].shadow)
+    return Veil(look.veil.color, look.veil.opacity, rim_stops(look.rim, glass), glass.frosts[frost].shadow)
 
 
-def pane(drawn: Drawn, presented: Presented, sizes: Sizes) -> Pane | None:
+def pane(drawn: Drawn, presented: Presented, spec: BarSpec) -> Pane | None:
     match drawn.look:
         case GlassLook() as look:
             box = drawn.framed.box
             return Pane(
                 drawn.view.key.name,
                 box.on_device(presented.scale),
-                radius(box.height, sizes) * presented.scale,
+                radius(box.height, spec.sizes) * presented.scale,
                 visibility(drawn.framed.presence),
-                _veil(look, presented.frost),
+                _veil(look, presented.frost, spec.glass),
             )
         case SolidLook():
             return None
@@ -300,7 +299,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         corner = bounds.height() / 2 if cell.face is Face.LINK else cells.corner
         painter.setPen(Qt.PenStyle.NoPen)
         if cell.face is not Face.LINK:
-            painter.setBrush(color(Shade(lettering.ink.color, 0.07)))
+            painter.setBrush(color(Shade(lettering.ink.color, self.capsule.window_.washes.well)))
             painter.drawRoundedRect(bounds, corner, corner)
         paint_feedback(painter, lettering, bounds, corner, pressed=chosen, hovered=self.underMouse() and cell.face is not Face.CARD)
         match cell.entry:
@@ -337,9 +336,10 @@ class MenuCell(QtWidgets.QAbstractButton):
         capsule = self.sizes.capsule
         at = QtCore.QPointF(self.sizes.cells.symbol_x, (self.height() - capsule.control) / 2)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(color(self.capsule.signal(GLASS_ACCENT, lettering.ink) if on else Shade(lettering.ink.color, 0.12)))
+        off = Shade(lettering.ink.color, self.capsule.window_.washes.off)
+        painter.setBrush(color(self.capsule.signal(GLASS_ACCENT, lettering.ink) if on else off))
         painter.drawEllipse(QtCore.QRectF(at.x(), at.y(), capsule.control, capsule.control))
-        ink = self.capsule.signal("#ffffff", lettering.press) if on else lettering.ink
+        ink = self.capsule.signal(ON_ACCENT, lettering.press) if on else lettering.ink
         inset = (capsule.control - capsule.icon) / 2
         self.paint_icon(painter, name, ink, QtCore.QPointF(at.x() + inset, at.y() + inset))
 
@@ -370,14 +370,14 @@ class MenuCell(QtWidgets.QAbstractButton):
         symbol = "speaker-muted" if slider.muted else "speaker-on"
         self.paint_icon(painter, symbol, lettering.quiet, QtCore.QPointF(cells.lead, bar.center().y() - self.sizes.capsule.icon / 2))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(color(Shade(lettering.ink.color, 0.16)))
+        painter.setBrush(color(Shade(lettering.ink.color, self.capsule.window_.washes.track)))
         painter.drawRoundedRect(bar, cells.track_corner, cells.track_corner)
         if slider.level is None:
             return
         filled = QtCore.QRectF(bar.left(), bar.top(), bar.width() * slider.level, bar.height())
         painter.setBrush(color(lettering.quiet if slider.muted else self.capsule.signal(GLASS_ACCENT, lettering.ink)))
         painter.drawRoundedRect(filled, cells.track_corner, cells.track_corner)
-        painter.setBrush(color(self.capsule.signal("#ffffff", lettering.ink)))
+        painter.setBrush(color(self.capsule.signal(ON_ACCENT, lettering.ink)))
         painter.drawEllipse(QtCore.QPointF(filled.right(), bar.center().y()), cells.knob, cells.knob)
 
     def paint_live(self, painter: QtGui.QPainter, activity: Live) -> None:
@@ -635,7 +635,7 @@ class Capsule(KeyboardFocus):
             case Marker.DOT:
                 red = color(self.signal(RED, lettering.ink))
                 halo = QtGui.QColor(red)
-                halo.setAlphaF(0.25)
+                halo.setAlphaF(self.window_.washes.halo)
                 centre = QtCore.QPointF(spot.x + spot.width / 2, middle)
                 paint_dot(painter, halo, centre, markers.halo)
                 paint_dot(painter, red, centre, spot.width / 2)
@@ -650,17 +650,20 @@ class Capsule(KeyboardFocus):
         painter.setPen(Qt.PenStyle.NoPen)
         for index in range(markers.dot_count):
             lift = max(0.0, math.sin((cycle - index / 6) * 2 * math.pi))
-            painter.setBrush(color(Shade(ink.color, ink.opacity * (0.35 + 0.65 * lift))))
+            resting = self.window_.washes.resting
+            painter.setBrush(color(Shade(ink.color, ink.opacity * (resting + (1 - resting) * lift))))
             painter.drawEllipse(QtCore.QPointF(spot.x + pitch * (index + 0.5), middle - lift * markers.dots_lift), radius, radius)
 
 
 class BarWindow(QtWidgets.QWidget):
     """The bar's one window: the full width of the primary screen, as tall as the capsules."""
 
-    def __init__(self, report: Callable[[Event], None], composition: DesktopComposition | None, sizes: Sizes) -> None:
+    def __init__(self, report: Callable[[Event], None], composition: DesktopComposition | None, spec: BarSpec) -> None:
         super().__init__()
-        self.sizes = sizes
+        self.spec = spec
+        sizes = self.sizes = spec.sizes
         """Every size the bar paints, as its owner declared them."""
+        self.washes = spec.washes
         self.report = report
         """Everything the person does in the bar, as the bar's events."""
         self.composition = composition
@@ -771,12 +774,12 @@ class BarWindow(QtWidgets.QWidget):
         pager.place(round(sizes.bar.edge), leftmost - round(sizes.bar.pager_gap))
         pager.apply_look(presented.shell_look)
         self.glass = presented.glass
-        self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented, sizes)))
+        self.panes = tuple(found for each in presented.drawn if (found := pane(each, presented, self.spec)))
         scale = presented.scale
         match presented.shell_look:
             case GlassLook() as shell_look if pager.isVisibleTo(self):
                 bounds = Box(pager.x(), pager.y(), pager.width(), pager.height()).on_device(scale)
-                self.panes = (*self.panes, Pane("desktops", bounds, sizes.bar.radius * scale, 1, _veil(shell_look, presented.frost)))
+                self.panes = (*self.panes, Pane("desktops", bounds, sizes.bar.radius * scale, 1, _veil(shell_look, presented.frost, self.spec.glass)))
             case GlassLook() | SolidLook():
                 pass
         if not self.glass_timer.isActive():

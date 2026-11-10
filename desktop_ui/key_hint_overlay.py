@@ -14,7 +14,21 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui.components.appearance import GLASS_ACCENT, CanvasBar, GlassLook, Look, Rim, Scheme, Shade, SolidLook, look, rim_stops
+from desktop_ui.components.appearance import (
+    GLASS,
+    GLASS_ACCENT,
+    ON_ACCENT,
+    CanvasBar,
+    Glass,
+    GlassLook,
+    Look,
+    Rim,
+    Scheme,
+    Shade,
+    SolidLook,
+    look,
+    rim_stops,
+)
 from desktop_ui.components.meaning import Tint
 from desktop_ui.components.text import color, inter, outline, paint_capsule
 from desktop_ui.components.typeface import TYPE
@@ -35,17 +49,16 @@ GAP: Final = 4
 CORNER: Final = 8
 """Each badge's inset from its window's top-left corner."""
 ARROWS: Final = {Direction.LEFT: "←", Direction.DOWN: "↓", Direction.UP: "↑", Direction.RIGHT: "→"}
-WHITE: Final = Shade("#ffffff")
 
 
-def rim_gradient(bounds: QtCore.QRectF, rim: Rim) -> QtGui.QLinearGradient:
+def rim_gradient(bounds: QtCore.QRectF, rim: Rim, glass: Glass) -> QtGui.QLinearGradient:
     """CSS's 160deg gradient: brightest where light catches the upper-leading curve."""
     angle = math.radians(160)
     dx, dy = math.sin(angle), -math.cos(angle)
     half = (abs(bounds.width() * dx) + abs(bounds.height() * dy)) / 2
     center = bounds.center()
     gradient = QtGui.QLinearGradient(center - QtCore.QPointF(dx * half, dy * half), center + QtCore.QPointF(dx * half, dy * half))
-    for stop in rim_stops(rim):
+    for stop in rim_stops(rim, glass):
         gradient.setColorAt(stop.offset, color(Shade(stop.color, stop.opacity)))
     return gradient
 
@@ -85,7 +98,7 @@ def keycap_face(keycap: Keycap, style: Style) -> Face:
             # High contrast swaps the system colours instead of adding a hue.
             return Face(lettering.ink, background(style.surface), text)
         case AppCap(next=True):
-            return Face(Shade(GLASS_ACCENT), WHITE, text)
+            return Face(Shade(GLASS_ACCENT), Shade(ON_ACCENT), text)
         case AppCap():
             return Face(lettering.hover, lettering.ink, text)
         case DirectionCap():
@@ -104,9 +117,9 @@ def background(surface: Look) -> Shade:
             assert_never(surface)
 
 
-def style(preference: Preference) -> Style:
+def style(preference: Preference, glass: Glass) -> Style:
     """Hints float over any window without composition's blur, so glass takes the thicker Qt-painted veil."""
-    surface = look(preference, CanvasBar(Scheme.DARK), Tint.NONE)
+    surface = look(preference, CanvasBar(Scheme.DARK), Tint.NONE, glass)
     match preference:
         case Contrast():
             return Style(surface, contrast=True)
@@ -126,14 +139,14 @@ def badge_width(keycaps: tuple[Keycap, ...], metrics: QtGui.QFontMetricsF) -> in
     return round(inner + (HEIGHT - CAP))
 
 
-def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look) -> None:
+def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look, glass: Glass) -> None:
     """A capsule. Glass without composition: its veil and rim light, painted by Qt; solid and high contrast fill and edge."""
     edge = bounds.adjusted(0.5, 0.5, -0.5, -0.5)
     path = outline(edge, bounds.height() / 2 - 0.5)
     match surface:
         case GlassLook(veil=veil, rim=rim):
             painter.fillPath(path, color(veil))
-            painter.setPen(QtGui.QPen(rim_gradient(edge, rim), 1))
+            painter.setPen(QtGui.QPen(rim_gradient(edge, rim, glass), 1))
             painter.drawPath(path)
         case SolidLook():
             paint_capsule(painter, path, surface)
@@ -160,7 +173,7 @@ class BadgeWindow(QtWidgets.QWidget):
         tool_window(self, "Workspace key hint", on_top=True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.keycaps: tuple[Keycap, ...] = ()
-        self.look = style(Material.SOLID)
+        self.look = style(Material.SOLID, GLASS)
 
     def draw(self, keycaps: tuple[Keycap, ...], look: Style) -> None:
         self.keycaps, self.look = keycaps, look
@@ -172,7 +185,7 @@ class BadgeWindow(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         painter.setFont(inter(TYPE.label))
-        paint_surface(painter, QtCore.QRectF(self.rect()), self.look.surface)
+        paint_surface(painter, QtCore.QRectF(self.rect()), self.look.surface, GLASS)
         metrics = QtGui.QFontMetricsF(inter(TYPE.label))
         left = (HEIGHT - CAP) / 2
         for keycap in self.keycaps:
@@ -216,7 +229,7 @@ class KeyHintOverlay:
         pooled = self._state.get().badges
         grown = (*pooled, *(self._prepared() for _ in range(len(badges) - len(pooled))))
         self._state.set(_Badges(grown, (badges, preference)))
-        look = style(preference)
+        look = style(preference, GLASS)
         for window, badge in zip(grown, badges, strict=False):
             window.draw(badge.keycaps, look)
             window.move(logical(badge.rect.left, badge.rect.top) + QtCore.QPoint(CORNER, CORNER))

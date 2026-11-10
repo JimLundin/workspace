@@ -17,6 +17,7 @@ from contracts.status import Job
 from desktop_ui import island_menu
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.application_observer import EMPTY_ARRANGEMENT, Arrangement
+from desktop_ui.components.appearance import Glass, Washes
 from desktop_ui.island_layout import Sizes
 from desktop_ui.island_menu import (
     DISMISSED,
@@ -72,6 +73,8 @@ class BarSpec:
     controls: ControlsSpec
     springs: Springs
     sizes: Sizes
+    glass: Glass
+    washes: Washes
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,11 +7,12 @@ coordinate, whatever the bar's real sizes are.
 from dataclasses import asdict
 
 from desktop_ui.bar_events import BarSpec
+from desktop_ui.components.appearance import Washes
 from desktop_ui.components.typeface import Font, Weight
 from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
 from desktop_ui.island_menu import Menu, entries
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
-from tests import test_island_menu, test_island_model, test_island_motion
+from tests import test_glass_look, test_island_menu, test_island_model, test_island_motion
 
 BASE = Sizes(
     bar=Bar(top=5, edge=20, gap=10, radius=3, shadow=7, pager_gap=11),
@@ -63,7 +64,14 @@ BASE = Sizes(
 )
 """The test's own sizes, unlike the bar's so a test can't pass on its values."""
 
-SPEC = BarSpec(test_island_model.SPEC, test_island_menu.SPEC, test_island_motion.SPRINGS, BASE)
+SPEC = BarSpec(
+    test_island_model.SPEC,
+    test_island_menu.SPEC,
+    test_island_motion.SPRINGS,
+    BASE,
+    test_glass_look.GLASS,
+    Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5),
+)
 """The test's own bar, for tests of the bar's decisions."""
 
 
