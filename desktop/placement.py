@@ -88,5 +88,5 @@ SETUPS: Final = Setups(
 """Workspace's own setups; startup code passes them in, tests pass their own."""
 
 
-PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS, launch_grace=15.0, recent=32)
-"""Placement as the desktop is handed it: a launch waits 15 s for its window, and 32 windows are remembered as last in front."""
+PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS)
+"""Placement as the desktop is handed it."""

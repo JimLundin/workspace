@@ -14,7 +14,7 @@ its application.
 from dataclasses import dataclass, field, replace
 from enum import Enum, StrEnum, auto
 from itertools import accumulate, chain
-from typing import assert_never
+from typing import Final, assert_never
 
 from protocol import Tool
 
@@ -117,6 +117,10 @@ class Face(StrEnum):
     TOOL = auto()  # A small square with its symbol above a caption.
     LINK = auto()  # A quiet line of text.
     ICON = auto()  # A tray application's own image, icon-sized.
+
+
+# Eight narrow columns: tray icons take one each, the other tiles span pairs.
+COLUMNS: Final = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,12 +227,8 @@ class ControlsSpec:
 
     rows: tuple[RowSpec, ...]
     words: MenuWords
-    columns: int
-    """The grid's columns: tray icons take one each, the other tiles span several."""
     hints: frozendict[Tool, str]
     """Each tool's keys, from the layout the desktop is handed, at a tool cell's trailing edge."""
-    volume_step: float
-    """How far Left and Right move the sound slider."""
 
 
 def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
@@ -280,7 +280,7 @@ def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
         case ActivitiesRow(tracks=tracks):
             return tracks * len(activities(controls, spec.words))
         case TrayRow(tracks=tracks):
-            return tracks * ((len(controls.tray) + spec.columns - 1) // spec.columns)
+            return tracks * ((len(controls.tray) + COLUMNS - 1) // COLUMNS)
         case CellsRow(tracks=tracks, cells=specs):
             return tracks if present_cells(controls, specs, spec) else 0
         case _:
@@ -292,10 +292,10 @@ def row_cells(row: RowSpec, controls: Controls, top: int, spec: ControlsSpec) ->
     match row:
         case ActivitiesRow(tracks=tracks):
             cards = enumerate(activities(controls, spec.words))
-            return tuple(Cell(activity, Face.CARD, 0, spec.columns, top + tracks * index, tracks) for index, activity in cards)
+            return tuple(Cell(activity, Face.CARD, 0, COLUMNS, top + tracks * index, tracks) for index, activity in cards)
         case TrayRow(tracks=tracks):
             return tuple(
-                Cell(TrayIcon(name, slot), Face.ICON, slot % spec.columns, 1, top + tracks * (slot // spec.columns), tracks)
+                Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
                 for slot, name in enumerate(controls.tray)
             )
         case CellsRow(tracks=tracks, cells=specs):
@@ -416,11 +416,14 @@ def move(menu: Menu, key: Key) -> Menu:
     return menu if target is None else replace(menu, selected=target)
 
 
-def sideways(menu: Menu, entry: Entry | None, key: Key, step: float) -> Outcome:
+VOLUME_STEP: Final = 0.05
+
+
+def sideways(menu: Menu, entry: Entry | None, key: Key) -> Outcome:
     """Left and Right change the volume on the slider and otherwise move."""
     match entry:
         case Slider(level=float() as level):
-            change = step if key is Key.RIGHT else -step
+            change = VOLUME_STEP if key is Key.RIGHT else -VOLUME_STEP
             return Applied(Volume(min(1.0, max(0.0, round(level + change, 2)))))
         case Slider(level=None):
             return menu
@@ -428,12 +431,12 @@ def sideways(menu: Menu, entry: Entry | None, key: Key, step: float) -> Outcome:
             return move(menu, key)
 
 
-def press(menu: Menu, key: Press, spec: ControlsSpec) -> Outcome:
+def press(menu: Menu, key: Press) -> Outcome:
     cell = current(menu)
     entry = cell.entry if cell is not None else None
     match key:
         case Key.LEFT | Key.RIGHT:
-            return sideways(menu, entry, key, spec.volume_step)
+            return sideways(menu, entry, key)
         case Key.UP | Key.DOWN:
             return move(menu, key)
         case Key.ESCAPE:

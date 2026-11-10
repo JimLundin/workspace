@@ -12,7 +12,7 @@ def shown(key: Key, zone: Zone, width: float, *parts: Text | Glyph) -> Shown:
 
 SPRINGS = Springs(morph=Spring(0.86, 0.42), appear=Spring(0.78, 0.42), leave=Spring(1.0, 0.3), fade=Spring(1.0, 0.2))
 """The test's own springs; each settles well within a second."""
-TIMING = Timing(pulse=2.0, lag=0.25, opaque_at=0.5, wave_sample=0.04, tick=0.2, frame=0.02, power=9, material=0.5, dismiss=0.03)
+TIMING = Timing(pulse=2.0, lag=0.25, opaque_at=0.5, wave_sample=0.04)
 
 ISLAND = shown(Key.ISLAND, Zone.ISLAND, 112, Text("10:22"))
 RECORDING = shown(Key.RECORDING, Zone.TRAIL, 36, Text("02:05"))

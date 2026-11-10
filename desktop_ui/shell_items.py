@@ -4,6 +4,7 @@ executable, each with stable window ordering and cycling."""
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from typing import Final
 
 from winapi.icon_pixels import Pixels
 from winapi.shapes import Rect, Window
@@ -24,6 +25,9 @@ class WebApp:
 
 
 type WebApps = frozendict[PinnedApp, WebApp]
+
+LAUNCH_GRACE: Final = 15.0
+"""Seconds a started app's new window has to appear before the launch is forgotten."""
 
 """Seconds a launch may take to show its window before another click launches again."""
 

@@ -22,6 +22,7 @@ from contracts.geometry import framed
 from desktop_ui.navigation import Effect, Focus, Launch, Order, Placing, Switch, World, ZoomIn, ZoomOut, destination, effect, zoom_after
 from desktop_ui.shell_items import (
     EMPTY_SHELF,
+    LAUNCH_GRACE,
     Launches,
     PinnedApp,
     Seat,
@@ -53,18 +54,16 @@ from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
 
 _CREATE_NO_WINDOW = 0x0800_0000
+RECENT = 32
+"""Windows remembered as last in front, for landing on a desktop."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class PlacementSpec:
-    """Where windows go on each setup of screens, the web apps pinned beside them, and how the observer keeps track."""
+    """Where windows go on each setup of screens, and the web apps pinned beside them."""
 
     setups: Setups
     web_apps: WebApps
-    launch_grace: float
-    """Seconds a started app's new window has to appear before the launch is forgotten."""
-    recent: int
-    """Windows remembered as last in front, for landing on a desktop."""
 
 
 def frame(window: int) -> None:
@@ -335,7 +334,7 @@ class Worker:
         release(watched.framed - current)
         live = frozenset(window.handle for window in observed.windows)
         candidates = tuple(handle for handle in (foreground, *watched.recent) if handle in placement and handle in live)
-        recent = tuple(handle for index, handle in enumerate(candidates) if handle not in candidates[:index])[: self.observer.spec.recent]
+        recent = tuple(handle for index, handle in enumerate(candidates) if handle not in candidates[:index])[:RECENT]
         world = World(
             len(state.ids) if state is not None else 1,
             state.ids.index(state.current) if state is not None else 0,
@@ -441,7 +440,7 @@ class Worker:
 
     def open_web_app(self, watched: _Watched, app: PinnedApp) -> _Watched:
         """Edge opens the slot's app window in the user's own profile; a repeated launch waits for it."""
-        pending = launch(watched.launches, app, time.monotonic(), self.observer.spec.launch_grace)
+        pending = launch(watched.launches, app, time.monotonic(), LAUNCH_GRACE)
         if pending is None:
             return watched
         edge = edge_path()

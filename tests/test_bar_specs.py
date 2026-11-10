@@ -29,7 +29,6 @@ BASE = Sizes(
         slot_gap=9,
         text_pad=11,
         icon_pad=7,
-        stack=9,
         ring_inset=1,
     ),
     menu=MenuGrid(width=200, radius=9, pad=5, head=40, track=4, gutter=2),
@@ -116,6 +115,5 @@ def test_every_size_the_bar_lays_out_comes_from_the_sizes_it_is_given() -> None:
     )
     assert [(f.box.x * 2, f.box.y * 2, f.box.width * 2) for f in small_frame] == [(f.box.x, f.box.y, f.box.width) for f in big_frame]
     menu = Menu(entries(test_island_menu.RESTING, test_island_menu.SPEC))
-    columns = test_island_menu.SPEC.columns
-    pairs = zip(tiles(menu, BASE.menu, columns), tiles(menu, large.menu, columns), strict=True)
+    pairs = zip(tiles(menu, BASE.menu), tiles(menu, large.menu), strict=True)
     assert all((2 * a.x, 2 * a.y, 2 * a.width, 2 * a.height) == (b.x, b.y, b.width, b.height) for a, b in pairs)

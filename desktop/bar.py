@@ -53,7 +53,6 @@ SIZES: Final = Sizes(
         slot_gap=12,
         text_pad=12,
         icon_pad=10,
-        stack=12,  # each 16 px icon overlaps the next by a quarter
         ring_inset=1.5,
     ),
     menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
@@ -123,13 +122,11 @@ CONTROLS: Final = ControlsSpec(
         unread="unavailable",
         muted="muted",
     ),
-    columns=8,
     hints=frozendict(),
-    volume_step=0.05,
 )
 """The controls menu (press the clock or battery), top to bottom.
 
-The menu is a grid of `columns` columns. Each row is a band `tracks` tall (a track is
+The menu is a grid of 8 columns. Each row is a band `tracks` tall (a track is
 `menu.track` in `SIZES`, gutter included):
 
 - `CellsRow`: entries placed left to right; `span` is their width in columns. An
@@ -205,7 +202,7 @@ SPRINGS: Final = Springs(
 """The bar's own springs; its owner passes them in, tests pass their own."""
 
 
-TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05, tick=0.1, frame=0.016, power=15, material=0.75, dismiss=0.016)
+TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05)
 
 
 PAGER: Final = PagerSpec(placement.WEB_APPS, (), desktop="Desktop", current="current", empty="No placed apps")

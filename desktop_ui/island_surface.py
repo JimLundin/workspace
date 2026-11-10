@@ -484,7 +484,7 @@ class Capsule(KeyboardFocus):
 
     def show_menu(self, menu: Menu | None) -> None:
         """The expanded capsule's cells, pooled for as long as the menu shows the same grid."""
-        laid = tiles(menu, self.window_.sizes.menu, self.window_.spec.controls.columns) if menu is not None else ()
+        laid = tiles(menu, self.window_.sizes.menu) if menu is not None else ()
         if len(laid) != len(self.cells) or any(cell.tile.cell.entry != tile.cell.entry for cell, tile in zip(self.cells, laid, strict=False)):
             for cell in self.cells:
                 cell.hide()
@@ -836,7 +836,7 @@ class BarWindow(QtWidgets.QWidget):
             if self.isActiveWindow():
                 self.deactivation_timer.stop()
             elif self.menu is not None and not self.deactivation_timer.isActive():
-                self.deactivation_timer.start(round(self.spec.timing.dismiss * 1000))
+                self.deactivation_timer.start(16)
 
     def dismiss_inactive(self) -> None:
         if self.menu is not None and not self.isActiveWindow():
