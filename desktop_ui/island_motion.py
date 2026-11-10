@@ -51,9 +51,19 @@ class Timing:
     """The presence at which a capsule's glass and content are fully opaque, before it reaches its full width."""
     wave_sample: float
     """Seconds between the microphone trace's samples; the wave moves across each one."""
+    tick: float
+    """Seconds between the bar's observations of the desktop."""
+    frame: float
+    """Seconds between frames while something moves."""
+    power: float
+    """Seconds between readings of the battery and charger..."""
+    material: float
+    """...and of the material Windows asks for."""
+    dismiss: float
+    """Seconds the open menu waits, inactive, before it closes; native activation can briefly report inactive while Qt settles."""
 
 
-TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05)
+TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05, tick=0.1, frame=0.016, power=15, material=0.75, dismiss=0.016)
 
 
 @dataclass(frozen=True, slots=True)

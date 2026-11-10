@@ -120,10 +120,6 @@ class Face(StrEnum):
     ICON = auto()  # A tray application's own image, icon-sized.
 
 
-# Eight narrow columns: tray icons take one each, the other tiles span pairs.
-COLUMNS: Final = 8
-
-
 @dataclass(frozen=True, slots=True)
 class Cell:
     """An entry's place in the grid: columns from the left, tracks from the top."""
@@ -228,6 +224,10 @@ class ControlsSpec:
 
     rows: tuple[RowSpec, ...]
     words: MenuWords
+    columns: int
+    """The grid's columns: tray icons take one each, the other tiles span several."""
+    volume_step: float
+    """How far Left and Right move the sound slider."""
 
 
 CONTROLS: Final = ControlsSpec(
@@ -264,10 +264,12 @@ CONTROLS: Final = ControlsSpec(
         unread="unavailable",
         muted="muted",
     ),
+    columns=8,
+    volume_step=0.05,
 )
 """The controls menu (press the clock or battery), top to bottom.
 
-The menu is a grid of 8 columns. Each row is a band `tracks` tall (a track is
+The menu is a grid of `columns` columns. Each row is a band `tracks` tall (a track is
 `menu.track` in `SIZES`, gutter included):
 
 - `CellsRow`: entries placed left to right; `span` is their width in columns. An
@@ -322,32 +324,32 @@ def present_cells(controls: Controls, specs: tuple[CellSpec, ...], words: MenuWo
     return tuple((each, present) for each in specs if (present := entry(each, controls, words)))
 
 
-def height(row: RowSpec, controls: Controls, words: MenuWords) -> int:
+def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
     """The tracks `row` takes now: an empty row takes none."""
     match row:
         case ActivitiesRow(tracks=tracks):
-            return tracks * len(activities(controls, words))
+            return tracks * len(activities(controls, spec.words))
         case TrayRow(tracks=tracks):
-            return tracks * ((len(controls.tray) + COLUMNS - 1) // COLUMNS)
+            return tracks * ((len(controls.tray) + spec.columns - 1) // spec.columns)
         case CellsRow(tracks=tracks, cells=specs):
-            return tracks if present_cells(controls, specs, words) else 0
+            return tracks if present_cells(controls, specs, spec.words) else 0
         case _:
             assert_never(row)
 
 
-def row_cells(row: RowSpec, controls: Controls, top: int, words: MenuWords) -> tuple[Cell, ...]:
+def row_cells(row: RowSpec, controls: Controls, top: int, spec: ControlsSpec) -> tuple[Cell, ...]:
     """`row`'s cells from `top`, each following the one before it."""
     match row:
         case ActivitiesRow(tracks=tracks):
-            cards = enumerate(activities(controls, words))
-            return tuple(Cell(activity, Face.CARD, 0, COLUMNS, top + tracks * index, tracks) for index, activity in cards)
+            cards = enumerate(activities(controls, spec.words))
+            return tuple(Cell(activity, Face.CARD, 0, spec.columns, top + tracks * index, tracks) for index, activity in cards)
         case TrayRow(tracks=tracks):
             return tuple(
-                Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
+                Cell(TrayIcon(name, slot), Face.ICON, slot % spec.columns, 1, top + tracks * (slot // spec.columns), tracks)
                 for slot, name in enumerate(controls.tray)
             )
         case CellsRow(tracks=tracks, cells=specs):
-            shown = present_cells(controls, specs, words)
+            shown = present_cells(controls, specs, spec.words)
             columns = accumulate((each.span for each, _ in shown), initial=0)
             return tuple(
                 Cell(present, each.face, column, each.span, top, tracks, each.caption)
@@ -360,8 +362,8 @@ def row_cells(row: RowSpec, controls: Controls, top: int, words: MenuWords) -> t
 def entries(controls: Controls, spec: ControlsSpec) -> tuple[Cell, ...]:
     """The grid for what's happening now, flowed from the spec's rows: each row
     starts below the one before it, so no two cells overlap. Tracks include the gutters."""
-    tops = accumulate((height(row, controls, spec.words) for row in spec.rows), initial=0)
-    return tuple(chain.from_iterable(row_cells(row, controls, top, spec.words) for row, top in zip(spec.rows, tops, strict=False)))
+    tops = accumulate((height(row, controls, spec) for row in spec.rows), initial=0)
+    return tuple(chain.from_iterable(row_cells(row, controls, top, spec) for row, top in zip(spec.rows, tops, strict=False)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -417,8 +419,6 @@ DISMISSED = sentinel("DISMISSED")
 
 type Outcome = Menu | Chosen | Applied | DISMISSED
 
-VOLUME_STEP: Final = 0.05
-
 
 def current(menu: Menu) -> Cell | None:
     cells = menu.cells
@@ -466,24 +466,24 @@ def move(menu: Menu, key: Key) -> Menu:
     return menu if target is None else replace(menu, selected=target)
 
 
-def sideways(menu: Menu, entry: Entry | None, key: Key) -> Outcome:
+def sideways(menu: Menu, entry: Entry | None, key: Key, step: float) -> Outcome:
     """Left and Right change the volume on the slider and otherwise move."""
     match entry:
         case Slider(level=float() as level):
-            step = VOLUME_STEP if key is Key.RIGHT else -VOLUME_STEP
-            return Applied(Volume(min(1.0, max(0.0, round(level + step, 2)))))
+            change = step if key is Key.RIGHT else -step
+            return Applied(Volume(min(1.0, max(0.0, round(level + change, 2)))))
         case Slider(level=None):
             return menu
         case _:
             return move(menu, key)
 
 
-def press(menu: Menu, key: Press) -> Outcome:
+def press(menu: Menu, key: Press, spec: ControlsSpec) -> Outcome:
     cell = current(menu)
     entry = cell.entry if cell is not None else None
     match key:
         case Key.LEFT | Key.RIGHT:
-            return sideways(menu, entry, key)
+            return sideways(menu, entry, key, spec.volume_step)
         case Key.UP | Key.DOWN:
             return move(menu, key)
         case Key.ESCAPE:

@@ -489,7 +489,7 @@ def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]
         case MenuKey(press):
             if model.opened is None:
                 return model, ()
-            return _settled(model, island_menu.press(model.opened, press))
+            return _settled(model, island_menu.press(model.opened, press, model.spec.controls))
         case Deactivated():
             return _closed(model, restore=False)
         case VolumeSet(level):

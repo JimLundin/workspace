@@ -17,7 +17,7 @@ from operator import add
 from typing import Final, assert_never
 
 from desktop_ui.components.typeface import TYPE, Font
-from desktop_ui.island_menu import COLUMNS, Cell, Menu
+from desktop_ui.island_menu import Cell, Menu
 from desktop_ui.island_model import Control, Glyph, Key, Marker, Part, Slot, Text, Zone
 from winapi.shapes import Rect
 
@@ -63,6 +63,8 @@ class Capsule:
     """A capsule's ends when it holds text..."""
     icon_pad: float
     """...and when it holds only symbols."""
+    stack: float
+    """Between stacked icons' left edges, such as a desktop's applications in the pager; each overlaps the next."""
     ring_inset: float
     """The keyboard focus ring, inside the capsule's edge."""
 
@@ -194,6 +196,7 @@ SIZES: Final = Sizes(
         slot_gap=12,
         text_pad=12,
         icon_pad=10,
+        stack=12,  # each 16 px icon overlaps the next by a quarter
         ring_inset=1.5,
     ),
     menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
@@ -257,9 +260,9 @@ class Tile:
     height: float
 
 
-def tiles(menu: Menu, grid: MenuGrid) -> tuple[Tile, ...]:
+def tiles(menu: Menu, grid: MenuGrid, columns: int) -> tuple[Tile, ...]:
     """Tracks include the gutter, which each cell splits around itself."""
-    column = (grid.width - 2 * grid.pad) / COLUMNS
+    column = (grid.width - 2 * grid.pad) / columns
     return tuple(
         Tile(
             index,

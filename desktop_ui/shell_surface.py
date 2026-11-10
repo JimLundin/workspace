@@ -7,7 +7,7 @@ controls are, so no stylesheet can pad, re-font or restyle it.
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Final, assert_never, override
+from typing import assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -54,9 +54,6 @@ class Stack:
     icons: tuple[Icon, ...]
 
 
-STACK_STEP: Final = 12
-"""Pixels between stacked icons' left edges; each 16 px icon overlaps the next by a quarter."""
-
 type Face = Stack | str
 """A stack of icons (a desktop's applications), or text such as a desktop number or keycap."""
 
@@ -86,7 +83,7 @@ class ShellButton(KeyboardFocus):
         match target.face:
             case Stack(icons=icons):
                 self.pictures = tuple(pixmap(each) if isinstance(each, Pixels) else None for each in icons)
-                width = control + STACK_STEP * (len(icons) - 1)
+                width = control + round(capsule.stack * (len(icons) - 1))
             case str() as text:
                 advance = QtGui.QFontMetricsF(inter(pager.sizes.type.reading)).horizontalAdvance(text)
                 width = max(control, math.ceil(advance) + 2 * face_inset(capsule))
@@ -106,8 +103,9 @@ class ShellButton(KeyboardFocus):
         """The stacked icon under `x`: the one whose centre is nearest, as later icons cover earlier ones' right edges."""
         match self.target.face:
             case Stack(icons=icons) if icons:
-                first = (self.width() - STACK_STEP * (len(icons) - 1)) / 2
-                return max(0, min(len(icons) - 1, round((x - first) / STACK_STEP)))
+                step = self.pager.sizes.capsule.stack
+                first = (self.width() - step * (len(icons) - 1)) / 2
+                return max(0, min(len(icons) - 1, round((x - first) / step)))
             case _:
                 return 0
 
@@ -160,10 +158,11 @@ class ShellButton(KeyboardFocus):
         match self.target.face:
             case Stack(icons=icons):
                 painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
-                first = face.translated(-STACK_STEP * (len(icons) - 1) / 2, 0)
+                step = self.pager.sizes.capsule.stack
+                first = face.translated(-step * (len(icons) - 1) / 2, 0)
                 # Later icons draw over earlier ones, so the row reads left to right.
                 for index, (each, picture) in enumerate(zip(icons, self.pictures, strict=True)):
-                    spot = first.translated(STACK_STEP * index, 0)
+                    spot = first.translated(step * index, 0)
                     match each:
                         case Glyph(name=name):
                             paint_icon(painter, name, lettering.ink, spot)

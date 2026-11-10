@@ -64,6 +64,8 @@ SPEC = ControlsSpec(
         CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
     ),
     MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed"),
+    columns=8,
+    volume_step=0.1,
 )
 
 RESTING = Controls(None, sound=Slider("Volume", 0.4, muted=False))
@@ -102,7 +104,7 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     grid = MenuGrid(width=200, radius=0, pad=5, head=10, track=4, gutter=2)
     tray = tuple(f"App {index}" for index in range(11))
     for controls in (RESTING, Controls("02:05"), replace(RESTING, tray=tray)):
-        laid = tiles(Menu(entries(controls, SPEC)), grid)
+        laid = tiles(Menu(entries(controls, SPEC)), grid, SPEC.columns)
         for tile in laid:
             assert tile.x > 0 and tile.x + tile.width < grid.width
         for first in laid:
@@ -125,31 +127,31 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
     assert states(Controls(None, overlay=True, dark_when_away=True)) == {Command.OVERLAY: True, Command.PLACEMENT: True, Command.DARK_WHEN_AWAY: True}
     assert states(Controls(None, placement_paused=True)) == {Command.OVERLAY: False, Command.PLACEMENT: False, Command.DARK_WHEN_AWAY: False}
     menu = Menu(entries(RESTING, SPEC))
-    assert press(at(menu, "Keys"), Key.ENTER) == Applied(Command.OVERLAY)
-    assert press(at(menu, "Key map"), Key.ENTER) == Chosen(Command.KEYMAP)
+    assert press(at(menu, "Keys"), Key.ENTER, SPEC) == Applied(Command.OVERLAY)
+    assert press(at(menu, "Key map"), Key.ENTER, SPEC) == Chosen(Command.KEYMAP)
 
 
 def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     # Defects: an arrow skips the cell beside or below the selection, Left or Right
     # leaves the grid's edge, or Down from the last cell strands the selection.
     menu = Menu(entries(RESTING, SPEC))
-    assert selected(press(menu, Key.DOWN)) == "Keys"
-    assert selected(press(at(menu, "Keys"), Key.RIGHT)) == "Placing"
-    assert selected(press(at(menu, "Placing"), Key.LEFT)) == "Keys"
-    assert selected(press(at(menu, "Placing"), Key.DOWN)) == "Dark"
-    assert selected(press(at(menu, "Record"), Key.DOWN)) == "Volume"
-    assert selected(press(at(menu, "Copy"), Key.RIGHT)) == "Key map"
-    assert selected(press(at(menu, "Key map"), Key.RIGHT)) == "Key map"
-    assert selected(press(at(menu, "Switch"), Key.LEFT)) == "Switch"
-    assert selected(press(at(menu, "Everything"), Key.DOWN)) == "Keys"
-    assert selected(press(at(menu, "Keys"), Key.UP)) == "Everything"
+    assert selected(press(menu, Key.DOWN, SPEC)) == "Keys"
+    assert selected(press(at(menu, "Keys"), Key.RIGHT, SPEC)) == "Placing"
+    assert selected(press(at(menu, "Placing"), Key.LEFT, SPEC)) == "Keys"
+    assert selected(press(at(menu, "Placing"), Key.DOWN, SPEC)) == "Dark"
+    assert selected(press(at(menu, "Record"), Key.DOWN, SPEC)) == "Volume"
+    assert selected(press(at(menu, "Copy"), Key.RIGHT, SPEC)) == "Key map"
+    assert selected(press(at(menu, "Key map"), Key.RIGHT, SPEC)) == "Key map"
+    assert selected(press(at(menu, "Switch"), Key.LEFT, SPEC)) == "Switch"
+    assert selected(press(at(menu, "Everything"), Key.DOWN, SPEC)) == "Keys"
+    assert selected(press(at(menu, "Keys"), Key.UP, SPEC)) == "Everything"
 
 
 def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
     # Defects: Left or Right moves off the slider instead of changing the volume,
     # a step leaves the 0 to 1 range, or an unknown level invents one.
     def stepped(level: float | None, key: Key) -> Outcome:
-        return press(at(Menu(entries(replace(RESTING, sound=Slider("Volume", level, muted=False)), SPEC)), "Volume"), key)
+        return press(at(Menu(entries(replace(RESTING, sound=Slider("Volume", level, muted=False)), SPEC)), "Volume"), key, SPEC)
 
     match stepped(0.4, Key.RIGHT), stepped(0.4, Key.LEFT):
         case Applied(Volume(up)), Applied(Volume(down)):
@@ -159,20 +161,20 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
     assert stepped(1.0, Key.RIGHT) == Applied(Volume(1.0))
     assert stepped(0.0, Key.LEFT) == Applied(Volume(0.0))
     unknown = at(Menu(entries(replace(RESTING, sound=Slider("Volume", None, muted=False)), SPEC)), "Volume")
-    assert press(unknown, Key.RIGHT) == unknown
+    assert press(unknown, Key.RIGHT, SPEC) == unknown
     menu = at(Menu(entries(RESTING, SPEC)), "Volume")
-    assert press(menu, Key.ENTER) == menu
+    assert press(menu, Key.ENTER, SPEC) == menu
 
 
 def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> None:
     # Defects: Enter on a card doesn't stop its activity, Escape chooses something,
     # or a repeated letter stays on its first match.
     menu = Menu(entries(Controls("02:05"), SPEC), selected=0)
-    assert press(menu, Key.ENTER) == Chosen(Command.STOP_RECORDING)
-    assert press(menu, Key.ESCAPE) is DISMISSED
-    first = opened(press(menu, Letter("k")))
+    assert press(menu, Key.ENTER, SPEC) == Chosen(Command.STOP_RECORDING)
+    assert press(menu, Key.ESCAPE, SPEC) is DISMISSED
+    first = opened(press(menu, Letter("k"), SPEC))
     assert selected(first) == "Keys"
-    assert selected(press(first, Letter("K"))) == "Key map"
+    assert selected(press(first, Letter("K"), SPEC)) == "Key map"
 
 
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:
@@ -199,10 +201,10 @@ def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot
     def below(icon: Cell) -> Cell | None:
         return next((cell for cell in icons if cell.column == icon.column and cell.track == icon.track + TRAY_TRACKS), None)
 
-    assert selected(press(at(menu, "Switch"), Key.DOWN)) == "App 0"
+    assert selected(press(at(menu, "Switch"), Key.DOWN, SPEC)) == "App 0"
     for icon in icons:
         if (under := below(icon)) is not None:
-            assert selected(press(at(menu, label(icon.entry)), Key.DOWN)) == label(under.entry)
-    assert selected(press(at(menu, f"App {count - 1}"), Key.DOWN)) == "Notices"
-    assert press(at(menu, "App 9"), Key.ENTER) == Chosen(TrayChoice(9))
+            assert selected(press(at(menu, label(icon.entry)), Key.DOWN, SPEC)) == label(under.entry)
+    assert selected(press(at(menu, f"App {count - 1}"), Key.DOWN, SPEC)) == "Notices"
+    assert press(at(menu, "App 9"), Key.ENTER, SPEC) == Chosen(TrayChoice(9))
     assert not any(cell.face is Face.ICON for cell in entries(RESTING, SPEC))

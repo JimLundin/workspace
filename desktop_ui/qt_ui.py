@@ -51,15 +51,16 @@ class EventLoop:
 
     app: QApplication
     timer: QtCore.QTimer
-    """Every 16 ms while something moves; the bar connects its painting."""
+    """Every frame while something moves; the bar connects its painting."""
     composition: DesktopComposition | None
     _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
-    def start(cls, app: QApplication, log: Callable[[str], None]) -> EventLoop:
+    def start(cls, app: QApplication, log: Callable[[str], None], frame: float) -> EventLoop:
+        """The loop, framing every `frame` seconds; a composition that won't start goes to `log`."""
         timer = QtCore.QTimer(app)
         timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
-        timer.setInterval(16)
+        timer.setInterval(round(frame * 1000))
         try:
             composition = DesktopComposition.start()
         except OSError as error:

@@ -131,7 +131,7 @@ class DesktopBar:
     resolution: appearance.TimerResolution
     window: BarWindow
     timer: QtCore.QTimer
-    """The 100 ms desktop observation tick."""
+    """The desktop observation tick."""
     audio_timer: QtCore.QTimer
     """The microphone trace's sampling while dictating."""
     apps: tuple[protocol.App, ...]
@@ -147,11 +147,11 @@ class DesktopBar:
             bar.handle(event)
 
         errors: queue.Queue[str] = queue.Queue()
-        loop = EventLoop.start(application(log), log)
         spec = settings.bar
+        loop = EventLoop.start(application(log), log, spec.timing.frame)
         window = BarWindow(report, loop.composition, spec, log)
         tick, audio = QtCore.QTimer(window), QtCore.QTimer(window)
-        tick.setInterval(100)
+        tick.setInterval(round(spec.timing.tick * 1000))
         audio.setInterval(round(spec.timing.wave_sample * 1000))
         audio.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         seen = Surroundings(preference=appearance.preference(), ambient=Ambient(datetime.now().strftime("%H:%M"), PowerUnavailable.UNKNOWN))
@@ -357,7 +357,8 @@ class DesktopBar:
         now = time.monotonic()
         seen = model.seen
         arrangement = self._poll_shell(model)
-        power, next_power = (winapi.ambient.power(), now + 15) if now >= model.next_power else (seen.ambient.power, model.next_power)
+        timing = model.spec.timing
+        power, next_power = (winapi.ambient.power(), now + timing.power) if now >= model.next_power else (seen.ambient.power, model.next_power)
         system = seen.system
         with suppress(queue.Empty):
             system = self.shell.status.results.get_nowait()
@@ -366,7 +367,7 @@ class DesktopBar:
         frost = next((sample.frost for sample in self.materials.read() if sample.bounds == sample_bounds), seen.frost)
         preference, next_material = seen.preference, model.next_material
         if now >= model.next_material:
-            preference, next_material = appearance.preference(), now + 0.75
+            preference, next_material = appearance.preference(), now + timing.material
             if preference is appearance.Material.GLASS and sample_bounds is not None:
                 self.materials.submit((sample_bounds,))
         area = QtGui.QGuiApplication.primaryScreen().geometry()
