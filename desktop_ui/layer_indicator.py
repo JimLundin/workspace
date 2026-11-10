@@ -33,9 +33,6 @@ class IndicatorSpec:
     flash: float
     """Seconds a change of layout stays lit before the steady layer returns."""
     flash_ink: str
-    layout_on: str
-    layout_off: str
-    """What the indicator flashes as the layout switches on or off."""
 
 
 @dataclass(frozen=True, slots=True)

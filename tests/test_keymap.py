@@ -1,13 +1,10 @@
 """The key map's shortcut lookup: which physical key and thumb reach a tool."""
 
-from desktop_ui.keymap import KeyboardView, KeymapWords, Shortcut
+from desktop_ui.keymap import KeyboardView, Shortcut
 from protocol import Tool
 from tests import layouts
 
-WORDS = KeymapWords(
-    tools=frozendict({tool: tool.name for tool in Tool}), chords=frozendict(), chord_hold="Chord", hold="h", escape="e", escape_hold="eh", held="d"
-)
-VIEW = KeyboardView.of(layouts.LAYOUT, WORDS)
+VIEW = KeyboardView.of(layouts.LAYOUT)
 """The tests' own layout, as the desktop reads it."""
 
 

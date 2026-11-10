@@ -121,8 +121,6 @@ class OverlaySpec:
     handle_spacing: float
     handle_glyph: str
     handle_text: str
-    handle_name: str
-    """The handle's accessible name."""
     handle_gap: int
     """Between the handle and the overlay below it."""
     tap: float
@@ -131,7 +129,6 @@ class OverlaySpec:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MapWindowSpec:
-    title: str
     width: int
     height: int
     side: float
@@ -258,7 +255,7 @@ class OverlayHandle(QtWidgets.QWidget):
         self.drag: OverlayDrag = drag
         self.read_cursor: Callable[[], Point] = cursor
         tool_window(self, "Workspace keyboard overlay handle", on_top=False)
-        self.setAccessibleName(spec.handle_name)
+        self.setAccessibleName("Drag to move the keyboard overlay")
         theme = design.tokens()
         self.setStyleSheet(window_style(theme, design))
         layout = row(surface(self, theme, round(spec.handle_radius), design.kit))
@@ -458,7 +455,7 @@ class KeymapWindow:
             return lambda: shown.draw(layer)
 
         size = spec.window
-        window = Window(size.title, close, design, width=size.width, height=size.height)
+        window = Window("Workspace key map", close, design, width=size.width, height=size.height)
         layout = column(window)
         layout.setContentsMargins(round(size.side), round(size.top), round(size.side), round(size.top))
         keys = tuple(button(layer.name.title(), chooser(layer)) for layer in _LAYERS)

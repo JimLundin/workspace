@@ -73,7 +73,6 @@ SPEC = BarSpec(
     glass=test_glass_look.GLASS,
     palette=test_glass_look.PALETTE,
     washes=Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5),
-    title="test bar",
 )
 """The test's own bar, for tests of the bar's decisions."""
 

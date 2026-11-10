@@ -6,20 +6,20 @@ lines are code lines. Product code averages 5.8 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 87,018 | 14,967 |
-| **support** | 57,567 | 8,569 |
+| **product** | 86,759 | 14,878 |
+| **support** | 57,455 | 8,543 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 44,105 | 7,460 |
-| tests | 42,096 | 6,150 |
+| desktop_ui | 44,065 | 7,444 |
+| tests | 41,984 | 6,124 |
 | winapi | 19,657 | 3,302 |
 | scripts | 11,862 | 1,713 |
 | assistant | 6,962 | 1,196 |
 | keyboard | 6,466 | 1,072 |
 | contracts | 3,992 | 719 |
 | typings | 3,609 | 706 |
-| desktop | 2,316 | 635 |
+| desktop | 2,097 | 562 |
 | (top level) | 1,481 | 269 |
 | settings | 1,066 | 149 |
 | gateway | 973 | 165 |
@@ -29,20 +29,20 @@ The 25 largest files:
 | file | nodes | lines |
 |---|---:|---:|
 | `scripts/architecture.py` | 6,901 | 954 |
-| `desktop_ui/island_surface.py` | 5,812 | 716 |
+| `desktop_ui/island_surface.py` | 5,811 | 716 |
 | `tests/test_keyboard_hook.py` | 4,006 | 479 |
 | `keyboard/win.py` | 3,782 | 624 |
 | `tests/test_engine.py` | 3,464 | 568 |
 | `tests/test_meetings.py` | 3,106 | 474 |
 | `assistant/meetings.py` | 2,717 | 454 |
-| `desktop_ui/keymap_views.py` | 2,682 | 414 |
+| `desktop_ui/keymap_views.py` | 2,672 | 411 |
 | `desktop_ui/desktop_bar.py` | 2,409 | 434 |
 | `keyboard/engine.py` | 2,218 | 349 |
 | `desktop_ui/application_observer.py` | 2,134 | 365 |
-| `desktop_ui/desktop_app.py` | 2,127 | 393 |
-| `desktop_ui/desktop_control.py` | 2,025 | 431 |
+| `desktop_ui/desktop_app.py` | 2,117 | 392 |
+| `desktop_ui/desktop_control.py` | 2,004 | 428 |
 | `desktop_ui/island_menu.py` | 1,990 | 316 |
-| `desktop_ui/bar_events.py` | 1,923 | 403 |
+| `desktop_ui/bar_events.py` | 1,918 | 401 |
 | `winapi/composition.py` | 1,845 | 314 |
 | `winapi/audio.py` | 1,826 | 277 |
 | `tests/test_meeting_audio.py` | 1,795 | 226 |

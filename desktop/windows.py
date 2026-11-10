@@ -5,22 +5,18 @@ declarations; `desktop.__main__` hands them to the desktop.
 
 from typing import Final
 
-from contracts.keyboard.actions import Chord
-from contracts.keyboard.keys import Key
 from contracts.members import every_member
 from contracts.status import State
 from desktop import bar, look
 from desktop_ui.colour import Rgb
 from desktop_ui.components.appearance import Scheme
-from desktop_ui.desktop_control import Menu, Separator, TrayAction, TrayMenuSpec, TrayWords
 from desktop_ui.key_hint_overlay import BadgeSpec
-from desktop_ui.keymap import KeymapWords, Role
+from desktop_ui.keymap import Role
 from desktop_ui.keymap_views import Bindings, KeymapSpec, KeysSpec, Lit, MapWindowSpec, OverlaySpec
 from desktop_ui.layer_indicator import IndicatorSpec
 from desktop_ui.navigation import Direction
 from desktop_ui.tray import TraySpec
 from desktop_ui.window_switcher import SwitcherSpec
-from protocol import Tool
 
 BADGES: Final = BadgeSpec(
     height=26,
@@ -35,40 +31,6 @@ BADGES: Final = BadgeSpec(
     palette=look.PALETTE,
 )
 """Workspace's badges; the bar passes them to the overlay."""
-
-
-KEYMAP_WORDS: Final = KeymapWords(
-    tools=frozendict(
-        {
-            Tool.DICTATE: "Talk",
-            Tool.ZOOM: "Zoom",
-            Tool.FOCUS_LEFT: "Focus ←",
-            Tool.FOCUS_DOWN: "Focus ↓",
-            Tool.FOCUS_UP: "Focus ↑",
-            Tool.FOCUS_RIGHT: "Focus →",
-            Tool.DESKTOP_1: "Desk 1",
-            Tool.DESKTOP_2: "Desk 2",
-            Tool.DESKTOP_3: "Desk 3",
-            Tool.DESKTOP_4: "Desk 4",
-            Tool.DESKTOP_5: "Desk 5",
-            Tool.PLACEMENT_PAUSE: "Pause place",
-            Tool.PLACE_NOW: "Re-place",
-            Tool.MEETING_TOGGLE: "Record",
-            Tool.COPY_TRANSCRIPT: "Copy speech",
-            Tool.DICTATE_TOGGLE: "Dictate toggle",
-            Tool.WINDOW_SWITCHER: "Windows",
-        }
-    ),
-    chords=frozendict(
-        {Chord.ctrl(Key.Z): "Undo", Chord.ctrl(Key.Y): "Redo", Chord.ctrl(Key.C): "Copy", Chord.ctrl(Key.V): "Paste", Chord.ctrl(Key.X): "Cut"}
-    ),
-    chord_hold="Apps",
-    hold="hold",
-    escape="On/off",
-    escape_hold="hold: quit",
-    held="held",
-)
-"""The key map's words."""
 
 
 KEYMAP: Final = KeymapSpec(
@@ -125,13 +87,10 @@ KEYMAP: Final = KeymapSpec(
         handle_spacing=6,
         handle_glyph="menu",
         handle_text="Drag to move",
-        handle_name="Drag to move the keyboard overlay",
         handle_gap=4,
         tap=0.12,
     ),
-    window=MapWindowSpec(
-        title="Workspace key map", width=940, height=390, side=20, top=16, hint="Hold . for Apps: L dictate · ' dictation toggle · S windows"
-    ),
+    window=MapWindowSpec(width=940, height=390, side=20, top=16, hint="Hold . for Apps: L dictate · ' dictation toggle · S windows"),
 )
 """Workspace's key map and overlay; the desktop app opens them with it."""
 
@@ -145,8 +104,6 @@ INDICATOR: Final = IndicatorSpec(
     bottom=28,
     flash=1.2,
     flash_ink=look.PALETTE.accent,
-    layout_on="Layout on",
-    layout_off="Layout off",
 )
 
 
@@ -200,33 +157,3 @@ TRAY_ICON: Final = TraySpec(
         }
     ),
 )
-
-
-TRAY_MENU: Final = TrayMenuSpec(
-    items=(
-        TrayAction(Menu.TOGGLE_LAYOUT),
-        TrayAction(Menu.RESTART_LAYOUT),
-        TrayAction(Menu.OVERLAY, "Keyboard overlay"),
-        TrayAction(Menu.KEYMAP, "Key map"),
-        Separator(),
-        TrayAction(Menu.MEETING),
-        TrayAction(Menu.TRANSCRIPTS, "Open meeting transcripts"),
-        Separator(),
-        TrayAction(Menu.LOGS, "Open logs folder"),
-        Separator(),
-        TrayAction(Menu.RESTART_DESKTOP, "Restart desktop"),
-        TrayAction(Menu.QUIT, "Quit Workspace"),
-    ),
-    words=TrayWords(
-        layout="Layout",
-        on="on",
-        off="off",
-        not_running="not running",
-        toggle_key="Tap §",
-        restart="Restart layout",
-        start="Start layout",
-        record="Record a meeting",
-        stop_recording="Stop recording",
-    ),
-)
-"""The tray icon's menu. The layout and meeting items word their own state."""

@@ -9,7 +9,6 @@ from pathlib import Path
 from desktop_ui.application_observer import PlacementSpec
 from desktop_ui.bar_events import BarSpec
 from desktop_ui.components.appearance import Design
-from desktop_ui.desktop_control import TrayMenuSpec
 from desktop_ui.desktop_pager import PagerSpec
 from desktop_ui.key_hint_overlay import BadgeSpec
 from desktop_ui.keymap import KeyboardView
@@ -48,6 +47,5 @@ class DesktopSettings:
     indicator: IndicatorSpec
     switcher: SwitcherSpec
     tray: TraySpec
-    tray_menu: TrayMenuSpec
     placement: PlacementSpec
     pager: PagerSpec

@@ -76,8 +76,6 @@ class BarSpec:
     glass: Glass
     palette: Palette
     washes: Washes
-    title: str
-    """The bar window's title."""
 
 
 @dataclass(frozen=True, slots=True)

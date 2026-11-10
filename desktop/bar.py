@@ -207,6 +207,3 @@ TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05)
 
 PAGER: Final = PagerSpec(placement.WEB_APPS, (), desktop="Desktop", current="current", empty="No placed apps")
 """The pager's wording; `desktop.__main__` adds the chord letter for each desktop from the layout."""
-
-TITLE: Final = "Workspace floating bar"
-"""The bar window's title."""

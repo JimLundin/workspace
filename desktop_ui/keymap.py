@@ -102,42 +102,38 @@ class Cap:
     role: Role
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class KeymapWords:
-    """What the key map calls the keys' actions."""
+CHORD_HOLD: Final = "Apps"
+"""The Apps key, held for a request's letter: the laptop's Esc thumb or the Charybdis's Tab thumb."""
 
-    tools: frozendict[Tool, str]
-    chords: frozendict[Chord, str]
-    """Shortcuts named by what they do, such as Ctrl+Z as Undo."""
-    chord_hold: str
-    """The Apps key, held for a request's letter: the laptop's Esc thumb or the Charybdis's Tab thumb."""
-    hold: str
-    """Below a tool that acts while held."""
-    escape: str
-    escape_hold: str
-    """The escape key's tap and hold."""
-    held: str
-    """Below the thumb holding the layer shown."""
-
-    def __post_init__(self) -> None:
-        every_member(Tool, self.tools)
+_CHORD_NAMES: Final = frozendict(
+    {Chord.ctrl(Key.Z): "Undo", Chord.ctrl(Key.Y): "Redo", Chord.ctrl(Key.C): "Copy", Chord.ctrl(Key.V): "Paste", Chord.ctrl(Key.X): "Cut"}
+)
+TOOL_NAMES: Final = every_member(Tool, {
+    Tool.DICTATE: "Talk",
+    Tool.ZOOM: "Zoom",
+    Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",
+    Tool.DESKTOP_1: "Desk 1", Tool.DESKTOP_2: "Desk 2", Tool.DESKTOP_3: "Desk 3", Tool.DESKTOP_4: "Desk 4", Tool.DESKTOP_5: "Desk 5",
+    Tool.PLACEMENT_PAUSE: "Pause place", Tool.PLACE_NOW: "Re-place",
+    Tool.MEETING_TOGGLE: "Record", Tool.COPY_TRANSCRIPT: "Copy speech",
+    Tool.DICTATE_TOGGLE: "Dictate toggle",
+    Tool.WINDOW_SWITCHER: "Windows",
+})  # fmt: skip
 
 
 @dataclass(frozen=True, slots=True)
 class KeyboardView:
-    """The layout as the desktop draws and names it: its lookups, each request's chord letter, and the key map's words."""
+    """The layout as the desktop draws and names it: its lookups and each request's chord letter."""
 
     layout: Layout
     bindings: Bindings
     letters: frozendict[Request, str]
     """Each request's key under the Apps hold."""
-    words: KeymapWords
 
     @classmethod
-    def of(cls, layout: Layout, words: KeymapWords) -> KeyboardView:
+    def of(cls, layout: Layout) -> KeyboardView:
         """`layout` as the desktop reads it, or `LayoutError` if it is inconsistent."""
         bindings = Bindings.of(layout)
-        return cls(layout, bindings, Chords.of(bindings).letters, words)
+        return cls(layout, bindings, Chords.of(bindings).letters)
 
     def shortcut(self, tool: Tool) -> Shortcut | None:
         """The first binding in the held layers' order, else the tool's firmware chord."""
@@ -150,7 +146,7 @@ class KeyboardView:
                 if binding is tool:
                     return Shortcut(physical[cell].legend, physical[held].legend)
         letter = self.letters.get(tool)
-        return Shortcut(letter, self.words.chord_hold) if letter is not None else None
+        return Shortcut(letter, CHORD_HOLD) if letter is not None else None
 
     def describe(self, a: Binding) -> tuple[str, Role]:
         """A key's label and role, as drawn."""
@@ -159,8 +155,8 @@ class KeyboardView:
         match a:
             case Key():
                 return a.legend, Role.KEY
-            case Chord(key, mods) if a in self.words.chords:
-                return self.words.chords[a], Role.KEY
+            case Chord(key, mods) if a in _CHORD_NAMES:
+                return _CHORD_NAMES[a], Role.KEY
             case Chord(key) if a.only_shifted and (c := key.typed(shifted=True)):
                 return c, Role.KEY
             case Chord(key, mods):
@@ -172,14 +168,14 @@ class KeyboardView:
             case Layer():
                 return a.name.title(), Role.LAYER
             case Tool():
-                return self.words.tools[a], Role.TOOL
+                return TOOL_NAMES[a], Role.TOOL
             case App():
                 return a.name[:1].upper() + a.name[1:], Role.APP
 
     def _hold(self, a: Binding) -> str:
         match a:
             case Tool() if ROUTES[a] is Route.HOLD:
-                return self.words.hold
+                return "hold"
             case TapHold(hold=Mod() as modifier):
                 return modifier.legend
             case TapHold(hold=Layer() as layer):
@@ -196,12 +192,12 @@ class KeyboardView:
         """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
         name = key.legend
         if key.scancode == self.layout.escape:
-            return Cap(name, self.words.escape, self.words.escape_hold, Role.SPECIAL)
+            return Cap(name, "On/off", "hold: quit", Role.SPECIAL)
         match self.bindings.slot(key.scancode):
             case Unmapped():
                 return Cap(name, "", "", Role.BLANK)
             case int(cell) if cell == held:
-                return Cap(name, layer.name.title(), self.words.held, Role.HELD)
+                return Cap(name, layer.name.title(), "held", Role.HELD)
             case int(cell):
                 a = self.bindings.action(layer, cell)
                 label, role = self.describe(a)

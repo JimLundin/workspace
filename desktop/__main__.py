@@ -25,7 +25,7 @@ def main() -> None:
     if sys.platform != "win32":
         sys.exit("Workspace only runs on Windows")
     root = Path(__file__).resolve().parent.parent
-    keyboard = KeyboardView.of(layout.LAYOUT, windows.KEYMAP_WORDS)
+    keyboard = KeyboardView.of(layout.LAYOUT)
     hints = frozendict({tool: shortcut_hint(keyboard.shortcut(tool), compact=True) for tool in Tool})
     island = BarSpec(
         island=bar.ISLAND,
@@ -36,7 +36,6 @@ def main() -> None:
         glass=look.DESIGN.glass,
         palette=look.DESIGN.palette,
         washes=look.WASHES,
-        title=bar.TITLE,
     )
     run(
         DesktopSettings(
@@ -52,7 +51,6 @@ def main() -> None:
             indicator=windows.INDICATOR,
             switcher=windows.SWITCHER,
             tray=windows.TRAY_ICON,
-            tray_menu=windows.TRAY_MENU,
             placement=placement.PLACEMENT,
             pager=replace(bar.PAGER, letters=desktop_pager.jump_letters(keyboard.letters)),
         )

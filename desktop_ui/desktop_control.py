@@ -14,7 +14,7 @@ is its own effect and passes straight through.
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import assert_never
+from typing import Final, assert_never
 
 import protocol
 import winapi.shapes
@@ -68,45 +68,36 @@ class Separator:
     pass
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TrayWords:
-    """What the layout and meeting items say as their state changes."""
-
-    layout: str
-    """Before the layout's state: "Layout: on"."""
-    on: str
-    off: str
-    not_running: str
-    toggle_key: str
-    """The key that toggles the layout, shown at the item's trailing edge while it runs."""
-    restart: str
-    start: str
-    """Restarting a running layout, or starting a stopped one."""
-    record: str
-    stop_recording: str
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class TrayMenuSpec:
-    """The tray icon's menu, top to bottom, and its wording."""
-
-    items: tuple[TrayAction | Separator, ...]
-    words: TrayWords
+TRAY: Final[tuple[TrayAction | Separator, ...]] = (
+    TrayAction(Menu.TOGGLE_LAYOUT),
+    TrayAction(Menu.RESTART_LAYOUT),
+    TrayAction(Menu.OVERLAY, "Keyboard overlay"),
+    TrayAction(Menu.KEYMAP, "Key map"),
+    Separator(),
+    TrayAction(Menu.MEETING),
+    TrayAction(Menu.TRANSCRIPTS, "Open meeting transcripts"),
+    Separator(),
+    TrayAction(Menu.LOGS, "Open logs folder"),
+    Separator(),
+    TrayAction(Menu.RESTART_DESKTOP, "Restart desktop"),
+    TrayAction(Menu.QUIT, "Quit Workspace"),
+)
+"""The tray icon's menu, top to bottom. The layout and meeting items word their own state."""
 
 
-def tray_item(item: TrayAction, state: MenuState, words: TrayWords) -> MenuItem:
+def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
     """One item as it reads in `state`: its words, hint, and whether it's enabled or checked."""
     running = state.layout in (LayoutState.ON, LayoutState.OFF)
     hint = f"\t{item.key}" if item.key else ""
     match item.action:
         case Menu.TOGGLE_LAYOUT:
-            status = words.on if state.layout is LayoutState.ON else words.off if state.layout is LayoutState.OFF else words.not_running
-            text = f"{words.layout}: {status}" + (f"\t{words.toggle_key}" if running else "")
+            status = "on" if state.layout is LayoutState.ON else "off" if state.layout is LayoutState.OFF else "not running"
+            text = f"Layout: {status}" + ("\tTap §" if running else "")
             return MenuItem(item.action.value, text, enabled=running, checked=state.layout is LayoutState.ON)
         case Menu.RESTART_LAYOUT:
-            return MenuItem(item.action.value, words.restart if running else words.start)
+            return MenuItem(item.action.value, "Restart layout" if running else "Start layout")
         case Menu.MEETING:
-            return MenuItem(item.action.value, words.stop_recording if state.capturing else words.record)
+            return MenuItem(item.action.value, "Stop recording" if state.capturing else "Record a meeting")
         case Menu.OVERLAY:
             return MenuItem(item.action.value, item.label + hint, checked=state.overlay_enabled)
         case Menu.KEYMAP | Menu.TRANSCRIPTS | Menu.LOGS | Menu.RESTART_DESKTOP | Menu.QUIT:
@@ -115,12 +106,12 @@ def tray_item(item: TrayAction, state: MenuState, words: TrayWords) -> MenuItem:
             assert_never(item.action)
 
 
-def menu_items(state: MenuState, spec: TrayMenuSpec) -> Iterator[MenuItem]:
+def menu_items(state: MenuState) -> Iterator[MenuItem]:
     """The tray menu as it reads in `state`; a separator is item 0."""
-    for item in spec.items:
+    for item in TRAY:
         match item:
             case TrayAction():
-                yield tray_item(item, state, spec.words)
+                yield tray_item(item, state)
             case Separator():
                 yield MenuItem(0)
             case _:

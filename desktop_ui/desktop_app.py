@@ -282,8 +282,7 @@ class DesktopApp:
                 except OSError:
                     return Problem("The overlay changed, but its setting couldn't be saved.")
             case Flash(on=on):
-                words = self.settings.indicator
-                self._indicator().flash(words.layout_on if on else words.layout_off, indicator_area())
+                self._indicator().flash("Layout on" if on else "Layout off", indicator_area())
             case PressedKeys(pressed, reset):
                 if keymap := self.views.get().overlay:
                     keymap.set_pressed(pressed, reset=reset)
@@ -294,7 +293,7 @@ class DesktopApp:
                 if layout is None or not system.post_message(layout, protocol.Message.TOGGLE_LAYOUT, 0, 0):
                     return Problem("Couldn't reach the layout. Try Start layout or Restart layout.")
             case ShowMenu(state):
-                return MenuChosen(shell.show_menu(self.inbox.window.handle, tuple(menu_items(state, self.settings.tray_menu))))
+                return MenuChosen(shell.show_menu(self.inbox.window.handle, tuple(menu_items(state))))
             case Quit():
                 self.quit()
             case _:

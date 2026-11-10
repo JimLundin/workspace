@@ -694,7 +694,7 @@ class BarWindow(QtWidgets.QWidget):
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()
         self.glass = False
-        tool_window(self, spec.title, on_top=True)
+        tool_window(self, "Workspace floating bar", on_top=True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # The open menu takes the keyboard here.
         borderless(int(self.winId()))
         windows.allow_activation(int(self.winId()), allowed=False)
