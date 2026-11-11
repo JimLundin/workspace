@@ -110,6 +110,8 @@ class CapsuleView:
     tint: meaning.Tint = meaning.Tint.NONE
     panels: tuple[Panel, ...] = field(default=(), kw_only=True)
     """The panel each slot opens, slot for slot; a capsule without them acts as a whole."""
+    tips: tuple[str, ...] = field(default=(), kw_only=True)
+    """What each slot reads as under the pointer, slot for slot; a capsule without them has one tip, its label."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,11 +213,15 @@ class Words:
     listening: str
     """Dictation's accessible name."""
     open_controls: str
-    """After a capsule's description: pressing it opens the controls."""
+    """After a capsule's description: pressing it opens the controls; Workspace's own reading says it alone."""
     close_controls: str
     """The expanded status capsule's name."""
+    keyboard: str
+    """Said of the keyboard while it types plainly."""
+    battery: str
+    """Before the battery's charge."""
     charger: str
-    """Said of a connected charger."""
+    """Said of a connected charger, and of a machine without a battery."""
     cpu: str
     memory: str
     of: str
@@ -334,19 +340,6 @@ def battery_tone(ambient: Ambient, status: StatusSpec) -> meaning.Tone:
             return meaning.Tone.INK
 
 
-def resources(system: SystemStatus, words: Words, status: StatusSpec) -> str:
-    """The processor and memory readings, as words: memory in use of all installed."""
-    cpu = words.unavailable if system.cpu is None else f"{system.cpu}%"
-    match system.memory:
-        case Memory(used=used, total=total):
-            memory = f"{gigabytes(used, status)} {words.of} {gigabytes(total, status)}"
-        case None:
-            memory = words.unavailable
-        case _:
-            assert_never(system.memory)
-    return f"{words.cpu} {cpu}, {words.memory} {memory}"
-
-
 def usage(percent: int | None, status: StatusSpec) -> Text:
     """The processor's share in use, reserving its widest form so a changing value never shifts the cluster."""
     return Text(status.unread if percent is None else f"{percent}%", reserve=status.widest_percent)
@@ -383,18 +376,42 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
             assert_never(each)
 
 
-def devices(system: SystemStatus, status: StatusSpec) -> str:
-    return status.speakers[system.speakers].description + ". " + status.wifi[system.wifi].description
-
-
-def describe(ambient: Ambient, spec: IslandSpec) -> str:
-    match ambient.power:
-        case Battery(powered=True):
-            charger = spec.words.charger
+def tip(each: Reading, observed: Observed, spec: IslandSpec) -> str:
+    """What one reading says under the pointer, in words rather than symbols."""
+    ambient, system, words, status = observed.ambient, observed.system, spec.words, spec.status
+    match each:
+        case Reading.WORKSPACE:
+            return words.open_controls
+        case Reading.KEYBOARD:
+            return words.keyboard
+        case Reading.SPEAKER:
+            return status.speakers[system.speakers].description
+        case Reading.WIFI:
+            return status.wifi[system.wifi].description
+        case Reading.CLOCK:
+            return ambient.clock
+        case Reading.BATTERY:
+            match ambient.power:
+                case Battery(percent=percent, powered=powered):
+                    return f"{words.battery} {percent}%" + (f". {words.charger}" if powered else "")
+                case PowerUnavailable.NO_BATTERY:
+                    return words.charger
+                case PowerUnavailable.UNKNOWN:
+                    return f"{words.battery} {words.unavailable}"
+                case _:
+                    assert_never(ambient.power)
+        case Reading.CPU:
+            return f"{words.cpu} {words.unavailable if system.cpu is None else f'{system.cpu}%'}"
+        case Reading.MEMORY:
+            match system.memory:
+                case Memory(used=used, total=total):
+                    return f"{words.memory} {gigabytes(used, status)} {words.of} {gigabytes(total, status)}"
+                case None:
+                    return f"{words.memory} {words.unavailable}"
+                case _:
+                    assert_never(system.memory)
         case _:
-            charger = ""
-    readings = "  ·  ".join(value for value in (ambient.clock, battery_text(ambient, spec.status)) if value)
-    return ". ".join(value for value in (readings, charger) if value)
+            assert_never(each)
 
 
 def recording_slot(recorded: Capture, words: Words, *, hovered: bool) -> Slot:
@@ -425,22 +442,12 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
     # The readings stay the top row while their capsule expands into the menu. Each
     # reading is its own slot; a reading with nothing to show (a keyboard typing
     # normally) takes none, and a group without any takes no space or rule.
-    shown = tuple((slot, spec.status.opens[each]) for each in spec.status.readings if (slot := reading(each, observed, spec.status)))
-    readings = tuple(slot for slot, _ in shown)
-    panels = tuple(panel for _, panel in shown)
-    persistent = (
-        CapsuleView(Key.STATUS, Zone.RIGHT, readings, words.close_controls, Action.CLOSE_MENU, panels=panels)
-        if expanded
-        else CapsuleView(
-            Key.STATUS,
-            Zone.RIGHT,
-            readings,
-            ". ".join((resources(observed.system, words, spec.status), devices(observed.system, spec.status), describe(observed.ambient, spec)))
-            + f" · {words.open_controls}",
-            Action.OPEN_MENU,
-            panels=panels,
-        ),
-    )
+    shown = tuple((each, slot) for each in spec.status.readings if (slot := reading(each, observed, spec.status)))
+    readings = tuple(slot for _, slot in shown)
+    panels = tuple(spec.status.opens[each] for each, _ in shown)
+    tips = tuple(tip(each, observed, spec) for each, _ in shown)
+    label, action = (words.close_controls, Action.CLOSE_MENU) if expanded else (". ".join(tips), Action.OPEN_MENU)
+    persistent = (CapsuleView(Key.STATUS, Zone.RIGHT, readings, label, action, panels=panels, tips=tips),)
     panel = (CapsuleView(Key.PANEL, Zone.PANEL, (), words.close_controls, Action.CLOSE_MENU),) if expanded else ()
     active = observed.dictating or job is not None or recorded is not None
     middle = (centre(observed, recorded, words, hovered=hovered),) if active and not expanded else ()

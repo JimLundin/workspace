@@ -27,12 +27,13 @@ close together while desktops sit a wider gap apart. The current desktop has a
 dot under its apps, and the pointer lights only the app under it.
 
 The resource readings are the processor's percentage and the gigabytes of
-memory in use (the tooltip adds how many are installed), each before its
+memory in use (its own tooltip adds how many are installed), each before its
 symbol and beside the battery's, so the machine's readings sit together, and the
 clock closes the capsule at the screen's edge where it is easiest to find. Each
 reserves its widest form ("100%", "00.0 GB") so a changing value never moves
 the cluster, and its digits keep to the right of that room, against their
-symbol. Each reading is its own slot, so every two sit the same gap apart. An unread value shows "—" rather than 0. The status worker reads
+symbol. Each reading is its own slot, so every two sit the same gap apart, and has its own
+tooltip, saying in words what it shows. An unread value shows "—" rather than 0. The status worker reads
 them every 2 s; CPU is the busy share of processor time since the previous
 reading. Disk, network and GPU are left out: on this laptop they are idle or
 bursty, so a number there is mostly noise.

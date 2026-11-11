@@ -642,8 +642,27 @@ class Capsule(KeyboardFocus):
         return 0.0 if self.drawn.view.zone is Zone.PANEL else self.window_.sizes.bar.top
 
     def describe(self, view: CapsuleView) -> None:
-        self.setToolTip("" if view.action is Action.CLOSE_MENU else view.label)
+        # A capsule of readings tips each reading under the pointer (`event`); any other tips as a whole.
+        self.setToolTip("" if view.action is Action.CLOSE_MENU or view.tips else view.label)
         self.setAccessibleName(view.label)
+
+    @override
+    def event(self, event: QtCore.QEvent) -> bool:
+        """The reading under the pointer shows its own tip, held only while the pointer stays over that reading."""
+        view = self.drawn.view
+        if event.type() is not QtCore.QEvent.Type.ToolTip or not view.tips:
+            return super().event(event)
+        assert isinstance(event, QtGui.QHelpEvent)
+        sizes, content = self.window_.sizes, self.drawn.content
+        slot = self.reading_under(QtCore.QPointF(event.pos()))
+        box = lit(content, slot, sizes.capsule) if slot is not None and slot < len(view.tips) else None
+        if view.action is Action.CLOSE_MENU or slot is None or box is None:
+            QtWidgets.QToolTip.hideText()
+            event.ignore()
+            return True
+        area = QtCore.QRectF(self.shift(content) + box.x, sizes.bar.top + box.y, box.width, box.height).toAlignedRect()
+        QtWidgets.QToolTip.showText(event.globalPos(), view.tips[slot], self, area)
+        return True
 
     def show_view(self, drawn: Drawn, *, contrast: bool) -> None:
         """Show `drawn`; a frame that only moves the capsule changes nothing it paints."""

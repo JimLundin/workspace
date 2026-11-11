@@ -1,11 +1,12 @@
 """Real ambient observations, including unavailable devices."""
 
 import unittest
+from dataclasses import replace
 
 from win32more.Windows.Win32.System.Power import SYSTEM_POWER_STATUS
 
 from desktop_ui.ambient import Ambient
-from desktop_ui.island_model import battery_text, describe
+from desktop_ui.island_model import Reading, battery_text, tip
 from tests import test_island_model
 from winapi import ambient, system_status
 from winapi.machine_status import Battery, CpuTimes, Network, PowerUnavailable, Wifi, cpu_load, nearby
@@ -17,7 +18,8 @@ def test_battery_percentage_remains_visible_when_plugged_in_or_full() -> None:
         for powered, charging in ((True, True), (True, False), (False, False)):
             observed = Ambient("09:41", Battery(percent, powered=powered, charging=charging))
             shown = battery_text(observed, test_island_model.SPEC.status)
-            assert str(percent) in shown and shown in describe(observed, test_island_model.SPEC)
+            said = tip(Reading.BATTERY, replace(test_island_model.RESTING, ambient=observed), test_island_model.SPEC)
+            assert str(percent) in shown and shown in said
 
 
 def test_invalid_battery_is_not_presented_as_a_real_observation() -> None:

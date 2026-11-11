@@ -38,6 +38,7 @@ from desktop_ui.island_model import (
     island,
     order,
     reading,
+    tip,
 )
 from winapi.machine_status import Battery, Memory, PowerUnavailable, Speakers, Wifi
 
@@ -66,6 +67,8 @@ WORDS = Words(
     listening="Hearing",
     open_controls="Open",
     close_controls="Close",
+    keyboard="Plain keys",
+    battery="Cell",
     charger="Plugged in",
     cpu="Chip",
     memory="Ram",
@@ -228,3 +231,15 @@ def test_a_recording_reads_as_its_phase_says_and_its_elapsed_time_keeps_its_hour
     assert capture(RecordingState(phase="recording", seconds=65), PHASES) == Capture("01:05", can_stop=True, attention=False)
     assert capture(RecordingState(phase="paused", seconds=65), PHASES) == Capture("Look", can_stop=False, attention=True)
     assert capture(RecordingState(phase="saved", seconds=900), PHASES) is None
+
+
+def test_each_reading_has_its_own_tip_slot_for_slot() -> None:
+    # Defects: the capsule tips every reading with one combined description, a hidden
+    # reading keeps its tip so every later reading shows its neighbour's, or a tip
+    # misses the value its reading shows.
+    for observed in (RESTING, replace(RESTING, plain_keyboard=True)):
+        status = view(observed, Key.STATUS)
+        shown = tuple(each for each in SPEC.status.readings if reading(each, observed, SPEC.status))
+        assert status.tips == tuple(tip(each, observed, SPEC) for each in shown)
+        assert len(set(status.tips)) == len(status.slots)
+        assert "10:22" in status.tips[shown.index(Reading.CLOCK)] and "73" in status.tips[shown.index(Reading.BATTERY)]
