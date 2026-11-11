@@ -26,6 +26,7 @@ from desktop_ui.island_menu import (
     Controls,
     ControlsSpec,
     Menu,
+    Page,
     Panel,
     Slider,
     ToolChoice,
@@ -36,6 +37,7 @@ from desktop_ui.island_menu import (
 )
 from desktop_ui.island_model import Action, CapsuleView, IslandSpec, Key, Marker, capture
 from desktop_ui.island_motion import IslandMotion, Springs, Timing, advance, finish, settled
+from desktop_ui.month import Month
 from desktop_ui.navigation import Order, Placing
 from protocol import Tool
 from winapi import appearance
@@ -114,9 +116,11 @@ class BarModel:
 
 
 def menu(model: BarModel, panel: Panel) -> Menu:
-    """`panel` for what's happening now, keeping the selection while it stays open."""
+    """`panel` for what's happening now, keeping its selection and month while it stays open."""
     recorded = capture(model.recording, model.spec.island.words.phases) if model.recording.capturing else None
     seen = model.seen
+    kept = opened if (opened := model.opened) and opened.panel is panel else None
+    month = kept.month if kept else None
     sound = Slider(model.spec.controls.words.sound, seen.system.volume, muted=seen.system.speakers is Speakers.MUTED)
     built = Menu(
         panel,
@@ -129,13 +133,15 @@ def menu(model: BarModel, panel: Panel) -> Menu:
                 sound=sound,
                 tray=seen.tray_tips,
                 hints=model.spec.hints,
+                today=seen.ambient.today,
+                month=month,
             ),
             model.spec.controls,
             panel,
         ),
+        month=month,
     )
-    kept = model.opened
-    return replace(built, selected=kept.selected) if kept is not None and kept.panel is panel else built
+    return replace(built, selected=kept.selected) if kept else built
 
 
 # ---- facts --------------------------------------------------------------------------
@@ -151,6 +157,13 @@ class PanelPressed:
     """A reading in the status capsule was pressed: it opens its panel, or closes it if open."""
 
     panel: Panel
+
+
+@dataclass(frozen=True, slots=True)
+class Paged:
+    """The calendar's arrow was pressed."""
+
+    months: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,6 +281,7 @@ class Closing:
 type Event = (
     Pressed
     | PanelPressed
+    | Paged
     | Hovered
     | Selected
     | Picked
@@ -414,6 +428,10 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
             return model, (ToggleAway(),)
         case Command.MUTE:
             return _muted(model, muted=model.seen.system.speakers is not Speakers.MUTED)
+        case Command.THIS_MONTH:
+            return _turned(model, None), ()
+        case Page(months=months):
+            return _paged(model, months), ()
         case Command.NOTIFICATIONS:
             return model, (NotificationSettings(),)
         case Command.ALL_CONTROLS:
@@ -437,6 +455,21 @@ def _muted(model: BarModel, *, muted: bool) -> tuple[BarModel, tuple[Effect, ...
     speakers = Speakers.MUTED if muted else Speakers.AUDIBLE
     seen = replace(model.seen, system=replace(model.seen.system, speakers=speakers))
     return replace(model, seen=seen), (SetMute(muted=muted), Render())
+
+
+def _turned(model: BarModel, month: Month | None) -> BarModel:
+    """The open calendar shows `month`; None returns it to today's."""
+    return replace(model, opened=replace(model.opened, month=month)) if model.opened is not None else model
+
+
+def _paged(model: BarModel, months: int) -> BarModel:
+    """The calendar turned from the month it shows; past the representable dates it stays."""
+    if not (opened := model.opened) or not (today := model.seen.ambient.today):
+        return model
+    try:
+        return _turned(model, (opened.month or Month.of(today)).paged(months))
+    except ValueError:
+        return model
 
 
 def _tray(model: BarModel, slot: int, click: Click) -> tuple[BarModel, tuple[Effect, ...]]:
@@ -518,6 +551,8 @@ def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]
             return _pressed(model, action)
         case PanelPressed(panel):
             return _panel(model, panel)
+        case Paged(months):
+            return _changed(model, _paged(model, months))
         case Hovered(key):
             return _changed(model, replace(model, hovered=key))
         case Selected(index):

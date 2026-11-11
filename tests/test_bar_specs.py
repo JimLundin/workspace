@@ -63,6 +63,11 @@ BASE = Sizes(
         live_elide=80,
         stop_right=5,
         tray_image=20,
+        month_head=26,
+        month_arrow=24,
+        weekdays=16,
+        month_side=3,
+        today=10,
     ),
     type=BarType(reading=Font(11, Weight.MEDIUM), strong=Font(11, Weight.SEMIBOLD), detail=Font(9, Weight.REGULAR)),
 )

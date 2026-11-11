@@ -162,6 +162,16 @@ class Cells:
     """The card's Stop circle from the trailing edge."""
     tray_image: float
     """The largest a tray application's image draws, in DIPs: Windows' small-icon size."""
+    month_head: float
+    """The calendar's heading row, with its arrows..."""
+    month_arrow: float
+    """...each this wide..."""
+    weekdays: float
+    """...then the weekdays' row; the six weeks share what remains."""
+    month_side: float
+    """The days' columns from the tile's sides."""
+    today: float
+    """The radius of today's disc."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

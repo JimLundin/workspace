@@ -1,6 +1,7 @@
 """Validated observations for the toolbar's quiet resting presentation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 
 from winapi.machine_status import Memory, Power, Speakers, Wifi
 
@@ -26,3 +27,5 @@ class SystemStatus:
 class Ambient:
     clock: str
     power: Power
+    today: date | None = field(default=None, kw_only=True)
+    """The local date the clock reads; None before the first tick."""

@@ -66,13 +66,15 @@ SPEC = ControlsSpec(
                 CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
                 CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
             ),
+            Panel.CALENDAR: (CellsRow(10, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),)),),
             Panel.SOUND: (
                 CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
                 CellsRow(2, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Hush"),)),
             ),
         }
     ),
-    MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed"),
+    MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed", month="%m/%Y", weekday="%a"),
+    first_weekday=6,
 )
 
 RESTING = Controls(None, sound=Slider("Volume", 0.4, muted=False))

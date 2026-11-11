@@ -30,6 +30,10 @@ _MEMORY = (
     '<path d="M3.5 6h2v3h-2zM7 6h2v3H7zM10.5 6h2v3h-2zM3 11h1v2H3zM5 11h1v2H5zM7 11h1v2H7zM9 11h1v2H9zM11 11h1v2h-1z"/>'
 )
 
+# Chevrons turn the calendar's months.
+_EARLIER = '<path d="M10.35 3.15l.7.7L6.9 8l4.15 4.15-.7.7L5.5 8z"/>'
+_LATER = '<path d="M5.65 3.15l-.7.7L9.1 8l-4.15 4.15.7.7L10.5 8z"/>'
+
 _QUESTION = '<path d="M11 10a2 2 0 0 1 4 0c0 1-1.5 1.2-1.5 2h-1c0-1.4 1.5-1.5 1.5-2a1 1 0 0 0-2 0z"/><circle cx="13" cy="14" r=".6"/>'
 _ABSENT = '<path d="M11 11h4v1h-4z"/>'
 
@@ -42,7 +46,7 @@ class Badged:
     badge: str
 
 
-OWN: Final = frozendict({"stop": _STOP, "stop.fill": _STOP, "cpu": _CPU, "memory": _MEMORY})
+OWN: Final = frozendict({"stop": _STOP, "stop.fill": _STOP, "cpu": _CPU, "memory": _MEMORY, "earlier": _EARLIER, "later": _LATER})
 """Symbols drawn here rather than taken from Fluent."""
 BADGED: Final = frozendict(
     {

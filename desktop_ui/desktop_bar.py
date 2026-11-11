@@ -374,9 +374,10 @@ class DesktopBar:
             if preference is appearance.Material.GLASS and sample_bounds is not None:
                 self.materials.submit((sample_bounds,))
         area = QtGui.QGuiApplication.primaryScreen().geometry()
+        now_local = datetime.now()
         observed = Surroundings(
             system,
-            Ambient(datetime.now().strftime(self.window.spec.island.status.clock), power),
+            Ambient(now_local.strftime(self.window.spec.island.status.clock), power, today=now_local.date()),
             preference,
             frost,
             arrangement,

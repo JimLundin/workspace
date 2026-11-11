@@ -1,6 +1,7 @@
 """The bar's decisions, as values: opening and closing the menu, and what a publication changes."""
 
 from dataclasses import replace
+from datetime import date
 
 from desktop_ui.bar_events import (
     BarModel,
@@ -8,6 +9,7 @@ from desktop_ui.bar_events import (
     DictationShown,
     Expand,
     Opening,
+    Paged,
     PanelPressed,
     Picked,
     Pressed,
@@ -17,8 +19,9 @@ from desktop_ui.bar_events import (
     menu,
     transition,
 )
-from desktop_ui.island_menu import Applied, Command, Key, Panel, Toggle, label, press
+from desktop_ui.island_menu import Applied, Calendar, Command, Key, Page, Panel, Toggle, label, press
 from desktop_ui.island_model import Action
+from desktop_ui.month import Month
 from tests import test_bar_specs
 from winapi.machine_status import Speakers
 
@@ -83,3 +86,26 @@ def test_mute_flips_the_speakers_and_shows_at_once() -> None:
         assert SetMute(muted=after) in tuple(effects)
         shown = next(cell.entry for cell in menu(flipped, Panel.SOUND).cells if isinstance(cell.entry, Toggle))
         assert shown.on is after, label(shown)
+
+
+def test_the_calendar_turns_from_the_month_it_shows_and_returns_to_today() -> None:
+    # Defects: each arrow turns from today's month rather than the one shown, the turned
+    # month is lost on the next render, another panel inherits it, or the heading
+    # doesn't bring today back.
+    dated = replace(model(), seen=replace(model().seen, ambient=replace(model().seen.ambient, today=date(2026, 12, 31))))
+
+    def shown(state: BarModel) -> Month:
+        assert state.opened is not None
+        calendar = next(cell.entry for cell in menu(state, state.opened.panel).cells if isinstance(cell.entry, Calendar))
+        return calendar.month
+
+    opened = replace(dated, opened=menu(dated, Panel.CALENDAR))
+    assert shown(opened) == Month(2026, 12)
+    once, _ = transition(opened, Paged(1))
+    twice, _ = transition(once, Paged(1))
+    assert shown(twice) == Month(2027, 2)
+    calendar = menu(twice, Panel.CALENDAR)
+    assert press(replace(calendar, selected=0), Key.LEFT) == Applied(Page(-1))
+    assert menu(twice, Panel.SOUND).month is None
+    back, _ = transition(twice, Picked(0))
+    assert shown(back) == Month(2026, 12)

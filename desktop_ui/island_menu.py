@@ -13,10 +13,12 @@ its application.
 """
 
 from dataclasses import dataclass, field, replace
+from datetime import date
 from enum import Enum, StrEnum, auto
 from itertools import accumulate, chain
 from typing import Final, assert_never
 
+from desktop_ui.month import Month
 from protocol import Tool
 
 
@@ -28,6 +30,7 @@ class Command(Enum):
     PLACEMENT = auto()
     DARK_WHEN_AWAY = auto()
     MUTE = auto()
+    THIS_MONTH = auto()
     NOTIFICATIONS = auto()
     ALL_CONTROLS = auto()
 
@@ -53,7 +56,14 @@ class TrayChoice:
     slot: int
 
 
-type Choice = Command | ToolChoice | Volume | TrayChoice
+@dataclass(frozen=True, slots=True)
+class Page:
+    """Turn the calendar `months` later, or earlier when negative."""
+
+    months: int
+
+
+type Choice = Command | ToolChoice | Volume | TrayChoice | Page
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +116,16 @@ class TrayIcon:
     slot: int
 
 
-type Entry = Item | Live | Toggle | Slider | TrayIcon
+@dataclass(frozen=True, slots=True)
+class Calendar:
+    """A month's weeks, with today marked when it falls in them."""
+
+    label: str
+    month: Month
+    today: date
+
+
+type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar
 
 
 class Face(StrEnum):
@@ -119,6 +138,7 @@ class Face(StrEnum):
     TOOL = auto()  # A small square with its symbol above a caption.
     LINK = auto()  # A quiet line of text.
     ICON = auto()  # A tray application's own image, icon-sized.
+    CALENDAR = auto()  # A month under its name, with arrows to turn it.
 
 
 # Eight narrow columns: tray icons take one each, the other tiles span pairs.
@@ -148,6 +168,9 @@ class Controls:
     dark_when_away: bool = field(default=False, kw_only=True)
     sound: Slider = Slider("", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
+    today: date | None = field(default=None, kw_only=True)
+    month: Month | None = field(default=None, kw_only=True)
+    """The month the calendar shows."""
     hints: frozendict[Tool, str] = field(default=frozendict(), kw_only=True)
     """Each tool's keys on the layout, at a tool cell's trailing edge."""
 
@@ -160,6 +183,7 @@ class Panel(StrEnum):
 
     WORKSPACE = auto()  # Workspace's own controls, its activities and the tray.
     SOUND = auto()
+    CALENDAR = auto()
 
 
 class EntryId(StrEnum):
@@ -172,6 +196,7 @@ class EntryId(StrEnum):
     RECORD = auto()
     SOUND = auto()
     MUTE = auto()
+    CALENDAR = auto()
     SWITCH_WINDOWS = auto()
     COPY_TRANSCRIPT = auto()
     KEYMAP = auto()
@@ -231,6 +256,10 @@ class MenuWords:
     unread: str
     """The speaker level before Windows reports one."""
     muted: str
+    month: str
+    """The calendar's heading, a `strftime` format."""
+    weekday: str
+    """The calendar's column headings, a `strftime` format."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +268,8 @@ class ControlsSpec:
 
     panels: frozendict[Panel, tuple[RowSpec, ...]]
     words: MenuWords
+    first_weekday: int = field(kw_only=True)
+    """The calendar's first column: 0 is Monday, 6 Sunday."""
 
 
 def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
@@ -264,6 +295,8 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
         case EntryId.MUTE:
             muted = controls.sound.muted
             return toggle(spec, words.on if muted else words.off, Command.MUTE, on=muted)
+        case EntryId.CALENDAR:
+            return Calendar(spec.label, controls.month or Month.of(today), today) if (today := controls.today) else None
         case EntryId.SWITCH_WINDOWS:
             return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER, controls.hints)
         case EntryId.COPY_TRANSCRIPT:
@@ -337,11 +370,13 @@ class Menu:
     panel: Panel
     cells: tuple[Cell, ...]
     selected: int | None = None
+    month: Month | None = None
+    """The month the calendar was turned to; None shows today's."""
 
 
 def label(entry: Entry) -> str:
     match entry:
-        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | TrayIcon(label=text):
+        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | TrayIcon(label=text) | Calendar(label=text):
             return text
         case _:
             assert_never(entry)
@@ -435,8 +470,10 @@ VOLUME_STEP: Final = 0.05
 
 
 def sideways(menu: Menu, entry: Entry | None, key: Key) -> Outcome:
-    """Left and Right change the volume on the slider and otherwise move."""
+    """Left and Right change the volume on the slider, turn the calendar, and otherwise move."""
     match entry:
+        case Calendar():
+            return Applied(Page(1 if key is Key.RIGHT else -1))
         case Slider(level=float() as level):
             change = VOLUME_STEP if key is Key.RIGHT else -VOLUME_STEP
             return Applied(Volume(min(1.0, max(0.0, round(level + change, 2)))))
@@ -474,6 +511,8 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
             return Applied(choice)
         case TrayIcon(slot=slot):
             return Chosen(TrayChoice(slot))
+        case Calendar():
+            return Applied(Command.THIS_MONTH)
         case Slider() | None:
             return menu
         case _:
@@ -491,9 +530,11 @@ def jump(menu: Menu, character: str) -> Menu:
 def restores_focus(choice: Choice) -> bool:
     """Window tools and quiet toggles hand the keyboard back; Workspace's own views keep it."""
     match choice:
-        case ToolChoice() | Volume():
+        case ToolChoice() | Volume() | Page():
             return True
-        case Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.MUTE | Command.RECORD | Command.STOP_RECORDING:
+        case (
+            Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.MUTE | Command.THIS_MONTH | Command.RECORD | Command.STOP_RECORDING
+        ):
             return True
         case Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
             return False

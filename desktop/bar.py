@@ -87,6 +87,11 @@ SIZES: Final = Sizes(
         live_elide=84,
         stop_right=6,
         tray_image=22,
+        month_head=30,
+        month_arrow=28,
+        weekdays=20,
+        month_side=4,
+        today=12,
     ),
     type=BarType(reading=look.TYPE.reading, strong=look.TYPE.strong, detail=look.TYPE.detail),
 )
@@ -120,6 +125,7 @@ CONTROLS: Final = ControlsSpec(
                 CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
                 CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
             ),
+            Panel.CALENDAR: (CellsRow(25, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Calendar"),)),),
             Panel.SOUND: (
                 CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
                 CellsRow(4, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Mute", "speaker-muted"),)),
@@ -134,7 +140,10 @@ CONTROLS: Final = ControlsSpec(
         sound="Sound",
         unread="unavailable",
         muted="muted",
+        month="%B %Y",
+        weekday="%a",
     ),
+    first_weekday=0,  # Monday.
 )
 """The status capsule's panels, each top to bottom: Workspace's own controls
 (press its glyph, or an activity) and each reading's own (press the reading).
@@ -171,7 +180,7 @@ ISLAND: Final = IslandSpec(
                 Reading.CPU: Panel.WORKSPACE,
                 Reading.MEMORY: Panel.WORKSPACE,
                 Reading.BATTERY: Panel.WORKSPACE,
-                Reading.CLOCK: Panel.WORKSPACE,
+                Reading.CLOCK: Panel.CALENDAR,
             },
         ),
         low_battery=20,

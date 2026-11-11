@@ -20,16 +20,30 @@ lazy from PySide6.QtCore import Qt
 
 from desktop_ui import island_menu
 from desktop_ui.bar_control import KeyboardFocus, paint_feedback
-from desktop_ui.bar_events import BarSpec, Deactivated, Event, Hovered, MenuKey, PanelPressed, Picked, Pressed, Selected, TrayClicked, VolumeSet
+from desktop_ui.bar_events import (
+    BarSpec,
+    Deactivated,
+    Event,
+    Hovered,
+    MenuKey,
+    Paged,
+    PanelPressed,
+    Picked,
+    Pressed,
+    Selected,
+    TrayClicked,
+    VolumeSet,
+)
 from desktop_ui.components.appearance import Glass, GlassLook, Look, Shade, SolidLook, reading, rim_stops
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, reading_at, tiles
-from desktop_ui.island_menu import Face, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
+from desktop_ui.island_menu import Calendar, Face, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
 from desktop_ui.live_marks import Beat, paint_dots, paint_wave
+from desktop_ui.month import WEEKS, weeks
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.shell_surface import Pager, pixmap
 from desktop_ui.vector_icons import paint_icon
@@ -210,6 +224,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                 name = f"{label}: {sound_reading(slider, self.capsule.window_.spec.controls.words)}"
             case TrayIcon(label=label):
                 name = label
+            case Calendar(label=label, month=month):
+                name = f"{label}: {month.first().strftime(self.capsule.window_.spec.controls.words.month)}"
             case _:
                 assert_never(self.tile.cell.entry)
         if self.accessibleName() != name:
@@ -240,13 +256,20 @@ class MenuCell(QtWidgets.QAbstractButton):
         control = self.sizes.capsule.control
         return QtCore.QRectF(self.width() - control - self.sizes.cells.stop_right, (self.height() - control) / 2, control, control)
 
+    def month_heading(self) -> tuple[QtCore.QRectF, QtCore.QRectF, QtCore.QRectF]:
+        """The calendar's heading, which returns it to today, and its earlier and later arrows."""
+        cells = self.sizes.cells
+        later = QtCore.QRectF(self.width() - cells.month_side - cells.month_arrow, 0, cells.month_arrow, cells.month_head)
+        earlier = later.translated(-cells.month_arrow, 0)
+        return QtCore.QRectF(cells.lead, 0, earlier.left() - cells.lead, cells.month_head), earlier, later
+
     @override
     def hitButton(self, pos: QtCore.QPoint) -> bool:
         match self.tile.cell.entry:
             case Live():
                 return self.stop_circle().contains(QtCore.QPointF(pos))
-            case Slider():
-                return False  # The slider takes the pointer itself rather than clicking.
+            case Slider() | Calendar():
+                return False  # The slider and the calendar take the pointer themselves rather than clicking.
             case Item() | Toggle() | TrayIcon():
                 return super().hitButton(pos)
             case _:
@@ -260,10 +283,25 @@ class MenuCell(QtWidgets.QAbstractButton):
             case _:
                 pass
 
+    def turn(self, pos: QtCore.QPointF) -> None:
+        """A press on the calendar's arrows turns it; on its heading, it returns to today."""
+        match self.tile.cell.entry:
+            case Calendar():
+                heading, earlier, later = self.month_heading()
+                if earlier.contains(pos):
+                    self.capsule.window_.report(Paged(-1))
+                elif later.contains(pos):
+                    self.capsule.window_.report(Paged(1))
+                elif heading.contains(pos):
+                    self.capsule.window_.report(Picked(self.tile.index))
+            case _:
+                pass
+
     @override
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mousePressEvent(event)
         self.slide(event.position())
+        self.turn(event.position())
         event.accept()  # A miss on a cell stays in the menu, rather than reaching the capsule beneath it.
 
     @override
@@ -302,7 +340,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         if cell.face is not Face.LINK:
             painter.setBrush(color(Shade(lettering.ink.color, self.capsule.window_.washes.well)))
             painter.drawRoundedRect(bounds, corner, corner)
-        paint_feedback(painter, lettering, bounds, corner, pressed=chosen, hovered=self.underMouse() and cell.face is not Face.CARD)
+        paint_feedback(painter, lettering, bounds, corner, pressed=chosen, hovered=self.underMouse() and cell.face not in (Face.CARD, Face.CALENDAR))
         match cell.entry:
             case Live() as activity:
                 self.paint_live(painter, activity)
@@ -327,6 +365,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                     painter.drawText(bounds.adjusted(0, 0, -cells.trail, 0), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, key)
             case TrayIcon(slot=slot):
                 self.paint_tray(painter, slot, bounds)
+            case Calendar() as month:
+                self.paint_month(painter, month)
             case _:
                 assert_never(cell.entry)
 
@@ -402,6 +442,48 @@ class MenuCell(QtWidgets.QAbstractButton):
         painter.drawEllipse(circle)
         inset = (self.sizes.capsule.control - self.sizes.capsule.icon) / 2
         paint_icon(painter, "stop", lettering.ink, circle.adjusted(inset, inset, -inset, -inset).toRect())
+
+    def paint_month(self, painter: QtGui.QPainter, shown: Calendar) -> None:
+        """The month's name and arrows, the weekdays, then six weeks: other months' days quiet, today on the accent."""
+        lettering, cells, text = self.capsule.drawn.look.lettering, self.sizes.cells, self.sizes.type
+        spec = self.capsule.window_.spec
+        heading, earlier, later = self.month_heading()
+        centred = Qt.AlignmentFlag.AlignCenter
+        painter.setFont(inter(text.strong))
+        painter.setPen(color(lettering.ink))
+        painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, shown.month.first().strftime(spec.controls.words.month))
+        half = self.sizes.capsule.icon / 2
+        for name, arrow in (("earlier", earlier), ("later", later)):
+            self.paint_icon(painter, name, lettering.ink, arrow.center() - QtCore.QPointF(half, half))
+        shown_weeks = weeks(shown.month, spec.controls.first_weekday)
+        column = (self.width() - 2 * cells.month_side) / 7
+        top = cells.month_head + cells.weekdays
+        row = (self.height() - top - cells.month_side) / WEEKS
+
+        def box(across: int, line: float, height: float) -> QtCore.QRectF:
+            return QtCore.QRectF(cells.month_side + across * column, line, column, height)
+
+        painter.setFont(inter(text.detail))
+        painter.setPen(color(lettering.quiet))
+        for across, day in enumerate(shown_weeks[0]):
+            painter.drawText(box(across, cells.month_head, cells.weekdays), centred, day.strftime(spec.controls.words.weekday))
+        painter.setFont(inter(text.reading))
+        for down, week in enumerate(shown_weeks):
+            for across, day in enumerate(week):
+                place = box(across, top + down * row, row)
+                if day == shown.today and self.capsule.contrast:
+                    # High contrast keeps the system's ink: today is ringed rather than filled.
+                    painter.setPen(color(lettering.ink))
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawEllipse(place.center(), cells.today, cells.today)
+                elif day == shown.today:
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(color(Shade(spec.palette.accent)))
+                    painter.drawEllipse(place.center(), cells.today, cells.today)
+                    painter.setPen(color(Shade(spec.palette.on_accent)))
+                else:
+                    painter.setPen(color(lettering.ink if day.month == shown.month.month else lettering.quiet))
+                painter.drawText(place, centred, str(day.day))
 
     def paint_tray(self, painter: QtGui.QPainter, slot: int, bounds: QtCore.QRectF) -> None:
         """The application's own image, one image pixel per screen pixel up to `tray_image`, on whole device pixels.
