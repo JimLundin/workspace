@@ -12,7 +12,7 @@ edge still lands on it.
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from functools import reduce
-from itertools import chain
+from itertools import chain, groupby
 from operator import add
 from typing import assert_never
 
@@ -172,6 +172,10 @@ class Cells:
     """The days' columns from the tile's sides."""
     today: float
     """The radius of today's disc."""
+    graph_head: float
+    """A graph's name and reading above it..."""
+    graph_line: float
+    """...and its line's width."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -361,6 +365,33 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Size
     width = max(float(capsule.height), end)
     shift = (width - end) / 2
     return Content(width, tuple(replace(spot, x=spot.x + shift) for spot in spots), capsule.height)
+
+
+@dataclass(frozen=True, slots=True)
+class Plotted:
+    """A sample's place in a graph, inside its tile."""
+
+    x: float
+    y: float
+
+
+def _read(sample: tuple[int, float | None]) -> bool:
+    _, share = sample
+    return share is not None
+
+
+def plotted(shares: Sequence[float | None], capacity: int, box: Box) -> Iterator[tuple[Plotted, ...]]:
+    """The samples' runs as lines across `box`: the newest at its right edge, each earlier one a
+    step left, a share of 0 on its bottom and 1 on its top. An unread sample breaks the line."""
+    step = box.width / max(1, capacity - 1)
+    start = capacity - len(shares)
+
+    def at(index: int, share: float) -> Plotted:
+        return Plotted(box.x + (start + index) * step, box.y + box.height * (1 - share))
+
+    for read, run in groupby(enumerate(shares), key=_read):
+        if read:
+            yield tuple(at(index, share) for index, share in run if share is not None)
 
 
 def reading_at(content: Content, x: float) -> int | None:

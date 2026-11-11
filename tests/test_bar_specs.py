@@ -68,6 +68,8 @@ BASE = Sizes(
         weekdays=16,
         month_side=3,
         today=10,
+        graph_head=24,
+        graph_line=1,
     ),
     type=BarType(reading=Font(11, Weight.MEDIUM), strong=Font(11, Weight.SEMIBOLD), detail=Font(9, Weight.REGULAR)),
 )

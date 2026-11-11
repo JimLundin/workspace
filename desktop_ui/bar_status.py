@@ -17,7 +17,7 @@ from typing import Final, Protocol
 
 from cell import Cell
 from desktop_ui.ambient import SystemStatus
-from winapi.machine_status import CpuTimes, cpu_load
+from winapi.machine_status import CpuTimes, Memory, cpu_load
 lazy from winapi import resources, system_status
 
 RESOURCES: Final = 2.0  # Seconds between processor and memory readings; faster readings only flicker.
@@ -29,6 +29,17 @@ class _Sampled:
     times: CpuTimes | None = None
     """The processor times the next load measures against."""
     sampled: float = 0.0
+
+
+def sampled_resources(last: SystemStatus, cpu: int | None, memory: Memory | None) -> SystemStatus:
+    """The new processor and memory readings, each added to its history; an unread one leaves a gap."""
+    return replace(
+        last,
+        cpu=cpu,
+        memory=memory,
+        cpu_history=last.cpu_history.added(cpu),
+        memory_history=last.memory_history.added(memory.used if memory is not None else None),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +56,7 @@ class Observation:
         # Until a first load is known, the next tick measures one; then every interval.
         if sampled.last.cpu is None or now - sampled.sampled >= RESOURCES:
             times = resources.cpu_times()
-            sampled = _Sampled(replace(sampled.last, cpu=cpu_load(sampled.times, times), memory=resources.memory_use()), times, now)
+            sampled = _Sampled(sampled_resources(sampled.last, cpu_load(sampled.times, times), resources.memory_use()), times, now)
             self._sampled.set(sampled)
         return replace(sampled.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume)
 

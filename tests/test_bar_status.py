@@ -3,8 +3,9 @@
 import threading
 import time
 
-from desktop_ui.ambient import SystemStatus
-from desktop_ui.bar_status import StatusObserver
+from desktop_ui.ambient import History, SystemStatus
+from desktop_ui.bar_status import StatusObserver, sampled_resources
+from winapi.machine_status import Memory
 
 
 class Speakers:
@@ -49,3 +50,13 @@ def test_a_drag_applies_only_its_latest_level_and_keeps_a_mute_on_the_status_wor
         assert time.monotonic() - started < 0.9, "The request waited for the next polling interval."
     finally:
         observer.close()
+
+
+def test_the_history_keeps_its_newest_samples_and_leaves_a_gap_for_an_unread_one() -> None:
+    # Defects: the history grows without bound, drops the newest sample instead of the
+    # oldest, or records an unread processor or memory reading as zero use.
+    status = SystemStatus(cpu_history=History((1, 2, 3), capacity=3), memory_history=History((10, 20, 30), capacity=3))
+    read = sampled_resources(status, 4, Memory(40, 100))
+    assert (read.cpu_history.samples, read.memory_history.samples) == ((2, 3, 4), (20, 30, 40))
+    unread = sampled_resources(read, None, None)
+    assert (unread.cpu_history.samples, unread.memory_history.samples) == ((3, 4, None), (30, 40, None))

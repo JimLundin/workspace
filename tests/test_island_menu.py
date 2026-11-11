@@ -66,6 +66,10 @@ SPEC = ControlsSpec(
                 CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
                 CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
             ),
+            Panel.PERFORMANCE: (
+                CellsRow(4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)),
+                CellsRow(4, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"),)),
+            ),
             Panel.CALENDAR: (CellsRow(10, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),)),),
             Panel.SOUND: (
                 CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),

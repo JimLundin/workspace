@@ -38,8 +38,8 @@ from desktop_ui.components.appearance import Glass, GlassLook, Look, Shade, Soli
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
-from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, reading_at, tiles
-from desktop_ui.island_menu import Calendar, Face, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
+from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, plotted, reading_at, tiles
+from desktop_ui.island_menu import Calendar, Face, Graph, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
 from desktop_ui.live_marks import Beat, paint_dots, paint_wave
@@ -226,6 +226,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                 name = label
             case Calendar(label=label, month=month):
                 name = f"{label}: {month.first().strftime(self.capsule.window_.spec.controls.words.month)}"
+            case Graph(label=label, trace=trace):
+                name = f"{label}: {trace.reading}"
             case _:
                 assert_never(self.tile.cell.entry)
         if self.accessibleName() != name:
@@ -268,7 +270,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         match self.tile.cell.entry:
             case Live():
                 return self.stop_circle().contains(QtCore.QPointF(pos))
-            case Slider() | Calendar():
+            case Slider() | Calendar() | Graph():
                 return False  # The slider and the calendar take the pointer themselves rather than clicking.
             case Item() | Toggle() | TrayIcon():
                 return super().hitButton(pos)
@@ -340,7 +342,9 @@ class MenuCell(QtWidgets.QAbstractButton):
         if cell.face is not Face.LINK:
             painter.setBrush(color(Shade(lettering.ink.color, self.capsule.window_.washes.well)))
             painter.drawRoundedRect(bounds, corner, corner)
-        paint_feedback(painter, lettering, bounds, corner, pressed=chosen, hovered=self.underMouse() and cell.face not in (Face.CARD, Face.CALENDAR))
+        paint_feedback(
+            painter, lettering, bounds, corner, pressed=chosen, hovered=self.underMouse() and cell.face not in (Face.CARD, Face.CALENDAR, Face.GRAPH)
+        )
         match cell.entry:
             case Live() as activity:
                 self.paint_live(painter, activity)
@@ -367,6 +371,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                 self.paint_tray(painter, slot, bounds)
             case Calendar() as month:
                 self.paint_month(painter, month)
+            case Graph() as graph:
+                self.paint_graph(painter, graph)
             case _:
                 assert_never(cell.entry)
 
@@ -484,6 +490,37 @@ class MenuCell(QtWidgets.QAbstractButton):
                 else:
                     painter.setPen(color(lettering.ink if day.month == shown.month.month else lettering.quiet))
                 painter.drawText(place, centred, str(day.day))
+
+    def paint_graph(self, painter: QtGui.QPainter, graph: Graph) -> None:
+        """The reading's name and latest value over its recent history: a line on the accent over a soft wash."""
+        lettering, cells, text = self.capsule.drawn.look.lettering, self.sizes.cells, self.sizes.type
+        spec, window = self.capsule.window_.spec, self.capsule.window_
+        heading = QtCore.QRectF(cells.lead, 0, self.width() - cells.lead - cells.trail, cells.graph_head)
+        painter.setFont(inter(text.strong))
+        painter.setPen(color(lettering.ink))
+        painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, graph.label)
+        painter.setFont(inter(text.reading))
+        painter.setPen(color(lettering.quiet))
+        painter.drawText(heading, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, graph.trace.reading)
+        box = Box(cells.lead, cells.graph_head, self.width() - cells.lead - cells.trail, self.height() - cells.graph_head - cells.lead)
+        hue = self.capsule.signal(spec.palette.accent, lettering.ink).color
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color(Shade(lettering.ink.color, window.washes.track)))
+        painter.drawRect(QtCore.QRectF(box.x, box.y + box.height, box.width, cells.graph_line / 2))
+        for run in plotted(graph.trace.shares, graph.trace.capacity, box):
+            line = QtGui.QPolygonF([QtCore.QPointF(point.x, point.y) for point in run])
+            bottom = box.y + box.height
+            area = QtGui.QPolygonF(line)
+            area.append(QtCore.QPointF(line.last().x(), bottom))
+            area.prepend(QtCore.QPointF(line.first().x(), bottom))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color(Shade(hue, window.washes.halo)))
+            painter.drawPolygon(area)
+            pen = QtGui.QPen(color(Shade(hue)), cells.graph_line)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPolyline(line)
 
     def paint_tray(self, painter: QtGui.QPainter, slot: int, bounds: QtCore.QRectF) -> None:
         """The application's own image, one image pixel per screen pixel up to `tray_image`, on whole device pixels.

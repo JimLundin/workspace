@@ -30,18 +30,20 @@ from desktop_ui.island_menu import (
     Panel,
     Slider,
     ToolChoice,
+    Trace,
     TrayChoice,
     Volume,
     entries,
     restores_focus,
+    traced,
 )
-from desktop_ui.island_model import Action, CapsuleView, IslandSpec, Key, Marker, capture
+from desktop_ui.island_model import Action, CapsuleView, IslandSpec, Key, Marker, capture, gigabytes, memory_used, usage
 from desktop_ui.island_motion import IslandMotion, Springs, Timing, advance, finish, settled
 from desktop_ui.month import Month
 from desktop_ui.navigation import Order, Placing
 from protocol import Tool
 from winapi import appearance
-from winapi.machine_status import PowerUnavailable, Speakers
+from winapi.machine_status import Memory, PowerUnavailable, Speakers
 from winapi.shapes import Rect
 from winapi.tray_host import Click
 
@@ -115,6 +117,19 @@ class BarModel:
     sampled_at: float | None = None
 
 
+def memory_trace(model: BarModel) -> Trace:
+    """Memory in use against all installed: its graph's ceiling, and its reading's."""
+    system, status = model.seen.system, model.spec.island.status
+    used = memory_used(system.memory, status).text
+    match system.memory:
+        case Memory(total=total):
+            return traced(system.memory_history, total, f"{used} {model.spec.island.words.of} {gigabytes(total, status)}")
+        case None:
+            return traced(system.memory_history, None, used)
+        case _:
+            assert_never(system.memory)
+
+
 def menu(model: BarModel, panel: Panel) -> Menu:
     """`panel` for what's happening now, keeping its selection and month while it stays open."""
     recorded = capture(model.recording, model.spec.island.words.phases) if model.recording.capturing else None
@@ -134,6 +149,8 @@ def menu(model: BarModel, panel: Panel) -> Menu:
                 tray=seen.tray_tips,
                 hints=model.spec.hints,
                 today=seen.ambient.today,
+                cpu=traced(seen.system.cpu_history, 100, usage(seen.system.cpu, model.spec.island.status).text),
+                memory=memory_trace(model),
                 month=month,
             ),
             model.spec.controls,

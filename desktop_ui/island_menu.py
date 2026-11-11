@@ -18,6 +18,7 @@ from enum import Enum, StrEnum, auto
 from itertools import accumulate, chain
 from typing import Final, assert_never
 
+from desktop_ui.ambient import History
 from desktop_ui.month import Month
 from protocol import Tool
 
@@ -125,7 +126,34 @@ class Calendar:
     today: date
 
 
-type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar
+@dataclass(frozen=True, slots=True)
+class Trace:
+    """A reading's recent samples as shares of its ceiling, oldest first (None where unread), and its latest reading."""
+
+    shares: tuple[float | None, ...]
+    capacity: int
+    """How many samples the graph spans; a younger history fills it from the right."""
+    reading: str
+
+
+NO_TRACE: Final = Trace((), 1, "")
+
+
+def traced(history: History, ceiling: int | None, reading: str) -> Trace:
+    """`history` as shares of `ceiling`, held within it; without a ceiling, nothing reads."""
+    shares = tuple(None if sample is None or ceiling is None or ceiling <= 0 else min(1.0, max(0.0, sample / ceiling)) for sample in history.samples)
+    return Trace(shares, history.capacity, reading)
+
+
+@dataclass(frozen=True, slots=True)
+class Graph:
+    """A reading's recent history as a line, under its name and latest reading."""
+
+    label: str
+    trace: Trace
+
+
+type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph
 
 
 class Face(StrEnum):
@@ -139,6 +167,7 @@ class Face(StrEnum):
     LINK = auto()  # A quiet line of text.
     ICON = auto()  # A tray application's own image, icon-sized.
     CALENDAR = auto()  # A month under its name, with arrows to turn it.
+    GRAPH = auto()  # A reading's recent history under its name.
 
 
 # Eight narrow columns: tray icons take one each, the other tiles span pairs.
@@ -169,6 +198,8 @@ class Controls:
     sound: Slider = Slider("", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
     today: date | None = field(default=None, kw_only=True)
+    cpu: Trace = field(default=NO_TRACE, kw_only=True)
+    memory: Trace = field(default=NO_TRACE, kw_only=True)
     month: Month | None = field(default=None, kw_only=True)
     """The month the calendar shows."""
     hints: frozendict[Tool, str] = field(default=frozendict(), kw_only=True)
@@ -184,6 +215,7 @@ class Panel(StrEnum):
     WORKSPACE = auto()  # Workspace's own controls, its activities and the tray.
     SOUND = auto()
     CALENDAR = auto()
+    PERFORMANCE = auto()
 
 
 class EntryId(StrEnum):
@@ -197,6 +229,8 @@ class EntryId(StrEnum):
     SOUND = auto()
     MUTE = auto()
     CALENDAR = auto()
+    CPU_GRAPH = auto()
+    MEMORY_GRAPH = auto()
     SWITCH_WINDOWS = auto()
     COPY_TRANSCRIPT = auto()
     KEYMAP = auto()
@@ -295,6 +329,10 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
         case EntryId.MUTE:
             muted = controls.sound.muted
             return toggle(spec, words.on if muted else words.off, Command.MUTE, on=muted)
+        case EntryId.CPU_GRAPH:
+            return Graph(spec.label, controls.cpu)
+        case EntryId.MEMORY_GRAPH:
+            return Graph(spec.label, controls.memory)
         case EntryId.CALENDAR:
             return Calendar(spec.label, controls.month or Month.of(today), today) if (today := controls.today) else None
         case EntryId.SWITCH_WINDOWS:
@@ -376,7 +414,15 @@ class Menu:
 
 def label(entry: Entry) -> str:
     match entry:
-        case Item(label=text) | Live(label=text) | Toggle(label=text) | Slider(label=text) | TrayIcon(label=text) | Calendar(label=text):
+        case (
+            Item(label=text)
+            | Live(label=text)
+            | Toggle(label=text)
+            | Slider(label=text)
+            | TrayIcon(label=text)
+            | Calendar(label=text)
+            | Graph(label=text)
+        ):
             return text
         case _:
             assert_never(entry)
@@ -513,7 +559,7 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
             return Chosen(TrayChoice(slot))
         case Calendar():
             return Applied(Command.THIS_MONTH)
-        case Slider() | None:
+        case Slider() | Graph() | None:
             return menu
         case _:
             assert_never(entry)

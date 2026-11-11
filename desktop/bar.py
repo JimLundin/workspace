@@ -92,6 +92,8 @@ SIZES: Final = Sizes(
         weekdays=20,
         month_side=4,
         today=12,
+        graph_head=30,
+        graph_line=1.5,
     ),
     type=BarType(reading=look.TYPE.reading, strong=look.TYPE.strong, detail=look.TYPE.detail),
 )
@@ -124,6 +126,10 @@ CONTROLS: Final = ControlsSpec(
                 TrayRow(4),
                 CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
                 CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
+            ),
+            Panel.PERFORMANCE: (
+                CellsRow(11, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Processor"),)),
+                CellsRow(11, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"),)),
             ),
             Panel.CALENDAR: (CellsRow(25, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Calendar"),)),),
             Panel.SOUND: (
@@ -177,8 +183,8 @@ ISLAND: Final = IslandSpec(
                 Reading.KEYBOARD: Panel.WORKSPACE,
                 Reading.SPEAKER: Panel.SOUND,
                 Reading.WIFI: Panel.WORKSPACE,
-                Reading.CPU: Panel.WORKSPACE,
-                Reading.MEMORY: Panel.WORKSPACE,
+                Reading.CPU: Panel.PERFORMANCE,
+                Reading.MEMORY: Panel.PERFORMANCE,
                 Reading.BATTERY: Panel.WORKSPACE,
                 Reading.CLOCK: Panel.CALENDAR,
             },

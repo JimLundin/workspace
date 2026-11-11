@@ -6,7 +6,7 @@ capsules and parts relative to the sizes it is given, never the bar's real posit
 
 from itertools import pairwise
 
-from desktop_ui.island_layout import Content, Framed, Metrics, Placed, Spot, arrange, frame, reading_at, snap
+from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Plotted, Spot, arrange, frame, plotted, reading_at, snap
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_bar_specs, test_island_model
 
@@ -136,3 +136,14 @@ def test_a_press_goes_to_the_nearest_reading_and_the_ends_to_the_outer_ones() ->
     assert reading_at(content, second.x - gap * 0.4) == 1
     assert reading_at(content, 0.0) == 0 and reading_at(content, content.width) == 2
     assert reading_at(Content(0.0, (), 0.0), 5.0) is None
+
+
+def test_a_graph_ends_at_its_right_edge_spans_its_height_and_breaks_at_an_unread_sample() -> None:
+    # Defects: a young history stretches across the whole graph instead of growing from
+    # the right, shares plot upside down, or an unread sample draws as a drop to zero.
+    box = Box(10, 20, 100, 50)
+    assert tuple(plotted((0.0, 1.0), 11, box)) == ((Plotted(100, 70), Plotted(110, 20)),)
+    first, second = plotted((0.5, None, 0.25, 0.75), 5, box)
+    assert first == (Plotted(35, 45),)
+    assert second == (Plotted(85, 57.5), Plotted(110, 32.5))
+    assert tuple(plotted((None, None), 5, box)) == ()
