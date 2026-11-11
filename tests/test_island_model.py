@@ -28,7 +28,6 @@ from desktop_ui.island_model import (
     Phased,
     Phases,
     Reading,
-    Slot,
     StatusSpec,
     Symbols,
     Text,
@@ -74,7 +73,7 @@ WORDS = Words(
 )
 SPEC = IslandSpec(
     StatusSpec(
-        ((Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI), (Reading.BATTERY, Reading.CPU, Reading.MEMORY), (Reading.CLOCK,)),
+        (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI, Reading.BATTERY, Reading.CPU, Reading.MEMORY, Reading.CLOCK),
         SPEAKERS,
         WIFI,
         SYMBOLS,
@@ -103,43 +102,25 @@ def parts(observed: Observed, *readings: Reading) -> tuple[Part, ...]:
     return tuple(part for each in readings for part in reading(each, observed, SPEC.status))
 
 
-def test_at_rest_the_status_capsule_shows_each_group_of_readings_in_order_with_a_rule_between() -> None:
+def test_at_rest_the_status_capsule_shows_each_reading_in_order_in_its_own_slot() -> None:
     # Defects: idle readings reappear as activity, the fixed capsule gains or drops
-    # a reading, two readings share a slot and so their spacing, a group's
-    # readings leave the order the spec gives, or groups run together without their rule.
+    # a reading, two readings share a slot and so their spacing, or the readings
+    # leave the order the spec gives.
     views = island(RESTING, SPEC)
     assert tuple((each.key, each.zone) for each in views) == ((Key.STATUS, Zone.RIGHT),)
-    rule = (Marker.RULE,)
-
-    def slots(*readings: Reading) -> tuple[Slot, ...]:
-        return tuple(reading(each, RESTING, SPEC.status) for each in readings)
-
-    expected = (
-        *slots(Reading.SPEAKER, Reading.WIFI),
-        rule,
-        *slots(Reading.BATTERY, Reading.CPU, Reading.MEMORY),
-        rule,
-        *slots(Reading.CLOCK),
-    )
+    expected = tuple(reading(each, RESTING, SPEC.status) for each in SPEC.status.readings if each is not Reading.KEYBOARD)
     assert views[0].slots == expected and views[0].action is Action.OPEN_MENU
 
 
-def test_a_plain_keyboard_joins_its_group_and_an_empty_group_takes_no_slot() -> None:
-    # Defects: the keyboard shows while the layout remaps, it leaves its group, a
-    # reading with nothing to show leaves an empty slot, or a group with nothing to
-    # show leaves a rule with nothing on one side.
+def test_a_plain_keyboard_takes_its_place_and_a_reading_with_nothing_to_show_takes_no_slot() -> None:
+    # Defects: the keyboard shows while the layout remaps, it shows out of its
+    # place, or a reading with nothing to show leaves an empty slot.
     plain = replace(RESTING, plain_keyboard=True)
     assert reading(Reading.KEYBOARD, RESTING, SPEC.status) == () and reading(Reading.KEYBOARD, plain, SPEC.status) != ()
-    assert view(plain, Key.STATUS).slots[:4] == (
-        parts(plain, Reading.KEYBOARD),
-        parts(plain, Reading.SPEAKER),
-        parts(plain, Reading.WIFI),
-        (Marker.RULE,),
-    )
-    assert view(RESTING, Key.STATUS).slots[:3] == (parts(RESTING, Reading.SPEAKER), parts(RESTING, Reading.WIFI), (Marker.RULE,))
-    alone = replace(SPEC, status=replace(SPEC.status, groups=((Reading.KEYBOARD,), (Reading.CLOCK,))))
+    assert view(plain, Key.STATUS).slots[:2] == (parts(plain, Reading.KEYBOARD), parts(plain, Reading.SPEAKER))
+    alone = replace(SPEC, status=replace(SPEC.status, readings=(Reading.KEYBOARD, Reading.CLOCK)))
     assert view(RESTING, Key.STATUS, spec=alone).slots == (parts(RESTING, Reading.CLOCK),)
-    assert view(plain, Key.STATUS, spec=alone).slots == (parts(plain, Reading.KEYBOARD), (Marker.RULE,), parts(plain, Reading.CLOCK))
+    assert view(plain, Key.STATUS, spec=alone).slots == (parts(plain, Reading.KEYBOARD), parts(plain, Reading.CLOCK))
 
 
 def test_resource_readings_keep_one_reserve_and_never_show_an_unread_value_as_zero() -> None:

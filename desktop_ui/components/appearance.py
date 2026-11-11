@@ -339,8 +339,6 @@ class Washes:
     """The glow around a signal's dot."""
     resting: float
     """A pulsing dot between pulses."""
-    rule: float
-    """The rule between groups of readings or desktops."""
     gauge: float
     """The battery symbol's outline, which the charge fills."""
 

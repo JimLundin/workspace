@@ -71,10 +71,6 @@ class Capsule:
     """...and the gap between a desktop's icons."""
     current_dot: float
     """The radius of the dot under the current desktop."""
-    rule: float
-    """The rule between groups: its length..."""
-    hairline: float
-    """...and its width."""
 
     @property
     def inset(self) -> float:
@@ -283,8 +279,6 @@ def extent(part: Part, measure: Callable[[Text], float], sizes: Sizes) -> float:
             return capsule.dot
         case Marker.DOTS:
             return capsule.dots
-        case Marker.RULE:
-            return capsule.hairline
         case _:
             assert_never(part)
 

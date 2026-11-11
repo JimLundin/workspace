@@ -19,9 +19,10 @@ plain text for the clock, and the battery as a symbol filled to its charge
 (red when low on its own power, a bolt cut into it while on mains power).
 Each meter reads value first, then its symbol, as a menu bar's battery does.
 
-A hairline rule divides the right capsule's groups (the keyboard, volume and
-Wi-Fi; processor, memory and power; the clock) and stands between each two
-desktops in the pager, so neighbouring symbols read as separate facts.
+Space alone separates things, with no dividers: every two of the right
+capsule's readings sit one even gap apart, and in the pager a desktop's apps sit
+close together while desktops sit a wider gap apart. The current desktop has a
+dot under its apps, and the pointer lights only the app under it.
 
 The resource readings are the processor's percentage and the gigabytes of
 memory in use (the tooltip adds how many are installed), each before its

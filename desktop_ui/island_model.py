@@ -16,7 +16,6 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - Stoppable activities reveal Stop under the pointer.
 """
 
-from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
@@ -56,12 +55,11 @@ class Action(Enum):
 
 
 class Marker(Enum):
-    """Marks without a payload: the live indicators, and the rule between groups."""
+    """Live indicators without a payload."""
 
     WAVE = auto()
     DOT = auto()
     DOTS = auto()  # A quick job in progress.
-    RULE = auto()  # A hairline between groups of readings.
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,8 +218,8 @@ class Words:
 
 @dataclass(frozen=True, slots=True)
 class StatusSpec:
-    groups: tuple[tuple[Reading, ...], ...]
-    """Left to right; each reading is a slot, and a rule divides the groups."""
+    readings: tuple[Reading, ...]
+    """Left to right, each its own slot, so every two sit the same gap apart."""
     speakers: frozendict[Speakers, ambient.Reading]
     """The speakers' symbol and words in each state."""
     wifi: frozendict[Wifi, ambient.Reading]
@@ -413,8 +411,7 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
     # The readings stay the top row while their capsule expands into the menu. Each
     # reading is its own slot; a reading with nothing to show (a keyboard typing
     # normally) takes none, and a group without any takes no space or rule.
-    groups = (tuple(slot for each in group if (slot := reading(each, observed, spec.status))) for group in spec.status.groups)
-    readings: tuple[Slot, ...] = tuple(ruled(group for group in groups if group))
+    readings = tuple(slot for each in spec.status.readings if (slot := reading(each, observed, spec.status)))
     persistent = (
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, words.close_controls, Action.CLOSE_MENU)
         if expanded
@@ -431,14 +428,6 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
     middle = (centre(observed, recorded, words, hovered=hovered),) if active and not expanded else ()
     ranks = order(spec)
     return tuple(sorted((*lead, *middle, *trail, *persistent), key=lambda view: ranks.index(view.key)))
-
-
-def ruled(groups: Iterable[tuple[Slot, ...]]) -> Iterator[Slot]:
-    """The groups' slots with a rule between each two groups."""
-    for index, group in enumerate(groups):
-        if index:
-            yield (Marker.RULE,)
-        yield from group
 
 
 def centre(observed: Observed, recorded: Capture | None, words: Words, *, hovered: Key | None) -> CapsuleView:

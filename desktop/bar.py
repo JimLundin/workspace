@@ -57,8 +57,6 @@ SIZES: Final = Sizes(
         app_icon=18,
         app_gap=6,
         current_dot=1.5,
-        rule=16,
-        hairline=1,
     ),
     menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
     markers=Markers(wave_floor=3, wave_reach=13, wave_corner=1, halo=7, dot_count=3, dots_radius=2.2, dots_lift=1.5),
@@ -146,14 +144,10 @@ Each entry is placed once; the sound slider takes Windows' own name.
 
 ISLAND: Final = IslandSpec(
     # The fixed capsule at the screen's right edge, which opens the controls menu:
-    # its readings left to right, in groups a rule divides. Leave a reading out to
-    # hide it. The keyboard shows only while it types plainly.
+    # its readings left to right, evenly spaced. Leave a reading out to hide it.
+    # The keyboard shows only while it types plainly.
     status=StatusSpec(
-        (
-            (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI),
-            (Reading.CPU, Reading.MEMORY, Reading.BATTERY),
-            (Reading.CLOCK,),
-        ),
+        (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI, Reading.CPU, Reading.MEMORY, Reading.BATTERY, Reading.CLOCK),
         SPEAKERS,
         WIFI,
         Symbols(keyboard="keyboard", charger="charger", cpu="cpu", memory="memory"),
