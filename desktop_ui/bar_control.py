@@ -59,9 +59,7 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
     def focus_ringed(self) -> bool:
         return self.hasFocus() and self.ringed
 
-    def paint_round(self, painter: QtGui.QPainter, lettering: Lettering, *, selected: bool) -> None:
-        """Press, hover or selection fill and the keyboard ring, round at the button's height: a circle, or a pill when wider."""
+    def paint_round(self, painter: QtGui.QPainter, lettering: Lettering) -> None:
+        """Press or hover fill and the keyboard ring, round at the button's height: a circle, or a pill when wider."""
         bounds = QtCore.QRectF(self.rect())
-        paint_feedback(
-            painter, lettering, bounds, bounds.height() / 2, pressed=self.isDown() or selected, hovered=self.underMouse(), ringed=self.focus_ringed
-        )
+        paint_feedback(painter, lettering, bounds, bounds.height() / 2, pressed=self.isDown(), hovered=self.underMouse(), ringed=self.focus_ringed)

@@ -14,8 +14,8 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui.bar_control import KeyboardFocus
-from desktop_ui.components.appearance import Look, Shade, Washes
+from desktop_ui.bar_control import KeyboardFocus, paint_feedback
+from desktop_ui.components.appearance import Lettering, Look, Shade, Washes
 from desktop_ui.components.text import color, inter, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
 from desktop_ui.island_layout import Capsule, Sizes, on_pixels
@@ -28,8 +28,8 @@ from winapi.tray_host import Click
 
 
 def face_inset(capsule: Capsule) -> int:
-    """A symbol's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
-    return round(capsule.control - capsule.icon) // 2
+    """An app icon's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
+    return round(capsule.control - capsule.app_icon) // 2
 
 
 def paint_rule(painter: QtGui.QPainter, x: float, middle: float, capsule: Capsule, ink: Shade) -> None:
@@ -63,7 +63,7 @@ class Stack:
 
 def step(capsule: Capsule) -> float:
     """From one of a desktop's icons to the next."""
-    return capsule.icon + capsule.app_gap
+    return capsule.app_icon + capsule.app_gap
 
 
 type Face = Stack | str
@@ -109,10 +109,13 @@ class ShellButton(KeyboardFocus):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.pressed_at = 0.0
         """Where the last press landed, which picks a stack's icon."""
+        self.hovered = 0
+        """The stacked icon under the pointer, which alone lights."""
+        self.setMouseTracking(True)
         self.clicked.connect(lambda: self.choose(Click.LEFT))
 
     def icon_at(self, x: float) -> int:
-        """The stacked icon under `x`: the one whose centre is nearest, as later icons cover earlier ones' right edges."""
+        """The desktop's icon under `x`: the one whose centre is nearest, so the gap between two splits evenly."""
         match self.target.face:
             case Stack(icons=icons) if icons:
                 pitch = step(self.pager.sizes.capsule)
@@ -133,6 +136,13 @@ class ShellButton(KeyboardFocus):
         super().mousePressEvent(event)
 
     @override
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        if (index := self.icon_at(event.position().x())) != self.hovered:
+            self.hovered = index
+            self.update()
+        super().mouseMoveEvent(event)
+
+    @override
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
         self._choose_on(event, Qt.MouseButton.RightButton, Click.RIGHT, super().mouseReleaseEvent)
 
@@ -148,12 +158,27 @@ class ShellButton(KeyboardFocus):
         else:
             otherwise(event)
 
+    def paint_lit(self, painter: QtGui.QPainter, lettering: Lettering) -> None:
+        """Press and hover light only the app under the pointer in a desktop of several; the keyboard ring holds the whole desktop."""
+        whole = QtCore.QRectF(self.rect())
+        match self.target.face:
+            case Stack(icons=icons) if len(icons) > 1 and self.underMouse():
+                pitch, radius = step(self.pager.sizes.capsule), self.height() / 2
+                centre = (self.width() - pitch * (len(icons) - 1)) / 2 + pitch * self.hovered
+                circle = QtCore.QRectF(centre - radius, 0, 2 * radius, self.height())
+                paint_feedback(painter, lettering, circle, radius, pressed=self.isDown(), hovered=True)
+                paint_feedback(painter, lettering, whole, radius, pressed=False, hovered=False, ringed=self.focus_ringed)
+            case _:
+                paint_feedback(
+                    painter, lettering, whole, self.height() / 2, pressed=self.isDown(), hovered=self.underMouse(), ringed=self.focus_ringed
+                )
+
     def snapped(self) -> QtCore.QPointF:
         """The face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
         capsule = self.pager.sizes.capsule
         scale = self.devicePixelRatioF()
         origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
-        corner = origin + QtCore.QPointF((self.width() - capsule.icon) / 2, face_inset(capsule))
+        corner = origin + QtCore.QPointF((self.width() - capsule.app_icon) / 2, face_inset(capsule))
         return QtCore.QPointF(on_pixels(corner.x(), scale), on_pixels(corner.y(), scale)) - origin
 
     @override
@@ -164,9 +189,16 @@ class ShellButton(KeyboardFocus):
         lettering = appearance.lettering
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        self.paint_round(painter, lettering, selected=self.target.active)
-        side = self.pager.sizes.capsule.icon
+        capsule = self.pager.sizes.capsule
+        self.paint_lit(painter, lettering)
+        side = capsule.app_icon
         face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(side, side))
+        if self.target.active:
+            # The current desktop: a dot under its apps, as a dock marks a running app.
+            below = QtCore.QPointF(self.width() / 2, self.height() - face_inset(capsule) / 2)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color(lettering.ink))
+            painter.drawEllipse(below, capsule.current_dot, capsule.current_dot)
         match self.target.face:
             case Stack(icons=icons):
                 painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)

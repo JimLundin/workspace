@@ -168,7 +168,7 @@ class ControlButton(KeyboardFocus):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         lettering = self.capsule.drawn.look.lettering
-        self.paint_round(painter, lettering, selected=False)
+        self.paint_round(painter, lettering)
         symbol = round(self.capsule.window_.sizes.capsule.icon)
         inset = (self.width() - symbol) // 2
         paint_icon(painter, self.control.icon, lettering.ink, QtCore.QRect(inset, inset, symbol, symbol))

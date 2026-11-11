@@ -65,8 +65,12 @@ class Capsule:
     """...and when it holds only symbols."""
     ring_inset: float
     """The keyboard focus ring, inside the capsule's edge."""
+    app_icon: float
+    """An app's icon in the pager..."""
     app_gap: float
-    """Between a desktop's app icons in the pager."""
+    """...and the gap between a desktop's icons."""
+    current_dot: float
+    """The radius of the dot under the current desktop."""
     rule: float
     """The rule between groups: its length..."""
     hairline: float
