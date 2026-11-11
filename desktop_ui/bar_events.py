@@ -9,6 +9,7 @@ so even the motion it draws changes only through the fold.
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from typing import Final, assert_never
 
 from contracts.recording_state import RecordingAction, RecordingState
@@ -25,6 +26,7 @@ from desktop_ui.island_menu import (
     Command,
     Controls,
     ControlsSpec,
+    Join,
     Menu,
     Page,
     Panel,
@@ -149,6 +151,7 @@ def menu(model: BarModel, panel: Panel) -> Menu:
                 tray=seen.tray_tips,
                 hints=model.spec.hints,
                 today=seen.ambient.today,
+                networks=seen.system.networks,
                 cpu=traced(seen.system.cpu_history, 100, usage(seen.system.cpu, model.spec.island.status).text),
                 memory=memory_trace(model),
                 month=month,
@@ -374,9 +377,29 @@ class ToggleAway:
     pass
 
 
+class SettingsPage(StrEnum):
+    """A page of Windows' Settings, by its address."""
+
+    NOTIFICATIONS = "ms-settings:notifications"
+    WIFI = "ms-settings:network-wifi"
+    LOCATION = "ms-settings:privacy-location"
+
+
 @dataclass(frozen=True, slots=True)
-class NotificationSettings:
-    pass
+class OpenSettings:
+    page: SettingsPage
+
+
+@dataclass(frozen=True, slots=True)
+class Survey:
+    """Read the Wi-Fi networks in range while `listing`: their panel is open."""
+
+    listing: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class JoinNetwork:
+    profile: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,7 +434,9 @@ type Effect = (
     | UseTool
     | Navigate
     | ToggleAway
-    | NotificationSettings
+    | OpenSettings
+    | Survey
+    | JoinNetwork
     | SetVolume
     | SetMute
     | ClickTray
@@ -423,7 +448,7 @@ def _closed(model: BarModel, *, restore: bool) -> tuple[BarModel, tuple[Effect, 
     """The menu closes, giving the keyboard back to who had it if `restore`."""
     if model.opened is None:
         return model, ()
-    return replace(model, opened=None), (Release(model.menu_target if restore else 0), Render())
+    return replace(model, opened=None), (Release(model.menu_target if restore else 0), Survey(listing=False), Render())
 
 
 def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[Effect, ...]]:
@@ -450,7 +475,13 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
         case Page(months=months):
             return _paged(model, months), ()
         case Command.NOTIFICATIONS:
-            return model, (NotificationSettings(),)
+            return model, (OpenSettings(SettingsPage.NOTIFICATIONS),)
+        case Command.WIFI_SETTINGS:
+            return model, (OpenSettings(SettingsPage.WIFI),)
+        case Command.LOCATION_SETTINGS:
+            return model, (OpenSettings(SettingsPage.LOCATION),)
+        case Join(profile=profile):
+            return model, (JoinNetwork(profile),)
         case Command.ALL_CONTROLS:
             return model, (AllControls(),)
         case Volume(level=level):
@@ -531,7 +562,7 @@ def _opened(model: BarModel, panel: Panel) -> tuple[BarModel, tuple[Effect, ...]
     """Expand into `panel`, from the closed bar or from another panel."""
     if model.closed:
         return model, ()
-    return model, (Expand(menu(model, panel), remember=model.opened is None),)
+    return model, (Expand(menu(model, panel), remember=model.opened is None), Survey(listing=panel is Panel.NETWORK))
 
 
 def _panel(model: BarModel, panel: Panel) -> tuple[BarModel, tuple[Effect, ...]]:

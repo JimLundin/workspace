@@ -21,6 +21,7 @@ from typing import Final, assert_never
 from desktop_ui.ambient import History
 from desktop_ui.month import Month
 from protocol import Tool
+from winapi.machine_status import LOCATION_OFF, Listing, Network
 
 
 class Command(Enum):
@@ -33,6 +34,8 @@ class Command(Enum):
     MUTE = auto()
     THIS_MONTH = auto()
     NOTIFICATIONS = auto()
+    WIFI_SETTINGS = auto()
+    LOCATION_SETTINGS = auto()
     ALL_CONTROLS = auto()
 
 
@@ -64,7 +67,14 @@ class Page:
     months: int
 
 
-type Choice = Command | ToolChoice | Volume | TrayChoice | Page
+@dataclass(frozen=True, slots=True)
+class Join:
+    """Connect to a network through the profile Windows saved for it."""
+
+    profile: str
+
+
+type Choice = Command | ToolChoice | Volume | TrayChoice | Page | Join
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,7 +163,16 @@ class Graph:
     trace: Trace
 
 
-type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph
+@dataclass(frozen=True, slots=True)
+class Nearby:
+    """A Wi-Fi network in range, by its name, and how it reads."""
+
+    label: str
+    network: Network
+    detail: str
+
+
+type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph | Nearby
 
 
 class Face(StrEnum):
@@ -168,6 +187,7 @@ class Face(StrEnum):
     ICON = auto()  # A tray application's own image, icon-sized.
     CALENDAR = auto()  # A month under its name, with arrows to turn it.
     GRAPH = auto()  # A reading's recent history under its name.
+    NETWORK = auto()  # A network's signal, name and state, across the grid.
 
 
 # Eight narrow columns: tray icons take one each, the other tiles span pairs.
@@ -198,6 +218,7 @@ class Controls:
     sound: Slider = Slider("", None, muted=False)
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
     today: date | None = field(default=None, kw_only=True)
+    networks: Listing = field(default=(), kw_only=True)
     cpu: Trace = field(default=NO_TRACE, kw_only=True)
     memory: Trace = field(default=NO_TRACE, kw_only=True)
     month: Month | None = field(default=None, kw_only=True)
@@ -214,6 +235,7 @@ class Panel(StrEnum):
 
     WORKSPACE = auto()  # Workspace's own controls, its activities and the tray.
     SOUND = auto()
+    NETWORK = auto()
     CALENDAR = auto()
     PERFORMANCE = auto()
 
@@ -231,6 +253,8 @@ class EntryId(StrEnum):
     CALENDAR = auto()
     CPU_GRAPH = auto()
     MEMORY_GRAPH = auto()
+    LOCATION = auto()  # Only while Windows withholds the networks for want of location.
+    WIFI_SETTINGS = auto()
     SWITCH_WINDOWS = auto()
     COPY_TRANSCRIPT = auto()
     KEYMAP = auto()
@@ -267,13 +291,21 @@ class ActivitiesRow:
 
 
 @dataclass(frozen=True, slots=True)
+class NetworksRow:
+    """The Wi-Fi networks in range, the connected one first: a full-width line each, `tracks` tall, at most `most`."""
+
+    tracks: int
+    most: int
+
+
+@dataclass(frozen=True, slots=True)
 class TrayRow:
     """The system tray's icons, a column each, wrapping onto lines `tracks` tall."""
 
     tracks: int
 
 
-type RowSpec = CellsRow | ActivitiesRow | TrayRow
+type RowSpec = CellsRow | ActivitiesRow | TrayRow | NetworksRow
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -294,6 +326,11 @@ class MenuWords:
     """The calendar's heading, a `strftime` format."""
     weekday: str
     """The calendar's column headings, a `strftime` format."""
+    connected: str
+    saved: str
+    """A network Windows has a profile for."""
+    secured: str
+    open: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,6 +380,10 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
             return Item(spec.label, spec.icon, Command.KEYMAP)
         case EntryId.NOTIFICATIONS:
             return Item(spec.label, spec.icon, Command.NOTIFICATIONS)
+        case EntryId.WIFI_SETTINGS:
+            return Item(spec.label, spec.icon, Command.WIFI_SETTINGS)
+        case EntryId.LOCATION:
+            return Item(spec.label, spec.icon, Command.LOCATION_SETTINGS) if controls.networks is LOCATION_OFF else None
         case EntryId.ALL_CONTROLS:
             return Item(spec.label, spec.icon, Command.ALL_CONTROLS)
         case _:
@@ -351,6 +392,21 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
 
 def activities(controls: Controls, words: MenuWords) -> tuple[Live, ...]:
     return (Live(words.recording, controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()
+
+
+def heard(controls: Controls, row: NetworksRow, words: MenuWords) -> tuple[Nearby, ...]:
+    """The networks to list, each with what it reads as; none while Windows withholds them."""
+    if controls.networks is LOCATION_OFF:
+        return ()
+
+    def detail(network: Network) -> str:
+        if network.connected:
+            return words.connected
+        if network.profile is not None:
+            return words.saved
+        return words.secured if network.secured else words.open
+
+    return tuple(Nearby(network.ssid, network, detail(network)) for network in controls.networks[: row.most])
 
 
 def present_cells(controls: Controls, specs: tuple[CellSpec, ...], menu: ControlsSpec) -> tuple[tuple[CellSpec, Entry], ...]:
@@ -365,6 +421,8 @@ def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
             return tracks * len(activities(controls, spec.words))
         case TrayRow(tracks=tracks):
             return tracks * ((len(controls.tray) + COLUMNS - 1) // COLUMNS)
+        case NetworksRow(tracks=tracks):
+            return tracks * len(heard(controls, row, spec.words))
         case CellsRow(tracks=tracks, cells=specs):
             return tracks if present_cells(controls, specs, spec) else 0
         case _:
@@ -382,6 +440,9 @@ def row_cells(row: RowSpec, controls: Controls, top: int, spec: ControlsSpec) ->
                 Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
                 for slot, name in enumerate(controls.tray)
             )
+        case NetworksRow(tracks=tracks):
+            lines = enumerate(heard(controls, row, spec.words))
+            return tuple(Cell(network, Face.NETWORK, 0, COLUMNS, top + tracks * index, tracks) for index, network in lines)
         case CellsRow(tracks=tracks, cells=specs):
             shown = present_cells(controls, specs, spec)
             columns = accumulate((each.span for each, _ in shown), initial=0)
@@ -422,6 +483,7 @@ def label(entry: Entry) -> str:
             | TrayIcon(label=text)
             | Calendar(label=text)
             | Graph(label=text)
+            | Nearby(label=text)
         ):
             return text
         case _:
@@ -559,6 +621,12 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
             return Chosen(TrayChoice(slot))
         case Calendar():
             return Applied(Command.THIS_MONTH)
+        case Nearby(network=Network(connected=True)):
+            return menu
+        case Nearby(network=Network(profile=str() as profile)):
+            return Applied(Join(profile))
+        case Nearby():
+            return Chosen(Command.WIFI_SETTINGS)
         case Slider() | Graph() | None:
             return menu
         case _:
@@ -576,13 +644,13 @@ def jump(menu: Menu, character: str) -> Menu:
 def restores_focus(choice: Choice) -> bool:
     """Window tools and quiet toggles hand the keyboard back; Workspace's own views keep it."""
     match choice:
-        case ToolChoice() | Volume() | Page():
+        case ToolChoice() | Volume() | Page() | Join():
             return True
         case (
             Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.MUTE | Command.THIS_MONTH | Command.RECORD | Command.STOP_RECORDING
         ):
             return True
-        case Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
+        case Command.KEYMAP | Command.NOTIFICATIONS | Command.WIFI_SETTINGS | Command.LOCATION_SETTINGS | Command.ALL_CONTROLS | TrayChoice():
             return False
         case _:
             assert_never(choice)

@@ -40,10 +40,11 @@ lazy from desktop_ui.bar_events import (
     Event,
     Expand,
     Framed,
+    JoinNetwork,
     Keyboard,
     Navigate,
-    NotificationSettings,
     Opening,
+    OpenSettings,
     Overlay,
     Record,
     Release,
@@ -54,6 +55,7 @@ lazy from desktop_ui.bar_events import (
     SetVolume,
     ShowHints,
     Surroundings,
+    Survey,
     Ticked,
     ToggleAway,
     UseTool,
@@ -230,8 +232,12 @@ class DesktopBar:
                 self.navigate(order)
             case ToggleAway():
                 self.shell.away.toggle()
-            case NotificationSettings():
-                os.startfile("ms-settings:notifications")
+            case OpenSettings(page):
+                os.startfile(page.value)
+            case Survey(listing=listing):
+                self.shell.status.survey(listing=listing)
+            case JoinNetwork(profile):
+                self.shell.status.join(profile)
             case SetVolume(level):
                 self.shell.status.set_volume(level)
             case SetMute(muted=muted):

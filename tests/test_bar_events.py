@@ -16,6 +16,7 @@ from desktop_ui.bar_events import (
     Release,
     Render,
     SetMute,
+    Survey,
     menu,
     transition,
 )
@@ -34,11 +35,11 @@ def test_opening_the_menu_remembers_the_keyboard_only_when_the_island_was_closed
     # Defect: reopening the open menu forgets who had the keyboard first.
     closed = model()
     _, effects = transition(closed, Pressed(Action.OPEN_MENU))
-    assert tuple(effects) == (Expand(menu(closed, Panel.WORKSPACE), remember=True),)
+    assert tuple(effects) == (Expand(menu(closed, Panel.WORKSPACE), remember=True), Survey(listing=False))
     opened, _ = transition(closed, Opening(menu(closed, Panel.WORKSPACE), 42))
     assert opened.menu_target == 42
     _, again = transition(opened, Pressed(Action.OPEN_MENU))
-    assert tuple(again)[-1] == Expand(menu(replace(opened, opened=None), Panel.WORKSPACE), remember=False)
+    assert Expand(menu(replace(opened, opened=None), Panel.WORKSPACE), remember=False) in tuple(again)
 
 
 def test_a_reading_opens_its_panel_switches_from_another_and_closes_its_own() -> None:
@@ -46,10 +47,10 @@ def test_a_reading_opens_its_panel_switches_from_another_and_closes_its_own() ->
     # panels forgets who had the keyboard, or a closed bar still opens.
     closed = model()
     _, opening = transition(closed, PanelPressed(Panel.SOUND))
-    assert tuple(opening) == (Expand(menu(closed, Panel.SOUND), remember=True),)
+    assert tuple(opening) == (Expand(menu(closed, Panel.SOUND), remember=True), Survey(listing=False))
     sound, _ = transition(closed, Opening(menu(closed, Panel.SOUND), 42))
     _, switching = transition(sound, PanelPressed(Panel.WORKSPACE))
-    assert tuple(switching) == (Expand(menu(sound, Panel.WORKSPACE), remember=False),)
+    assert tuple(switching) == (Expand(menu(sound, Panel.WORKSPACE), remember=False), Survey(listing=False))
     _, closing = transition(sound, PanelPressed(Panel.SOUND))
     assert Release(42) in tuple(closing)
     _, ignored = transition(replace(closed, closed=True), PanelPressed(Panel.SOUND))
@@ -61,7 +62,7 @@ def test_losing_the_keyboard_closes_without_taking_it_back_but_escape_returns_it
     # key leaves the keyboard with Workspace.
     opened, _ = transition(model(), Opening(menu(model(), Panel.WORKSPACE), 42))
     lost, deactivated = transition(opened, Deactivated())
-    assert lost.opened is None and tuple(deactivated) == (Release(0), Render())
+    assert lost.opened is None and tuple(deactivated) == (Release(0), Survey(listing=False), Render())
     _, closed = transition(opened, Pressed(Action.CLOSE_MENU))
     assert Release(42) in tuple(closed)
 
@@ -109,3 +110,15 @@ def test_the_calendar_turns_from_the_month_it_shows_and_returns_to_today() -> No
     assert menu(twice, Panel.SOUND).month is None
     back, _ = transition(twice, Picked(0))
     assert shown(back) == Month(2026, 12)
+
+
+def test_networks_are_read_only_while_their_panel_is_open() -> None:
+    # Defects: the worker keeps scanning after the panel closes or switches away, or
+    # opening the Wi-Fi panel never starts reading the networks in range.
+    _, opening = transition(model(), PanelPressed(Panel.NETWORK))
+    assert Survey(listing=True) in tuple(opening)
+    listing, _ = transition(model(), Opening(menu(model(), Panel.NETWORK), 42))
+    _, switching = transition(listing, PanelPressed(Panel.SOUND))
+    assert Survey(listing=False) in tuple(switching)
+    _, closing = transition(listing, PanelPressed(Panel.NETWORK))
+    assert Survey(listing=False) in tuple(closing)

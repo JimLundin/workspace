@@ -1,10 +1,15 @@
-"""Default speaker mute and level, and Wi-Fi association. The speakers' level and mute are the writes; no scans or connection changes."""
+"""Default speaker mute and level, Wi-Fi association and the networks in range.
+
+The writes are the speakers' level and mute, a scan for networks, and joining
+one through the profile Windows saved for it; joining a new network is Windows' own.
+"""
 
 import ctypes
 import math
 from collections.abc import Generator
 from contextlib import contextmanager
 from ctypes import wintypes
+from typing import Final
 
 lazy from win32more import FAILED
 lazy from win32more._win32 import Guid
@@ -12,15 +17,23 @@ lazy from win32more.Windows.Win32.Media.Audio import IMMDevice, IMMDeviceEnumera
 lazy from win32more.Windows.Win32.Media.Audio.Endpoints import IAudioEndpointVolume
 lazy from win32more.Windows.Win32.NetworkManagement.WiFi import (
     WLAN_API_VERSION_2_0,
+    WLAN_AVAILABLE_NETWORK_CONNECTED,
+    WLAN_AVAILABLE_NETWORK_LIST,
+    WLAN_CONNECTION_PARAMETERS,
     WLAN_INTERFACE_INFO_LIST,
     WlanCloseHandle,
+    WlanConnect,
     WlanEnumInterfaces,
     WlanFreeMemory,
+    WlanGetAvailableNetworkList,
     WlanOpenHandle,
+    WlanScan,
+    dot11_BSS_type_infrastructure,
+    wlan_connection_mode_profile,
 )
 lazy from win32more.Windows.Win32.System.Com import CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize
 
-from winapi.machine_status import Audio, Speakers, Wifi
+from winapi.machine_status import LOCATION_OFF, Audio, Listing, Network, Speakers, Wifi, nearby
 
 
 def wifi_state(states: tuple[int, ...]) -> Wifi:
@@ -47,6 +60,81 @@ def wifi() -> Wifi:
         if interfaces:
             WlanFreeMemory(interfaces)
         WlanCloseHandle(handle, None)
+
+
+@contextmanager
+def _adapters() -> Generator[tuple[ctypes.c_void_p, tuple[Guid, ...]]]:
+    """A WLAN client handle and each Wi-Fi adapter's identity, valid inside the block; none when Windows offers none."""
+    handle, version, interfaces = ctypes.c_void_p(), ctypes.c_uint32(), ctypes.POINTER(WLAN_INTERFACE_INFO_LIST)()
+    if WlanOpenHandle(WLAN_API_VERSION_2_0, None, ctypes.byref(version), ctypes.byref(handle)):
+        yield handle, ()
+        return
+    try:
+        if WlanEnumInterfaces(handle, None, ctypes.byref(interfaces)) or not interfaces:
+            yield handle, ()
+            return
+        listed = interfaces.contents
+        count = listed.dwNumberOfItems if 0 <= listed.dwNumberOfItems <= 64 else 0
+        yield handle, tuple(item.InterfaceGuid for item in listed.InterfaceInfo[:count])
+    finally:
+        if interfaces:
+            WlanFreeMemory(interfaces)
+        WlanCloseHandle(handle, None)
+
+
+def scan() -> None:
+    """Ask every adapter to look for networks; their lists refresh a few seconds later."""
+    with _adapters() as (handle, guids):
+        for guid in guids:
+            WlanScan(handle, ctypes.byref(guid), None, None, None)
+
+
+def _ssid(length: int, raw: bytes) -> str:
+    return raw[: min(length, 32)].decode("utf-8", errors="replace")
+
+
+ACCESS_DENIED: Final = 5
+"""What Windows answers a list request while location services are off for desktop apps."""
+
+
+def networks() -> Listing:
+    """The networks every adapter hears, one per name, the connected one first."""
+    with _adapters() as (handle, guids):
+        heard = tuple(_heard(handle, guid) for guid in guids)
+        if any(each is LOCATION_OFF for each in heard):
+            return LOCATION_OFF
+        return nearby(sighting for each in heard if each is not LOCATION_OFF for sighting in each)
+
+
+def _heard(handle: ctypes.c_void_p, guid: Guid) -> Listing:
+    listed = ctypes.POINTER(WLAN_AVAILABLE_NETWORK_LIST)()
+    if (failed := WlanGetAvailableNetworkList(handle, ctypes.byref(guid), 0, None, ctypes.byref(listed))) or not listed:
+        return LOCATION_OFF if failed == ACCESS_DENIED else ()
+    try:
+        found = listed.contents
+        count = found.dwNumberOfItems if 0 <= found.dwNumberOfItems <= 1024 else 0
+        return tuple(
+            Network(
+                _ssid(item.dot11Ssid.uSSIDLength, bytes(item.dot11Ssid.ucSSID)),
+                min(100, max(0, item.wlanSignalQuality)),
+                secured=bool(item.bSecurityEnabled),
+                connected=bool(item.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED),
+                profile=item.strProfileName or None,
+            )
+            for item in found.Network[:count]
+        )
+    finally:
+        WlanFreeMemory(listed)
+
+
+def join(profile: str) -> bool:
+    """Connect through the saved `profile` on the first adapter that accepts it; False when none does."""
+    with _adapters() as (handle, guids):
+        parameters = WLAN_CONNECTION_PARAMETERS()
+        parameters.wlanConnectionMode = wlan_connection_mode_profile
+        parameters.strProfile = profile
+        parameters.dot11BssType = dot11_BSS_type_infrastructure
+        return any(not WlanConnect(handle, ctypes.byref(guid), ctypes.byref(parameters), None) for guid in guids)
 
 
 @contextmanager

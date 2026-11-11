@@ -22,11 +22,14 @@ from desktop_ui.island_menu import (
     EntryId,
     Face,
     Item,
+    Join,
     Key,
     Letter,
     Live,
     Menu,
     MenuWords,
+    Nearby,
+    NetworksRow,
     Outcome,
     Panel,
     Slider,
@@ -42,6 +45,7 @@ from desktop_ui.island_menu import (
     restores_focus,
 )
 from protocol import Tool
+from winapi.machine_status import LOCATION_OFF, Network
 
 TRAY_TRACKS = 3
 
@@ -66,6 +70,11 @@ SPEC = ControlsSpec(
                 CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
                 CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
             ),
+            Panel.NETWORK: (
+                NetworksRow(3, most=2),
+                CellsRow(2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)),
+                CellsRow(1, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"),)),
+            ),
             Panel.PERFORMANCE: (
                 CellsRow(4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)),
                 CellsRow(4, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"),)),
@@ -77,7 +86,21 @@ SPEC = ControlsSpec(
             ),
         }
     ),
-    MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed", month="%m/%Y", weekday="%a"),
+    MenuWords(
+        on="Yes",
+        off="No",
+        paused="Held",
+        recording="Taping",
+        sound="Level",
+        unread="?",
+        muted="hushed",
+        month="%m/%Y",
+        weekday="%a",
+        connected="On it",
+        saved="Known",
+        secured="Locked",
+        open="Free",
+    ),
     first_weekday=6,
 )
 
@@ -223,3 +246,29 @@ def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot
     assert selected(press(at(menu, f"App {count - 1}"), Key.DOWN)) == "Notices"
     assert press(at(menu, "App 9"), Key.ENTER) == Chosen(TrayChoice(9))
     assert not any(cell.face is Face.ICON for cell in entries(RESTING, SPEC, Panel.WORKSPACE))
+
+
+def test_a_saved_network_joins_in_place_and_any_other_opens_windows_wifi_settings() -> None:
+    # Defects: choosing an unsaved network tries a join that can only fail, a saved one
+    # closes the panel before showing it connect, or the connected one rejoins.
+    def network(ssid: str, *, connected: bool = False, profile: str | None = None) -> Network:
+        return Network(ssid, 80, secured=True, connected=connected, profile=profile)
+
+    networks = (network("Home", connected=True, profile="Home"), network("Office", profile="Office profile"), network("Cafe"))
+    menu = Menu(Panel.NETWORK, entries(replace(RESTING, networks=networks), SPEC, Panel.NETWORK))
+    shown = [cell.entry for cell in menu.cells if isinstance(cell.entry, Nearby)]
+    assert [entry.label for entry in shown] == ["Home", "Office"], "Expected the row's limit to hold."
+    assert press(at(menu, "Office"), Key.ENTER) == Applied(Join("Office profile"))
+    assert press(at(menu, "Home"), Key.ENTER) == at(menu, "Home")
+    alone = Menu(Panel.NETWORK, entries(replace(RESTING, networks=(network("Cafe"),)), SPEC, Panel.NETWORK))
+    assert press(at(alone, "Cafe"), Key.ENTER) == Chosen(Command.WIFI_SETTINGS)
+
+
+def test_location_is_offered_only_while_windows_withholds_the_networks() -> None:
+    # Defects: the location link shows beside a working list, or a withheld list leaves
+    # the panel with no way to fix it.
+    def labels(controls: Controls) -> list[str]:
+        return [label(cell.entry) for cell in entries(controls, SPEC, Panel.NETWORK)]
+
+    assert labels(replace(RESTING, networks=LOCATION_OFF)) == ["Locate", "Radio"]
+    assert "Locate" not in labels(replace(RESTING, networks=(Network("Home", 50, secured=False, connected=True, profile=None),)))

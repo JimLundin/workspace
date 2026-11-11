@@ -9,14 +9,14 @@ from winapi.machine_status import Memory
 
 
 class Speakers:
-    """A concrete level owner that records where and what the worker applied."""
+    """A concrete machine that records where and what the worker applied."""
 
     def __init__(self) -> None:
         self.held = threading.Event()
         self.release = threading.Event()
         self.applied: list[tuple[float | bool, str]] = []
 
-    def observe(self) -> SystemStatus:
+    def observe(self, *, listing: bool) -> SystemStatus:
         self.held.set()
         self.release.wait(2)
         return SystemStatus()
@@ -27,6 +27,13 @@ class Speakers:
 
     def mute(self, *, muted: bool) -> bool:
         self.applied.append((muted, threading.current_thread().name))
+        return True
+
+    def scan(self) -> None:
+        self.applied.append((True, "scan"))
+
+    def join(self, profile: str) -> bool:
+        self.applied.append((0.0, profile))
         return True
 
 

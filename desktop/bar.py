@@ -11,7 +11,7 @@ from desktop import look, placement
 from desktop_ui import ambient
 from desktop_ui.desktop_pager import PagerSpec
 from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Sizes
-from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, Panel, TrayRow
+from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, NetworksRow, Panel, TrayRow
 from desktop_ui.island_model import ELAPSED, ActivitiesSpec, Activity, IslandSpec, Phased, Reading, StatusSpec, Symbols, Words
 from desktop_ui.island_motion import Springs, Timing
 from desktop_ui.motion import Spring
@@ -94,6 +94,7 @@ SIZES: Final = Sizes(
         today=12,
         graph_head=30,
         graph_line=1.5,
+        signal_bar=2.5,
     ),
     type=BarType(reading=look.TYPE.reading, strong=look.TYPE.strong, detail=look.TYPE.detail),
 )
@@ -127,6 +128,11 @@ CONTROLS: Final = ControlsSpec(
                 CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
                 CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
             ),
+            Panel.NETWORK: (
+                NetworksRow(5, most=8),
+                CellsRow(5, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Turn on location to list networks", "lock"),)),
+                CellsRow(3, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Wi-Fi settings", "wifi"),)),
+            ),
             Panel.PERFORMANCE: (
                 CellsRow(11, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Processor"),)),
                 CellsRow(11, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"),)),
@@ -148,6 +154,10 @@ CONTROLS: Final = ControlsSpec(
         muted="muted",
         month="%B %Y",
         weekday="%a",
+        connected="Connected",
+        saved="Saved",
+        secured="Secured",
+        open="Open",
     ),
     first_weekday=0,  # Monday.
 )
@@ -182,7 +192,7 @@ ISLAND: Final = IslandSpec(
                 Reading.WORKSPACE: Panel.WORKSPACE,
                 Reading.KEYBOARD: Panel.WORKSPACE,
                 Reading.SPEAKER: Panel.SOUND,
-                Reading.WIFI: Panel.WORKSPACE,
+                Reading.WIFI: Panel.NETWORK,
                 Reading.CPU: Panel.PERFORMANCE,
                 Reading.MEMORY: Panel.PERFORMANCE,
                 Reading.BATTERY: Panel.WORKSPACE,

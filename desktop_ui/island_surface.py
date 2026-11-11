@@ -39,7 +39,7 @@ from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, plotted, reading_at, tiles
-from desktop_ui.island_menu import Calendar, Face, Graph, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
+from desktop_ui.island_menu import Calendar, Face, Graph, Item, Live, Menu, MenuWords, Nearby, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
 from desktop_ui.live_marks import Beat, paint_dots, paint_wave
@@ -228,6 +228,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                 name = f"{label}: {month.first().strftime(self.capsule.window_.spec.controls.words.month)}"
             case Graph(label=label, trace=trace):
                 name = f"{label}: {trace.reading}"
+            case Nearby(label=label, detail=detail):
+                name = f"{label}: {detail}"
             case _:
                 assert_never(self.tile.cell.entry)
         if self.accessibleName() != name:
@@ -272,7 +274,7 @@ class MenuCell(QtWidgets.QAbstractButton):
                 return self.stop_circle().contains(QtCore.QPointF(pos))
             case Slider() | Calendar() | Graph():
                 return False  # The slider and the calendar take the pointer themselves rather than clicking.
-            case Item() | Toggle() | TrayIcon():
+            case Item() | Toggle() | TrayIcon() | Nearby():
                 return super().hitButton(pos)
             case _:
                 assert_never(self.tile.cell.entry)
@@ -373,6 +375,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                 self.paint_month(painter, month)
             case Graph() as graph:
                 self.paint_graph(painter, graph)
+            case Nearby() as nearby:
+                self.paint_network(painter, nearby)
             case _:
                 assert_never(cell.entry)
 
@@ -521,6 +525,25 @@ class MenuCell(QtWidgets.QAbstractButton):
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPolyline(line)
+
+    def paint_network(self, painter: QtGui.QPainter, nearby: Nearby) -> None:
+        """Four bars lit to the signal, the network's name over its state, then a lock if secured and a check if connected."""
+        lettering, cells, icon = self.capsule.drawn.look.lettering, self.sizes.cells, self.sizes.capsule.icon
+        network, middle = nearby.network, self.height() / 2
+        bars, step = 4, (icon - cells.signal_bar) / 3
+        lit = math.ceil(network.signal * bars / 100)
+        painter.setPen(Qt.PenStyle.NoPen)
+        for bar in range(bars):
+            tall = icon * (bar + 1) / bars
+            painter.setBrush(color(lettering.ink if bar < lit else Shade(lettering.ink.color, self.capsule.window_.washes.track)))
+            painter.drawRect(QtCore.QRectF(cells.lead + bar * step, middle + icon / 2 - tall, cells.signal_bar, tall))
+        marks = (*(("lock",) if network.secured else ()), *(("check",) if network.connected else ()))
+        right = self.width() - cells.trail
+        for index, mark in enumerate(reversed(marks)):
+            self.paint_icon(painter, mark, lettering.quiet, QtCore.QPointF(right - (index + 1) * icon - index * cells.signal_bar, middle - icon / 2))
+        text = QtCore.QRectF(cells.label_x, 0, right - cells.label_x - len(marks) * (icon + cells.signal_bar), self.height())
+        title = QtGui.QFontMetricsF(inter(self.sizes.type.reading)).elidedText(network.ssid, Qt.TextElideMode.ElideRight, text.width())
+        self.paint_lines(painter, text, title, nearby.detail, strong=network.connected)
 
     def paint_tray(self, painter: QtGui.QPainter, slot: int, bounds: QtCore.QRectF) -> None:
         """The application's own image, one image pixel per screen pixel up to `tray_image`, on whole device pixels.

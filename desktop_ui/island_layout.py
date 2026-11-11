@@ -176,6 +176,8 @@ class Cells:
     """A graph's name and reading above it..."""
     graph_line: float
     """...and its line's width."""
+    signal_bar: float
+    """A network's signal bar's width; four span a symbol."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

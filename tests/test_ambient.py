@@ -8,7 +8,7 @@ from desktop_ui.ambient import Ambient
 from desktop_ui.island_model import battery_text, describe
 from tests import test_island_model
 from winapi import ambient, system_status
-from winapi.machine_status import Battery, CpuTimes, PowerUnavailable, Wifi, cpu_load
+from winapi.machine_status import Battery, CpuTimes, Network, PowerUnavailable, Wifi, cpu_load, nearby
 
 
 def test_battery_percentage_remains_visible_when_plugged_in_or_full() -> None:
@@ -61,3 +61,20 @@ def test_wifi_association_uses_all_interfaces_without_claiming_unknown_or_absent
     assert system_status.wifi_state((4, 1)) is Wifi.CONNECTED
     assert system_status.wifi_state((2,)) is Wifi.CONNECTED
     assert system_status.wifi_state((99,)) is Wifi.UNKNOWN
+
+
+def test_networks_merge_by_name_keep_a_saved_profile_and_list_the_connected_one_first() -> None:
+    # Defects: a network heard on two bands, or once with its profile and once without,
+    # lists twice; the merge loses the profile or the connection; or a hidden network
+    # shows as a nameless line.
+    heard = (
+        Network("Cafe", 90, secured=False, connected=False, profile=None),
+        Network("Home", 40, secured=True, connected=False, profile=None),
+        Network("Home", 60, secured=True, connected=True, profile="Home"),
+        Network("", 99, secured=True, connected=False, profile=None),
+        Network("Office", 70, secured=True, connected=False, profile="Office"),
+    )
+    listed = nearby(heard)
+    assert [each.ssid for each in listed] == ["Home", "Cafe", "Office"]
+    home, *_ = listed
+    assert home == Network("Home", 60, secured=True, connected=True, profile="Home")

@@ -1,10 +1,12 @@
 """System indicators are observed off the UI thread, with one bounded result slot.
 
-The same worker applies the speakers' level and mute. Windows' audio interfaces need a
-multithreaded COM apartment, which Qt's thread cannot join. Requests coalesce by
-kind, so a drag applies its latest level rather than every intermediate one, and
-never drops a mute requested beside it.
-The same worker reads processor and memory use, every two seconds.
+The same worker applies the speakers' level and mute, and Wi-Fi scans and joins.
+Windows' audio interfaces need a multithreaded COM apartment, which Qt's thread
+cannot join, and a scan or join blocks. Requests coalesce by kind, so a drag
+applies its latest level rather than every intermediate one, and never drops a
+mute requested beside it.
+The same worker reads processor and memory use every two seconds, and the Wi-Fi
+networks in range each tick while their panel is open.
 """
 
 import queue
@@ -49,7 +51,7 @@ class Observation:
     clock: Callable[[], float] = time.monotonic
     _sampled: Cell[_Sampled] = field(default_factory=lambda: Cell(_Sampled()), init=False, repr=False)
 
-    def observe(self) -> SystemStatus:
+    def observe(self, *, listing: bool) -> SystemStatus:
         audio = system_status.audio()
         now = self.clock()
         sampled = self._sampled.get()
@@ -58,7 +60,8 @@ class Observation:
             times = resources.cpu_times()
             sampled = _Sampled(sampled_resources(sampled.last, cpu_load(sampled.times, times), resources.memory_use()), times, now)
             self._sampled.set(sampled)
-        return replace(sampled.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume)
+        networks = system_status.networks() if listing else ()
+        return replace(sampled.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume, networks=networks)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,18 +70,23 @@ class Pending:
 
     volume: float | None = None
     muted: bool | None = None
+    scan: bool = False
+    join: str | None = None
+    """The saved profile to connect through."""
 
 
-class Speakers(Protocol):
-    """What applies the speakers' requests."""
+class Machine(Protocol):
+    """What applies the requests."""
 
     def volume(self, level: float) -> bool: ...
     def mute(self, *, muted: bool) -> bool: ...
+    def scan(self) -> None: ...
+    def join(self, profile: str) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
-class DefaultSpeakers:
-    """Windows' default playback device."""
+class ThisMachine:
+    """Windows' default playback device and Wi-Fi adapters."""
 
     def volume(self, level: float) -> bool:
         return system_status.set_volume(level)
@@ -86,24 +94,42 @@ class DefaultSpeakers:
     def mute(self, *, muted: bool) -> bool:
         return system_status.set_mute(muted=muted)
 
+    def scan(self) -> None:
+        system_status.scan()
 
-def apply(speakers: Speakers, pending: Pending) -> None:
+    def join(self, profile: str) -> bool:
+        return system_status.join(profile)
+
+
+def apply(machine: Machine, pending: Pending) -> None:
     if pending.volume is not None:
-        speakers.volume(pending.volume)
+        machine.volume(pending.volume)
     if pending.muted is not None:
-        speakers.mute(muted=pending.muted)
+        machine.mute(muted=pending.muted)
+    if pending.join is not None:
+        machine.join(pending.join)
+    if pending.scan:
+        machine.scan()
 
 
-def _observe_status() -> Callable[[], SystemStatus]:
+class Observe(Protocol):
+    """One reading of the system; `listing` reads the Wi-Fi networks in range too."""
+
+    def __call__(self, *, listing: bool) -> SystemStatus: ...
+
+
+def _observe_status() -> Observe:
     return Observation().observe
 
 
 @dataclass(frozen=True, slots=True)
 class StatusObserver:
-    observe: Callable[[], SystemStatus] = field(default_factory=_observe_status)
-    speakers: Speakers = field(default_factory=DefaultSpeakers)
+    observe: Observe = field(default_factory=_observe_status)
+    machine: Machine = field(default_factory=ThisMachine)
     cancelled: threading.Event = field(default_factory=threading.Event)
     wake: threading.Event = field(default_factory=threading.Event)
+    listing: threading.Event = field(default_factory=threading.Event)
+    """The Wi-Fi panel is open: each tick reads the networks in range."""
     requests: Cell[Pending] = field(default_factory=lambda: Cell(Pending()))
     lock: threading.Lock = field(default_factory=threading.Lock)
     """Serializes the UI thread's requests with the worker taking them."""
@@ -112,9 +138,9 @@ class StatusObserver:
     """Set when the worker thread exits."""
 
     @classmethod
-    def start(cls, observe: Callable[[], SystemStatus] | None = None, speakers: Speakers | None = None) -> StatusObserver:
-        applied = DefaultSpeakers() if speakers is None else speakers
-        observer = cls(speakers=applied) if observe is None else cls(observe, applied)
+    def start(cls, observe: Observe | None = None, machine: Machine | None = None) -> StatusObserver:
+        applied = ThisMachine() if machine is None else machine
+        observer = cls(machine=applied) if observe is None else cls(observe, applied)
         threading.Thread(target=observer.run, name="toolbar system status", daemon=True).start()
         return observer
 
@@ -128,6 +154,17 @@ class StatusObserver:
 
     def set_mute(self, *, muted: bool) -> None:
         self.request(lambda pending: replace(pending, muted=muted))
+
+    def survey(self, *, listing: bool) -> None:
+        """Read the networks in range while `listing`, scanning afresh as it starts."""
+        if listing and not self.listing.is_set():
+            self.listing.set()
+            self.request(lambda pending: replace(pending, scan=True))
+        elif not listing:
+            self.listing.clear()
+
+    def join(self, profile: str) -> None:
+        self.request(lambda pending: replace(pending, join=profile))
 
     def taken(self) -> Pending:
         """The pending requests, leaving none."""
@@ -144,8 +181,8 @@ class StatusObserver:
 
     def _poll(self) -> None:
         while not self.cancelled.is_set():
-            apply(self.speakers, self.taken())
-            observed = self.observe()
+            apply(self.machine, self.taken())
+            observed = self.observe(listing=self.listing.is_set())
             with suppress(queue.Empty):
                 self.results.get_nowait()
             self.results.put_nowait(observed)

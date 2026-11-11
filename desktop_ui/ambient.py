@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field, replace
 from datetime import date
 
-from winapi.machine_status import Memory, Power, Speakers, Wifi
+from winapi.machine_status import Listing, Memory, Power, Speakers, Wifi
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,8 @@ class SystemStatus:
     """The processor's percentages."""
     memory_history: History = field(default_factory=History)
     """Memory in use, in bytes."""
+    networks: Listing = ()
+    """The Wi-Fi networks in range, read only while their panel is open."""
 
 
 @dataclass(frozen=True, slots=True)

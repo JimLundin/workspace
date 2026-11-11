@@ -70,6 +70,7 @@ BASE = Sizes(
         today=10,
         graph_head=24,
         graph_line=1,
+        signal_bar=2,
     ),
     type=BarType(reading=Font(11, Weight.MEDIUM), strong=Font(11, Weight.SEMIBOLD), detail=Font(9, Weight.REGULAR)),
 )
