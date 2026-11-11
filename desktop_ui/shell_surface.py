@@ -5,8 +5,9 @@ controls are, so no stylesheet can pad, re-font or restyle it.
 """
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from itertools import accumulate
 from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -14,7 +15,7 @@ lazy from PySide6.QtCore import Qt
 
 from cell import Cell
 from desktop_ui.bar_control import KeyboardFocus
-from desktop_ui.components.appearance import Look
+from desktop_ui.components.appearance import Look, Shade, Washes
 from desktop_ui.components.text import color, inter, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
 from desktop_ui.island_layout import Capsule, Sizes, on_pixels
@@ -29,6 +30,12 @@ from winapi.tray_host import Click
 def face_inset(capsule: Capsule) -> int:
     """A symbol's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
     return round(capsule.control - capsule.icon) // 2
+
+
+def paint_rule(painter: QtGui.QPainter, x: float, middle: float, capsule: Capsule, ink: Shade) -> None:
+    """The hairline between groups, from `x` and centred on `middle`, on whole device pixels so it stays sharp."""
+    scale = painter.device().devicePixelRatioF()
+    painter.fillRect(QtCore.QRectF(on_pixels(x, scale), middle - capsule.rule / 2, capsule.hairline, capsule.rule), color(ink))
 
 
 def pixmap(image: Pixels) -> QtGui.QPixmap:
@@ -181,6 +188,45 @@ class ShellButton(KeyboardFocus):
                 assert_never(self.target.face)
 
 
+@dataclass(frozen=True, slots=True)
+class Row:
+    """The pager's controls along its strip, with a rule between each two."""
+
+    lefts: tuple[int, ...]
+    rules: tuple[int, ...]
+    """Where each rule starts."""
+    width: int
+
+
+def ruled_row(widths: Sequence[int], capsule: Capsule) -> Row:
+    """Controls of `widths` left to right. A rule sits a part gap from each control, so with the
+    control's own inset it stands as far from the icons as the status capsule's rules from its readings.
+    """
+    gap, rule = round(capsule.part_gap), round(capsule.hairline)
+    lefts = tuple(accumulate((width + 2 * gap + rule for width in widths[:-1]), initial=0))[: len(widths)]
+    ends = tuple(left + width for left, width in zip(lefts, widths, strict=True))
+    return Row(lefts, tuple(end + gap for end in ends[:-1]), ends[-1] if ends else 0)
+
+
+class Strip(QtWidgets.QWidget):
+    """The pager's scrolling row: its controls, and a rule between each two desktops."""
+
+    def __init__(self, pager: Pager) -> None:
+        super().__init__()
+        self.pager = pager
+        self.rules: tuple[int, ...] = ()
+        """Where each rule starts."""
+
+    @override
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        if (appearance := self.pager.appearance) is None:
+            return
+        painter = QtGui.QPainter(self)
+        ink = Shade(appearance.lettering.ink.color, self.pager.washes.rule)
+        for x in self.rules:
+            paint_rule(painter, x, self.height() / 2, self.pager.sizes.capsule, ink)
+
+
 class HorizontalScroll(QtWidgets.QScrollArea):
     """Qt owns overflow; vertical wheel input moves the horizontal icon strip, as horizontal input does natively."""
 
@@ -236,12 +282,14 @@ class Pager(QtWidgets.QWidget):
     scrolling horizontally, so no icons are silently dropped. Native buttons exist only for the current snapshot.
     """
 
-    def __init__(self, parent: QtWidgets.QWidget, sizes: Sizes) -> None:
+    def __init__(self, parent: QtWidgets.QWidget, sizes: Sizes, washes: Washes) -> None:
         super().__init__(parent)
         self.sizes = sizes
+        self.washes = washes
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.overflow = HorizontalScroll(self)
-        self.body = QtWidgets.QWidget()
+        self.appearance: Look | None = None
+        self.body = Strip(self)
         self.overflow.setWidget(self.body)
         self.overflow.setWidgetResizable(False)
         self.overflow.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
@@ -251,7 +299,6 @@ class Pager(QtWidgets.QWidget):
             widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             widget.setAutoFillBackground(False)
         self.buttons: tuple[ShellButton, ...] = ()
-        self.appearance: Look | None = None
         self.paged = Cell(_Paged())
         self.hide()
 
@@ -262,13 +309,13 @@ class Pager(QtWidgets.QWidget):
             button.deleteLater()
         self.buttons = tuple(ShellButton(self, target) for target in targets)
         capsule = self.sizes.capsule
-        gap = round(capsule.part_gap)
-        x = 0
-        for button in self.buttons:
+        row = ruled_row(tuple(button.width() for button in self.buttons), capsule)
+        for button, x in zip(self.buttons, row.lefts, strict=True):
             button.move(x, round(capsule.inset))
             button.show()
-            x += button.width() + gap
-        self.body.setFixedSize(max(0, x - gap), round(capsule.height))
+        self.body.rules = row.rules
+        self.body.setFixedSize(row.width, round(capsule.height))
+        self.body.update()
 
     def remember_icons(self, shelf: Shelf) -> None:
         """The running apps' icons, which the pager draws its programs by."""

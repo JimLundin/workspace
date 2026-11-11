@@ -30,6 +30,8 @@ BASE = Sizes(
         text_pad=11,
         icon_pad=7,
         ring_inset=1,
+        rule=12,
+        hairline=1,
     ),
     menu=MenuGrid(width=200, radius=9, pad=5, head=40, track=4, gutter=2),
     markers=Markers(wave_floor=2, wave_reach=9, wave_corner=1, halo=5, dot_count=4, dots_radius=2, dots_lift=1),
@@ -72,7 +74,7 @@ SPEC = BarSpec(
     sizes=BASE,
     glass=test_glass_look.GLASS,
     palette=test_glass_look.PALETTE,
-    washes=Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5),
+    washes=Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5, rule=0.6),
     hints=frozendict(),
 )
 """The test's own bar, for tests of the bar's decisions."""

@@ -31,7 +31,7 @@ from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Ma
 from desktop_ui.island_motion import Timing
 from desktop_ui.live_marks import Beat, paint_dots, paint_wave
 from desktop_ui.qt_runtime import prepare
-from desktop_ui.shell_surface import Pager, pixmap
+from desktop_ui.shell_surface import Pager, paint_rule, pixmap
 from desktop_ui.vector_icons import paint_icon
 from winapi import windows
 from winapi.appearance import Frost
@@ -645,6 +645,8 @@ class Capsule(KeyboardFocus):
                 centre = QtCore.QPointF(spot.x + spot.width / 2, middle)
                 paint_dot(painter, halo, centre, markers.halo)
                 paint_dot(painter, red, centre, spot.width / 2)
+            case Marker.RULE:
+                paint_rule(painter, spot.x, middle, capsule, Shade(lettering.ink.color, self.window_.washes.rule))
             case _:
                 assert_never(spot.part)
 
@@ -674,7 +676,7 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation: Presented | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
-        self.pager = Pager(self, sizes)
+        self.pager = Pager(self, sizes, spec.washes)
         # The bar's latest tray snapshot and Qt copies of its images, for the menu's tray cells.
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()

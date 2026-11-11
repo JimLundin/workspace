@@ -96,25 +96,28 @@ def parts(observed: Observed, *readings: Reading) -> tuple[Part, ...]:
     return tuple(part for each in readings for part in reading(each, observed, SPEC.status))
 
 
-def test_at_rest_the_status_capsule_shows_each_group_of_readings_in_order() -> None:
+def test_at_rest_the_status_capsule_shows_each_group_of_readings_in_order_with_a_rule_between() -> None:
     # Defects: idle readings reappear as activity, the fixed capsule gains or drops
-    # a reading, or a group's readings leave the order the spec gives.
+    # a reading, a group's readings leave the order the spec gives, or groups run
+    # together without their rule.
     views = island(RESTING, SPEC)
     assert tuple((each.key, each.zone) for each in views) == ((Key.STATUS, Zone.RIGHT),)
-    expected = tuple(slot for slot in (parts(RESTING, *group) for group in SPEC.status.groups) if slot)
-    assert views[0].slots == expected and views[0].action is Action.OPEN_MENU
+    rule = (Marker.RULE,)
+    devices, machine, clock = (parts(RESTING, *group) for group in SPEC.status.groups)
+    assert views[0].slots == (devices, rule, machine, rule, clock) and views[0].action is Action.OPEN_MENU
 
 
 def test_a_plain_keyboard_joins_its_group_and_an_empty_group_takes_no_slot() -> None:
     # Defects: the keyboard shows while the layout remaps, it opens its own slot
-    # beside its group, or a group with nothing to show leaves an empty slot.
+    # beside its group, or a group with nothing to show leaves an empty slot or a
+    # rule with nothing on one side.
     plain = replace(RESTING, plain_keyboard=True)
     assert reading(Reading.KEYBOARD, RESTING, SPEC.status) == () and reading(Reading.KEYBOARD, plain, SPEC.status) != ()
     assert view(plain, Key.STATUS).slots[0] == parts(plain, Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI)
     assert view(RESTING, Key.STATUS).slots[0] == parts(RESTING, Reading.SPEAKER, Reading.WIFI)
     alone = replace(SPEC, status=replace(SPEC.status, groups=((Reading.KEYBOARD,), (Reading.CLOCK,))))
-    assert len(view(RESTING, Key.STATUS, spec=alone).slots) == 1
-    assert len(view(plain, Key.STATUS, spec=alone).slots) == 2
+    assert view(RESTING, Key.STATUS, spec=alone).slots == (parts(RESTING, Reading.CLOCK),)
+    assert view(plain, Key.STATUS, spec=alone).slots == (parts(plain, Reading.KEYBOARD), (Marker.RULE,), parts(plain, Reading.CLOCK))
 
 
 def test_resource_readings_keep_one_reserve_and_never_show_an_unread_value_as_zero() -> None:

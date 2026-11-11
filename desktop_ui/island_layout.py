@@ -65,6 +65,10 @@ class Capsule:
     """...and when it holds only symbols."""
     ring_inset: float
     """The keyboard focus ring, inside the capsule's edge."""
+    rule: float
+    """The rule between groups: its length..."""
+    hairline: float
+    """...and its width."""
 
     @property
     def inset(self) -> float:
@@ -247,6 +251,8 @@ def extent(part: Part, measure: Callable[[Text], float], capsule: Capsule) -> fl
             return capsule.dot
         case Marker.DOTS:
             return capsule.dots
+        case Marker.RULE:
+            return capsule.hairline
         case _:
             assert_never(part)
 
@@ -257,6 +263,15 @@ def textual(part: Part) -> bool:
             return True
         case _:
             return False
+
+
+def apart(before: Part, part: Part) -> bool:
+    """Whether `part` starts another fact in its slot: a reading or symbol after a reading, but not the control that acts on it."""
+    match part:
+        case Control():
+            return False
+        case _:
+            return textual(before)
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,8 +290,8 @@ def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], capsule: Cap
             if not position:
                 yield _Step(part, capsule.slot_gap if index else 0.0, width)
             elif width:
-                # Two readings side by side keep the space of separate facts.
-                yield _Step(part, capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap, width)
+                # A fact after a reading keeps the space of separate facts.
+                yield _Step(part, capsule.slot_gap if apart(slot[position - 1], part) else capsule.part_gap, width)
             else:
                 yield _Step(part, 0.0, width)
 

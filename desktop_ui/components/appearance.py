@@ -339,6 +339,8 @@ class Washes:
     """The glow around a signal's dot."""
     resting: float
     """A pulsing dot between pulses."""
+    rule: float
+    """The rule between groups of readings or desktops."""
 
 
 def _scheme(pane: Pane, material: appearance.Material, glass: Glass) -> Scheme:
