@@ -11,7 +11,7 @@ from desktop import look, placement
 from desktop_ui import ambient
 from desktop_ui.desktop_pager import PagerSpec
 from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Sizes
-from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, TrayRow
+from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, Panel, TrayRow
 from desktop_ui.island_model import ELAPSED, ActivitiesSpec, Activity, IslandSpec, Phased, Reading, StatusSpec, Symbols, Words
 from desktop_ui.island_motion import Springs, Timing
 from desktop_ui.motion import Spring
@@ -93,29 +93,35 @@ SIZES: Final = Sizes(
 
 
 CONTROLS: Final = ControlsSpec(
-    (
-        ActivitiesRow(5),
-        CellsRow(
-            4,
-            (
-                CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
-                CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
+    every_member(
+        Panel,
+        {
+            Panel.WORKSPACE: (
+                ActivitiesRow(5),
+                CellsRow(
+                    4,
+                    (
+                        CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
+                        CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
+                    ),
+                ),
+                CellsRow(4, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark when away", "lock"),)),
+                CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
+                CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                CellsRow(
+                    7,
+                    (
+                        CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
+                        CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
+                        CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
+                    ),
+                ),
+                TrayRow(4),
+                CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
+                CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
             ),
-        ),
-        CellsRow(4, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark when away", "lock"),)),
-        CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
-        CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-        CellsRow(
-            7,
-            (
-                CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
-                CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
-                CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
-            ),
-        ),
-        TrayRow(4),
-        CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
-        CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
+            Panel.SOUND: (CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),),
+        },
     ),
     MenuWords(
         on="On",
@@ -127,9 +133,10 @@ CONTROLS: Final = ControlsSpec(
         muted="muted",
     ),
 )
-"""The controls menu (press the clock or battery), top to bottom.
+"""The status capsule's panels, each top to bottom: Workspace's own controls
+(press its glyph, or an activity) and each reading's own (press the reading).
 
-The menu is a grid of 8 columns. Each row is a band `tracks` tall (a track is
+A panel is a grid of 8 columns. Each row is a band `tracks` tall (a track is
 `menu.track` in `SIZES`, gutter included):
 
 - `CellsRow`: entries placed left to right; `span` is their width in columns. An
@@ -138,19 +145,32 @@ The menu is a grid of 8 columns. Each row is a band `tracks` tall (a track is
 - `ActivitiesRow`: a full-width card with its Stop for each running activity.
 - `TrayRow`: the system tray's icons, a column each, wrapping onto new lines.
 
-Each entry is placed once; the sound slider takes Windows' own name.
+Each entry is placed once in a panel; the sound slider takes Windows' own name.
 """
 
 
 ISLAND: Final = IslandSpec(
-    # The fixed capsule at the screen's right edge, which opens the controls menu:
-    # its readings left to right, evenly spaced. Leave a reading out to hide it.
+    # The fixed capsule at the screen's right edge: its readings left to right,
+    # evenly spaced, each opening its panel. Leave a reading out to hide it.
     # The keyboard shows only while it types plainly.
     status=StatusSpec(
-        (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI, Reading.CPU, Reading.MEMORY, Reading.BATTERY, Reading.CLOCK),
+        (Reading.WORKSPACE, Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI, Reading.CPU, Reading.MEMORY, Reading.BATTERY, Reading.CLOCK),
         SPEAKERS,
         WIFI,
-        Symbols(keyboard="keyboard", charger="charger", cpu="cpu", memory="memory"),
+        Symbols(workspace="menu", keyboard="keyboard", charger="charger", cpu="cpu", memory="memory"),
+        every_member(
+            Reading,
+            {
+                Reading.WORKSPACE: Panel.WORKSPACE,
+                Reading.KEYBOARD: Panel.WORKSPACE,
+                Reading.SPEAKER: Panel.SOUND,
+                Reading.WIFI: Panel.WORKSPACE,
+                Reading.CPU: Panel.WORKSPACE,
+                Reading.MEMORY: Panel.WORKSPACE,
+                Reading.BATTERY: Panel.WORKSPACE,
+                Reading.CLOCK: Panel.WORKSPACE,
+            },
+        ),
         low_battery=20,
         unread="—",
         mains="AC",

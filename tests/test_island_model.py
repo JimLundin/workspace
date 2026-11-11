@@ -11,6 +11,7 @@ from contracts.status import TRANSCRIBING
 from desktop_ui import ambient
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components.meaning import Tone
+from desktop_ui.island_menu import Panel
 from desktop_ui.island_model import (
     ELAPSED,
     Action,
@@ -42,7 +43,7 @@ from winapi.machine_status import Battery, Memory, PowerUnavailable, Speakers, W
 
 SPEAKERS = frozendict((state, ambient.Reading(f"speaker {state.name}", f"speakers {state.name}")) for state in Speakers)
 WIFI = frozendict((state, ambient.Reading(f"wifi {state.name}", f"wifi {state.name}")) for state in Wifi)
-SYMBOLS = Symbols(keyboard="keys", charger="plug", cpu="chip", memory="ram")
+SYMBOLS = Symbols(workspace="home", keyboard="keys", charger="plug", cpu="chip", memory="ram")
 PHASES: Phases = frozendict(
     {
         "idle": None,
@@ -77,6 +78,7 @@ SPEC = IslandSpec(
         SPEAKERS,
         WIFI,
         SYMBOLS,
+        frozendict((reading, Panel.SOUND if reading is Reading.SPEAKER else Panel.WORKSPACE) for reading in Reading),
         low_battery=20,
         unread="?",
         mains="Mains",

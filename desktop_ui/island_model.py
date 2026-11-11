@@ -12,7 +12,8 @@ The bar's policy (docs/toolbar-design.md, "What the bar shows"):
 - The pinned web apps sit at the far left (the shell sections own that capsule).
   One fixed capsule anchors right: CPU and memory use, the keyboard while it types plainly,
   volume, Wi-Fi, clock and power. The system tray is in the controls menu.
-- That capsule expands into the controls menu.
+- That capsule expands into the panel of the reading pressed; Workspace's own
+  glyph opens its controls.
 - Stoppable activities reveal Stop under the pointer.
 """
 
@@ -26,6 +27,7 @@ from contracts.status import Job
 from desktop_ui import ambient
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
+from desktop_ui.island_menu import Panel
 from winapi.machine_status import Battery, Memory, PowerUnavailable, Speakers, Wifi
 
 
@@ -104,6 +106,8 @@ class CapsuleView:
     label: str
     action: Action
     tint: meaning.Tint = meaning.Tint.NONE
+    panels: tuple[Panel, ...] = field(default=(), kw_only=True)
+    """The panel each slot opens, slot for slot; a capsule without them acts as a whole."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +166,7 @@ def capture(recording: RecordingState, phases: Phases) -> Capture | None:
 class Reading(StrEnum):
     """A reading the status capsule can show; what each shows stays here."""
 
+    WORKSPACE = auto()  # Workspace's own glyph, which opens its controls.
     KEYBOARD = auto()  # Only while the keyboard types plainly.
     SPEAKER = auto()
     WIFI = auto()
@@ -182,6 +187,7 @@ class Activity(StrEnum):
 class Symbols:
     """The status readings' symbols."""
 
+    workspace: str
     keyboard: str
     charger: str
     """Power on a machine without a battery."""
@@ -225,6 +231,8 @@ class StatusSpec:
     wifi: frozendict[Wifi, ambient.Reading]
     """Wi-Fi's symbol and words in each state."""
     symbols: Symbols
+    opens: frozendict[Reading, Panel]
+    """The panel each reading expands into when pressed."""
     low_battery: int
     """The battery percentage at or below which, on its own power, the reading warns."""
     unread: str
@@ -350,6 +358,8 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
     so a changing reading never shifts the fixed cluster."""
     ambient, system, symbols = observed.ambient, observed.system, status.symbols
     match each:
+        case Reading.WORKSPACE:
+            return (Glyph(symbols.workspace),)
         case Reading.KEYBOARD:
             return (Glyph(symbols.keyboard),) if observed.plain_keyboard else ()
         case Reading.SPEAKER:
@@ -411,9 +421,11 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
     # The readings stay the top row while their capsule expands into the menu. Each
     # reading is its own slot; a reading with nothing to show (a keyboard typing
     # normally) takes none, and a group without any takes no space or rule.
-    readings = tuple(slot for each in spec.status.readings if (slot := reading(each, observed, spec.status)))
+    shown = tuple((slot, spec.status.opens[each]) for each in spec.status.readings if (slot := reading(each, observed, spec.status)))
+    readings = tuple(slot for slot, _ in shown)
+    panels = tuple(panel for _, panel in shown)
     persistent = (
-        CapsuleView(Key.STATUS, Zone.RIGHT, readings, words.close_controls, Action.CLOSE_MENU)
+        CapsuleView(Key.STATUS, Zone.RIGHT, readings, words.close_controls, Action.CLOSE_MENU, panels=panels)
         if expanded
         else CapsuleView(
             Key.STATUS,
@@ -422,6 +434,7 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
             ". ".join((resources(observed.system, words, spec.status), devices(observed.system, spec.status), describe(observed.ambient, spec)))
             + f" · {words.open_controls}",
             Action.OPEN_MENU,
+            panels=panels,
         ),
     )
     active = observed.dictating or job is not None or recorded is not None

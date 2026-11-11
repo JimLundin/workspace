@@ -7,7 +7,7 @@ from desktop_ui.motion import Spring
 
 
 def shown(key: Key, zone: Zone, width: float, *parts: Text | Glyph) -> Shown:
-    return Shown(CapsuleView(key, zone, (parts,), key.name, Action.OPEN_MENU), Content(width, tuple(Spot(part, 12, 10) for part in parts), 34))
+    return Shown(CapsuleView(key, zone, (parts,), key.name, Action.OPEN_MENU), Content(width, tuple(Spot(part, 12, 10, 0) for part in parts), 34))
 
 
 SPRINGS = Springs(morph=Spring(0.86, 0.42), appear=Spring(0.78, 0.42), leave=Spring(1.0, 0.3), fade=Spring(1.0, 0.2))

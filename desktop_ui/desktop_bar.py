@@ -261,7 +261,7 @@ class DesktopBar:
     def render(self) -> None:
         """Retarget the capsules at what the bar should show now, then paint; frames carry them there."""
         model = self.model
-        opened = menu(model) if model.opened is not None else None
+        opened = menu(model, previous.panel) if (previous := model.opened) else None
         observed = Observed(
             model.job, model.recording, model.seen.ambient, model.seen.system, plain_keyboard=not model.layout_enabled, dictating=model.dictating
         )

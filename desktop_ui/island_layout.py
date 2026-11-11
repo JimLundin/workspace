@@ -10,7 +10,7 @@ edge still lands on it.
 """
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import reduce
 from itertools import chain
 from operator import add
@@ -210,11 +210,12 @@ class Sizes:
 
 @dataclass(frozen=True, slots=True)
 class Spot:
-    """A part's horizontal place inside its capsule."""
+    """A part's horizontal place inside its capsule, and the slot it belongs to."""
 
     part: Part
     x: float
     width: float
+    slot: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,7 +259,7 @@ def expansion(menu: Menu, row: Content, grid: MenuGrid) -> Content:
     tracks = max((cell.track + cell.tracks for cell in menu.cells), default=0)
     bottom = grid.pad + grid.head + tracks * grid.track
     width = max(float(grid.width), row.width)
-    spots = tuple(Spot(spot.part, spot.x + width - row.width, spot.width) for spot in row.spots)
+    spots = tuple(replace(spot, x=spot.x + width - row.width) for spot in row.spots)
     return Content(width, spots, bottom + grid.pad)
 
 
@@ -298,6 +299,7 @@ class _Step:
     part: Part
     gap: float
     width: float
+    slot: int
 
 
 def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes) -> Iterator[_Step]:
@@ -306,12 +308,13 @@ def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes
         for position, part in enumerate(slot):
             width = extent(part, measure, sizes)
             if not position:
-                yield _Step(part, capsule.slot_gap if index else 0.0, width)
+                yield _Step(part, capsule.slot_gap if index else 0.0, width, index)
             elif width:
                 # Two readings side by side keep the space of separate facts.
-                yield _Step(part, capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap, width)
+                gap = capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap
+                yield _Step(part, gap, width, index)
             else:
-                yield _Step(part, 0.0, width)
+                yield _Step(part, 0.0, width, index)
 
 
 def _placed(steps: Iterable[_Step], start: float) -> Iterator[Spot]:
@@ -319,7 +322,7 @@ def _placed(steps: Iterable[_Step], start: float) -> Iterator[Spot]:
     x = start
     for step in steps:
         x += step.gap
-        yield Spot(step.part, x, step.width)
+        yield Spot(step.part, x, step.width, step.slot)
         x += step.width
 
 
@@ -347,7 +350,17 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Size
     end = x + (edge(parts[-1]) if parts else pad)
     width = max(float(capsule.height), end)
     shift = (width - end) / 2
-    return Content(width, tuple(Spot(spot.part, spot.x + shift, spot.width) for spot in spots), capsule.height)
+    return Content(width, tuple(replace(spot, x=spot.x + shift) for spot in spots), capsule.height)
+
+
+def reading_at(content: Content, x: float) -> int | None:
+    """The slot under `x` in `content`'s row: the one whose parts are nearest, so the
+    gap between two readings splits halfway and the ends belong to the outer readings."""
+
+    def distance(spot: Spot) -> float:
+        return max(spot.x - x, x - spot.x - spot.width, 0.0)
+
+    return min(content.spots, key=distance).slot if content.spots else None
 
 
 @dataclass(frozen=True, slots=True)

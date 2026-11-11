@@ -28,6 +28,7 @@ from desktop_ui.island_menu import (
     Menu,
     MenuWords,
     Outcome,
+    Panel,
     Slider,
     Toggle,
     ToolChoice,
@@ -45,23 +46,28 @@ from protocol import Tool
 TRAY_TRACKS = 3
 
 SPEC = ControlsSpec(
-    (
-        ActivitiesRow(3),
-        CellsRow(2, (CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"), CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"))),
-        CellsRow(2, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"),)),
-        CellsRow(2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)),
-        CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-        CellsRow(
-            2,
-            (
-                CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"),
-                CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"),
-                CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Key map"),
+    frozendict(
+        {
+            Panel.WORKSPACE: (
+                ActivitiesRow(3),
+                CellsRow(2, (CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"), CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"))),
+                CellsRow(2, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"),)),
+                CellsRow(2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)),
+                CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                CellsRow(
+                    2,
+                    (
+                        CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"),
+                        CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"),
+                        CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Key map"),
+                    ),
+                ),
+                TrayRow(TRAY_TRACKS),
+                CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
+                CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
             ),
-        ),
-        TrayRow(TRAY_TRACKS),
-        CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
-        CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
+            Panel.SOUND: (CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),),
+        }
     ),
     MenuWords(on="Yes", off="No", paused="Held", recording="Taping", sound="Level", unread="?", muted="hushed"),
 )
@@ -91,10 +97,10 @@ def opened(outcome: Outcome) -> Menu:
 
 def test_a_running_recording_leads_as_a_card_and_replaces_its_start() -> None:
     # Defects: a running recording still offers its start, or has no Stop in the menu.
-    cells = entries(Controls("02:05"), SPEC)
+    cells = entries(Controls("02:05"), SPEC, Panel.WORKSPACE)
     assert cells[0].face is Face.CARD and isinstance(cells[0].entry, Live) and cells[0].entry.stop is Command.STOP_RECORDING
     assert not any(isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD for cell in cells)
-    assert any(isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD for cell in entries(RESTING, SPEC))
+    assert any(isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD for cell in entries(RESTING, SPEC, Panel.WORKSPACE))
 
 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
@@ -102,7 +108,7 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     grid = MenuGrid(width=200, radius=0, pad=5, head=10, track=4, gutter=2)
     tray = tuple(f"App {index}" for index in range(11))
     for controls in (RESTING, Controls("02:05"), replace(RESTING, tray=tray)):
-        laid = tiles(Menu(entries(controls, SPEC)), grid)
+        laid = tiles(Menu(Panel.WORKSPACE, entries(controls, SPEC, Panel.WORKSPACE)), grid)
         for tile in laid:
             assert tile.x > 0 and tile.x + tile.width < grid.width
         for first in laid:
@@ -120,11 +126,11 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
 def test_toggles_show_their_state_and_apply_in_place() -> None:
     # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
     def states(controls: Controls) -> dict[Command, bool]:
-        return {cell.entry.choice: cell.entry.on for cell in entries(controls, SPEC) if isinstance(cell.entry, Toggle)}
+        return {cell.entry.choice: cell.entry.on for cell in entries(controls, SPEC, Panel.WORKSPACE) if isinstance(cell.entry, Toggle)}
 
     assert states(Controls(None, overlay=True, dark_when_away=True)) == {Command.OVERLAY: True, Command.PLACEMENT: True, Command.DARK_WHEN_AWAY: True}
     assert states(Controls(None, placement_paused=True)) == {Command.OVERLAY: False, Command.PLACEMENT: False, Command.DARK_WHEN_AWAY: False}
-    menu = Menu(entries(RESTING, SPEC))
+    menu = Menu(Panel.WORKSPACE, entries(RESTING, SPEC, Panel.WORKSPACE))
     assert press(at(menu, "Keys"), Key.ENTER) == Applied(Command.OVERLAY)
     assert press(at(menu, "Key map"), Key.ENTER) == Chosen(Command.KEYMAP)
 
@@ -132,7 +138,7 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
 def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
     # Defects: an arrow skips the cell beside or below the selection, Left or Right
     # leaves the grid's edge, or Down from the last cell strands the selection.
-    menu = Menu(entries(RESTING, SPEC))
+    menu = Menu(Panel.WORKSPACE, entries(RESTING, SPEC, Panel.WORKSPACE))
     assert selected(press(menu, Key.DOWN)) == "Keys"
     assert selected(press(at(menu, "Keys"), Key.RIGHT)) == "Placing"
     assert selected(press(at(menu, "Placing"), Key.LEFT)) == "Keys"
@@ -149,7 +155,9 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
     # Defects: Left or Right moves off the slider instead of changing the volume,
     # a step leaves the 0 to 1 range, or an unknown level invents one.
     def stepped(level: float | None, key: Key) -> Outcome:
-        return press(at(Menu(entries(replace(RESTING, sound=Slider("Volume", level, muted=False)), SPEC)), "Volume"), key)
+        return press(
+            at(Menu(Panel.WORKSPACE, entries(replace(RESTING, sound=Slider("Volume", level, muted=False)), SPEC, Panel.WORKSPACE)), "Volume"), key
+        )
 
     match stepped(0.4, Key.RIGHT), stepped(0.4, Key.LEFT):
         case Applied(Volume(up)), Applied(Volume(down)):
@@ -158,16 +166,16 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
             raise AssertionError(f"Expected two volume changes, got {other}")
     assert stepped(1.0, Key.RIGHT) == Applied(Volume(1.0))
     assert stepped(0.0, Key.LEFT) == Applied(Volume(0.0))
-    unknown = at(Menu(entries(replace(RESTING, sound=Slider("Volume", None, muted=False)), SPEC)), "Volume")
+    unknown = at(Menu(Panel.WORKSPACE, entries(replace(RESTING, sound=Slider("Volume", None, muted=False)), SPEC, Panel.WORKSPACE)), "Volume")
     assert press(unknown, Key.RIGHT) == unknown
-    menu = at(Menu(entries(RESTING, SPEC)), "Volume")
+    menu = at(Menu(Panel.WORKSPACE, entries(RESTING, SPEC, Panel.WORKSPACE)), "Volume")
     assert press(menu, Key.ENTER) == menu
 
 
 def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> None:
     # Defects: Enter on a card doesn't stop its activity, Escape chooses something,
     # or a repeated letter stays on its first match.
-    menu = Menu(entries(Controls("02:05"), SPEC), selected=0)
+    menu = Menu(Panel.WORKSPACE, entries(Controls("02:05"), SPEC, Panel.WORKSPACE), selected=0)
     assert press(menu, Key.ENTER) == Chosen(Command.STOP_RECORDING)
     assert press(menu, Key.ESCAPE) is DISMISSED
     first = opened(press(menu, Letter("k")))
@@ -186,7 +194,7 @@ def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot
     # Defects: an icon lands on the wrong line or slot, the links overlap the tray,
     # or Enter on an icon clicks another application's icon.
     count = 30
-    menu = Menu(entries(replace(RESTING, tray=tuple(f"App {index}" for index in range(count))), SPEC))
+    menu = Menu(Panel.WORKSPACE, entries(replace(RESTING, tray=tuple(f"App {index}" for index in range(count))), SPEC, Panel.WORKSPACE))
     icons = [cell for cell in menu.cells if cell.face is Face.ICON]
     assert [cell.entry for cell in icons] == [TrayIcon(f"App {index}", index) for index in range(count)]
     assert (icons[0].column, icons[0].span) == (0, 1)
@@ -205,4 +213,4 @@ def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot
             assert selected(press(at(menu, label(icon.entry)), Key.DOWN)) == label(under.entry)
     assert selected(press(at(menu, f"App {count - 1}"), Key.DOWN)) == "Notices"
     assert press(at(menu, "App 9"), Key.ENTER) == Chosen(TrayChoice(9))
-    assert not any(cell.face is Face.ICON for cell in entries(RESTING, SPEC))
+    assert not any(cell.face is Face.ICON for cell in entries(RESTING, SPEC, Panel.WORKSPACE))

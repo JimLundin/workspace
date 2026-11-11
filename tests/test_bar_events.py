@@ -8,12 +8,14 @@ from desktop_ui.bar_events import (
     DictationShown,
     Expand,
     Opening,
+    PanelPressed,
     Pressed,
     Release,
     Render,
     menu,
     transition,
 )
+from desktop_ui.island_menu import Panel
 from desktop_ui.island_model import Action
 from tests import test_bar_specs
 
@@ -26,17 +28,32 @@ def test_opening_the_menu_remembers_the_keyboard_only_when_the_island_was_closed
     # Defect: reopening the open menu forgets who had the keyboard first.
     closed = model()
     _, effects = transition(closed, Pressed(Action.OPEN_MENU))
-    assert tuple(effects) == (Expand(menu(closed), remember=True),)
-    opened, _ = transition(closed, Opening(menu(closed), 42))
+    assert tuple(effects) == (Expand(menu(closed, Panel.WORKSPACE), remember=True),)
+    opened, _ = transition(closed, Opening(menu(closed, Panel.WORKSPACE), 42))
     assert opened.menu_target == 42
     _, again = transition(opened, Pressed(Action.OPEN_MENU))
-    assert tuple(again)[-1] == Expand(menu(replace(opened, opened=None)), remember=False)
+    assert tuple(again)[-1] == Expand(menu(replace(opened, opened=None), Panel.WORKSPACE), remember=False)
+
+
+def test_a_reading_opens_its_panel_switches_from_another_and_closes_its_own() -> None:
+    # Defects: pressing the open panel's reading opens it again instead of closing, switching
+    # panels forgets who had the keyboard, or a closed bar still opens.
+    closed = model()
+    _, opening = transition(closed, PanelPressed(Panel.SOUND))
+    assert tuple(opening) == (Expand(menu(closed, Panel.SOUND), remember=True),)
+    sound, _ = transition(closed, Opening(menu(closed, Panel.SOUND), 42))
+    _, switching = transition(sound, PanelPressed(Panel.WORKSPACE))
+    assert tuple(switching) == (Expand(menu(sound, Panel.WORKSPACE), remember=False),)
+    _, closing = transition(sound, PanelPressed(Panel.SOUND))
+    assert Release(42) in tuple(closing)
+    _, ignored = transition(replace(closed, closed=True), PanelPressed(Panel.SOUND))
+    assert tuple(ignored) == ()
 
 
 def test_losing_the_keyboard_closes_without_taking_it_back_but_escape_returns_it() -> None:
     # Defect: another window taking focus is fought for, or closing with the menu
     # key leaves the keyboard with Workspace.
-    opened, _ = transition(model(), Opening(menu(model()), 42))
+    opened, _ = transition(model(), Opening(menu(model(), Panel.WORKSPACE), 42))
     lost, deactivated = transition(opened, Deactivated())
     assert lost.opened is None and tuple(deactivated) == (Release(0), Render())
     _, closed = transition(opened, Pressed(Action.CLOSE_MENU))

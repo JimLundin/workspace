@@ -26,6 +26,7 @@ from desktop_ui.island_menu import (
     Controls,
     ControlsSpec,
     Menu,
+    Panel,
     Slider,
     ToolChoice,
     TrayChoice,
@@ -112,12 +113,13 @@ class BarModel:
     sampled_at: float | None = None
 
 
-def menu(model: BarModel) -> Menu:
-    """The menu for what's happening now, keeping the current selection."""
+def menu(model: BarModel, panel: Panel) -> Menu:
+    """`panel` for what's happening now, keeping the selection while it stays open."""
     recorded = capture(model.recording, model.spec.island.words.phases) if model.recording.capturing else None
     seen = model.seen
     sound = Slider(model.spec.controls.words.sound, seen.system.volume, muted=seen.system.speakers is Speakers.MUTED)
     built = Menu(
+        panel,
         entries(
             Controls(
                 recorded.title if recorded is not None else None,
@@ -129,9 +131,11 @@ def menu(model: BarModel) -> Menu:
                 hints=model.spec.hints,
             ),
             model.spec.controls,
-        )
+            panel,
+        ),
     )
-    return replace(built, selected=model.opened.selected) if model.opened is not None else built
+    kept = model.opened
+    return replace(built, selected=kept.selected) if kept is not None and kept.panel is panel else built
 
 
 # ---- facts --------------------------------------------------------------------------
@@ -140,6 +144,13 @@ def menu(model: BarModel) -> Menu:
 @dataclass(frozen=True, slots=True)
 class Pressed:
     action: Action
+
+
+@dataclass(frozen=True, slots=True)
+class PanelPressed:
+    """A reading in the status capsule was pressed: it opens its panel, or closes it if open."""
+
+    panel: Panel
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +267,7 @@ class Closing:
 
 type Event = (
     Pressed
+    | PanelPressed
     | Hovered
     | Selected
     | Picked
@@ -438,9 +450,7 @@ def _settled(model: BarModel, outcome: island_menu.Outcome) -> tuple[BarModel, t
 def _pressed(model: BarModel, action: Action) -> tuple[BarModel, tuple[Effect, ...]]:
     match action:
         case Action.OPEN_MENU:
-            if model.closed:
-                return model, ()
-            return model, (Expand(menu(replace(model, opened=None)), remember=model.opened is None),)
+            return _opened(model, Panel.WORKSPACE)
         case Action.CLOSE_MENU:
             return _closed(model, restore=True)
         case Action.STOP_DICTATION:
@@ -450,6 +460,20 @@ def _pressed(model: BarModel, action: Action) -> tuple[BarModel, tuple[Effect, .
             return _ran(model, Command.STOP_RECORDING)
         case _:
             assert_never(action)
+
+
+def _opened(model: BarModel, panel: Panel) -> tuple[BarModel, tuple[Effect, ...]]:
+    """Expand into `panel`, from the closed bar or from another panel."""
+    if model.closed:
+        return model, ()
+    return model, (Expand(menu(model, panel), remember=model.opened is None),)
+
+
+def _panel(model: BarModel, panel: Panel) -> tuple[BarModel, tuple[Effect, ...]]:
+    """A reading's press opens its panel; pressed again it closes."""
+    if (opened := model.opened) and opened.panel is panel:
+        return _closed(model, restore=True)
+    return _opened(model, panel)
 
 
 def _shown(model: BarModel, change: ActivityChange) -> BarModel:
@@ -477,6 +501,8 @@ def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]
     match event:
         case Pressed(action):
             return _pressed(model, action)
+        case PanelPressed(panel):
+            return _panel(model, panel)
         case Hovered(key):
             return _changed(model, replace(model, hovered=key))
         case Selected(index):

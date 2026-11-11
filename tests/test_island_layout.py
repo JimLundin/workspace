@@ -6,7 +6,7 @@ capsules and parts relative to the sizes it is given, never the bar's real posit
 
 from itertools import pairwise
 
-from desktop_ui.island_layout import Content, Framed, Metrics, Placed, Spot, arrange, frame, snap
+from desktop_ui.island_layout import Content, Framed, Metrics, Placed, Spot, arrange, frame, reading_at, snap
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_bar_specs, test_island_model
 
@@ -122,4 +122,17 @@ def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> No
 def test_content_narrower_than_a_circle_centres_in_one() -> None:
     # Defect: a lone marker collapses the capsule below its height, losing its round shape.
     content = arrange(((Marker.DOT,),), width_of, SIZES)
-    assert content.width == CAPSULE.height and content.spots == (Spot(Marker.DOT, (CAPSULE.height - CAPSULE.dot) / 2, CAPSULE.dot),)
+    assert content.width == CAPSULE.height and content.spots == (Spot(Marker.DOT, (CAPSULE.height - CAPSULE.dot) / 2, CAPSULE.dot, 0),)
+
+
+def test_a_press_goes_to_the_nearest_reading_and_the_ends_to_the_outer_ones() -> None:
+    # Defects: a press in the gap opens the far reading's panel, the gap between a
+    # reading's value and its symbol belongs to the neighbour, or the capsule's ends open nothing.
+    content = arrange(((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)), width_of, SIZES)
+    value, symbol, second, _ = content.spots
+    assert reading_at(content, (value.x + value.width + symbol.x) / 2) == 0
+    gap = second.x - symbol.x - symbol.width
+    assert reading_at(content, symbol.x + symbol.width + gap * 0.4) == 0
+    assert reading_at(content, second.x - gap * 0.4) == 1
+    assert reading_at(content, 0.0) == 0 and reading_at(content, content.width) == 2
+    assert reading_at(Content(0.0, (), 0.0), 5.0) is None

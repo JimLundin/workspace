@@ -20,12 +20,12 @@ lazy from PySide6.QtCore import Qt
 
 from desktop_ui import island_menu
 from desktop_ui.bar_control import KeyboardFocus, paint_feedback
-from desktop_ui.bar_events import BarSpec, Deactivated, Event, Hovered, MenuKey, Picked, Pressed, Selected, TrayClicked, VolumeSet
+from desktop_ui.bar_events import BarSpec, Deactivated, Event, Hovered, MenuKey, PanelPressed, Picked, Pressed, Selected, TrayClicked, VolumeSet
 from desktop_ui.components.appearance import Glass, GlassLook, Look, Shade, SolidLook, reading, rim_stops
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
-from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, tiles
+from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, reading_at, tiles
 from desktop_ui.island_menu import Face, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
@@ -457,7 +457,16 @@ class Capsule(KeyboardFocus):
         return ink if self.contrast else Shade(hue)
 
     def pressed_capsule(self) -> None:
-        self.press(self.drawn.view.action)
+        """A reading under the pointer opens its own panel; the keyboard, or a capsule without panels, presses the whole."""
+        view, content = self.drawn.view, self.drawn.content
+        pointer = self.mapFromGlobal(QtGui.QCursor.pos())
+        row = self.window_.sizes.bar.top + self.window_.sizes.capsule.height
+        if view.panels and self.rect().contains(pointer) and pointer.y() <= row:
+            slot = reading_at(content, pointer.x() - self.shift(content))
+            if slot is not None and slot < len(view.panels):
+                self.window_.report(PanelPressed(view.panels[slot]))
+                return
+        self.press(view.action)
 
     def describe(self, view: CapsuleView) -> None:
         self.setToolTip("" if view.action is Action.CLOSE_MENU else view.label)

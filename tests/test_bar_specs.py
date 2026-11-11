@@ -10,7 +10,7 @@ from desktop_ui.bar_events import BarSpec
 from desktop_ui.components.appearance import Washes
 from desktop_ui.components.typeface import Font, Weight
 from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
-from desktop_ui.island_menu import Menu, entries
+from desktop_ui.island_menu import Menu, Panel, entries
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_glass_look, test_island_menu, test_island_model, test_island_motion
 
@@ -119,6 +119,6 @@ def test_every_size_the_bar_lays_out_comes_from_the_sizes_it_is_given() -> None:
         frame(placed, Metrics(screen, s.bar.top, s.bar.gap, s.bar.edge), order(test_island_model.SPEC)) for s, placed, screen in bars
     )
     assert [(f.box.x * 2, f.box.y * 2, f.box.width * 2) for f in small_frame] == [(f.box.x, f.box.y, f.box.width) for f in big_frame]
-    menu = Menu(entries(test_island_menu.RESTING, test_island_menu.SPEC))
+    menu = Menu(Panel.WORKSPACE, entries(test_island_menu.RESTING, test_island_menu.SPEC, Panel.WORKSPACE))
     pairs = zip(tiles(menu, BASE.menu), tiles(menu, large.menu), strict=True)
     assert all((2 * a.x, 2 * a.y, 2 * a.width, 2 * a.height) == (b.x, b.y, b.width, b.height) for a, b in pairs)

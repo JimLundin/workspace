@@ -1,7 +1,8 @@
-"""The controls menu: a grid of tiles, and keyboard navigation as pure transitions.
+"""The status capsule's panels: grids of tiles, and keyboard navigation as pure transitions.
 
-The status capsule expands into the menu. Ongoing activities lead as cards with
-their Stop; toggles sit beside Workspace's views; then recording, sound, the
+The status capsule expands into the panel of the reading pressed: the speaker's
+sound, or Workspace's own controls. In those, ongoing activities lead as cards
+with their Stop; toggles sit beside Workspace's views; then recording, sound, the
 desktop tools, the system tray's icons and links. Arrows move to the nearest cell in their direction, and
 Up and Down wrap. On the sound slider, Left and Right change the volume. Toggles
 and the slider apply in place and keep the menu open; a choice that opens a view
@@ -150,7 +151,14 @@ class Controls:
     """Each tool's keys on the layout, at a tool cell's trailing edge."""
 
 
-# ---- the menu's shape: `desktop.bar.CONTROLS` declares one ---------------------------------
+# ---- the panels' shape: `desktop.bar.CONTROLS` declares them --------------------------------
+
+
+class Panel(StrEnum):
+    """A grid the status capsule expands into; each reading opens one."""
+
+    WORKSPACE = auto()  # Workspace's own controls, its activities and the tray.
+    SOUND = auto()
 
 
 class EntryId(StrEnum):
@@ -225,9 +233,9 @@ class MenuWords:
 
 @dataclass(frozen=True, slots=True)
 class ControlsSpec:
-    """The menu's rows, top to bottom, and its wording."""
+    """Each panel's rows, top to bottom, and the panels' wording."""
 
-    rows: tuple[RowSpec, ...]
+    panels: frozendict[Panel, tuple[RowSpec, ...]]
     words: MenuWords
 
 
@@ -309,17 +317,19 @@ def row_cells(row: RowSpec, controls: Controls, top: int, spec: ControlsSpec) ->
             assert_never(row)
 
 
-def entries(controls: Controls, spec: ControlsSpec) -> tuple[Cell, ...]:
-    """The grid for what's happening now, flowed from the spec's rows: each row
+def entries(controls: Controls, spec: ControlsSpec, panel: Panel) -> tuple[Cell, ...]:
+    """`panel`'s grid for what's happening now, flowed from its rows: each row
     starts below the one before it, so no two cells overlap. Tracks include the gutters."""
-    tops = accumulate((height(row, controls, spec) for row in spec.rows), initial=0)
-    return tuple(chain.from_iterable(row_cells(row, controls, top, spec) for row, top in zip(spec.rows, tops, strict=False)))
+    rows = spec.panels[panel]
+    tops = accumulate((height(row, controls, spec) for row in rows), initial=0)
+    return tuple(chain.from_iterable(row_cells(row, controls, top, spec) for row, top in zip(rows, tops, strict=False)))
 
 
 @dataclass(frozen=True, slots=True)
 class Menu:
-    """The open menu: its grid and the cell under the keyboard or pointer."""
+    """The open panel: which it is, its grid and the cell under the keyboard or pointer."""
 
+    panel: Panel
     cells: tuple[Cell, ...]
     selected: int | None = None
 
