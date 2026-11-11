@@ -58,24 +58,26 @@ def test_new_windows_take_the_order_they_sit_in_so_a_restart_keeps_their_places(
 
 def test_pinned_web_app_windows_fill_their_slots_and_leave_the_edge_group() -> None:
     # Defect: an app window also shows in Edge's group, the ordinary browser or a
-    # lookalike id fills a slot, another profile's window is missed, or slot order shuffles.
+    # lookalike id or another profile's app window fills a slot, or slot order shuffles.
     mail = Window(1, "Mail", "msedge.exe", minimized=False)
     calendar = Window(2, "Calendar", "msedge.exe", minimized=False)
     chat = Window(3, "Chat", "msedge.exe", minimized=False)
     browser = Window(4, "Browser", "msedge.exe", minimized=False)
     lookalike = Window(5, "Other", "msedge.exe", minimized=False)
     editor = Window(6, "Editor", "editor.exe", minimized=False)
+    elsewhere = Window(7, "Mail", "msedge.exe", minimized=False)
     app_ids = {
         1: "Edge.mail.example_/",
         2: "Edge.mail.example_/",
-        3: "Edge.chat.example_/.Profile 1",
+        3: "Edge.chat.example_/",
         4: "Edge",
         5: "Edge.mail.example_/calendar",
+        7: "Edge.mail.example_/.Profile 1",
     }
-    first = shelf((mail, browser, chat, calendar, lookalike, editor), app_ids, EMPTY_SHELF, {}, WEB_APPS)
+    first = shelf((mail, browser, chat, calendar, lookalike, editor, elsewhere), app_ids, EMPTY_SHELF, {}, WEB_APPS)
     assert first == Shelf(
         (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, (chat,))),
-        (Application("msedge.exe", (browser, lookalike)), Application("editor.exe", (editor,))),
+        (Application("msedge.exe", (browser, lookalike, elsewhere)), Application("editor.exe", (editor,))),
     )
     again = shelf((calendar, editor, mail), app_ids, first, {}, WEB_APPS)
     assert again == Shelf(

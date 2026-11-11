@@ -15,6 +15,7 @@ import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import assert_never
 
 import protocol
@@ -49,7 +50,7 @@ from desktop_ui.window_layout import (
 )
 from winapi import app_user_model, screen, windows
 from winapi.icon_pixels import window_pixels
-from winapi.processes import edge_path
+from winapi.processes import DETACHED, edge_path
 from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
 
@@ -64,6 +65,8 @@ class PlacementSpec:
 
     setups: Setups
     web_apps: WebApps
+    edge_profile: Path
+    """The Edge profile the web apps open in: Edge started on it hands the window to the Edge running on it."""
 
 
 def frame(window: int) -> None:
@@ -457,7 +460,7 @@ class Worker:
                 assert_never(app)
 
     def open_web_app(self, watched: _Watched, app: PinnedApp) -> _Watched:
-        """Edge opens the slot's app window in the user's own profile; a repeated launch waits for it."""
+        """Edge opens the slot's app window on the web apps' profile; a repeated launch waits for it."""
         pending = launch(watched.launches, app, time.monotonic(), LAUNCH_GRACE)
         if pending is None:
             return watched
@@ -466,7 +469,10 @@ class Worker:
             self.observer.problem(f"Microsoft Edge is needed to open {self.observer.spec.web_apps[app].label}.")
             return watched
         try:
-            os.startfile(edge, arguments=f"--app={self.observer.spec.web_apps[app].url}")
+            subprocess.Popen(
+                [edge, f"--user-data-dir={self.observer.spec.edge_profile}", f"--app={self.observer.spec.web_apps[app].url}"],
+                creationflags=DETACHED,
+            )
         except OSError as error:
             self.observer.problem(f"Could not open {self.observer.spec.web_apps[app].label}: {error}")
             return watched

@@ -20,7 +20,7 @@ class WebApp:
     label: str
     url: str
     app_id: str
-    """Edge's AppUserModelID for its `--app` window; other profiles append `.<profile>`."""
+    """Edge's AppUserModelID for its `--app` window on the profile the apps open in; another profile's differs."""
     glyph: str
 
 
@@ -103,7 +103,7 @@ def applications(observed: Sequence[Window], previous: tuple[Application, ...], 
 def pinned_app(app_id: str | None, web_apps: WebApps) -> PinnedApp | None:
     if app_id is None:
         return None
-    return next((app for app, web in web_apps.items() if app_id == web.app_id or app_id.startswith(web.app_id + ".")), None)
+    return next((app for app, web in web_apps.items() if app_id == web.app_id), None)
 
 
 def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previous: Shelf, seats: Seats, web_apps: WebApps) -> Shelf:

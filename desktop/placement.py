@@ -2,7 +2,9 @@
 Only declarations; `desktop.__main__` hands them to the desktop.
 """
 
+import os
 from fractions import Fraction
+from pathlib import Path
 from typing import Final
 
 from contracts.members import every_member
@@ -11,11 +13,16 @@ from desktop_ui.shell_items import PinnedApp, WebApp
 from desktop_ui.window_layout import Layout, Position, Program, Region, Role, Setup, Setups
 from winapi.shapes import Size
 
+EDGE_PROFILE: Final = Path(os.environ["LOCALAPPDATA"]) / "Elwing" / "EdgeProfile"
+"""Elwing's Edge profile, which the pinned web apps share with Elwing: it opens them in the Edge it drives."""
+
+
+# Edge shortens each part of an app window's id to 20 characters by cutting out its middle.
 WEB_APPS: Final = every_member(
     PinnedApp,
     {
-        PinnedApp.OUTLOOK: WebApp("Outlook", "https://outlook.cloud.microsoft/mail/", "MSEdge.outlook.cloud.microsoft_/mail/", "mail"),
-        PinnedApp.TEAMS: WebApp("Teams", "https://teams.cloud.microsoft/", "MSEdge.teams.cloud.microsoft_/", "chat"),
+        PinnedApp.OUTLOOK: WebApp("Outlook", "https://outlook.cloud.microsoft/mail/", "MSEdge.outlook.cloft_/mail/.EdgeProfile.Default", "mail"),
+        PinnedApp.TEAMS: WebApp("Teams", "https://teams.cloud.microsoft/", "MSEdge.teams.clouicrosoft_/.EdgeProfile.Default", "chat"),
     },
 )
 
@@ -98,5 +105,5 @@ SETUPS: Final = Setups(
 """Workspace's own setups; startup code passes them in, tests pass their own."""
 
 
-PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS)
+PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS, edge_profile=EDGE_PROFILE)
 """Placement as the desktop is handed it."""
