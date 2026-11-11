@@ -27,7 +27,7 @@ from contracts.status import Job
 from desktop_ui import ambient
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
-from winapi.machine_status import Battery, PowerUnavailable, Speakers, Wifi
+from winapi.machine_status import Battery, Memory, PowerUnavailable, Speakers, Wifi
 
 
 class Key(Enum):
@@ -204,6 +204,8 @@ class Words:
     """Said of a connected charger."""
     cpu: str
     memory: str
+    of: str
+    """Between memory in use and installed."""
     unavailable: str
     """Said of a resource not yet read."""
 
@@ -223,7 +225,10 @@ class StatusSpec:
     """A reading not yet read, rather than a healthy-looking 0%."""
     mains: str
     """The battery reading on a machine without one."""
+    gigabytes: str
+    """After an amount of memory."""
     widest_percent: str
+    widest_memory: str
     widest_clock: str
     """The widest reading of each kind, which its room keeps, so a changing value never shifts the capsule."""
 
@@ -279,18 +284,35 @@ def battery_text(ambient: Ambient, status: StatusSpec) -> str:
             assert_never(ambient.power)
 
 
-def resources(system: SystemStatus, words: Words) -> str:
-    """The processor and memory readings, as words."""
+GIBIBYTE: Final = 1 << 30
+"""What Windows calls a gigabyte."""
 
-    def said(name: str, percent: int | None) -> str:
-        return f"{name} {words.unavailable}" if percent is None else f"{name} {percent}%"
 
-    return said(words.cpu, system.cpu) + ", " + said(words.memory, system.memory)
+def gigabytes(count: int, status: StatusSpec) -> str:
+    return f"{count / GIBIBYTE:.1f} {status.gigabytes}"
+
+
+def resources(system: SystemStatus, words: Words, status: StatusSpec) -> str:
+    """The processor and memory readings, as words: memory in use of all installed."""
+    cpu = words.unavailable if system.cpu is None else f"{system.cpu}%"
+    match system.memory:
+        case Memory(used=used, total=total):
+            memory = f"{gigabytes(used, status)} {words.of} {gigabytes(total, status)}"
+        case None:
+            memory = words.unavailable
+        case _:
+            assert_never(system.memory)
+    return f"{words.cpu} {cpu}, {words.memory} {memory}"
 
 
 def usage(percent: int | None, status: StatusSpec) -> Text:
-    """One resource's value, reserving its widest form so a changing value never shifts the cluster."""
+    """The processor's share in use, reserving its widest form so a changing value never shifts the cluster."""
     return Text(status.unread if percent is None else f"{percent}%", reserve=status.widest_percent)
+
+
+def memory_used(memory: Memory | None, status: StatusSpec) -> Text:
+    """Memory in use, reserving the widest amount, so a changing value never shifts the cluster."""
+    return Text(status.unread if memory is None else gigabytes(memory.used, status), reserve=status.widest_memory)
 
 
 def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
@@ -321,7 +343,7 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
         case Reading.CPU:
             return (Glyph(symbols.cpu), usage(system.cpu, status))
         case Reading.MEMORY:
-            return (Glyph(symbols.memory), usage(system.memory, status))
+            return (Glyph(symbols.memory), memory_used(system.memory, status))
         case _:
             assert_never(each)
 
@@ -376,7 +398,7 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
             Key.STATUS,
             Zone.RIGHT,
             readings,
-            ". ".join((resources(observed.system, words), devices(observed.system, spec.status), describe(observed.ambient, spec)))
+            ". ".join((resources(observed.system, words, spec.status), devices(observed.system, spec.status), describe(observed.ambient, spec)))
             + f" · {words.open_controls}",
             Action.OPEN_MENU,
         ),

@@ -156,7 +156,9 @@ ISLAND: Final = IslandSpec(
         low_battery=20,
         unread="—",
         mains="AC",
+        gigabytes="GB",
         widest_percent="100%",
+        widest_memory="00.0 GB",
         widest_clock="00:00",
     ),
     # Where activities sit beside the island, left to right. A transcription
@@ -188,6 +190,7 @@ ISLAND: Final = IslandSpec(
         charger="Charger connected",
         cpu="CPU",
         memory="memory",
+        of="of",
         unavailable="unavailable",
     ),
 )

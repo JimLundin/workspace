@@ -53,6 +53,18 @@ class CpuTimes:
     user: int
 
 
+@dataclass(frozen=True, slots=True)
+class Memory:
+    """Physical memory in use and installed, in bytes."""
+
+    used: int
+    total: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.used <= self.total or self.total <= 0:
+            raise ValueError("Memory in use must be between none and all of it.")
+
+
 def cpu_load(before: CpuTimes | None, after: CpuTimes | None) -> int | None:
     """The busy share of processor time between two samples, as a whole percent; None without a valid interval."""
     if before is None or after is None:

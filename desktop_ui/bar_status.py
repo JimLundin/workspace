@@ -44,7 +44,7 @@ class Observation:
         # Until a first load is known, the next tick measures one; then every interval.
         if sampled.last.cpu is None or now - sampled.sampled >= RESOURCES:
             times = resources.cpu_times()
-            sampled = _Sampled(replace(sampled.last, cpu=cpu_load(sampled.times, times), memory=resources.memory_load()), times, now)
+            sampled = _Sampled(replace(sampled.last, cpu=cpu_load(sampled.times, times), memory=resources.memory_use()), times, now)
             self._sampled.set(sampled)
         return replace(sampled.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume)
 

@@ -18,10 +18,13 @@ A hairline rule divides the right capsule's groups (the keyboard, volume and
 Wi-Fi; processor, memory and power; the clock) and stands between each two
 desktops in the pager, so neighbouring symbols read as separate facts.
 
-The resource readings are a processor and a memory symbol, each followed by
-its percentage, right after the battery's, so the machine's readings sit
-together, and the clock closes the capsule at the screen's edge where it is easiest to find. Each reserves "100%" so a changing value never moves the
-cluster, and an unread value shows "—" rather than 0%. The status worker reads
+The resource readings are a processor symbol with its percentage and a memory
+symbol with the gigabytes in use (the tooltip adds how many are installed),
+just before the battery's, so the machine's readings sit together, and the
+clock closes the capsule at the screen's edge where it is easiest to find. Each
+reserves its widest form ("100%", "00.0 GB") so a changing value never moves
+the cluster, and its digits keep to the right of that room, so every meter ends
+the same gap before the next. An unread value shows "—" rather than 0. The status worker reads
 them every 2 s; CPU is the busy share of processor time since the previous
 reading. Disk, network and GPU are left out: on this laptop they are idle or
 bursty, so a number there is mostly noise.

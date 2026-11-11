@@ -1,4 +1,4 @@
-"""Processor time and memory load, read without side effects."""
+"""Processor time and memory use, read without side effects."""
 
 import ctypes
 
@@ -6,7 +6,7 @@ lazy from win32more.Windows.Win32.Foundation import FILETIME
 lazy from win32more.Windows.Win32.System.SystemInformation import MEMORYSTATUSEX, GlobalMemoryStatusEx
 lazy from win32more.Windows.Win32.System.Threading import GetSystemTimes
 
-from winapi.machine_status import CpuTimes
+from winapi.machine_status import CpuTimes, Memory
 
 
 def ticks(time: FILETIME) -> int:
@@ -21,11 +21,11 @@ def cpu_times() -> CpuTimes | None:
     return CpuTimes(ticks(idle), ticks(kernel), ticks(user))
 
 
-def memory_load() -> int | None:
-    """The percent of physical memory in use, as Windows reports it, or None when it can't be read.
+def memory_use() -> Memory | None:
+    """Physical memory in use (installed less available) and installed, or None when it can't be read.
 
     Windows rejects the call unless `dwLength` is the structure's size."""
     status = MEMORYSTATUSEX(dwLength=ctypes.sizeof(MEMORYSTATUSEX))
-    if not GlobalMemoryStatusEx(status) or not 0 <= status.dwMemoryLoad <= 100:
+    if not GlobalMemoryStatusEx(status) or not 0 <= status.ullAvailPhys <= status.ullTotalPhys or not status.ullTotalPhys:
         return None
-    return int(status.dwMemoryLoad)
+    return Memory(int(status.ullTotalPhys - status.ullAvailPhys), int(status.ullTotalPhys))

@@ -32,8 +32,8 @@ def test_speaker_level_round_trips_through_the_default_endpoint_without_changing
 def test_processor_and_memory_bindings_read_real_values() -> None:
     # Defects: a wrong MEMORYSTATUSEX size makes Windows reject every memory read,
     # or the FILETIME halves are combined so later samples run backwards.
-    memory = resources.memory_load()
-    assert memory is not None and 0 < memory <= 100
+    memory = resources.memory_use()
+    assert memory is not None and 0 < memory.used < memory.total
     first = resources.cpu_times()
     assert first is not None and first.kernel >= first.idle > 0
     later = first

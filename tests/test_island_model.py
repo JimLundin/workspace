@@ -36,7 +36,7 @@ from desktop_ui.island_model import (
     order,
     reading,
 )
-from winapi.machine_status import Battery, Speakers, Wifi
+from winapi.machine_status import Battery, Memory, Speakers, Wifi
 
 SPEAKERS = frozendict((state, ambient.Reading(f"speaker {state.name}", f"speakers {state.name}")) for state in Speakers)
 WIFI = frozendict((state, ambient.Reading(f"wifi {state.name}", f"wifi {state.name}")) for state in Wifi)
@@ -66,6 +66,7 @@ WORDS = Words(
     charger="Plugged in",
     cpu="Chip",
     memory="Ram",
+    of="out of",
     unavailable="unread",
 )
 SPEC = IslandSpec(
@@ -78,6 +79,8 @@ SPEC = IslandSpec(
         unread="?",
         mains="Mains",
         widest_percent="100%",
+        gigabytes="gig",
+        widest_memory="00.0 gig",
         widest_clock="00:00",
     ),
     ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
@@ -121,18 +124,23 @@ def test_a_plain_keyboard_joins_its_group_and_an_empty_group_takes_no_slot() -> 
 
 
 def test_resource_readings_keep_one_reserve_and_never_show_an_unread_value_as_zero() -> None:
-    # Defects: a value from 9% to 100% resizes the fixed capsule because its reserve
-    # follows the value, a reading becomes a control, or an unread value reads as 0%.
-    def texts(cpu: int | None, memory: int | None) -> tuple[Text, ...]:
+    # Defects: a changing value resizes the fixed capsule because its reserve
+    # follows the value, memory shows in bytes, decimal gigabytes or as a share
+    # rather than the gigabytes Windows reports, a reading becomes a control, or an
+    # unread value reads as 0.
+    def texts(cpu: int | None, memory: Memory | None) -> tuple[Text, ...]:
         observed = replace(RESTING, system=SystemStatus(cpu=cpu, memory=memory))
         return tuple(part for part in parts(observed, Reading.CPU, Reading.MEMORY) if isinstance(part, Text))
 
-    for cpu, memory in ((23, 61), (100, 9)):
-        shown = texts(cpu, memory)
-        assert f"{cpu}" in shown[0].text and f"{memory}" in shown[1].text
-    assert len({text.reserve for values in ((23, 61), (100, 9), (None, None)) for text in texts(*values)}) == 1
-    assert texts(None, None) != texts(0, 0)
-    status = view(replace(RESTING, system=SystemStatus(cpu=5, memory=5)), Key.STATUS)
+    gib = 1 << 30
+    busy, idle = Memory(gib * 25 // 2, 32 * gib), Memory(gib // 10, 8 * gib)
+    assert tuple(text.text for text in texts(23, busy)) == ("23%", "12.5 gig")
+    assert tuple(text.text for text in texts(100, idle)) == ("100%", "0.1 gig")
+    shown = tuple(texts(cpu, memory) for cpu, memory in ((23, busy), (100, idle), (None, None)))
+    assert len({text.reserve for each in shown for text in each[:1]}) == 1
+    assert len({text.reserve for each in shown for text in each[1:]}) == 1
+    assert texts(None, None) != texts(0, Memory(0, gib))
+    status = view(replace(RESTING, system=SystemStatus(cpu=5, memory=busy)), Key.STATUS)
     assert not any(isinstance(part, Control) for slot in status.slots for part in slot)
 
 

@@ -617,11 +617,15 @@ class Capsule(KeyboardFocus):
         lettering, sizes = self.drawn.look.lettering, self.window_.sizes
         capsule, markers = sizes.capsule, sizes.markers
         match spot.part:
-            case Text(text=text, tone=tone):
+            case Text(text=text, tone=tone, reserve=reserve):
                 painter.setFont(inter(sizes.type.reading))
                 painter.setPen(color(reading(lettering, tone, self.window_.spec.palette, contrast=self.contrast)))
-                row = QtCore.QRectF(spot.x, sizes.bar.top, spot.width + 1, capsule.height)
-                painter.drawText(row, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
+                # A reading in a reserved room keeps its right edge, so the room's slack sits
+                # beside its own symbol and every meter ends the same gap before the next.
+                # The room is a pixel wider on the side the text grows away from, so antialiasing never clips.
+                edge, left = (Qt.AlignmentFlag.AlignRight, spot.x - 1) if reserve else (Qt.AlignmentFlag.AlignLeft, spot.x)
+                row = QtCore.QRectF(left, sizes.bar.top, spot.width + 1, capsule.height)
+                painter.drawText(row, Qt.AlignmentFlag.AlignVCenter | edge, text)
             case Glyph(name=name, tone=tone):
                 side = round(capsule.icon)
                 paint_icon(
