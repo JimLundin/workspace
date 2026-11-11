@@ -2,7 +2,7 @@
 
 Activity sits just left of the status capsule and acts on what it shows;
 persistent navigation and status anchor right; the system tray lives in the
-controls menu. `island_model` decides the views, `island_layout` where they sit,
+Workspace's controls panel. `island_model` decides the views, `island_layout` where they sit,
 and `ui_components.appearance` how they read. This owner observes the desktop and
 publishes each result to the one bar window and its glass.
 """

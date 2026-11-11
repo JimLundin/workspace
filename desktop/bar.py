@@ -1,4 +1,4 @@
-"""The island bar: what it shows, its controls menu, how it moves and its sizes.
+"""The island bar: what it shows, its panels, how it moves and its sizes.
 Only declarations; `desktop.__main__` builds the bar's spec from them.
 """
 

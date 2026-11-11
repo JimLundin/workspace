@@ -7,6 +7,11 @@ recording's `session.sqlite3` (`assistant/journal.py`).
 quick **job** such as transcription (`contracts/status.py`), or a meeting
 recording. See [the island bar](docs/toolbar-design.md).
 
+**Panel**: what the bar's status capsule expands into when one of its readings
+is pressed: the calendar under the clock, the networks under Wi-Fi, Workspace's
+own controls under its glyph (`desktop_ui/island_menu.py`, `Panel`). See [the
+island bar](docs/toolbar-design.md#the-panels).
+
 **Dictation marker**: the small capsule beside the caret of the app you dictate
 into, which shows listening, transcribing, typing and the outcome. It stays
 where the capture started; the bar shows dictation only when there is nothing

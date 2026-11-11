@@ -12,7 +12,9 @@ shows its number only while it is current, and holding the Apps key shows each
 desktop's letter. One fixed capsule on
 the right holds a keyboard icon while the keyboard types plainly (the layout
 is off, or the Charybdis is connected), volume, Wi-Fi, the battery,
-processor and memory use, and the day, date and time at the far right. Activity never moves the fixed controls.
+processor and memory use, and the day, date and time at the far right. Workspace's
+own glyph leads it. Each reading opens its own panel (see below). Activity never
+moves the fixed controls.
 
 The capsule follows a menu bar's restraint: symbols drawn at the text's weight,
 plain text for the clock, and the battery as a symbol filled to its charge
@@ -60,14 +62,30 @@ desktops.
 | Transcribing or recording | The activity | |
 | Dictating | The live microphone trace | Activities, detached |
 
-## The controls menu
+## The panels
 
-Pressing the clock or battery opens the menu in place. It holds a card per
-running activity, toggles (keyboard overlay, window
-placement, dark when away), **Record a meeting**, a volume slider, small tools (switch windows, copy transcript, key
-map), the system tray icons, and links to Windows notification settings and the
-tray menu. `CONTROLS` in `desktop/bar.py` is the source of truth: its rows, their order, each cell's span, label and symbol. Arrows move between
-cells, Enter chooses, and Escape closes.
+Pressing a reading expands the capsule into that reading's panel, in place;
+pressing another reading switches to its panel, and pressing the open one
+closes it. The readings stay the panel's top row.
+
+| Pressed | Panel |
+| --- | --- |
+| Workspace's glyph, the keyboard, or an activity | Workspace's controls: a card per running activity, toggles (keyboard overlay, window placement, dark when away), **Record a meeting**, a volume slider, small tools (switch windows, copy transcript, key map), the system tray icons, and links to Windows notification settings and the tray menu |
+| The speaker | Its volume slider and Mute |
+| Wi-Fi | The networks in range, the connected one first, each with its signal, name and state, and a link to Windows' Wi-Fi settings |
+| Processor or memory | A line graph of each over the last two minutes, under its latest reading |
+| The battery | Its charge over whether it charges or how long it lasts, and a link to Windows' power settings |
+| The clock | The month, today on the accent; its arrows, or Left and Right, turn the months, and its heading, or Enter, returns to today |
+
+A saved Wi-Fi network joins in place; any other opens Windows' Wi-Fi settings,
+which own passwords and new networks. The networks are read only while their
+panel is open. Windows lists them to desktop apps only while location services
+are on for them; until then the panel offers the location settings instead.
+
+`CONTROLS` in `desktop/bar.py` is the source of truth: each panel's rows, their
+order, each cell's span, label and symbol; `ISLAND.status.opens` says which
+panel each reading opens. Arrows move between cells, Enter chooses, and Escape
+closes.
 
 ## Code
 
@@ -78,7 +96,7 @@ constant that mypy checks, in the shape the code that reads it declares
 (`desktop_ui/island_model.py`, `island_menu.py`, `island_layout.py`), and
 `desktop/__main__.py` hands them to the bar.
 
-`island_model`, `island_menu`, `island_layout`, `island_motion` and
+`island_model`, `island_menu`, `island_layout`, `island_motion`, `month` and
 `bar_events` in `desktop_ui/` are pure decisions. `DesktopBar` owns
 observations and timers, `island_surface` owns the Qt window and its native
 glass, and `shell_surface` draws the pager.

@@ -124,7 +124,7 @@ icons, left to right as they sit on screen, running or not. Click an icon to go
 to that app; right-click lists its windows. One
 capsule on the right holds a keyboard icon while the keyboard types plainly
 (layout off or the Charybdis connected), volume, Wi-Fi, the battery, CPU and
-memory use, and the clock at the far right. Click the clock or battery to open the controls menu. See [the island bar](docs/toolbar-design.md) for the full policy.
+memory use, and the clock at the far right. Click a reading for its own panel (a calendar under the clock, networks under Wi-Fi, volume under the speaker, graphs under processor and memory), or Workspace's glyph for its controls. See [the island bar](docs/toolbar-design.md) for the full policy.
 
 The tray dot is green when the layout is on, grey when it is off, red while
 listening or recording, and amber while working. Its menu switches or restarts

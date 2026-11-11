@@ -94,7 +94,7 @@ class BarModel:
     spec: BarSpec
     closed: bool = False
     opened: Menu | None = None
-    """The controls menu, while it is open."""
+    """The open panel, while there is one."""
     menu_target: int = 0
     """The window that had the keyboard before the menu opened."""
     hovered: Key | None = None

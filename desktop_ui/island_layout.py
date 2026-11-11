@@ -85,7 +85,7 @@ class Capsule:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MenuGrid:
-    """The controls menu: a grid of tiles below the capsule's own row."""
+    """The panels: a grid of tiles below the capsule's own row."""
 
     width: float
     radius: float
@@ -118,7 +118,7 @@ class Markers:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Cells:
-    """The inside of the controls menu's tiles, from the tile's own edges."""
+    """The inside of the panels' tiles, from the tile's own edges."""
 
     corner: float
     lead: float
