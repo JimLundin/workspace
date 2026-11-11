@@ -120,7 +120,10 @@ CONTROLS: Final = ControlsSpec(
                 CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
                 CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
             ),
-            Panel.SOUND: (CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),),
+            Panel.SOUND: (
+                CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                CellsRow(4, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Mute", "speaker-muted"),)),
+            ),
         },
     ),
     MenuWords(

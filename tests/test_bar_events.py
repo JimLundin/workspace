@@ -9,15 +9,18 @@ from desktop_ui.bar_events import (
     Expand,
     Opening,
     PanelPressed,
+    Picked,
     Pressed,
     Release,
     Render,
+    SetMute,
     menu,
     transition,
 )
-from desktop_ui.island_menu import Panel
+from desktop_ui.island_menu import Applied, Command, Key, Panel, Toggle, label, press
 from desktop_ui.island_model import Action
 from tests import test_bar_specs
+from winapi.machine_status import Speakers
 
 
 def model() -> BarModel:
@@ -66,3 +69,17 @@ def test_an_unchanged_publication_does_not_render_again() -> None:
     assert dictating.dictating and tuple(effects) == (Render(),)
     _, repeated = transition(dictating, DictationShown(active=True))
     assert tuple(repeated) == ()
+
+
+def test_mute_flips_the_speakers_and_shows_at_once() -> None:
+    # Defects: pressing Mute on muted speakers mutes them again instead of unmuting,
+    # or the toggle and the capsule wait for the next reading to show it.
+    for before, after in ((Speakers.AUDIBLE, True), (Speakers.MUTED, False)):
+        heard = replace(model(), seen=replace(model().seen, system=replace(model().seen.system, speakers=before)))
+        sound = menu(heard, Panel.SOUND)
+        toggle = next(index for index, cell in enumerate(sound.cells) if isinstance(cell.entry, Toggle))
+        assert press(replace(sound, selected=toggle), Key.ENTER) == Applied(Command.MUTE)
+        flipped, effects = transition(replace(heard, opened=sound), Picked(toggle))
+        assert SetMute(muted=after) in tuple(effects)
+        shown = next(cell.entry for cell in menu(flipped, Panel.SOUND).cells if isinstance(cell.entry, Toggle))
+        assert shown.on is after, label(shown)

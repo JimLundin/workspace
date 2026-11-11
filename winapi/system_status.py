@@ -1,4 +1,4 @@
-"""Default speaker mute and level, and Wi-Fi association. The speaker level is the one write; no scans or connection changes."""
+"""Default speaker mute and level, and Wi-Fi association. The speakers' level and mute are the writes; no scans or connection changes."""
 
 import ctypes
 import math
@@ -98,5 +98,14 @@ def set_volume(level: float) -> bool:
     try:
         with endpoint() as volume:
             return volume is not None and not FAILED(volume.SetMasterVolumeLevelScalar(level, None))
+    except OSError:
+        return False
+
+
+def set_mute(*, muted: bool) -> bool:
+    """Mute or unmute the default speakers; False when Windows refuses it."""
+    try:
+        with endpoint() as volume:
+            return volume is not None and not FAILED(volume.SetMute(muted, None))
     except OSError:
         return False

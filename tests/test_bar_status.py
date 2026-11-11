@@ -13,32 +13,39 @@ class Speakers:
     def __init__(self) -> None:
         self.held = threading.Event()
         self.release = threading.Event()
-        self.applied: list[tuple[float, str]] = []
+        self.applied: list[tuple[float | bool, str]] = []
 
     def observe(self) -> SystemStatus:
         self.held.set()
         self.release.wait(2)
         return SystemStatus()
 
-    def apply(self, level: float) -> bool:
+    def volume(self, level: float) -> bool:
         self.applied.append((level, threading.current_thread().name))
         return True
 
+    def mute(self, *, muted: bool) -> bool:
+        self.applied.append((muted, threading.current_thread().name))
+        return True
 
-def test_a_drag_applies_only_its_latest_level_on_the_status_worker() -> None:
-    # Defects: every intermediate level of a drag queues a native write, the write
-    # runs on the caller's thread, or a request waits for the next polling second.
+
+def test_a_drag_applies_only_its_latest_level_and_keeps_a_mute_on_the_status_worker() -> None:
+    # Defects: every intermediate level of a drag queues a native write, a later level
+    # drops the mute requested beside it, the write runs on the caller's thread, or a
+    # request waits for the next polling second.
     speakers = Speakers()
-    observer = StatusObserver.start(speakers.observe, speakers.apply)
+    observer = StatusObserver.start(speakers.observe, speakers)
     try:
         assert speakers.held.wait(2), "The worker did not start observing."
-        for level in (0.2, 0.5, 0.7):
+        observer.set_volume(0.2)
+        observer.set_mute(muted=True)
+        for level in (0.5, 0.7):
             observer.set_volume(level)
         started = time.monotonic()
         speakers.release.set()
-        while not speakers.applied and time.monotonic() - started < 2:
+        while len(speakers.applied) < 2 and time.monotonic() - started < 2:
             time.sleep(0.01)
-        assert speakers.applied == [(0.7, "toolbar system status")]
+        assert speakers.applied == [(0.7, "toolbar system status"), (True, "toolbar system status")]
         assert time.monotonic() - started < 0.9, "The request waited for the next polling interval."
     finally:
         observer.close()

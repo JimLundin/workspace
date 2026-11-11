@@ -27,6 +27,7 @@ class Command(Enum):
     OVERLAY = auto()
     PLACEMENT = auto()
     DARK_WHEN_AWAY = auto()
+    MUTE = auto()
     NOTIFICATIONS = auto()
     ALL_CONTROLS = auto()
 
@@ -170,6 +171,7 @@ class EntryId(StrEnum):
     DARK_WHEN_AWAY = auto()
     RECORD = auto()
     SOUND = auto()
+    MUTE = auto()
     SWITCH_WINDOWS = auto()
     COPY_TRANSCRIPT = auto()
     KEYMAP = auto()
@@ -259,6 +261,9 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
             return None if controls.recording is not None else Item(spec.label, spec.icon, Command.RECORD)
         case EntryId.SOUND:
             return controls.sound
+        case EntryId.MUTE:
+            muted = controls.sound.muted
+            return toggle(spec, words.on if muted else words.off, Command.MUTE, on=muted)
         case EntryId.SWITCH_WINDOWS:
             return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER, controls.hints)
         case EntryId.COPY_TRANSCRIPT:
@@ -488,7 +493,7 @@ def restores_focus(choice: Choice) -> bool:
     match choice:
         case ToolChoice() | Volume():
             return True
-        case Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.RECORD | Command.STOP_RECORDING:
+        case Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.MUTE | Command.RECORD | Command.STOP_RECORDING:
             return True
         case Command.KEYMAP | Command.NOTIFICATIONS | Command.ALL_CONTROLS | TrayChoice():
             return False

@@ -50,6 +50,7 @@ lazy from desktop_ui.bar_events import (
     Render,
     Retargeted,
     Sampled,
+    SetMute,
     SetVolume,
     ShowHints,
     Surroundings,
@@ -233,6 +234,8 @@ class DesktopBar:
                 os.startfile("ms-settings:notifications")
             case SetVolume(level):
                 self.shell.status.set_volume(level)
+            case SetMute(muted=muted):
+                self.shell.status.set_mute(muted=muted)
             case ClickTray(slot, click):
                 entries = self.window.tray
                 if slot < len(entries):

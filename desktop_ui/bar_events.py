@@ -354,6 +354,11 @@ class SetVolume:
 
 
 @dataclass(frozen=True, slots=True)
+class SetMute:
+    muted: bool = field(kw_only=True)
+
+
+@dataclass(frozen=True, slots=True)
 class ClickTray:
     slot: int
     click: Click
@@ -377,6 +382,7 @@ type Effect = (
     | ToggleAway
     | NotificationSettings
     | SetVolume
+    | SetMute
     | ClickTray
     | ShowHints
 )
@@ -406,6 +412,8 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
             return model, (Navigate(Placing.TOGGLE_PAUSE),)
         case Command.DARK_WHEN_AWAY:
             return model, (ToggleAway(),)
+        case Command.MUTE:
+            return _muted(model, muted=model.seen.system.speakers is not Speakers.MUTED)
         case Command.NOTIFICATIONS:
             return model, (NotificationSettings(),)
         case Command.ALL_CONTROLS:
@@ -422,6 +430,13 @@ def _volume(model: BarModel, level: float) -> tuple[BarModel, tuple[Effect, ...]
     """The status observer applies it; the slider follows at once rather than at the next reading."""
     seen = replace(model.seen, system=replace(model.seen.system, volume=level))
     return replace(model, seen=seen), (SetVolume(level), Render())
+
+
+def _muted(model: BarModel, *, muted: bool) -> tuple[BarModel, tuple[Effect, ...]]:
+    """Like the level, the toggle and the capsule's speaker follow at once."""
+    speakers = Speakers.MUTED if muted else Speakers.AUDIBLE
+    seen = replace(model.seen, system=replace(model.seen.system, speakers=speakers))
+    return replace(model, seen=seen), (SetMute(muted=muted), Render())
 
 
 def _tray(model: BarModel, slot: int, click: Click) -> tuple[BarModel, tuple[Effect, ...]]:

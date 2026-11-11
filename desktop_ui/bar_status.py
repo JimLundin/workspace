@@ -1,8 +1,9 @@
 """System indicators are observed off the UI thread, with one bounded result slot.
 
-The same worker applies speaker-level requests. Windows' audio interfaces need a
-multithreaded COM apartment, which Qt's thread cannot join. Requests coalesce, so
-a drag applies its latest level rather than every intermediate one.
+The same worker applies the speakers' level and mute. Windows' audio interfaces need a
+multithreaded COM apartment, which Qt's thread cannot join. Requests coalesce by
+kind, so a drag applies its latest level rather than every intermediate one, and
+never drops a mute requested beside it.
 The same worker reads processor and memory use, every two seconds.
 """
 
@@ -12,7 +13,7 @@ import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
-from typing import Final
+from typing import Final, Protocol
 
 from cell import Cell
 from desktop_ui.ambient import SystemStatus
@@ -49,8 +50,37 @@ class Observation:
         return replace(sampled.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume)
 
 
-def apply_volume(level: float) -> bool:
-    return system_status.set_volume(level)
+@dataclass(frozen=True, slots=True)
+class Pending:
+    """Requests not yet applied: a later request of a kind replaces the earlier one."""
+
+    volume: float | None = None
+    muted: bool | None = None
+
+
+class Speakers(Protocol):
+    """What applies the speakers' requests."""
+
+    def volume(self, level: float) -> bool: ...
+    def mute(self, *, muted: bool) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class DefaultSpeakers:
+    """Windows' default playback device."""
+
+    def volume(self, level: float) -> bool:
+        return system_status.set_volume(level)
+
+    def mute(self, *, muted: bool) -> bool:
+        return system_status.set_mute(muted=muted)
+
+
+def apply(speakers: Speakers, pending: Pending) -> None:
+    if pending.volume is not None:
+        speakers.volume(pending.volume)
+    if pending.muted is not None:
+        speakers.mute(muted=pending.muted)
 
 
 def _observe_status() -> Callable[[], SystemStatus]:
@@ -60,26 +90,40 @@ def _observe_status() -> Callable[[], SystemStatus]:
 @dataclass(frozen=True, slots=True)
 class StatusObserver:
     observe: Callable[[], SystemStatus] = field(default_factory=_observe_status)
-    apply: Callable[[float], bool] = apply_volume
+    speakers: Speakers = field(default_factory=DefaultSpeakers)
     cancelled: threading.Event = field(default_factory=threading.Event)
     wake: threading.Event = field(default_factory=threading.Event)
-    requests: queue.Queue[float] = field(default_factory=lambda: queue.Queue[float](maxsize=1))
+    requests: Cell[Pending] = field(default_factory=lambda: Cell(Pending()))
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    """Serializes the UI thread's requests with the worker taking them."""
     results: queue.Queue[SystemStatus] = field(default_factory=lambda: queue.Queue[SystemStatus](maxsize=1))
     finished: threading.Event = field(default_factory=threading.Event)
     """Set when the worker thread exits."""
 
     @classmethod
-    def start(cls, observe: Callable[[], SystemStatus] | None = None, apply: Callable[[float], bool] = apply_volume) -> StatusObserver:
-        observer = cls(apply=apply) if observe is None else cls(observe, apply)
+    def start(cls, observe: Callable[[], SystemStatus] | None = None, speakers: Speakers | None = None) -> StatusObserver:
+        applied = DefaultSpeakers() if speakers is None else speakers
+        observer = cls(speakers=applied) if observe is None else cls(observe, applied)
         threading.Thread(target=observer.run, name="toolbar system status", daemon=True).start()
         return observer
 
-    def set_volume(self, level: float) -> None:
-        """Called from the UI thread only: it is the one producer, so replacing the pending level cannot race."""
-        with suppress(queue.Empty):
-            self.requests.get_nowait()
-        self.requests.put_nowait(level)
+    def request(self, change: Callable[[Pending], Pending]) -> None:
+        with self.lock:
+            self.requests.update(change)
         self.wake.set()
+
+    def set_volume(self, level: float) -> None:
+        self.request(lambda pending: replace(pending, volume=level))
+
+    def set_mute(self, *, muted: bool) -> None:
+        self.request(lambda pending: replace(pending, muted=muted))
+
+    def taken(self) -> Pending:
+        """The pending requests, leaving none."""
+        with self.lock:
+            pending = self.requests.get()
+            self.requests.set(Pending())
+        return pending
 
     def run(self) -> None:
         try:
@@ -89,8 +133,7 @@ class StatusObserver:
 
     def _poll(self) -> None:
         while not self.cancelled.is_set():
-            with suppress(queue.Empty):
-                self.apply(self.requests.get_nowait())
+            apply(self.speakers, self.taken())
             observed = self.observe()
             with suppress(queue.Empty):
                 self.results.get_nowait()
