@@ -10,7 +10,7 @@ from contracts.status import TRANSCRIBING, TYPING
 from desktop import look, placement
 from desktop_ui import ambient
 from desktop_ui.desktop_pager import PagerSpec
-from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Markers, MenuGrid, Sizes
+from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Sizes
 from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, TrayRow
 from desktop_ui.island_model import ELAPSED, ActivitiesSpec, Activity, IslandSpec, Phased, Reading, StatusSpec, Symbols, Words
 from desktop_ui.island_motion import Springs, Timing
@@ -59,6 +59,7 @@ SIZES: Final = Sizes(
     ),
     menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
     markers=Markers(wave_floor=3, wave_reach=13, wave_corner=1, halo=7, dot_count=3, dots_radius=2.2, dots_lift=1.5),
+    gauge=Gauge(width=24, height=12, corner=3.5, stroke=1, inset=1.5, nub=1.5, nub_height=4.5, bolt=10, knockout=1),
     cells=Cells(
         corner=12,
         lead=12,
@@ -152,14 +153,15 @@ ISLAND: Final = IslandSpec(
         ),
         SPEAKERS,
         WIFI,
-        Symbols(keyboard="keyboard", clock="clock", charger="charger", battery="battery", cpu="cpu", memory="memory"),
+        Symbols(keyboard="keyboard", charger="charger", cpu="cpu", memory="memory"),
         low_battery=20,
         unread="—",
         mains="AC",
         gigabytes="GB",
         widest_percent="100%",
         widest_memory="00.0 GB",
-        widest_clock="00:00",
+        widest_clock="Wed 00 May 00:00",
+        clock="%a %#d %b %H:%M",
     ),
     # Where activities sit beside the island, left to right. A transcription
     # and a recording step out of the island while you dictate. Each activity is

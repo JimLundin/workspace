@@ -341,6 +341,8 @@ class Washes:
     """A pulsing dot between pulses."""
     rule: float
     """The rule between groups of readings or desktops."""
+    gauge: float
+    """The battery symbol's outline, which the charge fills."""
 
 
 def _scheme(pane: Pane, material: appearance.Material, glass: Glass) -> Scheme:

@@ -121,11 +121,11 @@ GLASS: Final = Glass(
 """Workspace's material; owners pass it in, tests pass their own."""
 
 
-WASHES: Final = Washes(well=0.07, off=0.12, track=0.16, halo=0.25, resting=0.35, rule=0.22)
+WASHES: Final = Washes(well=0.07, off=0.12, track=0.16, halo=0.25, resting=0.35, rule=0.22, gauge=0.45)
 
 
 TYPE: Final = TypeScale(
-    reading=Font(12, Weight.MEDIUM, tabular=True),
+    reading=Font(13, Weight.REGULAR, tabular=True),
     strong=Font(12, Weight.SEMIBOLD, tabular=True),
     detail=Font(11, Weight.REGULAR),
     body=Font(13, Weight.REGULAR),

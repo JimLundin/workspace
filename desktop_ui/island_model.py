@@ -84,7 +84,17 @@ class Control:
     action: Action
 
 
-type Part = Text | Glyph | Control | Marker
+@dataclass(frozen=True, slots=True)
+class Charge:
+    """The battery as a symbol filled to its charge, with a bolt while it is on mains power."""
+
+    percent: int | None
+    """None while the battery hasn't been read: the symbol stays empty."""
+    powered: bool = field(kw_only=True)
+    tone: meaning.Tone = meaning.Tone.INK
+
+
+type Part = Text | Glyph | Control | Charge | Marker
 type Slot = tuple[Part, ...]
 
 
@@ -176,9 +186,8 @@ class Symbols:
     """The status readings' symbols."""
 
     keyboard: str
-    clock: str
     charger: str
-    battery: str
+    """Power on a machine without a battery."""
     cpu: str
     memory: str
 
@@ -230,6 +239,8 @@ class StatusSpec:
     widest_percent: str
     widest_memory: str
     widest_clock: str
+    clock: str
+    """The clock's `strftime` format: the day and date before the time, as a menu bar shows them."""
     """The widest reading of each kind, which its room keeps, so a changing value never shifts the capsule."""
 
 
@@ -292,6 +303,15 @@ def gigabytes(count: int, status: StatusSpec) -> str:
     return f"{count / GIBIBYTE:.1f} {status.gigabytes}"
 
 
+def battery_tone(ambient: Ambient, status: StatusSpec) -> meaning.Tone:
+    """Low while the battery runs down on its own power."""
+    match ambient.power:
+        case Battery(percent=percent, powered=False) if percent <= status.low_battery:
+            return meaning.Tone.LOW
+        case _:
+            return meaning.Tone.INK
+
+
 def resources(system: SystemStatus, words: Words, status: StatusSpec) -> str:
     """The processor and memory readings, as words: memory in use of all installed."""
     cpu = words.unavailable if system.cpu is None else f"{system.cpu}%"
@@ -327,19 +347,19 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
         case Reading.WIFI:
             return (Glyph(status.wifi[system.wifi].icon),)
         case Reading.CLOCK:
-            return (Glyph(symbols.clock), Text(ambient.clock, reserve=status.widest_clock))
+            return (Text(ambient.clock, reserve=status.widest_clock),)
         case Reading.POWER:
             match ambient.power:
-                case Battery(powered=True) | PowerUnavailable.NO_BATTERY:
+                case Battery(percent=percent, powered=powered):
+                    return (Charge(percent, powered=powered, tone=battery_tone(ambient, status)),)
+                case PowerUnavailable.NO_BATTERY:
                     return (Glyph(symbols.charger),)
+                case PowerUnavailable.UNKNOWN:
+                    return (Charge(None, powered=False),)
                 case _:
-                    return (Glyph(symbols.battery),)
+                    assert_never(ambient.power)
         case Reading.BATTERY:
-            match ambient.power:
-                case Battery(percent=percent, powered=False) if percent <= status.low_battery:
-                    return (Text(battery_text(ambient, status), meaning.Tone.LOW, reserve=status.widest_percent),)
-                case _:
-                    return (Text(battery_text(ambient, status), reserve=status.widest_percent),)
+            return (Text(battery_text(ambient, status), battery_tone(ambient, status), reserve=status.widest_percent),)
         case Reading.CPU:
             return (Glyph(symbols.cpu), usage(system.cpu, status))
         case Reading.MEMORY:

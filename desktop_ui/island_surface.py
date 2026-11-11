@@ -13,7 +13,7 @@ from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
-from typing import assert_never, override
+from typing import Final, assert_never, override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
@@ -25,9 +25,9 @@ from desktop_ui.components.appearance import Glass, GlassLook, Look, Shade, Soli
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
-from desktop_ui.island_layout import Box, Cells, Content, Framed, Sizes, Spot, Tile, arrange, on_pixels, tiles
+from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, tiles
 from desktop_ui.island_menu import Face, Item, Live, Menu, MenuWords, Slider, Toggle, TrayIcon
-from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Part, Text
+from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
 from desktop_ui.live_marks import Beat, paint_dots, paint_wave
 from desktop_ui.qt_runtime import prepare
@@ -634,6 +634,11 @@ class Capsule(KeyboardFocus):
                     reading(lettering, tone, self.window_.spec.palette, contrast=self.contrast),
                     QtCore.QRect(round(spot.x), round(middle - side / 2), side, side),
                 )
+            case Charge(tone=tone) as charge:
+                ink = reading(lettering, Tone.INK, self.window_.spec.palette, contrast=self.contrast)
+                fill = reading(lettering, tone, self.window_.spec.palette, contrast=self.contrast)
+                outline_ink = Shade(ink.color, ink.opacity * self.window_.washes.gauge)
+                paint_charge(painter, QtCore.QPointF(spot.x, middle), sizes.gauge, (color(outline_ink), color(fill), color(ink)), charge)
             case Control():
                 pass  # A child button paints it.
             case Marker.WAVE:
@@ -874,6 +879,63 @@ class BarWindow(QtWidgets.QWidget):
 
 def shifted(bounds: Rect, margin: int) -> Rect:
     return Rect(bounds.left + margin, bounds.top, bounds.right + margin, bounds.bottom)
+
+
+@dataclass(frozen=True, slots=True)
+class Unit:
+    """A point in a unit box, scaled to wherever the shape draws."""
+
+    x: float
+    y: float
+
+    def __post_init__(self) -> None:
+        if not (0 <= self.x <= 1 and 0 <= self.y <= 1):
+            raise ValueError("A unit point lies inside its box.")
+
+
+BOLT: Final = (Unit(0.62, 0.0), Unit(0.0, 0.58), Unit(0.44, 0.58), Unit(0.34, 1.0), Unit(1.0, 0.4), Unit(0.56, 0.4))
+"""The charging bolt: a zigzag from top right to bottom left."""
+
+
+def paint_charge(
+    painter: QtGui.QPainter,
+    start: QtCore.QPointF,
+    gauge: Gauge,
+    inks: tuple[QtGui.QColor, QtGui.QColor, QtGui.QColor],
+    charge: Charge,
+) -> None:
+    """The battery symbol from `start`, centred on its height: a quiet outline and nub, the charge filled
+    from the left, and while powered a bolt over it with a clear edge, as a menu bar draws its battery."""
+    outline_ink, fill_ink, bolt_ink = inks
+    percent = charge.percent
+    body = QtCore.QRectF(start.x(), start.y() - gauge.height / 2, gauge.width - gauge.nub, gauge.height)
+    edge = gauge.stroke / 2
+    painter.save()
+    painter.setPen(QtGui.QPen(outline_ink, gauge.stroke))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawRoundedRect(body.adjusted(edge, edge, -edge, -edge), gauge.corner, gauge.corner)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(outline_ink)
+    nub = QtCore.QRectF(body.right(), start.y() - gauge.nub_height / 2, gauge.nub, gauge.nub_height)
+    painter.drawRoundedRect(nub, gauge.nub / 2, gauge.nub / 2)
+    room = body.adjusted(*(sides := (gauge.stroke + gauge.inset,) * 2), *(-side for side in sides))
+    if percent:
+        painter.setBrush(fill_ink)
+        inner = gauge.corner - gauge.stroke - gauge.inset
+        painter.drawRoundedRect(QtCore.QRectF(room.left(), room.top(), room.width() * percent / 100, room.height()), inner, inner)
+    if charge.powered:
+        width = gauge.bolt * 0.6
+        corner = QtCore.QPointF(body.center().x() - width / 2, start.y() - gauge.bolt / 2)
+        bolt = QtGui.QPainterPath()
+        bolt.addPolygon(QtGui.QPolygonF([corner + QtCore.QPointF(point.x * width, point.y * gauge.bolt) for point in BOLT]))
+        bolt.closeSubpath()
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_Clear)
+        painter.strokePath(
+            bolt, QtGui.QPen(Qt.GlobalColor.black, 2 * gauge.knockout, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+        )
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceOver)
+        painter.fillPath(bolt, bolt_ink)
+    painter.restore()
 
 
 def paint_dot(painter: QtGui.QPainter, colour: QtGui.QColor, centre: QtCore.QPointF, radius: float) -> None:

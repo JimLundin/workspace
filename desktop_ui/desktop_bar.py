@@ -151,7 +151,9 @@ class DesktopBar:
         tick.setInterval(100)
         audio.setInterval(round(spec.timing.wave_sample * 1000))
         audio.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
-        seen = Surroundings(preference=appearance.preference(), ambient=Ambient(datetime.now().strftime("%H:%M"), PowerUnavailable.UNKNOWN))
+        seen = Surroundings(
+            preference=appearance.preference(), ambient=Ambient(datetime.now().strftime(spec.island.status.clock), PowerUnavailable.UNKNOWN)
+        )
         taskbar = TaskbarControl()
         bar = cls(
             actions,
@@ -371,7 +373,7 @@ class DesktopBar:
         area = QtGui.QGuiApplication.primaryScreen().geometry()
         observed = Surroundings(
             system,
-            Ambient(datetime.now().strftime("%H:%M"), power),
+            Ambient(datetime.now().strftime(self.window.spec.island.status.clock), power),
             preference,
             frost,
             arrangement,

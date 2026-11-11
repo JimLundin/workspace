@@ -18,7 +18,7 @@ from typing import assert_never
 
 from desktop_ui.components.typeface import Font
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
-from desktop_ui.island_model import Control, Glyph, Key, Marker, Part, Slot, Text, Zone
+from desktop_ui.island_model import Charge, Control, Glyph, Key, Marker, Part, Slot, Text, Zone
 from winapi.shapes import Rect
 
 # ---- the bar's sizes, in device-independent pixels (DIPs) -----------------------------
@@ -163,6 +163,28 @@ class Cells:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Gauge:
+    """The battery symbol: a rounded body with a nub on its right, filled to the charge."""
+
+    width: float
+    """The body and its nub."""
+    height: float
+    corner: float
+    stroke: float
+    """The body's outline."""
+    inset: float
+    """Between the outline and the fill."""
+    nub: float
+    """The nub's width..."""
+    nub_height: float
+    """...and height."""
+    bolt: float
+    """The charging bolt's height; its width follows."""
+    knockout: float
+    """The clear edge around the bolt, so it reads over the fill."""
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class BarType:
     """The bar's text: readings, a leading reading, and quieter detail."""
 
@@ -179,6 +201,7 @@ class Sizes:
     capsule: Capsule
     menu: MenuGrid
     markers: Markers
+    gauge: Gauge
     cells: Cells
     type: BarType
 
@@ -237,12 +260,15 @@ def expansion(menu: Menu, row: Content, grid: MenuGrid) -> Content:
     return Content(width, spots, bottom + grid.pad)
 
 
-def extent(part: Part, measure: Callable[[Text], float], capsule: Capsule) -> float:
+def extent(part: Part, measure: Callable[[Text], float], sizes: Sizes) -> float:
+    capsule = sizes.capsule
     match part:
         case Text(tone=tone, reserve=reserve):
             return max(measure(part), measure(Text(reserve, tone))) if reserve else measure(part)
         case Glyph():
             return capsule.icon
+        case Charge():
+            return sizes.gauge.width
         case Control():
             return capsule.control
         case Marker.WAVE:
@@ -283,10 +309,11 @@ class _Step:
     width: float
 
 
-def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], capsule: Capsule) -> Iterator[_Step]:
+def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes) -> Iterator[_Step]:
+    capsule = sizes.capsule
     for index, slot in enumerate(slots):
         for position, part in enumerate(slot):
-            width = extent(part, measure, capsule)
+            width = extent(part, measure, sizes)
             if not position:
                 yield _Step(part, capsule.slot_gap if index else 0.0, width)
             elif width:
@@ -321,7 +348,7 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Size
             case _:
                 return pad
 
-    steps = tuple(_steps(slots, measure, capsule))
+    steps = tuple(_steps(slots, measure, sizes))
     start = edge(parts[0]) if parts else pad
     spots = tuple(_placed(steps, start))
     # Added left to right like the placement, so the end matches the last part exactly.

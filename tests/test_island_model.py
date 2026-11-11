@@ -10,6 +10,7 @@ from contracts.recording_state import RecordingState
 from contracts.status import TRANSCRIBING
 from desktop_ui import ambient
 from desktop_ui.ambient import Ambient, SystemStatus
+from desktop_ui.components.meaning import Tone
 from desktop_ui.island_model import (
     ELAPSED,
     Action,
@@ -17,6 +18,7 @@ from desktop_ui.island_model import (
     Activity,
     CapsuleView,
     Capture,
+    Charge,
     Control,
     IslandSpec,
     Key,
@@ -36,11 +38,11 @@ from desktop_ui.island_model import (
     order,
     reading,
 )
-from winapi.machine_status import Battery, Memory, Speakers, Wifi
+from winapi.machine_status import Battery, Memory, PowerUnavailable, Speakers, Wifi
 
 SPEAKERS = frozendict((state, ambient.Reading(f"speaker {state.name}", f"speakers {state.name}")) for state in Speakers)
 WIFI = frozendict((state, ambient.Reading(f"wifi {state.name}", f"wifi {state.name}")) for state in Wifi)
-SYMBOLS = Symbols(keyboard="keys", clock="time", charger="plug", battery="cell", cpu="chip", memory="ram")
+SYMBOLS = Symbols(keyboard="keys", charger="plug", cpu="chip", memory="ram")
 PHASES: Phases = frozendict(
     {
         "idle": None,
@@ -82,6 +84,7 @@ SPEC = IslandSpec(
         gigabytes="gig",
         widest_memory="00.0 gig",
         widest_clock="00:00",
+        clock="%H:%M",
     ),
     ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
     WORDS,
@@ -163,17 +166,24 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                     assert all(Text("10:22") not in slot for each in activity for slot in each.slots)
 
 
-def test_power_follows_the_charger_and_a_low_battery_takes_a_warning_tone() -> None:
-    # Defects: the power reading ignores the charger, or a low battery on its own
-    # power reads like a healthy one.
+def test_the_battery_fills_to_its_charge_follows_the_charger_and_warns_when_low() -> None:
+    # Defects: the battery symbol shows a stale or wrong charge, ignores the
+    # charger, an unread battery looks empty-but-read, or a low battery on its own
+    # power warns in its text but not its symbol (or not at all).
     def power(percent: int, *, powered: bool) -> tuple[Part, ...]:
         return parts(replace(RESTING, ambient=Ambient("09:41", Battery(percent, powered=powered, charging=False))), Reading.POWER, Reading.BATTERY)
 
-    assert power(99, powered=True)[0] != power(99, powered=False)[0]
-    low, high = power(15, powered=False)[-1], power(99, powered=False)[-1]
-    assert isinstance(low, Text) and isinstance(high, Text) and low.tone != high.tone
-    plugged = power(15, powered=True)[-1]
-    assert isinstance(plugged, Text) and plugged.tone == high.tone
+    assert power(64, powered=False)[0] == Charge(64, powered=False)
+    assert power(64, powered=True)[0] == Charge(64, powered=True)
+    unread = parts(replace(RESTING, ambient=Ambient("09:41", PowerUnavailable.UNKNOWN)), Reading.POWER)
+    assert unread == (Charge(None, powered=False),)
+
+    def tone(percent: int, *, powered: bool) -> Tone:
+        symbol, text = power(percent, powered=powered)
+        assert isinstance(symbol, Charge) and isinstance(text, Text) and symbol.tone == text.tone
+        return text.tone
+
+    assert tone(15, powered=False) != tone(99, powered=False) == tone(15, powered=True)
 
 
 def test_concurrent_activity_has_distinct_indicators_and_recording_stop_under_the_pointer() -> None:

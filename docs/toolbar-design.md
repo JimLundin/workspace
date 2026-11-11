@@ -12,7 +12,12 @@ shows its number only while it is current, and holding the Apps key shows each
 desktop's letter. One fixed capsule on
 the right holds a keyboard icon while the keyboard types plainly (the layout
 is off, or the Charybdis is connected), volume, Wi-Fi, the battery,
-processor and memory use, and the clock at the far right behind a clock symbol. Activity never moves the fixed controls.
+processor and memory use, and the day, date and time at the far right. Activity never moves the fixed controls.
+
+The capsule follows a menu bar's restraint: symbols drawn at the text's weight,
+plain text for the clock, and the battery as a symbol filled to its charge
+(red when low on its own power, a bolt cut into it while on mains power) with
+its percentage beside it.
 
 A hairline rule divides the right capsule's groups (the keyboard, volume and
 Wi-Fi; processor, memory and power; the clock) and stands between each two

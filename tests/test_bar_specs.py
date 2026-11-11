@@ -9,7 +9,7 @@ from dataclasses import asdict
 from desktop_ui.bar_events import BarSpec
 from desktop_ui.components.appearance import Washes
 from desktop_ui.components.typeface import Font, Weight
-from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
+from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
 from desktop_ui.island_menu import Menu, entries
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_glass_look, test_island_menu, test_island_model, test_island_motion
@@ -35,6 +35,7 @@ BASE = Sizes(
     ),
     menu=MenuGrid(width=200, radius=9, pad=5, head=40, track=4, gutter=2),
     markers=Markers(wave_floor=2, wave_reach=9, wave_corner=1, halo=5, dot_count=4, dots_radius=2, dots_lift=1),
+    gauge=Gauge(width=20, height=10, corner=3, stroke=1, inset=1, nub=2, nub_height=4, bolt=8, knockout=1),
     cells=Cells(
         corner=9,
         lead=10,
@@ -74,7 +75,7 @@ SPEC = BarSpec(
     sizes=BASE,
     glass=test_glass_look.GLASS,
     palette=test_glass_look.PALETTE,
-    washes=Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5, rule=0.6),
+    washes=Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5, rule=0.6, gauge=0.7),
     hints=frozendict(),
 )
 """The test's own bar, for tests of the bar's decisions."""
@@ -89,6 +90,7 @@ def doubled(sizes: Sizes) -> Sizes:
         capsule=Capsule(**{**capsule, "wave_bars": sizes.capsule.wave_bars}),
         menu=MenuGrid(**{name: value * 2 for name, value in asdict(sizes.menu).items()}),
         markers=Markers(**{**markers, "dot_count": sizes.markers.dot_count}),
+        gauge=Gauge(**{name: value * 2 for name, value in asdict(sizes.gauge).items()}),
         cells=Cells(**{name: value * 2 for name, value in asdict(sizes.cells).items()}),
         type=sizes.type,  # Text measures through the test's own widths.
     )
