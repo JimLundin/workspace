@@ -6,7 +6,7 @@ capsules and parts relative to the sizes it is given, never the bar's real posit
 
 from itertools import pairwise
 
-from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Plotted, Spot, arrange, frame, plotted, reading_at, snap
+from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Plotted, Spot, arrange, frame, lit, plotted, reading_at, snap
 from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_bar_specs, test_island_model
 
@@ -147,3 +147,17 @@ def test_a_graph_ends_at_its_right_edge_spans_its_height_and_breaks_at_an_unread
     assert first == (Plotted(35, 45),)
     assert second == (Plotted(85, 57.5), Plotted(110, 32.5))
     assert tuple(plotted((None, None), 5, box)) == ()
+
+
+def test_a_reading_lights_as_a_pill_around_its_own_parts_and_a_lone_symbol_as_a_circle() -> None:
+    # Defects: the pill misses part of a reading (its symbol beside its value), spills over
+    # the next reading's parts, or a lone symbol lights as a sliver instead of a circle.
+    content = arrange(((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)), width_of, SIZES)
+    value, symbol, wifi, clock = content.spots
+    pill = lit(content, 0, CAPSULE)
+    assert pill is not None
+    assert pill.x <= value.x and symbol.x + symbol.width <= pill.x + pill.width < wifi.x
+    circle = lit(content, 1, CAPSULE)
+    assert circle is not None and circle.width == circle.height == CAPSULE.control
+    assert lit(content, 3, CAPSULE) is None
+    assert clock.x > circle.x + circle.width

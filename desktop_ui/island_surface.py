@@ -38,7 +38,7 @@ from desktop_ui.components.appearance import Glass, GlassLook, Look, Shade, Soli
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
-from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, plotted, reading_at, tiles
+from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, lit, on_pixels, plotted, reading_at, tiles
 from desktop_ui.island_menu import Calendar, Face, Fact, Graph, Item, Live, Menu, MenuWords, Nearby, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
@@ -47,7 +47,7 @@ from desktop_ui.month import WEEKS, weeks
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.shell_surface import Pager, pixmap
 from desktop_ui.vector_icons import paint_icon
-from winapi import windows
+from winapi import appearance, windows
 from winapi.appearance import Frost
 from winapi.composition import DesktopComposition, GlassScene, borderless
 from winapi.machine_status import Speakers
@@ -574,6 +574,18 @@ class MenuCell(QtWidgets.QAbstractButton):
         paint_icon(painter, name, ink, QtCore.QRect(round(at.x()), round(at.y()), side, side))
 
 
+@dataclass(frozen=True, slots=True)
+class Lit:
+    """The reading under the pointer, and the one it just left, which fades out as it fades in."""
+
+    slot: int | None = None
+    left: int | None = None
+
+
+GLOW: Final = 160
+"""Milliseconds a reading's pill takes to fade in or out."""
+
+
 class Capsule(KeyboardFocus):
     """One capsule: its strip to the screen edge, its shape, and its parts.
 
@@ -591,6 +603,15 @@ class Capsule(KeyboardFocus):
         self.cells: tuple[MenuCell, ...] = ()
         self.placed: tuple[QtCore.QRect, float, float, Content, tuple[Tile, ...]] | None = None
         self.stills: frozendict[tuple[Content, Look, bool, float], QtGui.QPixmap] = frozendict()
+        self.lit = Lit()
+        """Which reading lights under the pointer; a capsule without panels lights as a whole."""
+        self.glow = QtCore.QVariantAnimation(self)
+        self.glow.setDuration(GLOW)
+        self.glow.setStartValue(0.0)
+        self.glow.setEndValue(1.0)
+        self.glow.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
+        self.glow.valueChanged.connect(self.update)
+        self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.clicked.connect(self.pressed_capsule)
@@ -695,13 +716,56 @@ class Capsule(KeyboardFocus):
     def enterEvent(self, event: QtGui.QEnterEvent) -> None:
         super().enterEvent(event)
         self.window_.report(Hovered(self.key))
+        self.light(self.reading_under(event.position()))
         self.update()
 
     @override
     def leaveEvent(self, event: QtCore.QEvent) -> None:
         super().leaveEvent(event)
         self.window_.report(Hovered(None))
+        self.light(None)
         self.update()
+
+    @override
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        super().mouseMoveEvent(event)
+        self.light(self.reading_under(event.position()))
+
+    def reading_under(self, pointer: QtCore.QPointF) -> int | None:
+        """The reading whose panel a press here would open; None off the readings' row or on a capsule without them."""
+        sizes = self.window_.sizes
+        if not self.drawn.view.panels or pointer.y() > sizes.bar.top + sizes.capsule.height:
+            return None
+        return reading_at(self.drawn.content, pointer.x() - self.shift(self.drawn.content))
+
+    def light(self, slot: int | None) -> None:
+        """Fade `slot`'s pill in and the previous one's out."""
+        if slot == self.lit.slot:
+            return
+        self.lit = Lit(slot, self.lit.slot)
+        self.glow.stop()
+        if appearance.animations_enabled():
+            self.glow.start()
+        else:
+            self.glow.setCurrentTime(GLOW)
+        self.update()
+
+    def paint_lit(self, painter: QtGui.QPainter) -> None:
+        """Each reading's pill: the open panel's reading held lit, the one under the pointer fading in over the one it left."""
+        lettering, sizes, content = self.drawn.look.lettering, self.window_.sizes, self.drawn.content
+        glow = self.glow.currentValue()
+        rise = glow if isinstance(glow, float) else 1.0  # Before its first fade the animation holds no value.
+        opened = self.window_.menu
+        held = next((index for index, panel in enumerate(self.drawn.view.panels) if opened is not None and panel is opened.panel), None)
+        pills = ((self.lit.left, 1 - rise, False), (self.lit.slot, rise, self.isDown()), (held, 1.0, True))
+        for slot, opacity, pressed in pills:
+            if slot is None or opacity <= 0 or not (box := lit(content, slot, sizes.capsule)):
+                continue
+            pill = QtCore.QRectF(self.shift(content) + box.x, sizes.bar.top + box.y, box.width, box.height)
+            painter.save()
+            painter.setOpacity(opacity)
+            paint_feedback(painter, lettering, pill, box.height / 2, pressed=pressed, hovered=True)
+            painter.restore()
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -718,17 +782,20 @@ class Capsule(KeyboardFocus):
         alpha = visibility(self.drawn.framed.presence, self.window_.spec.timing)
         paint_capsule(painter, path, self.drawn.look, alpha)
         drawn = self.drawn
-        flat = not expanded(drawn.content.height, sizes)
+        # A capsule of readings lights the one under the pointer; any other lights as a whole.
+        whole = not expanded(drawn.content.height, sizes) and not drawn.view.panels
         paint_feedback(
             painter,
             drawn.look.lettering,
             shape,
             corner,
-            pressed=self.isDown() and flat,
-            hovered=self.underMouse() and flat,
+            pressed=self.isDown() and whole,
+            hovered=self.underMouse() and whole,
             ringed=self.focus_ringed,
             inset=sizes.capsule.ring_inset,
         )
+        if drawn.view.panels:
+            self.paint_lit(painter)
         painter.setClipPath(path)
         layers: tuple[tuple[Content, float], ...] = (
             ((drawn.previous, alpha * (1 - drawn.fade)), (drawn.content, alpha * drawn.fade))

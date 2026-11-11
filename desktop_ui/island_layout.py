@@ -396,6 +396,20 @@ def plotted(shares: Sequence[float | None], capacity: int, box: Box) -> Iterator
             yield tuple(at(index, share) for index, share in run if share is not None)
 
 
+def lit(content: Content, slot: int, capsule: Capsule) -> Box | None:
+    """The pill that lights `slot` under the pointer, within the capsule's row: around its parts
+    by half the gap to the next reading, a control's height, so a lone symbol lights as a circle."""
+    spots = tuple(spot for spot in content.spots if spot.slot == slot)
+    if not spots:
+        return None
+    pad = capsule.slot_gap / 2
+    left = min(spot.x for spot in spots) - pad
+    right = max(spot.x + spot.width for spot in spots) + pad
+    width = max(right - left, capsule.control)
+    middle = (left + right) / 2
+    return Box(middle - width / 2, (capsule.height - capsule.control) / 2, width, capsule.control)
+
+
 def reading_at(content: Content, x: float) -> int | None:
     """The slot under `x` in `content`'s row: the one whose parts are nearest, so the
     gap between two readings splits halfway and the ends belong to the outer readings."""
