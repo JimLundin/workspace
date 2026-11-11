@@ -30,6 +30,7 @@ BASE = Sizes(
         text_pad=11,
         icon_pad=7,
         ring_inset=1,
+        app_gap=5,
         rule=12,
         hairline=1,
     ),

@@ -1,6 +1,6 @@
 """The bar's desktop pager: a pure view of the observer's desktops.
 
-The pager shows each desktop as its applications' icons, overlapping left to
+The pager shows each desktop as its applications' icons, side by side left to
 right as they sit on screen, with the current one marked; an empty desktop shows
 its number. A click goes straight to that desktop. Desktops are reached directly,
 never cycled. Its names list the applications placed on each desktop. While either keyboard holds

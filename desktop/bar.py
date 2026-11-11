@@ -54,6 +54,7 @@ SIZES: Final = Sizes(
         text_pad=12,
         icon_pad=10,
         ring_inset=1.5,
+        app_gap=6,
         rule=16,
         hairline=1,
     ),

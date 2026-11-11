@@ -3,7 +3,7 @@
 The bar is a row of glass capsules 8 px below the top of the primary screen.
 Its island holds only live activity and is empty at rest; it sits directly left
 of the fixed right capsule, one gap away. Left of it is the bar's only toolbar, the desktop pager: each desktop as its apps' icons,
-overlapping left to right as they sit on screen. A desktop shows the apps its
+side by side a small gap apart, left to right as they sit on screen. A desktop shows the apps its
 layout puts there, running or not (a web app's symbol fills while it runs), and
 any other app placed there. A click on an icon goes to that app, cycling its
 windows or starting it, and so to its desktop; a right click lists its windows.
