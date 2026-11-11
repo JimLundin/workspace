@@ -40,7 +40,7 @@ from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, lit, on_pixels, plotted, reading_at, tiles
 from desktop_ui.island_menu import Calendar, Face, Fact, Graph, Item, Live, Menu, MenuWords, Nearby, Slider, Toggle, TrayIcon
-from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
+from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text, Zone
 from desktop_ui.island_motion import Timing
 from desktop_ui.live_marks import Beat, paint_dots, paint_wave
 from desktop_ui.month import WEEKS, weeks
@@ -141,7 +141,7 @@ def pane(drawn: Drawn, presented: Presented, spec: BarSpec) -> Pane | None:
             return Pane(
                 drawn.view.key.name,
                 box.on_device(presented.scale),
-                radius(box.height, spec.sizes) * presented.scale,
+                min(radius(drawn.content.height, spec.sizes), box.height / 2) * presented.scale,
                 visibility(drawn.framed.presence, spec.timing),
                 _veil(look, presented.frost, spec.glass),
             )
@@ -625,16 +625,21 @@ class Capsule(KeyboardFocus):
         return ink if self.contrast else Shade(hue)
 
     def pressed_capsule(self) -> None:
-        """A reading under the pointer opens its own panel; the keyboard, or a capsule without panels, presses the whole."""
-        view, content = self.drawn.view, self.drawn.content
+        """A reading under the pointer opens its own panel; the keyboard, or a capsule without panels, presses the whole.
+        A panel's own card between its tiles does nothing."""
+        view = self.drawn.view
+        if view.zone is Zone.PANEL:
+            return
         pointer = self.mapFromGlobal(QtGui.QCursor.pos())
-        row = self.window_.sizes.bar.top + self.window_.sizes.capsule.height
-        if view.panels and self.rect().contains(pointer) and pointer.y() <= row:
-            slot = reading_at(content, pointer.x() - self.shift(content))
-            if slot is not None and slot < len(view.panels):
-                self.window_.report(PanelPressed(view.panels[slot]))
-                return
+        slot = self.reading_under(QtCore.QPointF(pointer)) if self.rect().contains(pointer) else None
+        if slot is not None and slot < len(view.panels):
+            self.window_.report(PanelPressed(view.panels[slot], slot))
+            return
         self.press(view.action)
+
+    def strip(self) -> float:
+        """The strip above a capsule in the bar's row, up to the screen's edge so a press there still lands; a panel has none."""
+        return 0.0 if self.drawn.view.zone is Zone.PANEL else self.window_.sizes.bar.top
 
     def describe(self, view: CapsuleView) -> None:
         self.setToolTip("" if view.action is Action.CLOSE_MENU else view.label)
@@ -662,7 +667,7 @@ class Capsule(KeyboardFocus):
 
     def show_menu(self, menu: Menu | None) -> None:
         """The expanded capsule's cells, pooled for as long as the menu shows the same grid."""
-        laid = tiles(menu, self.window_.sizes.menu) if menu is not None else ()
+        laid = tiles(menu, self.window_.sizes.menu, self.window_.spec.controls.panels[menu.panel].width) if menu is not None else ()
         if len(laid) != len(self.cells) or any(cell.tile.cell.entry != tile.cell.entry for cell, tile in zip(self.cells, laid, strict=False)):
             for cell in self.cells:
                 cell.hide()
@@ -673,9 +678,8 @@ class Capsule(KeyboardFocus):
             cell.update()
 
     def place_cells(self) -> None:
-        sizes = self.window_.sizes
-        top = round(sizes.bar.top)
-        left = (self.width() - sizes.menu.width) / 2
+        top = round(self.strip())
+        left = self.shift(self.drawn.content)
         for cell in self.cells:
             tile = cell.tile
             cell.setGeometry(round(left + tile.x), top + round(tile.y), round(tile.width), round(tile.height))
@@ -692,9 +696,9 @@ class Capsule(KeyboardFocus):
         return (self.width() - content.width) / 2
 
     def frame(self, framed: Framed) -> None:
-        """The widget spans the edge strip and the capsule below it."""
-        top = round(self.window_.sizes.bar.top)
-        geometry = QtCore.QRect(round(framed.box.x), 0, max(1, round(framed.box.width)), top + round(framed.box.height))
+        """The widget spans its strip and the capsule below it."""
+        top = round(self.strip())
+        geometry = QtCore.QRect(round(framed.box.x), round(framed.box.y) - top, max(1, round(framed.box.width)), top + round(framed.box.height))
         placed = (geometry, self.drawn.fade, self.drawn.framed.presence, self.drawn.content, tuple(cell.tile for cell in self.cells))
         if placed == self.placed:
             return
@@ -756,7 +760,10 @@ class Capsule(KeyboardFocus):
         glow = self.glow.currentValue()
         rise = glow if isinstance(glow, float) else 1.0  # Before its first fade the animation holds no value.
         opened = self.window_.menu
-        held = next((index for index, panel in enumerate(self.drawn.view.panels) if opened is not None and panel is opened.panel), None)
+        held = None
+        if opened is not None:
+            first = next((index for index, panel in enumerate(self.drawn.view.panels) if panel is opened.panel), None)
+            held = opened.anchor if opened.anchor is not None else first
         pills = ((self.lit.left, 1 - rise, False), (self.lit.slot, rise, self.isDown()), (held, 1.0, True))
         for slot, opacity, pressed in pills:
             if slot is None or opacity <= 0 or not (box := lit(content, slot, sizes.capsule)):
@@ -772,13 +779,14 @@ class Capsule(KeyboardFocus):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         sizes = self.window_.sizes
-        top, middle = sizes.bar.top, sizes.bar.top + sizes.capsule.height / 2
+        top, middle = self.strip(), sizes.bar.top + sizes.capsule.height / 2
         shape = QtCore.QRectF(0, top, self.width(), self.height() - top)
-        corner = min(radius(shape.height(), sizes), shape.height() / 2)
+        corner = min(radius(self.drawn.content.height, sizes), shape.height() / 2)
         path = outline(shape, corner)
-        strip = QtGui.QPainterPath()
-        strip.addRect(QtCore.QRectF(0, 0, self.width(), top))
-        painter.fillPath(strip, hit())
+        if top:
+            strip = QtGui.QPainterPath()
+            strip.addRect(QtCore.QRectF(0, 0, self.width(), top))
+            painter.fillPath(strip, hit())
         alpha = visibility(self.drawn.framed.presence, self.window_.spec.timing)
         paint_capsule(painter, path, self.drawn.look, alpha)
         drawn = self.drawn
@@ -933,14 +941,14 @@ class BarWindow(QtWidgets.QWidget):
             return
         self.tray = entries
         self.tray_images = tuple(pixmap(entry.image) if entry.image is not None else None for entry in entries)
-        status = self.capsules.get(Key.STATUS)
-        for cell in status.cells if status is not None else ():
+        panel = self.capsules.get(Key.PANEL)
+        for cell in panel.cells if panel is not None else ():
             cell.update()
 
     def tray_locations(self) -> tuple[Located, ...]:
         """Where the open menu shows each tray icon, in device pixels, for applications anchoring their flyouts."""
-        status = self.capsules.get(Key.STATUS)
-        if status is None or not status.isVisible():
+        panel = self.capsules.get(Key.PANEL)
+        if panel is None or not panel.isVisible():
             return ()
         outer, scale = windows.outer_rect(int(self.winId())), self.devicePixelRatioF()
 
@@ -957,7 +965,7 @@ class BarWindow(QtWidgets.QWidget):
                 case _:
                     return ()
 
-        return tuple(found for cell in status.cells for found in slot(cell))
+        return tuple(found for cell in panel.cells for found in slot(cell))
 
     def measure(self, view: CapsuleView) -> Content:
         def width(text: Text) -> float:
@@ -993,8 +1001,8 @@ class BarWindow(QtWidgets.QWidget):
         keys = frozenset(each.view.key for each in presented.drawn)
         for each in presented.drawn:
             capsule = self.capsule(each, contrast=presented.contrast)
-            if each.view.key is Key.STATUS:
-                capsule.show_menu(self.menu if expanded(each.content.height, sizes) else None)
+            if each.view.key is Key.PANEL:
+                capsule.show_menu(self.menu)
             capsule.frame(each.framed)
             capsule.show()
         for key, capsule in self.capsules.items():

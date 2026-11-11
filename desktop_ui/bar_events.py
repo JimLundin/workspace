@@ -161,6 +161,7 @@ def menu(model: BarModel, panel: Panel) -> Menu:
             panel,
         ),
         month=month,
+        anchor=kept.anchor if kept else None,
     )
     return replace(built, selected=kept.selected) if kept else built
 
@@ -175,9 +176,11 @@ class Pressed:
 
 @dataclass(frozen=True, slots=True)
 class PanelPressed:
-    """A reading in the status capsule was pressed: it opens its panel, or closes it if open."""
+    """A reading in the status capsule was pressed: it opens its panel under it, or closes it if open."""
 
     panel: Panel
+    slot: int | None = None
+    """The reading's slot in the status capsule, which the panel hangs under."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -562,18 +565,19 @@ def _pressed(model: BarModel, action: Action) -> tuple[BarModel, tuple[Effect, .
             assert_never(action)
 
 
-def _opened(model: BarModel, panel: Panel) -> tuple[BarModel, tuple[Effect, ...]]:
-    """Expand into `panel`, from the closed bar or from another panel."""
+def _opened(model: BarModel, panel: Panel, anchor: int | None = None) -> tuple[BarModel, tuple[Effect, ...]]:
+    """Open `panel` under the reading at `anchor`, from the closed bar or from another panel."""
     if model.closed:
         return model, ()
-    return model, (Expand(menu(model, panel), remember=model.opened is None), Survey(listing=panel is Panel.NETWORK))
+    opening = replace(menu(model, panel), anchor=anchor)
+    return model, (Expand(opening, remember=model.opened is None), Survey(listing=panel is Panel.NETWORK))
 
 
-def _panel(model: BarModel, panel: Panel) -> tuple[BarModel, tuple[Effect, ...]]:
-    """A reading's press opens its panel; pressed again it closes."""
+def _panel(model: BarModel, panel: Panel, slot: int | None) -> tuple[BarModel, tuple[Effect, ...]]:
+    """A reading's press opens its panel under it; pressed again it closes."""
     if (opened := model.opened) and opened.panel is panel:
         return _closed(model, restore=True)
-    return _opened(model, panel)
+    return _opened(model, panel, slot)
 
 
 def _shown(model: BarModel, change: ActivityChange) -> BarModel:
@@ -601,8 +605,8 @@ def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]
     match event:
         case Pressed(action):
             return _pressed(model, action)
-        case PanelPressed(panel):
-            return _panel(model, panel)
+        case PanelPressed(panel, slot):
+            return _panel(model, panel, slot)
         case Paged(months):
             return _changed(model, _paged(model, months))
         case Hovered(key):

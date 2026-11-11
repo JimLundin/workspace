@@ -68,7 +68,7 @@ lazy from desktop_ui.components.appearance import Look, look
 lazy from desktop_ui.components.meaning import Tint
 lazy from desktop_ui.desktop_pager import PagerSpec, pager
 lazy from desktop_ui.desktop_settings import DesktopSettings
-lazy from desktop_ui.island_layout import Content, Metrics, expansion, frame, snap
+lazy from desktop_ui.island_layout import Content, Metrics, card, frame, hung_from, snap
 lazy from desktop_ui.island_menu import Menu
 lazy from desktop_ui.island_model import CapsuleView, Key, Marker, Observed, island, order
 lazy from desktop_ui.island_motion import Shown, placed, retarget
@@ -263,9 +263,19 @@ class DesktopBar:
     # ---- measuring and painting ----------------------------------------------------------
 
     def _measure(self, view: CapsuleView, opened: Menu | None, spec: BarSpec) -> Content:
-        if opened is not None and view.key is Key.STATUS:
-            return expansion(opened, self.window.measure(view), spec.sizes.menu)
+        if opened is not None and view.key is Key.PANEL:
+            return card(opened, spec.sizes.menu, spec.controls.panels[opened.panel].width)
         return self.window.measure(view)
+
+    def _shown(self, views: tuple[CapsuleView, ...], opened: Menu | None, spec: BarSpec) -> tuple[Shown, ...]:
+        """Each view measured; the panel hangs under the reading that opened it."""
+        measured = tuple((view, self._measure(view, opened, spec)) for view in views)
+        status = next(((view, content) for view, content in measured if view.key is Key.STATUS), None)
+        anchor = 0.0
+        if status is not None and opened is not None:
+            view, content = status
+            anchor = hung_from(view, content, opened, spec.sizes.bar.edge)
+        return tuple(Shown(view, content, anchor=anchor if view.key is Key.PANEL else 0.0) for view, content in measured)
 
     def render(self) -> None:
         """Retarget the capsules at what the bar should show now, then paint; frames carry them there."""
@@ -275,7 +285,7 @@ class DesktopBar:
             model.job, model.recording, model.seen.ambient, model.seen.system, plain_keyboard=not model.layout_enabled, dictating=model.dictating
         )
         views = island(observed, model.spec.island, hovered=model.hovered, expanded=opened is not None)
-        shown = tuple(Shown(view, self._measure(view, opened, model.spec)) for view in views)
+        shown = self._shown(views, opened, model.spec)
         motion = retarget(model.motion, shown, model.spec.springs, animate=appearance.animations_enabled())
         listening = model.dictating
         if listening and not self.audio_timer.isActive():
@@ -293,7 +303,7 @@ class DesktopBar:
 
     def _draw(self, model: BarModel) -> None:
         seen, sizes = model.seen, model.spec.sizes
-        metrics = Metrics(seen.screen.width, sizes.bar.top, sizes.bar.gap, sizes.bar.edge)
+        metrics = Metrics(seen.screen.width, sizes.bar.top, sizes.bar.gap, sizes.bar.edge, sizes.menu.drop)
         framed = frozendict(
             (each.key, each) for each in snap(frame(placed(model.motion, sizes.capsule.height), metrics, order(model.spec.island)), seen.scale)
         )
@@ -316,8 +326,15 @@ class DesktopBar:
             for moving in model.motion.capsules
             if moving.key in framed
         )
-        # The window keeps the room a capsule is heading for, so it resizes only as an expansion starts and settles.
-        reach = max((max(moving.height.value, moving.height.target) for moving in model.motion.capsules), default=float(sizes.capsule.height))
+        # The window keeps the room a capsule is heading for, so it resizes only as a panel starts and settles.
+        reach = max(
+            (
+                framed[moving.key].box.y - sizes.bar.top + max(moving.height.value, moving.height.target)
+                for moving in model.motion.capsules
+                if moving.key in framed
+            ),
+            default=float(sizes.capsule.height),
+        )
         self.window.present(
             Presented(
                 drawn,

@@ -38,6 +38,7 @@ class Key(Enum):
     ISLAND = auto()
     RECORDING = auto()
     STATUS = auto()
+    PANEL = auto()  # The open panel, hanging under its reading.
 
 
 class Zone(Enum):
@@ -45,6 +46,7 @@ class Zone(Enum):
     ISLAND = auto()
     TRAIL = auto()
     RIGHT = auto()  # The fixed readings, independent of activity.
+    PANEL = auto()  # Below the readings, under the one it belongs to.
 
 
 class Action(Enum):
@@ -273,7 +275,7 @@ def order(spec: IslandSpec) -> tuple[Key, ...]:
     """Every capsule left to right: the lead, the island, the trail, then the status capsule."""
     lead = tuple(ACTIVITY_KEYS[each] for each in spec.activities.lead)
     trail = tuple(ACTIVITY_KEYS[each] for each in spec.activities.trail)
-    return (*lead, Key.ISLAND, *trail, Key.STATUS)
+    return (*lead, Key.ISLAND, *trail, Key.STATUS, Key.PANEL)
 
 
 def zone(key: Key, spec: IslandSpec) -> Zone:
@@ -282,6 +284,8 @@ def zone(key: Key, spec: IslandSpec) -> Zone:
             return Zone.ISLAND
         case Key.STATUS:
             return Zone.RIGHT
+        case Key.PANEL:
+            return Zone.PANEL
         case Key.JOB | Key.RECORDING:
             return Zone.LEAD if any(ACTIVITY_KEYS[each] is key for each in spec.activities.lead) else Zone.TRAIL
         case _:
@@ -437,10 +441,11 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
             panels=panels,
         ),
     )
+    panel = (CapsuleView(Key.PANEL, Zone.PANEL, (), words.close_controls, Action.CLOSE_MENU),) if expanded else ()
     active = observed.dictating or job is not None or recorded is not None
     middle = (centre(observed, recorded, words, hovered=hovered),) if active and not expanded else ()
     ranks = order(spec)
-    return tuple(sorted((*lead, *middle, *trail, *persistent), key=lambda view: ranks.index(view.key)))
+    return tuple(sorted((*lead, *middle, *trail, *persistent, *panel), key=lambda view: ranks.index(view.key)))
 
 
 def centre(observed: Observed, recorded: Capture | None, words: Words, *, hovered: Key | None) -> CapsuleView:

@@ -361,10 +361,18 @@ class MenuWords:
 
 
 @dataclass(frozen=True, slots=True)
-class ControlsSpec:
-    """Each panel's rows, top to bottom, and the panels' wording."""
+class PanelSpec:
+    """A panel's width and its rows, top to bottom."""
 
-    panels: frozendict[Panel, tuple[RowSpec, ...]]
+    width: float
+    rows: tuple[RowSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ControlsSpec:
+    """Each panel and the panels' wording."""
+
+    panels: frozendict[Panel, PanelSpec]
     words: MenuWords
     first_weekday: int = field(kw_only=True)
     """The calendar's first column: 0 is Monday, 6 Sunday."""
@@ -513,7 +521,7 @@ def row_cells(row: RowSpec, controls: Controls, top: int, spec: ControlsSpec) ->
 def entries(controls: Controls, spec: ControlsSpec, panel: Panel) -> tuple[Cell, ...]:
     """`panel`'s grid for what's happening now, flowed from its rows: each row
     starts below the one before it, so no two cells overlap. Tracks include the gutters."""
-    rows = spec.panels[panel]
+    rows = spec.panels[panel].rows
     tops = accumulate((height(row, controls, spec) for row in rows), initial=0)
     return tuple(chain.from_iterable(row_cells(row, controls, top, spec) for row, top in zip(rows, tops, strict=False)))
 
@@ -527,6 +535,8 @@ class Menu:
     selected: int | None = None
     month: Month | None = None
     """The month the calendar was turned to; None shows today's."""
+    anchor: int | None = None
+    """The status capsule's slot the panel hangs under: the reading pressed; None, the first that opens it."""
 
 
 def label(entry: Entry) -> str:

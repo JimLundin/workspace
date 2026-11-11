@@ -11,7 +11,7 @@ from desktop import look, placement
 from desktop_ui import ambient
 from desktop_ui.desktop_pager import PagerSpec
 from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Sizes
-from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, NetworksRow, Panel, TrayRow
+from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, NetworksRow, Panel, PanelSpec, TrayRow
 from desktop_ui.island_model import ELAPSED, ActivitiesSpec, Activity, IslandSpec, Phased, Reading, StatusSpec, Symbols, Words
 from desktop_ui.island_motion import Springs, Timing
 from desktop_ui.motion import Spring
@@ -58,7 +58,7 @@ SIZES: Final = Sizes(
         app_gap=6,
         current_dot=1.5,
     ),
-    menu=MenuGrid(width=320, radius=21, pad=6, head=34, track=10, gutter=8),
+    menu=MenuGrid(radius=21, pad=6, drop=6, track=10, gutter=8),
     markers=Markers(wave_floor=3, wave_reach=13, wave_corner=1, halo=7, dot_count=3, dots_radius=2.2, dots_lift=1.5),
     gauge=Gauge(width=24, height=12, corner=3.5, stroke=1, inset=1.5, nub=1.5, nub_height=4.5, bolt=10, knockout=1),
     cells=Cells(
@@ -104,47 +104,62 @@ CONTROLS: Final = ControlsSpec(
     every_member(
         Panel,
         {
-            Panel.WORKSPACE: (
-                ActivitiesRow(5),
-                CellsRow(
-                    4,
-                    (
-                        CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
-                        CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
+            Panel.WORKSPACE: PanelSpec(
+                320,
+                (
+                    ActivitiesRow(5),
+                    CellsRow(
+                        4,
+                        (
+                            CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
+                            CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
+                        ),
                     ),
-                ),
-                CellsRow(4, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark when away", "lock"),)),
-                CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
-                CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                CellsRow(
-                    7,
-                    (
-                        CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
-                        CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
-                        CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
+                    CellsRow(4, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark when away", "lock"),)),
+                    CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
+                    CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                    CellsRow(
+                        7,
+                        (
+                            CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
+                            CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
+                            CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
+                        ),
                     ),
+                    TrayRow(4),
+                    CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
+                    CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
                 ),
-                TrayRow(4),
-                CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
-                CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
             ),
-            Panel.NETWORK: (
-                NetworksRow(5, most=8),
-                CellsRow(5, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Turn on location to list networks", "lock"),)),
-                CellsRow(3, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Wi-Fi settings", "wifi"),)),
+            Panel.NETWORK: PanelSpec(
+                300,
+                (
+                    NetworksRow(5, most=8),
+                    CellsRow(5, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Turn on location to list networks", "lock"),)),
+                    CellsRow(3, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Wi-Fi settings", "wifi"),)),
+                ),
             ),
-            Panel.POWER: (
-                CellsRow(5, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Battery", "battery"),)),
-                CellsRow(3, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Power & battery settings", "charger"),)),
+            Panel.POWER: PanelSpec(
+                280,
+                (
+                    CellsRow(5, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Battery", "battery"),)),
+                    CellsRow(3, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Power & battery settings", "charger"),)),
+                ),
             ),
-            Panel.PERFORMANCE: (
-                CellsRow(11, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Processor"),)),
-                CellsRow(11, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"),)),
+            Panel.PERFORMANCE: PanelSpec(
+                300,
+                (
+                    CellsRow(11, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Processor"),)),
+                    CellsRow(11, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"),)),
+                ),
             ),
-            Panel.CALENDAR: (CellsRow(25, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Calendar"),)),),
-            Panel.SOUND: (
-                CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                CellsRow(4, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Mute", "speaker-muted"),)),
+            Panel.CALENDAR: PanelSpec(300, (CellsRow(25, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Calendar"),)),)),
+            Panel.SOUND: PanelSpec(
+                280,
+                (
+                    CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                    CellsRow(4, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Mute", "speaker-muted"),)),
+                ),
             ),
         },
     ),

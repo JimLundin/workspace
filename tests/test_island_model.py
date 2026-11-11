@@ -201,7 +201,7 @@ def test_dictation_takes_the_island_and_detaches_every_other_activity_beside_it(
     # Defect: dictation shares the island with other activity, or loses its stop press.
     observed = replace(RESTING, dictating=True, job=TRANSCRIBING, recording=RECORDING)
     dynamic = tuple(each for each in island(observed, SPEC) if each.zone is not Zone.RIGHT)
-    assert tuple(each.key for each in dynamic) == tuple(key for key in order(SPEC) if key is not Key.STATUS)
+    assert tuple(each.key for each in dynamic) == tuple(key for key in order(SPEC) if key not in (Key.STATUS, Key.PANEL))
     centre = next(each for each in dynamic if each.key is Key.ISLAND)
     assert centre.action is Action.STOP_DICTATION
     shown = {part for slot in centre.slots for part in slot}
@@ -210,13 +210,15 @@ def test_dictation_takes_the_island_and_detaches_every_other_activity_beside_it(
     assert [each.key for each in island(observed, moved)][:3] == [Key.RECORDING, Key.JOB, Key.ISLAND]
 
 
-def test_the_status_capsule_expands_into_the_menu() -> None:
-    # Defects: the menu opens as the island instead of the capsule that opened it,
-    # that capsule loses its readings while open, or activity stays in the bar while
-    # the menu lists it.
+def test_an_open_panel_hangs_below_the_status_capsule_which_keeps_its_readings() -> None:
+    # Defects: the panel opens as the island instead of below the readings, the status
+    # capsule loses its readings while open, or activity stays in the bar while the
+    # panel lists it.
     busy = replace(RESTING, job=TRANSCRIBING, recording=RECORDING)
-    (opened,) = island(busy, SPEC, expanded=True)
-    assert (opened.key, opened.zone, opened.slots, opened.action) == (Key.STATUS, Zone.RIGHT, view(busy, Key.STATUS).slots, Action.CLOSE_MENU)
+    readings, panel = island(busy, SPEC, expanded=True)
+    assert (readings.key, readings.slots, readings.action) == (Key.STATUS, view(busy, Key.STATUS).slots, Action.CLOSE_MENU)
+    assert (panel.key, panel.zone) == (Key.PANEL, Zone.PANEL)
+    assert all(each.key is not Key.PANEL for each in island(busy, SPEC))
 
 
 def test_a_recording_reads_as_its_phase_says_and_its_elapsed_time_keeps_its_hours() -> None:

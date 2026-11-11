@@ -6,8 +6,9 @@ capsules and parts relative to the sizes it is given, never the bar's real posit
 
 from itertools import pairwise
 
-from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Plotted, Spot, arrange, frame, lit, plotted, reading_at, snap
-from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
+from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Plotted, Spot, arrange, frame, hung_from, lit, plotted, reading_at, snap
+from desktop_ui.island_menu import Menu, Panel
+from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Text, Zone, order
 from tests import test_bar_specs, test_island_model
 
 ORDER = order(test_island_model.SPEC)
@@ -161,3 +162,39 @@ def test_a_reading_lights_as_a_pill_around_its_own_parts_and_a_lone_symbol_as_a_
     assert circle is not None and circle.width == circle.height == CAPSULE.control
     assert lit(content, 3, CAPSULE) is None
     assert clock.x > circle.x + circle.width
+
+
+def test_a_panel_hangs_centred_under_its_reading_below_the_capsule_and_stays_on_screen() -> None:
+    # Defects: the panel opens at the capsule's left or the screen's corner instead of under
+    # its reading, overlaps the readings, runs off the screen's edge, or appears at full size.
+    metrics = Metrics(1000, 8, 6, 12, drop=6)
+    status = Placed(Key.STATUS, Zone.RIGHT, 400, 34)
+    under = {each.key: each for each in frame((status, Placed(Key.PANEL, Zone.PANEL, 200, 300, anchor=300)), metrics, (Key.STATUS, Key.PANEL))}
+    panel, readings = under[Key.PANEL].box, under[Key.STATUS].box
+    assert panel.x + panel.width / 2 == 700 and panel.y == readings.y + readings.height + 6
+    (edge,) = (
+        each.box
+        for each in frame((status, Placed(Key.PANEL, Zone.PANEL, 200, 300, anchor=40)), metrics, (Key.STATUS, Key.PANEL))
+        if each.key is Key.PANEL
+    )
+    assert edge.x + edge.width == 1000 - 12
+    (growing,) = (
+        each.box
+        for each in frame((status, Placed(Key.PANEL, Zone.PANEL, 200, 300, 0.5, 300)), metrics, (Key.STATUS, Key.PANEL))
+        if each.key is Key.PANEL
+    )
+    assert (growing.width, growing.height, growing.x + growing.width / 2) == (100, 150, 700)
+
+
+def test_a_panel_hangs_from_the_reading_pressed_or_else_the_first_that_opens_it() -> None:
+    # Defects: the panel hangs from the wrong reading when two open it (processor and
+    # memory), or measures its reading from the capsule's left instead of the screen's right.
+    content = arrange(((Glyph("cpu"),), (Glyph("memory"),), (Text("10:22"),)), width_of, SIZES)
+    status = CapsuleView(Key.STATUS, Zone.RIGHT, (), "", Action.OPEN_MENU, panels=(Panel.PERFORMANCE, Panel.PERFORMANCE, Panel.CALENDAR))
+    cpu, memory, _ = content.spots
+
+    def centre(spot: Spot) -> float:
+        return 12 + content.width - (spot.x + spot.width / 2)
+
+    assert hung_from(status, content, Menu(Panel.PERFORMANCE, ()), 12) == centre(cpu)
+    assert hung_from(status, content, Menu(Panel.PERFORMANCE, (), anchor=1), 12) == centre(memory)

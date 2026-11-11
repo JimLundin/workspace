@@ -33,6 +33,7 @@ from desktop_ui.island_menu import (
     NetworksRow,
     Outcome,
     Panel,
+    PanelSpec,
     Slider,
     Toggle,
     ToolChoice,
@@ -53,41 +54,56 @@ TRAY_TRACKS = 3
 SPEC = ControlsSpec(
     frozendict(
         {
-            Panel.WORKSPACE: (
-                ActivitiesRow(3),
-                CellsRow(2, (CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"), CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"))),
-                CellsRow(2, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"),)),
-                CellsRow(2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)),
-                CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                CellsRow(
-                    2,
-                    (
-                        CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"),
-                        CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"),
-                        CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Key map"),
+            Panel.WORKSPACE: PanelSpec(
+                200,
+                (
+                    ActivitiesRow(3),
+                    CellsRow(2, (CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"), CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"))),
+                    CellsRow(2, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"),)),
+                    CellsRow(2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)),
+                    CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                    CellsRow(
+                        2,
+                        (
+                            CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"),
+                            CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"),
+                            CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Key map"),
+                        ),
                     ),
+                    TrayRow(TRAY_TRACKS),
+                    CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
+                    CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
                 ),
-                TrayRow(TRAY_TRACKS),
-                CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
-                CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
             ),
-            Panel.NETWORK: (
-                NetworksRow(3, most=2),
-                CellsRow(2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)),
-                CellsRow(1, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"),)),
+            Panel.NETWORK: PanelSpec(
+                160,
+                (
+                    NetworksRow(3, most=2),
+                    CellsRow(2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)),
+                    CellsRow(1, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"),)),
+                ),
             ),
-            Panel.POWER: (
-                CellsRow(3, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Cell"),)),
-                CellsRow(1, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Energy"),)),
+            Panel.POWER: PanelSpec(
+                160,
+                (
+                    CellsRow(3, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Cell"),)),
+                    CellsRow(1, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Energy"),)),
+                ),
             ),
-            Panel.PERFORMANCE: (
-                CellsRow(4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)),
-                CellsRow(4, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"),)),
+            Panel.PERFORMANCE: PanelSpec(
+                160,
+                (
+                    CellsRow(4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)),
+                    CellsRow(4, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"),)),
+                ),
             ),
-            Panel.CALENDAR: (CellsRow(10, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),)),),
-            Panel.SOUND: (
-                CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                CellsRow(2, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Hush"),)),
+            Panel.CALENDAR: PanelSpec(160, (CellsRow(10, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),)),)),
+            Panel.SOUND: PanelSpec(
+                120,
+                (
+                    CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                    CellsRow(2, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Hush"),)),
+                ),
             ),
         }
     ),
@@ -148,12 +164,13 @@ def test_a_running_recording_leads_as_a_card_and_replaces_its_start() -> None:
 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     # Defect: a track or column offset places one tile over another or past the menu's edge.
-    grid = MenuGrid(width=200, radius=0, pad=5, head=10, track=4, gutter=2)
+    grid = MenuGrid(radius=0, pad=5, drop=4, track=4, gutter=2)
+    width = 200
     tray = tuple(f"App {index}" for index in range(11))
     for controls in (RESTING, Controls("02:05"), replace(RESTING, tray=tray)):
-        laid = tiles(Menu(Panel.WORKSPACE, entries(controls, SPEC, Panel.WORKSPACE)), grid)
+        laid = tiles(Menu(Panel.WORKSPACE, entries(controls, SPEC, Panel.WORKSPACE)), grid, width)
         for tile in laid:
-            assert tile.x > 0 and tile.x + tile.width < grid.width
+            assert tile.x > 0 and tile.x + tile.width < width
         for first in laid:
             for second in laid:
                 if first.index < second.index:

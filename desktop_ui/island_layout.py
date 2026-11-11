@@ -18,7 +18,7 @@ from typing import assert_never
 
 from desktop_ui.components.typeface import Font
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
-from desktop_ui.island_model import Charge, Control, Glyph, Key, Marker, Part, Slot, Text, Zone
+from desktop_ui.island_model import CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Slot, Text, Zone
 from winapi.shapes import Rect
 
 # ---- the bar's sizes, in device-independent pixels (DIPs) -----------------------------
@@ -85,13 +85,12 @@ class Capsule:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MenuGrid:
-    """The panels: a grid of tiles below the capsule's own row."""
+    """The panels: a grid of tiles in a card below the readings; each panel declares its width."""
 
-    width: float
     radius: float
     pad: float
-    head: float
-    """The capsule's own row, above the grid."""
+    drop: float
+    """From the readings' capsule down to the panel."""
     track: float
     """One grid row; a tile spans whole tracks."""
     gutter: float
@@ -253,15 +252,15 @@ class Tile:
     height: float
 
 
-def tiles(menu: Menu, grid: MenuGrid) -> tuple[Tile, ...]:
-    """Tracks include the gutter, which each cell splits around itself."""
-    column = (grid.width - 2 * grid.pad) / COLUMNS
+def tiles(menu: Menu, grid: MenuGrid, width: float) -> tuple[Tile, ...]:
+    """The panel's tiles inside its card `width` wide. Tracks include the gutter, which each cell splits around itself."""
+    column = (width - 2 * grid.pad) / COLUMNS
     return tuple(
         Tile(
             index,
             cell,
             grid.pad + cell.column * column + grid.gutter / 2,
-            grid.pad + grid.head + cell.track * grid.track + grid.gutter / 2,
+            grid.pad + cell.track * grid.track + grid.gutter / 2,
             cell.span * column - grid.gutter,
             cell.tracks * grid.track - grid.gutter,
         )
@@ -269,14 +268,11 @@ def tiles(menu: Menu, grid: MenuGrid) -> tuple[Tile, ...]:
     )
 
 
-def expansion(menu: Menu, row: Content, grid: MenuGrid) -> Content:
-    """A capsule expanded into the menu: its own row on top, right-aligned so it stays put as the capsule widens."""
+def card(menu: Menu, grid: MenuGrid, width: float) -> Content:
+    """The panel's card: its grid with a pad all round, `width` wide."""
     # A tile's gutters cancel at the grid's last track.
     tracks = max((cell.track + cell.tracks for cell in menu.cells), default=0)
-    bottom = grid.pad + grid.head + tracks * grid.track
-    width = max(float(grid.width), row.width)
-    spots = tuple(replace(spot, x=spot.x + width - row.width) for spot in row.spots)
-    return Content(width, spots, bottom + grid.pad)
+    return Content(width, (), grid.pad + tracks * grid.track + grid.pad)
 
 
 def extent(part: Part, measure: Callable[[Text], float], sizes: Sizes) -> float:
@@ -410,6 +406,20 @@ def lit(content: Content, slot: int, capsule: Capsule) -> Box | None:
     return Box(middle - width / 2, (capsule.height - capsule.control) / 2, width, capsule.control)
 
 
+def hung_from(status: CapsuleView, content: Content, opened: Menu, edge: float) -> float:
+    """Where `opened` hangs: the centre of its reading in the status capsule, as a distance from the
+    screen's right edge, where that capsule is anchored `edge` in. The reading pressed, else the first
+    that opens the panel, else the capsule's middle."""
+    slot = opened.anchor
+    if slot is None:
+        slot = next((index for index, panel in enumerate(status.panels) if panel is opened.panel), None)
+    spots = tuple(spot for spot in content.spots if spot.slot == slot)
+    if not spots:
+        return edge + content.width / 2
+    centre = (min(spot.x for spot in spots) + max(spot.x + spot.width for spot in spots)) / 2
+    return edge + content.width - centre
+
+
 def reading_at(content: Content, x: float) -> int | None:
     """The slot under `x` in `content`'s row: the one whose parts are nearest, so the
     gap between two readings splits halfway and the ends belong to the outer readings."""
@@ -429,6 +439,8 @@ class Placed:
     width: float
     height: float
     presence: float = 1.0
+    anchor: float = 0.0
+    """A panel's reading, as its centre's distance from the screen's right edge."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -468,6 +480,8 @@ class Metrics:
     top: float
     gap: float
     edge: float
+    drop: float = 0.0
+    """From the readings' capsule down to a panel."""
 
 
 def present(value: float) -> float:
@@ -500,6 +514,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
         right = (boxed(capsule, edge), *right)
         edge = max(0.0, edge - metrics.gap)
     boundary = edge if right else metrics.width
+    panels = tuple(hung(capsule, right, metrics) for capsule in zone(Zone.PANEL))
 
     def outward(capsules: tuple[Placed, ...], edge: float, before: float, *, leading: bool) -> tuple[Framed, ...]:
         framed: tuple[Framed, ...] = ()
@@ -520,7 +535,7 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
         case _:
             dynamic = outward(zone(Zone.TRAIL), 0.0, 0.0, leading=False)
     if not dynamic:
-        return right
+        return (*right, *panels)
     start = min(each.box.x for each in dynamic)
     end = max(each.box.x + each.box.width for each in dynamic)
     # Activity ends one gap before the right capsule; if it cannot fit, its start stays on screen.
@@ -531,7 +546,17 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
         width = max(0.0, min(each.box.width, boundary - x))
         return Framed(each.key, Box(x, each.box.y, width, each.box.height), each.presence)
 
-    return (*(bounded(each) for each in dynamic if each.box.x + shift < boundary), *right)
+    return (*(bounded(each) for each in dynamic if each.box.x + shift < boundary), *right, *panels)
+
+
+def hung(panel: Placed, readings: Sequence[Framed], metrics: Metrics) -> Framed:
+    """A panel under its reading, growing from it as it appears and kept on screen beside it."""
+    presence = present(panel.presence)
+    width, height = panel.width * presence, panel.height * presence
+    centre = metrics.width - panel.anchor
+    x = max(metrics.edge, min(centre - width / 2, metrics.width - metrics.edge - width))
+    top = max((each.box.y + each.box.height for each in readings), default=metrics.top) + metrics.drop
+    return Framed(panel.key, Box(x, top, width, height), presence)
 
 
 def snap(framed: Sequence[Framed], scale: float) -> tuple[Framed, ...]:

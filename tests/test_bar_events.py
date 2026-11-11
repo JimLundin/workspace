@@ -46,8 +46,8 @@ def test_a_reading_opens_its_panel_switches_from_another_and_closes_its_own() ->
     # Defects: pressing the open panel's reading opens it again instead of closing, switching
     # panels forgets who had the keyboard, or a closed bar still opens.
     closed = model()
-    _, opening = transition(closed, PanelPressed(Panel.SOUND))
-    assert tuple(opening) == (Expand(menu(closed, Panel.SOUND), remember=True), Survey(listing=False))
+    _, opening = transition(closed, PanelPressed(Panel.SOUND, 2))
+    assert tuple(opening) == (Expand(replace(menu(closed, Panel.SOUND), anchor=2), remember=True), Survey(listing=False))
     sound, _ = transition(closed, Opening(menu(closed, Panel.SOUND), 42))
     _, switching = transition(sound, PanelPressed(Panel.WORKSPACE))
     assert tuple(switching) == (Expand(menu(sound, Panel.WORKSPACE), remember=False), Survey(listing=False))

@@ -1,14 +1,14 @@
 """How the island's capsules move between views: a pure value advanced by its owner's frames.
 
 Each capsule springs its width toward its measured content and its presence
-toward shown (1) or gone (0). A capsule arrives from zero presence and leaves
+toward shown (1) or gone (0); a panel springs along to the reading it hangs under. A capsule arrives from zero presence and leaves
 showing its last content until it has collapsed. When content changes, the new
 content fades in over the previous one at its own measured size while the width
 morphs between them.
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from desktop_ui.island_layout import Content, Placed
 from desktop_ui.island_model import CapsuleView, Key, Part, Text
@@ -49,6 +49,8 @@ class Shown:
 
     view: CapsuleView
     content: Content
+    anchor: float = field(default=0.0, kw_only=True)
+    """A panel's reading, as its centre's distance from the screen's right edge."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +62,7 @@ class Moving:
     height: Motion
     presence: Motion
     fade: Motion
+    anchor: Motion
 
     @property
     def key(self) -> Key:
@@ -74,7 +77,8 @@ class IslandMotion:
 def arrive(shown: Shown, springs: Springs, *, animate: bool) -> Moving:
     presence = toward(still(0.0, springs.appear), 1.0, springs.appear)
     width, height = still(shown.content.width, springs.morph), still(shown.content.height, springs.morph)
-    return Moving(shown.view, shown.content, None, width, height, presence if animate else jump(presence, 1.0), still(1.0, springs.fade))
+    shape = presence if animate else jump(presence, 1.0)
+    return Moving(shown.view, shown.content, None, width, height, shape, still(1.0, springs.fade), still(shown.anchor, springs.morph))
 
 
 def outline(part: Part) -> object:
@@ -94,7 +98,7 @@ def follow(moving: Moving, shown: Shown, springs: Springs, *, animate: bool) -> 
         fade, previous = moving.fade, moving.previous
     else:
         fade, previous = toward(still(0.0, springs.fade), 1.0, springs.fade), moving.content
-    changed = Moving(shown.view, shown.content, previous, width, height, presence, fade)
+    changed = Moving(shown.view, shown.content, previous, width, height, presence, fade, toward(moving.anchor, shown.anchor, springs.morph))
     return changed if animate else rest(changed)
 
 
@@ -111,6 +115,7 @@ def rest(moving: Moving) -> Moving:
         height=jump(moving.height, moving.height.target),
         presence=jump(moving.presence, moving.presence.target),
         fade=jump(moving.fade, 1.0),
+        anchor=jump(moving.anchor, moving.anchor.target),
     )
 
 
@@ -148,6 +153,7 @@ def advance(motion: IslandMotion, seconds: float) -> IslandMotion:
             height=settle(moving.height, seconds),
             presence=settle(moving.presence, seconds),
             fade=(fade := settle(moving.fade, seconds)),
+            anchor=settle(moving.anchor, seconds),
             previous=None if resting(fade) else moving.previous,
         )
         for moving in motion.capsules
@@ -161,12 +167,14 @@ def finish(motion: IslandMotion) -> IslandMotion:
 
 
 def settled(motion: IslandMotion) -> bool:
-    return all(all(resting(spring) for spring in (moving.width, moving.height, moving.presence, moving.fade)) for moving in motion.capsules)
+    return all(
+        all(resting(spring) for spring in (moving.width, moving.height, moving.presence, moving.fade, moving.anchor)) for moving in motion.capsules
+    )
 
 
 def placed(motion: IslandMotion, row: float) -> tuple[Placed, ...]:
     """Each capsule's current frame; none is shorter than a capsule's `row` height."""
     return tuple(
-        Placed(moving.key, moving.view.zone, max(0.0, moving.width.value), max(row, moving.height.value), moving.presence.value)
+        Placed(moving.key, moving.view.zone, max(0.0, moving.width.value), max(row, moving.height.value), moving.presence.value, moving.anchor.value)
         for moving in motion.capsules
     )
