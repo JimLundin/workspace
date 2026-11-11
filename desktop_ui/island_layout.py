@@ -291,15 +291,6 @@ def textual(part: Part) -> bool:
             return False
 
 
-def apart(before: Part, part: Part) -> bool:
-    """Whether `part` starts another fact in its slot: a reading or symbol after a reading, but not the control that acts on it."""
-    match part:
-        case Control():
-            return False
-        case _:
-            return textual(before)
-
-
 @dataclass(frozen=True, slots=True)
 class _Step:
     """A part's advance along the row: the gap before it, then its width."""
@@ -317,8 +308,8 @@ def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes
             if not position:
                 yield _Step(part, capsule.slot_gap if index else 0.0, width)
             elif width:
-                # A fact after a reading keeps the space of separate facts.
-                yield _Step(part, capsule.slot_gap if apart(slot[position - 1], part) else capsule.part_gap, width)
+                # Two readings side by side keep the space of separate facts.
+                yield _Step(part, capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap, width)
             else:
                 yield _Step(part, 0.0, width)
 

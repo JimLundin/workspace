@@ -83,8 +83,8 @@ def width_of(text: Text) -> float:
 
 def test_text_content_pads_its_ends_and_separates_slots_and_readings_further_than_parts() -> None:
     # Defects: readings crowd the capsule edge, two slots read as one, two
-    # readings run together, a symbol sits as close to the reading before it as to
-    # its own, or Stop drifts from the reading it stops.
+    # readings run together, a meter's symbol drifts from its value, or Stop
+    # drifts from the reading it stops.
     content = arrange(((Marker.DOTS,), (Text("10:22"), Text("73%"))), width_of, SIZES)
     pad, slot = CAPSULE.text_pad, CAPSULE.slot_gap
     assert [spot.x for spot in content.spots] == [pad, pad + CAPSULE.dots + slot, pad + CAPSULE.dots + slot + 35 + slot]
@@ -92,8 +92,9 @@ def test_text_content_pads_its_ends_and_separates_slots_and_readings_further_tha
     stop = Control("stop", "Stop recording", Action.STOP_RECORDING)
     labelled = arrange(((Text("Recording"), stop),), width_of, SIZES)
     assert [spot.x for spot in labelled.spots] == [pad, pad + 63 + CAPSULE.part_gap]
-    readings = arrange(((Glyph("cpu"), Text("5%"), Glyph("memory")),), width_of, SIZES)
-    assert [spot.x for spot in readings.spots] == [pad, pad + CAPSULE.icon + CAPSULE.part_gap, pad + CAPSULE.icon + CAPSULE.part_gap + 14 + slot]
+    meters = arrange(((Text("5%"), Glyph("cpu")), (Text("9%"), Glyph("memory"))), width_of, SIZES)
+    second = pad + 14 + CAPSULE.part_gap + CAPSULE.icon + slot
+    assert [spot.x for spot in meters.spots] == [pad, pad + 14 + CAPSULE.part_gap, second, second + 14 + CAPSULE.part_gap]
 
 
 def test_a_control_at_the_edge_sits_concentric() -> None:

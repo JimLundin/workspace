@@ -168,8 +168,7 @@ class Reading(StrEnum):
     SPEAKER = auto()
     WIFI = auto()
     CLOCK = auto()
-    POWER = auto()
-    BATTERY = auto()
+    BATTERY = auto()  # Its charge, and its symbol filled to it.
     CPU = auto()
     MEMORY = auto()
 
@@ -222,7 +221,7 @@ class Words:
 @dataclass(frozen=True, slots=True)
 class StatusSpec:
     groups: tuple[tuple[Reading, ...], ...]
-    """Left to right; readings in a group sit a slot gap apart, and a rule divides the groups."""
+    """Left to right; each reading is a slot, and a rule divides the groups."""
     speakers: frozendict[Speakers, ambient.Reading]
     """The speakers' symbol and words in each state."""
     wifi: frozendict[Wifi, ambient.Reading]
@@ -303,6 +302,19 @@ def gigabytes(count: int, status: StatusSpec) -> str:
     return f"{count / GIBIBYTE:.1f} {status.gigabytes}"
 
 
+def power_symbol(ambient: Ambient, symbols: Symbols, tone: meaning.Tone) -> Part:
+    """The battery filled to its charge, empty while unread, or a plug on a machine without one."""
+    match ambient.power:
+        case Battery(percent=percent, powered=powered):
+            return Charge(percent, powered=powered, tone=tone)
+        case PowerUnavailable.NO_BATTERY:
+            return Glyph(symbols.charger)
+        case PowerUnavailable.UNKNOWN:
+            return Charge(None, powered=False)
+        case _:
+            assert_never(ambient.power)
+
+
 def battery_tone(ambient: Ambient, status: StatusSpec) -> meaning.Tone:
     """Low while the battery runs down on its own power."""
     match ambient.power:
@@ -348,22 +360,13 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
             return (Glyph(status.wifi[system.wifi].icon),)
         case Reading.CLOCK:
             return (Text(ambient.clock, reserve=status.widest_clock),)
-        case Reading.POWER:
-            match ambient.power:
-                case Battery(percent=percent, powered=powered):
-                    return (Charge(percent, powered=powered, tone=battery_tone(ambient, status)),)
-                case PowerUnavailable.NO_BATTERY:
-                    return (Glyph(symbols.charger),)
-                case PowerUnavailable.UNKNOWN:
-                    return (Charge(None, powered=False),)
-                case _:
-                    assert_never(ambient.power)
         case Reading.BATTERY:
-            return (Text(battery_text(ambient, status), battery_tone(ambient, status), reserve=status.widest_percent),)
+            tone = battery_tone(ambient, status)
+            return (Text(battery_text(ambient, status), tone, reserve=status.widest_percent), power_symbol(ambient, symbols, tone))
         case Reading.CPU:
-            return (Glyph(symbols.cpu), usage(system.cpu, status))
+            return (usage(system.cpu, status), Glyph(symbols.cpu))
         case Reading.MEMORY:
-            return (Glyph(symbols.memory), memory_used(system.memory, status))
+            return (memory_used(system.memory, status), Glyph(symbols.memory))
         case _:
             assert_never(each)
 
@@ -407,9 +410,10 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
         trail += (
             CapsuleView(Key.RECORDING, zone(Key.RECORDING, spec), (slot,), f"{recorded.title} · {words.open_controls}", Action.OPEN_MENU, tint),
         )
-    # The readings stay the top row while their capsule expands into the menu; a
-    # group whose readings are all absent (a keyboard typing normally) takes no space.
-    groups = (tuple(part for each in group for part in reading(each, observed, spec.status)) for group in spec.status.groups)
+    # The readings stay the top row while their capsule expands into the menu. Each
+    # reading is its own slot; a reading with nothing to show (a keyboard typing
+    # normally) takes none, and a group without any takes no space or rule.
+    groups = (tuple(slot for each in group if (slot := reading(each, observed, spec.status))) for group in spec.status.groups)
     readings: tuple[Slot, ...] = tuple(ruled(group for group in groups if group))
     persistent = (
         CapsuleView(Key.STATUS, Zone.RIGHT, readings, words.close_controls, Action.CLOSE_MENU)
@@ -429,12 +433,12 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
     return tuple(sorted((*lead, *middle, *trail, *persistent), key=lambda view: ranks.index(view.key)))
 
 
-def ruled(groups: Iterable[Slot]) -> Iterator[Slot]:
-    """The groups with a rule between each two."""
+def ruled(groups: Iterable[tuple[Slot, ...]]) -> Iterator[Slot]:
+    """The groups' slots with a rule between each two groups."""
     for index, group in enumerate(groups):
         if index:
             yield (Marker.RULE,)
-        yield group
+        yield from group
 
 
 def centre(observed: Observed, recorded: Capture | None, words: Words, *, hovered: Key | None) -> CapsuleView:

@@ -148,7 +148,7 @@ ISLAND: Final = IslandSpec(
     status=StatusSpec(
         (
             (Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI),
-            (Reading.CPU, Reading.MEMORY, Reading.POWER, Reading.BATTERY),
+            (Reading.CPU, Reading.MEMORY, Reading.BATTERY),
             (Reading.CLOCK,),
         ),
         SPEAKERS,

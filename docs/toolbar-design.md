@@ -16,20 +16,20 @@ processor and memory use, and the day, date and time at the far right. Activity 
 
 The capsule follows a menu bar's restraint: symbols drawn at the text's weight,
 plain text for the clock, and the battery as a symbol filled to its charge
-(red when low on its own power, a bolt cut into it while on mains power) with
-its percentage beside it.
+(red when low on its own power, a bolt cut into it while on mains power).
+Each meter reads value first, then its symbol, as a menu bar's battery does.
 
 A hairline rule divides the right capsule's groups (the keyboard, volume and
 Wi-Fi; processor, memory and power; the clock) and stands between each two
 desktops in the pager, so neighbouring symbols read as separate facts.
 
-The resource readings are a processor symbol with its percentage and a memory
-symbol with the gigabytes in use (the tooltip adds how many are installed),
-just before the battery's, so the machine's readings sit together, and the
+The resource readings are the processor's percentage and the gigabytes of
+memory in use (the tooltip adds how many are installed), each before its
+symbol and beside the battery's, so the machine's readings sit together, and the
 clock closes the capsule at the screen's edge where it is easiest to find. Each
 reserves its widest form ("100%", "00.0 GB") so a changing value never moves
-the cluster, and its digits keep to the right of that room, so every meter ends
-the same gap before the next. An unread value shows "—" rather than 0. The status worker reads
+the cluster, and its digits keep to the right of that room, against their
+symbol. Each reading is its own slot, so every two sit the same gap apart. An unread value shows "—" rather than 0. The status worker reads
 them every 2 s; CPU is the busy share of processor time since the previous
 reading. Disk, network and GPU are left out: on this laptop they are idle or
 bursty, so a number there is mostly noise.
