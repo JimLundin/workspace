@@ -15,7 +15,7 @@ is off, or the Charybdis is connected), volume, Wi-Fi, the battery,
 processor and memory use, and the clock at the far right behind a clock symbol. Activity never moves the fixed controls.
 
 A hairline rule divides the right capsule's groups (the keyboard, volume and
-Wi-Fi; processor and memory; power; the clock) and stands between each two
+Wi-Fi; processor, memory and power; the clock) and stands between each two
 desktops in the pager, so neighbouring symbols read as separate facts.
 
 The resource readings are a processor and a memory symbol, each followed by
