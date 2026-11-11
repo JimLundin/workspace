@@ -43,8 +43,13 @@ def test_processor_load_is_the_busy_share_of_time_between_two_samples() -> None:
 
 def test_native_power_validates_missing_and_unknown_batteries() -> None:
     status = SYSTEM_POWER_STATUS()
-    status.ACLineStatus, status.BatteryFlag, status.BatteryLifePercent = 1, 8, 73
+    status.ACLineStatus, status.BatteryFlag, status.BatteryLifePercent, status.BatteryLifeTime = 1, 8, 73, 5_000
     assert ambient.power_from_status(status) == Battery(73, powered=True, charging=True)
+    # Defects: Windows' all-ones "unknown" estimate reads as 136 years left, or a real one is dropped.
+    status.ACLineStatus, status.BatteryFlag = 0, 0
+    assert ambient.power_from_status(status) == Battery(73, powered=False, charging=False, remaining=5_000)
+    status.BatteryLifeTime = 0xFFFFFFFF
+    assert ambient.power_from_status(status) == Battery(73, powered=False, charging=False)
     status.BatteryFlag = 128
     assert ambient.power_from_status(status) is PowerUnavailable.NO_BATTERY
     status.BatteryFlag = 255

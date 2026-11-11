@@ -73,6 +73,8 @@ class Battery:
     percent: int
     powered: bool = field(kw_only=True)
     charging: bool = field(kw_only=True)
+    remaining: int | None = field(default=None, kw_only=True)
+    """Seconds of charge left on its own power, as Windows estimates them; None on mains or before an estimate."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.percent <= 100:

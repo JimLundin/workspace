@@ -133,6 +133,10 @@ CONTROLS: Final = ControlsSpec(
                 CellsRow(5, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Turn on location to list networks", "lock"),)),
                 CellsRow(3, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Wi-Fi settings", "wifi"),)),
             ),
+            Panel.POWER: (
+                CellsRow(5, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Battery", "battery"),)),
+                CellsRow(3, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Power & battery settings", "charger"),)),
+            ),
             Panel.PERFORMANCE: (
                 CellsRow(11, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Processor"),)),
                 CellsRow(11, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"),)),
@@ -158,6 +162,12 @@ CONTROLS: Final = ControlsSpec(
         saved="Saved",
         secured="Secured",
         open="Open",
+        charging="Charging",
+        plugged_in="Plugged in",
+        on_battery="On battery",
+        hours_left="{hours} h {minutes} min left",
+        minutes_left="{minutes} min left",
+        mains="On mains power",
     ),
     first_weekday=0,  # Monday.
 )
@@ -195,7 +205,7 @@ ISLAND: Final = IslandSpec(
                 Reading.WIFI: Panel.NETWORK,
                 Reading.CPU: Panel.PERFORMANCE,
                 Reading.MEMORY: Panel.PERFORMANCE,
-                Reading.BATTERY: Panel.WORKSPACE,
+                Reading.BATTERY: Panel.POWER,
                 Reading.CLOCK: Panel.CALENDAR,
             },
         ),

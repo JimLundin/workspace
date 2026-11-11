@@ -10,6 +10,7 @@ class SYSTEM_POWER_STATUS(ctypes.Structure):
     ACLineStatus: int
     BatteryFlag: int
     BatteryLifePercent: int
+    BatteryLifeTime: int
 
 def GetSystemPowerStatus(status: SYSTEM_POWER_STATUS) -> int: ...
 def CallNtPowerInformation(level: int, input: None, input_length: int, output: ByReference[ctypes.c_ulong], output_length: int) -> int: ...

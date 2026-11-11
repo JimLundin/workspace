@@ -21,7 +21,7 @@ from typing import Final, assert_never
 from desktop_ui.ambient import History
 from desktop_ui.month import Month
 from protocol import Tool
-from winapi.machine_status import LOCATION_OFF, Listing, Network
+from winapi.machine_status import LOCATION_OFF, Battery, Listing, Network, Power, PowerUnavailable
 
 
 class Command(Enum):
@@ -36,6 +36,7 @@ class Command(Enum):
     NOTIFICATIONS = auto()
     WIFI_SETTINGS = auto()
     LOCATION_SETTINGS = auto()
+    POWER_SETTINGS = auto()
     ALL_CONTROLS = auto()
 
 
@@ -172,7 +173,17 @@ class Nearby:
     detail: str
 
 
-type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph | Nearby
+@dataclass(frozen=True, slots=True)
+class Fact:
+    """A reading to look at, not act on: its value over what it means."""
+
+    label: str
+    icon: str
+    value: str
+    detail: str
+
+
+type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph | Nearby | Fact
 
 
 class Face(StrEnum):
@@ -188,6 +199,7 @@ class Face(StrEnum):
     CALENDAR = auto()  # A month under its name, with arrows to turn it.
     GRAPH = auto()  # A reading's recent history under its name.
     NETWORK = auto()  # A network's signal, name and state, across the grid.
+    FACT = auto()  # A symbol beside a value over its meaning.
 
 
 # Eight narrow columns: tray icons take one each, the other tiles span pairs.
@@ -219,6 +231,7 @@ class Controls:
     tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
     today: date | None = field(default=None, kw_only=True)
     networks: Listing = field(default=(), kw_only=True)
+    power: Power = field(default=PowerUnavailable.UNKNOWN, kw_only=True)
     cpu: Trace = field(default=NO_TRACE, kw_only=True)
     memory: Trace = field(default=NO_TRACE, kw_only=True)
     month: Month | None = field(default=None, kw_only=True)
@@ -238,6 +251,7 @@ class Panel(StrEnum):
     NETWORK = auto()
     CALENDAR = auto()
     PERFORMANCE = auto()
+    POWER = auto()
 
 
 class EntryId(StrEnum):
@@ -255,6 +269,8 @@ class EntryId(StrEnum):
     MEMORY_GRAPH = auto()
     LOCATION = auto()  # Only while Windows withholds the networks for want of location.
     WIFI_SETTINGS = auto()
+    BATTERY = auto()
+    POWER_SETTINGS = auto()
     SWITCH_WINDOWS = auto()
     COPY_TRANSCRIPT = auto()
     KEYMAP = auto()
@@ -331,6 +347,17 @@ class MenuWords:
     """A network Windows has a profile for."""
     secured: str
     open: str
+    charging: str
+    plugged_in: str
+    """On mains power with the battery not charging, as when it is full."""
+    on_battery: str
+    """On its own power, before Windows estimates what is left."""
+    hours_left: str
+    """What is left, a format with `hours` and `minutes`..."""
+    minutes_left: str
+    """...and, under an hour, with `minutes` alone."""
+    mains: str
+    """A machine without a battery."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -382,6 +409,10 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
             return Item(spec.label, spec.icon, Command.NOTIFICATIONS)
         case EntryId.WIFI_SETTINGS:
             return Item(spec.label, spec.icon, Command.WIFI_SETTINGS)
+        case EntryId.POWER_SETTINGS:
+            return Item(spec.label, spec.icon, Command.POWER_SETTINGS)
+        case EntryId.BATTERY:
+            return battery(spec, controls.power, words)
         case EntryId.LOCATION:
             return Item(spec.label, spec.icon, Command.LOCATION_SETTINGS) if controls.networks is LOCATION_OFF else None
         case EntryId.ALL_CONTROLS:
@@ -392,6 +423,31 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
 
 def activities(controls: Controls, words: MenuWords) -> tuple[Live, ...]:
     return (Live(words.recording, controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()
+
+
+def left(seconds: int, words: MenuWords) -> str:
+    """The charge left in hours and minutes, or in minutes alone under an hour."""
+    hours, minutes = seconds // 3600, seconds // 60 % 60
+    return words.hours_left.format(hours=hours, minutes=minutes) if hours else words.minutes_left.format(minutes=minutes)
+
+
+def battery(spec: CellSpec, power: Power, words: MenuWords) -> Fact | None:
+    """The battery's charge over whether it charges or how long it lasts; mains power on a machine without one."""
+    match power:
+        case Battery(charging=True, percent=percent):
+            return Fact(spec.label, spec.icon, f"{percent}%", words.charging)
+        case Battery(powered=True, percent=percent):
+            return Fact(spec.label, spec.icon, f"{percent}%", words.plugged_in)
+        case Battery(remaining=int() as seconds, percent=percent):
+            return Fact(spec.label, spec.icon, f"{percent}%", left(seconds, words))
+        case Battery(percent=percent):
+            return Fact(spec.label, spec.icon, f"{percent}%", words.on_battery)
+        case PowerUnavailable.NO_BATTERY:
+            return Fact(spec.label, spec.icon, words.mains, "")
+        case PowerUnavailable.UNKNOWN:
+            return None
+        case _:
+            assert_never(power)
 
 
 def heard(controls: Controls, row: NetworksRow, words: MenuWords) -> tuple[Nearby, ...]:
@@ -484,6 +540,7 @@ def label(entry: Entry) -> str:
             | Calendar(label=text)
             | Graph(label=text)
             | Nearby(label=text)
+            | Fact(label=text)
         ):
             return text
         case _:
@@ -627,7 +684,7 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
             return Applied(Join(profile))
         case Nearby():
             return Chosen(Command.WIFI_SETTINGS)
-        case Slider() | Graph() | None:
+        case Slider() | Graph() | Fact() | None:
             return menu
         case _:
             assert_never(entry)
@@ -650,7 +707,15 @@ def restores_focus(choice: Choice) -> bool:
             Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.MUTE | Command.THIS_MONTH | Command.RECORD | Command.STOP_RECORDING
         ):
             return True
-        case Command.KEYMAP | Command.NOTIFICATIONS | Command.WIFI_SETTINGS | Command.LOCATION_SETTINGS | Command.ALL_CONTROLS | TrayChoice():
+        case (
+            Command.KEYMAP
+            | Command.NOTIFICATIONS
+            | Command.WIFI_SETTINGS
+            | Command.LOCATION_SETTINGS
+            | Command.POWER_SETTINGS
+            | Command.ALL_CONTROLS
+            | TrayChoice()
+        ):
             return False
         case _:
             assert_never(choice)

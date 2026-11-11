@@ -39,7 +39,7 @@ from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.island_layout import Box, Cells, Content, Framed, Gauge, Sizes, Spot, Tile, arrange, on_pixels, plotted, reading_at, tiles
-from desktop_ui.island_menu import Calendar, Face, Graph, Item, Live, Menu, MenuWords, Nearby, Slider, Toggle, TrayIcon
+from desktop_ui.island_menu import Calendar, Face, Fact, Graph, Item, Live, Menu, MenuWords, Nearby, Slider, Toggle, TrayIcon
 from desktop_ui.island_model import Action, CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Text
 from desktop_ui.island_motion import Timing
 from desktop_ui.live_marks import Beat, paint_dots, paint_wave
@@ -230,6 +230,8 @@ class MenuCell(QtWidgets.QAbstractButton):
                 name = f"{label}: {trace.reading}"
             case Nearby(label=label, detail=detail):
                 name = f"{label}: {detail}"
+            case Fact(label=label, value=value, detail=detail):
+                name = ", ".join(part for part in (f"{label}: {value}", detail) if part)
             case _:
                 assert_never(self.tile.cell.entry)
         if self.accessibleName() != name:
@@ -272,7 +274,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         match self.tile.cell.entry:
             case Live():
                 return self.stop_circle().contains(QtCore.QPointF(pos))
-            case Slider() | Calendar() | Graph():
+            case Slider() | Calendar() | Graph() | Fact():
                 return False  # The slider and the calendar take the pointer themselves rather than clicking.
             case Item() | Toggle() | TrayIcon() | Nearby():
                 return super().hitButton(pos)
@@ -344,9 +346,8 @@ class MenuCell(QtWidgets.QAbstractButton):
         if cell.face is not Face.LINK:
             painter.setBrush(color(Shade(lettering.ink.color, self.capsule.window_.washes.well)))
             painter.drawRoundedRect(bounds, corner, corner)
-        paint_feedback(
-            painter, lettering, bounds, corner, pressed=chosen, hovered=self.underMouse() and cell.face not in (Face.CARD, Face.CALENDAR, Face.GRAPH)
-        )
+        still = cell.face in (Face.CARD, Face.CALENDAR, Face.GRAPH, Face.FACT)  # Nothing to press but a part of it.
+        paint_feedback(painter, lettering, bounds, corner, pressed=chosen, hovered=self.underMouse() and not still)
         match cell.entry:
             case Live() as activity:
                 self.paint_live(painter, activity)
@@ -377,6 +378,10 @@ class MenuCell(QtWidgets.QAbstractButton):
                 self.paint_graph(painter, graph)
             case Nearby() as nearby:
                 self.paint_network(painter, nearby)
+            case Fact(icon=name, value=value, detail=detail):
+                self.paint_symbol(painter, name, on=False)
+                area = QtCore.QRectF(cells.text_x, 0, bounds.width() - cells.text_x - cells.text_right, bounds.height())
+                self.paint_lines(painter, area, value, detail, strong=True)
             case _:
                 assert_never(cell.entry)
 

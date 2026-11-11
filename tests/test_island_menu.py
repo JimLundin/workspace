@@ -21,6 +21,7 @@ from desktop_ui.island_menu import (
     ControlsSpec,
     EntryId,
     Face,
+    Fact,
     Item,
     Join,
     Key,
@@ -45,7 +46,7 @@ from desktop_ui.island_menu import (
     restores_focus,
 )
 from protocol import Tool
-from winapi.machine_status import LOCATION_OFF, Network
+from winapi.machine_status import LOCATION_OFF, Battery, Network, Power, PowerUnavailable
 
 TRAY_TRACKS = 3
 
@@ -75,6 +76,10 @@ SPEC = ControlsSpec(
                 CellsRow(2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)),
                 CellsRow(1, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"),)),
             ),
+            Panel.POWER: (
+                CellsRow(3, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Cell"),)),
+                CellsRow(1, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Energy"),)),
+            ),
             Panel.PERFORMANCE: (
                 CellsRow(4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)),
                 CellsRow(4, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"),)),
@@ -100,6 +105,12 @@ SPEC = ControlsSpec(
         saved="Known",
         secured="Locked",
         open="Free",
+        charging="Filling",
+        plugged_in="Wired",
+        on_battery="Draining",
+        hours_left="{hours}:{minutes:02}",
+        minutes_left="{minutes}m",
+        mains="Wall",
     ),
     first_weekday=6,
 )
@@ -272,3 +283,19 @@ def test_location_is_offered_only_while_windows_withholds_the_networks() -> None
 
     assert labels(replace(RESTING, networks=LOCATION_OFF)) == ["Locate", "Radio"]
     assert "Locate" not in labels(replace(RESTING, networks=(Network("Home", 50, secured=False, connected=True, profile=None),)))
+
+
+def test_the_battery_says_whether_it_charges_or_how_long_it_lasts() -> None:
+    # Defects: a battery on mains power reads as draining, an estimate under an hour reads
+    # as zero hours, a known estimate is dropped, or an unread battery invents a reading.
+    def said(power: Power) -> tuple[str, str] | None:
+        found = [cell.entry for cell in entries(replace(RESTING, power=power), SPEC, Panel.POWER) if isinstance(cell.entry, Fact)]
+        return next(((fact.value, fact.detail) for fact in found), None)
+
+    assert said(Battery(80, powered=True, charging=True)) == ("80%", "Filling")
+    assert said(Battery(100, powered=True, charging=False)) == ("100%", "Wired")
+    assert said(Battery(55, powered=False, charging=False, remaining=2 * 3600 + 5 * 60)) == ("55%", "2:05")
+    assert said(Battery(9, powered=False, charging=False, remaining=45 * 60 + 30)) == ("9%", "45m")
+    assert said(Battery(40, powered=False, charging=False)) == ("40%", "Draining")
+    assert said(PowerUnavailable.NO_BATTERY) == ("Wall", "")
+    assert said(PowerUnavailable.UNKNOWN) is None

@@ -152,6 +152,7 @@ def menu(model: BarModel, panel: Panel) -> Menu:
                 hints=model.spec.hints,
                 today=seen.ambient.today,
                 networks=seen.system.networks,
+                power=seen.ambient.power,
                 cpu=traced(seen.system.cpu_history, 100, usage(seen.system.cpu, model.spec.island.status).text),
                 memory=memory_trace(model),
                 month=month,
@@ -383,6 +384,7 @@ class SettingsPage(StrEnum):
     NOTIFICATIONS = "ms-settings:notifications"
     WIFI = "ms-settings:network-wifi"
     LOCATION = "ms-settings:privacy-location"
+    POWER = "ms-settings:batterysaver"
 
 
 @dataclass(frozen=True, slots=True)
@@ -480,6 +482,8 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
             return model, (OpenSettings(SettingsPage.WIFI),)
         case Command.LOCATION_SETTINGS:
             return model, (OpenSettings(SettingsPage.LOCATION),)
+        case Command.POWER_SETTINGS:
+            return model, (OpenSettings(SettingsPage.POWER),)
         case Join(profile=profile):
             return model, (JoinNetwork(profile),)
         case Command.ALL_CONTROLS:
