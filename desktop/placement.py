@@ -30,6 +30,10 @@ WEB_APPS: Final = every_member(
 )
 
 
+COMPANION_TABS: Final = frozenset({"MSEdge.EdgeProfile.Default"})
+"""Companion's own tabs, in the tabbed window of its profile, which it keeps minimized and out of the owner's way."""
+
+
 TERMINAL, CODE, EDGE = Program("windowsterminal.exe"), Program("code.exe"), Program("msedge.exe")
 """Ordinary Edge is every Edge window that isn't a pinned web app's."""
 
@@ -102,5 +106,5 @@ SETUPS: Final = Setups(
 """Workspace's own setups; startup code passes them in, tests pass their own."""
 
 
-PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS, open_web_app=OPEN_WEB_APP)
+PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS, open_web_app=OPEN_WEB_APP, kept_away=COMPANION_TABS)
 """Placement as the desktop is handed it."""

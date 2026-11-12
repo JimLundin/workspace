@@ -16,6 +16,7 @@ from desktop_ui.shell_items import (
     caption_clip,
     launch,
     next_window,
+    not_kept_away,
     outstanding,
     retained,
     shelf,
@@ -84,6 +85,16 @@ def test_pinned_web_app_windows_fill_their_slots_and_leave_the_edge_group() -> N
         (Pinned(PinnedApp.OUTLOOK, (mail, calendar)), Pinned(PinnedApp.TEAMS, ())),
         (Application("editor.exe", (editor,)),),
     )
+
+
+def test_only_a_kept_away_window_is_left_alone() -> None:
+    # Defect: another program's own window is still handled, so Workspace places
+    # and restores it, or keeping it away also drops the profile's other windows.
+    tabs = Window(1, "Tabs", "msedge.exe", minimized=True)
+    mail = Window(2, "Mail", "msedge.exe", minimized=False)
+    browser = Window(3, "Browser", "msedge.exe", minimized=False)
+    app_ids = {1: "Edge.Profile", 2: "Edge.mail.example_/", 3: "Edge"}
+    assert tuple(not_kept_away((tabs, mail, browser), app_ids, frozenset({"Edge.Profile"}))) == (mail, browser)
 
 
 def test_a_pinned_launch_waits_for_its_window_before_launching_again() -> None:

@@ -1,7 +1,7 @@
 """The toolbar's applications: pinned web apps, then running applications grouped by
 executable, each with stable window ordering and cycling."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final
@@ -104,6 +104,11 @@ def pinned_app(app_id: str | None, web_apps: WebApps) -> PinnedApp | None:
     if app_id is None:
         return None
     return next((app for app, web in web_apps.items() if app_id == web.app_id), None)
+
+
+def not_kept_away(observed: Iterable[Window], app_ids: Mapping[int, str | None], kept_away: frozenset[str]) -> Iterator[Window]:
+    """The windows Workspace handles: all but those another program keeps for itself, by their AppUserModelID."""
+    return (window for window in observed if app_ids.get(window.handle) not in kept_away)
 
 
 def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previous: Shelf, seats: Seats, web_apps: WebApps) -> Shelf:

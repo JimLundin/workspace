@@ -31,6 +31,7 @@ from desktop_ui.shell_items import (
     WebApps,
     caption_clip,
     launch,
+    not_kept_away,
     outstanding,
     shelf,
 )
@@ -66,6 +67,8 @@ class PlacementSpec:
     web_apps: WebApps
     open_web_app: tuple[str, ...]
     """The command that opens the URL appended to it as an app window of the Edge the web apps share."""
+    kept_away: frozenset[str]
+    """AppUserModelIDs of Edge windows another program keeps for itself, which Workspace leaves alone: never shown, placed or restored."""
 
 
 def frame(window: int) -> None:
@@ -328,6 +331,7 @@ class Worker:
         connection, observed = observe(watched.connection)
         # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict((window.handle, app_user_model.app_id(window.handle)) for window in observed.windows if window.exe == "msedge.exe")
+        observed = replace(observed, windows=tuple(not_kept_away(observed.windows, app_ids, self.observer.spec.kept_away)))
         own = os.getpid()
         grouped = shelf(observed.windows, app_ids, watched.previous.shelf, seats(observed, watched.previous.shelf), self.observer.spec.web_apps)
         slots = tuple(window for pinned in grouped.pinned for window in pinned.windows)
