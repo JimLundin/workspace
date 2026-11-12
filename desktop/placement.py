@@ -40,12 +40,6 @@ LEFT_HALF = Region(Fraction(0), Fraction(0), Fraction(1, 2), Fraction(1))
 RIGHT_HALF = Region(Fraction(1, 2), Fraction(0), Fraction(1, 2), Fraction(1))
 
 
-LEFT_TWO_THIRDS = Region(Fraction(0), Fraction(0), Fraction(2, 3), Fraction(1))
-
-
-RIGHT_THIRD = Region(Fraction(2, 3), Fraction(0), Fraction(1, 3), Fraction(1))
-
-
 SETUPS: Final = Setups(
     externals=frozendict(
         {
@@ -74,9 +68,9 @@ SETUPS: Final = Setups(
             Setup.HOME: Layout(
                 frozendict(
                     {
-                        # Two terminals read Terminal | Terminal | Code across the 4K screen, Edge on the laptop below.
-                        TERMINAL: (Position(0, Role.MAIN, LEFT_TWO_THIRDS),),
-                        CODE: (Position(0, Role.MAIN, RIGHT_THIRD),),
+                        # Terminals and Code share the 4K screen equally, terminals first, Edge on the laptop below.
+                        TERMINAL: (Position(0, Role.MAIN, FULL),),
+                        CODE: (Position(0, Role.MAIN, FULL),),
                         EDGE: (Position(0, Role.LAPTOP, FULL),),
                         PinnedApp.OUTLOOK: (Position(1, Role.MAIN, LEFT_HALF),),
                         PinnedApp.TEAMS: (Position(1, Role.MAIN, RIGHT_HALF),),

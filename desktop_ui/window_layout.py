@@ -5,8 +5,9 @@ pure placement of observed windows onto them.
 Each declared application has an ordered list of places: a region of one
 role's monitor on one desktop. Its windows fill the places in their stable
 order, and windows beyond the last place share that place equally: side by side
-in a landscape region, stacked in a portrait one. Every other application shares
-the setup's one place for others, so a setup has exactly the desktops its layout
+in a landscape region, stacked in a portrait one. Applications whose last place
+is the same share it, their windows in the layout's order. Every other application
+shares the setup's one place for others, so a setup has exactly the desktops its layout
 declares. Regions are exact fractions, so
 neighbours' pixel edges are computed from the same value and meet without
 overlapping.
@@ -107,7 +108,7 @@ class Position:
 
 
 type Places = tuple[Position, ...]
-"""An application's places in order; its windows beyond the last share that one."""
+"""An application's places in order; its windows beyond the last share that one, with any app whose last place it also is."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,18 +188,23 @@ NOWHERE: Placement = frozendict()
 def place(where: Screens, apps: Sequence[Group]) -> Placement:
     """Each managed window's desktop and rectangle; undeclared applications' windows share the layout's place for others."""
     declared = where.layout.places
+    windows = frozendict((group.app, group.windows) for group in apps)
     others = tuple(handle for group in apps if group.app not in declared for handle in group.windows)
+    # Each place before an app's last holds one of its windows; its last holds the rest.
+    alone = (
+        (handle, Target(position.desktop, pixels(where.roles[position.role], position.region)))
+        for app, places in declared.items()
+        for handle, position in zip(windows.get(app, ()), places[:-1], strict=False)
+    )
+    lasts = (*((places[-1], windows.get(app, ())[len(places) - 1 :]) for app, places in declared.items()), (where.layout.others, others))
+    # Apps whose last place is the same share it equally, in the layout's order.
+    shared = frozendict((last, tuple(handle for position, rest in lasts if position == last for handle in rest)) for last, _ in lasts)
 
-    def targets(windows: Sequence[int], places: Places) -> Iterator[tuple[int, Target]]:
-        # Each place before the last holds one window; the last holds the rest, split equally.
-        alone, shared, last = windows[: len(places) - 1], windows[len(places) - 1 :], places[-1]
-        for handle, position in zip(alone, places, strict=False):
-            yield handle, Target(position.desktop, pixels(where.roles[position.role], position.region))
-        for handle, rect in zip(shared, split(where.roles[last.role], last.region, len(shared)), strict=True):
-            yield handle, Target(last.desktop, rect)
+    def split_up(position: Position, handles: Sequence[int]) -> Iterator[tuple[int, Target]]:
+        for handle, rect in zip(handles, split(where.roles[position.role], position.region, len(handles)), strict=True):
+            yield handle, Target(position.desktop, rect)
 
-    named = (pair for group in apps if (places := declared.get(group.app)) for pair in targets(group.windows, places))
-    return frozendict((*named, *targets(others, (where.layout.others,))))
+    return frozendict((*alone, *(pair for position, handles in shared.items() for pair in split_up(position, handles))))
 
 
 def _corner(rects: Iterable[Rect]) -> Point | None:

@@ -147,6 +147,25 @@ def test_undeclared_apps_share_the_place_for_others_and_add_no_desktops() -> Non
     assert alone.layout.desktops == OTHERS + 1
 
 
+def test_apps_given_the_same_place_share_it_equally_in_the_layouts_order() -> None:
+    # Defects: one app's windows overlap another's in their shared place, a
+    # lone window of each gets anything but half, or the order follows the shelf.
+    together = Screens(
+        Setup.HOME,
+        frozendict({Role.MAIN: Rect(0, 0, 3840, 2160), Role.LAPTOP: Rect(0, 2160, 1920, 3360)}),
+        Layout(frozendict({SHELL: (Position(0, Role.MAIN, FULL),), EDITOR: (Position(0, Role.MAIN, FULL),)}), others=Position(0, Role.LAPTOP, FULL)),
+    )
+    assert targets(place(together, (Group(EDITOR, (5,)), Group(SHELL, (3,))))) == {
+        3: (0, Rect(0, 0, 1920, 2160)),
+        5: (0, Rect(1920, 0, 3840, 2160)),
+    }
+    assert targets(place(together, (Group(EDITOR, (5, 6)), Group(SHELL, (3,))))) == {
+        3: (0, Rect(0, 0, 1280, 2160)),
+        5: (0, Rect(1280, 0, 2560, 2160)),
+        6: (0, Rect(2560, 0, 3840, 2160)),
+    }
+
+
 def test_windows_stack_in_a_portrait_region() -> None:
     # Defect: windows sharing a tall region are squeezed side by side.
     portrait = Screens(

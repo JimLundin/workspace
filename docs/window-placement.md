@@ -17,7 +17,7 @@ its windows fill them in order and any beyond the last share that place.
 | Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 | Desktop 5 |
 | --- | --- | --- | --- | --- | --- | --- |
 | Laptop only | None | Outlook, Teams | Terminal, Terminal | VS Code | Edge | Others |
-| Home | 3840×2160 (MAIN) | MAIN: Terminal ⅔, VS Code ⅓. Laptop: Edge | MAIN: Outlook, Teams. Laptop: others | | | |
+| Home | 3840×2160 (MAIN) | MAIN: Terminal, VS Code, sharing it equally. Laptop: Edge | MAIN: Outlook, Teams. Laptop: others | | | |
 | Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | SIDE: VS Code. ABOVE: Terminal. Laptop: Edge | ABOVE: Outlook, Teams. Laptop: others | | | |
 
 `desktop/placement.py` declares these places. Every app a layout doesn't name
@@ -32,7 +32,8 @@ region in their stable order, so an undeclared app never adds a desktop.
   place for others if need be. A minimized window is restored into its place, on
   whichever desktop it belongs, so a change of monitors sorts every window.
   There is no minimize key.
-- Several windows of one app share its region equally.
+- Several windows of one app share its region equally. Apps given the same
+  region share it the same way, every window an equal part, in the layout's order.
 - An app's windows keep their order while they stay open. Windows first seen
   together, as at startup, are ordered by where they sit (desktop, then left,
   then top). So a restart of Workspace, or of a program that restores its
