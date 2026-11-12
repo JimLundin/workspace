@@ -2,7 +2,6 @@
 Only declarations; `desktop.__main__` hands them to the desktop.
 """
 
-import os
 from fractions import Fraction
 from pathlib import Path
 from typing import Final
@@ -13,8 +12,12 @@ from desktop_ui.shell_items import PinnedApp, WebApp
 from desktop_ui.window_layout import Layout, Position, Program, Region, Role, Setup, Setups
 from winapi.shapes import Size
 
-EDGE_PROFILE: Final = Path(os.environ["LOCALAPPDATA"]) / "Elwing" / "EdgeProfile"
-"""Elwing's Edge profile, which the pinned web apps share with Elwing: it opens them in the Edge it drives."""
+COMPANION: Final = Path(__file__).resolve().parents[2] / "elwing"
+"""Companion's checkout, beside Workspace's."""
+
+
+OPEN_WEB_APP: Final = ("node", str(COMPANION / "src" / "process" / "main.ts"), "edge")
+"""Companion opens the pinned web apps in the Edge it drives, on its own profile, starting it first when it isn't running."""
 
 
 # Edge shortens each part of an app window's id to 20 characters by cutting out its middle.
@@ -99,5 +102,5 @@ SETUPS: Final = Setups(
 """Workspace's own setups; startup code passes them in, tests pass their own."""
 
 
-PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS, edge_profile=EDGE_PROFILE)
+PLACEMENT: Final = PlacementSpec(setups=SETUPS, web_apps=WEB_APPS, open_web_app=OPEN_WEB_APP)
 """Placement as the desktop is handed it."""
