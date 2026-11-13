@@ -53,14 +53,14 @@ or **Keyboard map** in the bar menu, draws every layer.
 | Key | Does |
 |---|---|
 | **§** | Tap: layout on or off. Hold 2 s: quit the layout |
-| thumbs **X C V** | Esc or **Apps**, Space or **Nav**, Tab |
+| thumbs **X C V** | Esc, Space or **Nav**, Tab or **Apps** |
 | thumbs **M , .** | Enter or **Sym**, Backspace or **Num**, Delete |
 
-The **Apps** layer (hold the **X** thumb, left outer) holds every Workspace key; nothing else in the
+The **Apps** layer (hold the **V** thumb, left inner, as the Charybdis holds its Tab thumb) holds every Workspace key; nothing else in the
 layout talks to Workspace. Desktops are reached directly by number, never
 cycled.
 
-| Hold **X** and press | Does |
+| Hold **V** and press | Does |
 |---|---|
 | **2 3 4 5 6**, **Q W E R T** | The ten apps in `APPS` |
 | **8 9 0 + ´** | Desktops 1 to 5 |

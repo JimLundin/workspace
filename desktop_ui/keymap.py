@@ -103,7 +103,7 @@ class Cap:
 
 
 CHORD_HOLD: Final = "Apps"
-"""The Apps key, held for a request's letter: the laptop's Esc thumb or the Charybdis's Tab thumb."""
+"""The Apps key, held for a request's letter: the Tab thumb, on the laptop or the Charybdis."""
 
 _CHORD_NAMES: Final = frozendict(
     {Chord.ctrl(Key.Z): "Undo", Chord.ctrl(Key.Y): "Redo", Chord.ctrl(Key.C): "Copy", Chord.ctrl(Key.V): "Paste", Chord.ctrl(Key.X): "Cut"}

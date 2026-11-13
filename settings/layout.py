@@ -99,7 +99,7 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
                       (Key.M,                          TapHold(Key.N, Mod.SHIFT),          TapHold(Key.E, Mod.CTRL),      TapHold(Key.I, Mod.ALT),        TapHold(Key.O, Mod.GUI))),
         bottom=   Row((Key.Z,                          Key.X,                              Key.C,                         Key.D,                          Key.V),
                       (Key.K,                          Key.H,                              Key.COMMA,                     Key.PERIOD,                     Key.SLASH)),
-        thumbs=Thumbs((                                                                    TapHold(Key.ESC, Layer.APPS),  TapHold(Key.SPACE, Layer.NAV),  Key.TAB),
+        thumbs=Thumbs((                                                                    Key.ESC,                       TapHold(Key.SPACE, Layer.NAV),  TapHold(Key.TAB, Layer.APPS)),
                       (TapHold(Key.ENTER, Layer.SYM),  TapHold(Key.BACKSPACE, Layer.NUM),  Key.DELETE)),
     ),
     Layer.NAV: Board(
@@ -136,9 +136,9 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
                       (BLANK,                         BLANK,                  BLANK)),
     ),
     Layer.APPS: Board(
-        # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
-        # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
-        # The Tab thumb stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
+        # Hold the Tab thumb (left inner), on the laptop as on the Charybdis. The only Workspace layer: apps on the left; desktops, focus and voice on the right.
+        # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.chords`).
+        # The Tab thumb stays empty: it holds Apps, so it can't also be a chord.
         # Desktops 1-4 sit under the index, middle, ring and pinky; the inner index stretch pauses placement.
         top=      Row((_Q,              _W,                    _F,                    _P,                    _B),
                       (Tool.PLACEMENT_PAUSE, Tool.DESKTOP_1,   Tool.DESKTOP_2,        Tool.DESKTOP_3,        Tool.DESKTOP_4)),
