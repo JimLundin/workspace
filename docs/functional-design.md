@@ -101,5 +101,8 @@ architecture review's `contract-isolation` rule enforces it.
 
 `check.py` runs the checks ([pipeline](iteration-pipeline.md)).
 `architecture.py` and `quality.py` are the reviews, sharing `source_analysis.py`'s
-parsing and cache; `volume.py` counts code volume, and
+parsing and cache. `architecture.py` reads the tree and judges findings against
+the declared exceptions; its rules live in the `*_rules.py` modules (imports,
+constants, declarations, modelling, function scopes, records, usage and test
+seams), which report `policy.py`'s `Finding`; `volume.py` counts code volume, and
 `benchmark_keyboard.py` measures the keyboard hook.
