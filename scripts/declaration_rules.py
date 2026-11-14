@@ -2,7 +2,7 @@
 
 import ast
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import reduce
 from typing import Final
 
@@ -50,6 +50,10 @@ class Scope:
 
     def finding(self, rule: str, expression: str, line: int, detail: str) -> Finding:
         return Finding(rule, self.module, self.declaration, expression, line, detail)
+
+    def member(self, name: str) -> Scope:
+        """The scope of one of the declaration's fields or parameters, named after it as `Record.field`."""
+        return replace(self, declaration=self.declaration + "." + name)
 
 
 def _scope_nodes(tree: ast.AST) -> Iterator[ast.AST]:
@@ -120,7 +124,7 @@ def _decorator_call(decorator: ast.expr) -> tuple[ast.expr, frozendict[str | Non
 def _kind_fields(fields: Iterable[ast.stmt], scope: Scope) -> Iterator[Finding]:
     detail = "Give each kind its own type and tag it with one constant Literal, or name the attribute for what it is."
     return (
-        Finding("kind-field", scope.module, scope.declaration + ".kind", ast.unparse(field.annotation), field.lineno, detail)
+        scope.member("kind").finding("kind-field", ast.unparse(field.annotation), field.lineno, detail)
         for field in _annotated(fields)
         if ast.unparse(field.target) == "kind" and not _constant_tag(field.annotation, scope.aliases)
     )
@@ -130,9 +134,7 @@ def _mutable_fields(fields: Iterable[ast.stmt], scope: Scope) -> Iterator[Findin
     """A frozen record's concrete mutable fields: each needs its own declared exception, where a mutable owner has one state exception."""
     detail = "Frozen records must not contain concrete mutable collections without an exact necessity."
     return (
-        Finding(
-            "mutable-field", scope.module, scope.declaration + "." + ast.unparse(field.target), ast.unparse(field.annotation), field.lineno, detail
-        )
+        scope.member(ast.unparse(field.target)).finding("mutable-field", ast.unparse(field.annotation), field.lineno, detail)
         for field in _annotated(fields)
         if _mutable(field.annotation, scope.aliases)
     )
@@ -159,9 +161,7 @@ def _mutable_parameters(arguments: ast.arguments, scope: Scope) -> Iterator[Find
         "or declare the exact signature a dependency dictates."
     )
     return (
-        Finding(
-            "mutable-parameter", scope.module, scope.declaration + "." + parameter.arg, ast.unparse(parameter.annotation), parameter.lineno, detail
-        )
+        scope.member(parameter.arg).finding("mutable-parameter", ast.unparse(parameter.annotation), parameter.lineno, detail)
         for parameter in parameters(arguments)
         if parameter.annotation is not None and _mutable(parameter.annotation, scope.aliases)
     )
