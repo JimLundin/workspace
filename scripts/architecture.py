@@ -7,7 +7,7 @@ Parsing uses private mutable ASTs. Traversals are generators over immutable
 breadth-first levels: each level is one tuple and the visited set grows by one
 union per level, not per module, so the walks stay linear in the graph. Only
 immutable policy reports leave this owner. The rules live in the `*_rules`
-modules beside this one; this module reads the tree, observes each module once
+modules beside this one; this module reads the checkout, observes each module once
 and judges the findings against the declared exceptions.
 """
 
@@ -163,7 +163,7 @@ TEXT_REFERENCES: Final = (".cmd", ".ps1", ".js")
 
 
 @dataclass(frozen=True, slots=True)
-class Tree:
+class Checkout:
     """The reviewed checkout: its root, every name listed in it, and every Python source read from it."""
 
     root: Path
@@ -183,35 +183,35 @@ class Tree:
         return Counter(word for name in texts for word in re.findall(r"[A-Za-z_]\w*", (self.root / name).read_text(encoding="utf-8")))
 
 
-def _module_findings(observed: tuple[Observation, ...], tree: Tree, cache: Cache | None) -> Iterator[Finding]:
+def _module_findings(observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None) -> Iterator[Finding]:
     """What each module shows on its own: its declarations, its plain records and its patches and mocks."""
     # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
     written = frozenset[str]().union(*(item.assigned for item in observed))
     yield from (finding for item in observed for finding in item.declarations)
     yield from (record.finding for item in observed for record in item.records if record.attributes.isdisjoint(written))
-    yield from (finding for source in tree.sources for finding in cached_testing_dependencies(source, cache))
+    yield from (finding for source in checkout.sources for finding in cached_testing_dependencies(source, cache))
 
 
-def _usage_findings(observed: tuple[Observation, ...], tree: Tree, cache: Cache | None) -> Iterator[Finding]:
+def _usage_findings(observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None) -> Iterator[Finding]:
     """What only every module together shows: unused definitions, copied functions and Win32 functions declared twice."""
-    production = sum((Counter(item.referenced) for item in observed), tree.text_words())
-    yield from unused_definitions((definition for item in observed for definition in item.definitions), production, tree.tested(cache))
+    production = sum((Counter(item.referenced) for item in observed), checkout.text_words())
+    yield from unused_definitions((definition for item in observed for definition in item.definitions), production, checkout.tested(cache))
     yield from duplicates(shape for item in observed for shape in item.shapes)
     yield from redeclarations(finding for item in observed for finding in item.natives)
 
 
-def _findings(tree: Tree, configuration: Configuration, cache: Cache | None) -> Iterator[Finding]:
-    loaded = tree.production()
+def _findings(checkout: Checkout, configuration: Configuration, cache: Cache | None) -> Iterator[Finding]:
+    loaded = checkout.production()
     observations = frozendict({module_name(source.name): observation(source, cache) for source in loaded})
     imported_by = frozendict({module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded})
     graph = frozendict({module: imported & frozenset(observations) for module, imported in imported_by.items()})
     observed = tuple(observations.values())
-    yield from _module_findings(observed, tree, cache)
+    yield from _module_findings(observed, checkout, cache)
     yield from keyboard_isolation(graph, frozendict({module: item.dynamic_imports for module, item in observations.items()}))
     yield from contract_isolation(imported_by)
-    yield from _usage_findings(observed, tree, cache)
+    yield from _usage_findings(observed, checkout, cache)
     yield from shared_constants(loaded, configuration.constants)
-    yield from entry_data(tree.sources, configuration.data, configuration.entries, cache)
+    yield from entry_data(checkout.sources, configuration.data, configuration.entries, cache)
     yield from layering(loaded, configuration.layers, configuration.entries, cache)
     yield from enum_shapes(loaded)
 
@@ -239,5 +239,5 @@ def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | Non
     listed = tuple(_walked(root) if names is None else names)
     sources = python_sources(root, listed)
     configuration = _configuration(root)
-    tree = Tree(root, listed, tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources))
-    return _judged(sources, tuple(_findings(tree, configuration, cache)), configuration.exceptions)
+    checkout = Checkout(root, listed, tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources))
+    return _judged(sources, tuple(_findings(checkout, configuration, cache)), configuration.exceptions)
