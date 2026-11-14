@@ -5,8 +5,9 @@ import re
 from collections.abc import Iterable, Iterator
 from typing import Final
 
-from scripts.policy import Finding, parameters, qualified
+from scripts.policy import Finding
 from scripts.scope_rules import loop_accumulations, state_writes
+from scripts.source_analysis import parameters, qualified
 
 
 def _constant(value: ast.expr, bound: frozenset[str]) -> bool:

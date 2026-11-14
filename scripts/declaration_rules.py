@@ -6,8 +6,8 @@ from dataclasses import dataclass, replace
 from functools import reduce
 from typing import Final
 
-from scripts.policy import Finding, parameters, qualified
-from scripts.source_analysis import call_name
+from scripts.policy import Finding
+from scripts.source_analysis import call_name, parameters, qualified
 
 REFLECTION = frozenset({"getattr", "hasattr", "setattr", "delattr"})
 REFLECTION_CALLS = REFLECTION | {"builtins." + name for name in REFLECTION}

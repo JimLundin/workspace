@@ -1,4 +1,4 @@
-"""Content-bound observations shared by the source inspection adapters.
+"""Content-bound observations shared by the source inspection adapters, and the syntax helpers they read sources with.
 
 ASTs belong to these adapters and are never mutated after parsing or given to
 application code. Bounded parser retention avoids three copies of the same work.
@@ -105,6 +105,26 @@ def call_name(node: ast.AST, aliases: Mapping[str, str]) -> str:
             return call_name(value, aliases) + "." + attribute
         case _:
             return ""
+
+
+def qualified(declaration: str, name: str) -> str:
+    """A name inside a declaration, dotted after it; at a module's top level, the name alone."""
+    return ".".join(part for part in (declaration, name) if part)
+
+
+def targets(node: ast.AST) -> tuple[ast.expr, ...]:
+    match node:
+        case ast.Assign(targets=targets) | ast.Delete(targets=targets):
+            return tuple(targets)
+        case ast.AugAssign(target=target) | ast.AnnAssign(target=target):
+            return (target,)
+        case _:
+            return ()
+
+
+def parameters(arguments: ast.arguments) -> tuple[ast.arg, ...]:
+    """Every parameter a signature declares, positional ones first, then the starred ones."""
+    return (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs, *(item for item in (arguments.vararg, arguments.kwarg) if item))
 
 
 def _bound_names(node: ast.AST) -> Iterator[tuple[str, str]]:

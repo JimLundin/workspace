@@ -5,7 +5,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Final
 
-from scripts.policy import Finding, qualified, targets
+from scripts.policy import Finding
+from scripts.source_analysis import qualified, targets
 
 
 @dataclass(frozen=True, slots=True)

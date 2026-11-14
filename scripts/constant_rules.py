@@ -6,8 +6,8 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from scripts.policy import Finding, targets, within_any
-from scripts.source_analysis import Source, module_name
+from scripts.policy import Finding, within_any
+from scripts.source_analysis import Source, module_name, targets
 
 CONSTANT: Final = re.compile(r"[A-Z][A-Z0-9_]*")
 """A module-level constant's name; a leading underscore keeps one private."""

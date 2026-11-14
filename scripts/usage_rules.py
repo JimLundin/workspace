@@ -11,8 +11,8 @@ from typing import Final, override
 
 from pydantic import TypeAdapter
 
-from scripts.policy import Finding, qualified, targets
-from scripts.source_analysis import Cache, Source, parse
+from scripts.policy import Finding
+from scripts.source_analysis import Cache, Source, parse, qualified, targets
 
 REFERENCES = TypeAdapter[frozenset[str]](frozenset[str])
 

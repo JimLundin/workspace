@@ -5,7 +5,8 @@ from collections.abc import Iterator
 from itertools import pairwise
 from typing import Final
 
-from scripts.policy import Finding, targets
+from scripts.policy import Finding
+from scripts.source_analysis import targets
 
 CONTAINERS: Final = frozenset({"list", "dict", "set", "bytearray", "deque", "defaultdict", "Counter", "OrderedDict"})
 """Constructors of the mutable containers a function might fill in a loop."""
