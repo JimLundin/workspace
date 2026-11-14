@@ -41,18 +41,13 @@ def _wildcard(case: ast.match_case) -> bool:
     return isinstance(case.pattern, ast.MatchAs) and case.pattern.pattern is None
 
 
-def _translates(cases: Iterable[ast.match_case], bound: frozenset[str]) -> bool:
-    """Every case but a wildcard names enum members and only returns or assigns one constant."""
-
-    def constant(case: ast.match_case) -> bool:
-        match case.body:
-            case [ast.Return(value=ast.expr() as value)] | [ast.Assign(value=value)]:
-                return _constant(value, bound)
-            case _:
-                return False
-
-    named = tuple(case for case in cases if not _wildcard(case))
-    return len(named) >= 2 and all(_members(case.pattern) and case.guard is None and constant(case) for case in named)
+def _gives_constant(case: ast.match_case, bound: frozenset[str]) -> bool:
+    """A case whose whole body returns or assigns one constant."""
+    match case.body:
+        case [ast.Return(value=ast.expr() as value)] | [ast.Assign(value=value)]:
+            return _constant(value, bound)
+        case _:
+            return False
 
 
 def _bound(function: ast.FunctionDef | ast.AsyncFunctionDef | None) -> frozenset[str]:
@@ -68,9 +63,14 @@ def _numeric(items: Iterable[ast.expr]) -> bool:
 
 
 def _translation(cases: Iterable[ast.match_case], function: ast.FunctionDef | ast.AsyncFunctionDef | None) -> bool:
-    """A `match` that only maps enum members to constants. Assigned names are collected only once every pattern names members."""
-    patterns = tuple(cases)
-    return all(_members(case.pattern) or _wildcard(case) for case in patterns) and _translates(patterns, _bound(function))
+    """A `match` that only maps enum members to constants: at least two cases besides a wildcard, each naming members, unguarded, giving one constant.
+
+    The function's assigned names are collected only once every pattern names members, the rare case that needs them."""
+    named = tuple(case for case in cases if not _wildcard(case))
+    if len(named) < 2 or not all(_members(case.pattern) and case.guard is None for case in named):
+        return False
+    bound = _bound(function)
+    return all(_gives_constant(case, bound) for case in named)
 
 
 def value_shapes(

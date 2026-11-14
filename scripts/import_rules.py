@@ -67,11 +67,8 @@ def entry_data(sources: Iterable[Source], data: Sequence[str], entries: Sequence
 def _owner(module: str, layers: Sequence[Layer]) -> Placed | None:
     """The declared module a source module belongs to, with its place bottom first: the one whose package holds it most closely."""
     held = ((len(package), Placed(place, layer)) for place, layer in enumerate(layers) for package in layer.packages if within(module, package))
-    match max(held, key=lambda found: found[0], default=None):
-        case (_, placed):
-            return placed
-        case _:
-            return None
+    _, placed = max(held, key=lambda found: found[0], default=(0, None))
+    return placed
 
 
 def _crossing(module: str, mine: Placed, target: str, layers: Sequence[Layer]) -> Finding | None:
@@ -159,12 +156,11 @@ def keyboard_isolation(graph: Mapping[str, frozenset[str]], dynamic_imports: Map
 
     Keyboard routes stop at the first application module they reach."""
     for route in _routes(graph, (module for module in sorted(graph) if within(module, "keyboard")), _keyboard):
-        start, *_ = route
-        *_, last = route
+        last = route[-1]
         if _keyboard(last):
             yield from dynamic_imports[last]
         else:
-            yield Finding("keyboard-isolation", start, "", "", 0, " → ".join(route))
+            yield Finding("keyboard-isolation", route[0], "", "", 0, " → ".join(route))
 
 
 def _static_import(call: ast.Call) -> bool:

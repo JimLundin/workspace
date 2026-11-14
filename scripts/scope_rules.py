@@ -87,7 +87,9 @@ def loop_accumulations(function: ast.FunctionDef | ast.AsyncFunctionDef, module:
     """A local container created in the function and filled inside one of its loops."""
     nodes = _own_nodes(function)
     grown = frozenset(name for node in nodes if (name := _filled(node)) is not None)
-    created = grown & _created(nodes) if grown else frozenset[str]()
+    if not grown:
+        return
+    created = grown & _created(nodes)
     if not created:
         return
     detail = "Build the collection with a comprehension, generator or generator function; a loop is for a side effect."
