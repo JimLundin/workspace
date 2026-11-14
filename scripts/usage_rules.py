@@ -12,7 +12,7 @@ from typing import Final, override
 from pydantic import TypeAdapter
 
 from scripts.policy import Finding
-from scripts.source_analysis import Cache, Source, parse, qualified, targets
+from scripts.source_analysis import Cache, Source, memoized, parse, qualified, targets
 
 REFERENCES = TypeAdapter[frozenset[str]](frozenset[str])
 
@@ -95,13 +95,7 @@ def _referenced(tree: ast.AST) -> Iterator[str]:
 
 
 def cached_references(source: Source, cache: Cache | None) -> frozenset[str]:
-    key = cache.key("references", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, REFERENCES)) is not None:
-        return saved
-    result = frozenset(references(parse(source)))
-    if cache is not None:
-        cache.write(key, result, REFERENCES)
-    return result
+    return memoized(cache, "references", source, REFERENCES, lambda source: frozenset(references(parse(source))))
 
 
 def unused_definitions(found: Iterable[Definition], production: Mapping[str, int], tests: frozenset[str]) -> Iterator[Finding]:

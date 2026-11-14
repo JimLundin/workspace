@@ -29,7 +29,7 @@ from scripts.import_rules import Layer, contract_isolation, dependencies, dynami
 from scripts.modelling_rules import value_shapes
 from scripts.policy import Finding, Text
 from scripts.record_rules import Candidate, assigned, records
-from scripts.source_analysis import Cache, Source, module_name, parse
+from scripts.source_analysis import Cache, Source, memoized, module_name, parse
 from scripts.testing_rules import cached_testing_dependencies
 from scripts.usage_rules import (
     Definition,
@@ -137,13 +137,10 @@ def _configuration(root: Path) -> Configuration:
     return replace(configuration, exceptions=exceptions)
 
 
-def observation(source: Source, cache: Cache | None) -> Observation:
-    key = cache.key("architecture", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, OBSERVATION)):
-        return saved
+def _observed(source: Source) -> Observation:
     tree = parse(source)
     module = module_name(source.name)
-    result = Observation(
+    return Observation(
         # value_shapes also applies the scope rules (loop accumulation, state writes) to each function it walks.
         (*declarations(tree, module), *value_shapes(tree, module)),
         tuple(dynamic_imports(tree, module)),
@@ -154,9 +151,10 @@ def observation(source: Source, cache: Cache | None) -> Observation:
         tuple(natives(tree, module)),
         references(tree),
     )
-    if cache is not None:
-        cache.write(key, result, OBSERVATION)
-    return result
+
+
+def observation(source: Source, cache: Cache | None) -> Observation:
+    return memoized(cache, "architecture", source, OBSERVATION, _observed)
 
 
 TEXT_REFERENCES: Final = (".cmd", ".ps1", ".js")

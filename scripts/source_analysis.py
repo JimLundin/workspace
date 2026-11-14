@@ -13,7 +13,7 @@ import importlib.metadata
 import os
 import sys
 import tempfile
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -84,6 +84,18 @@ class Cache:
             if temporary is not None:
                 with contextlib.suppress(OSError):
                     temporary.unlink(missing_ok=True)
+
+
+def memoized[T](cache: Cache | None, namespace: str, source: Source, adapter: TypeAdapter[T], compute: Callable[[Source], T]) -> T:
+    """The observation compute makes of source, read from the cache when saved there and saved once computed."""
+    if cache is None:
+        return compute(source)
+    key = cache.key(namespace, source)
+    if (saved := cache.read(key, adapter)) is not None:
+        return saved
+    result = compute(source)
+    cache.write(key, result, adapter)
+    return result
 
 
 DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})

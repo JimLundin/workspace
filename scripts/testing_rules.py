@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from pydantic import TypeAdapter
 
 from scripts.policy import Finding
-from scripts.source_analysis import DYNAMIC_IMPORTS, Cache, Source, call_name, import_aliases, module_name, parse
+from scripts.source_analysis import DYNAMIC_IMPORTS, Cache, Source, call_name, import_aliases, memoized, module_name, parse
 
 FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 FORBIDDEN_TEST_TOOLS = frozenset({"unittest.mock", "mock", "pytest_mock", "mockito", "pytest.MonkeyPatch"})
@@ -59,10 +59,4 @@ def testing_dependencies(source: Source) -> Iterator[Finding]:
 
 
 def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Finding, ...]:
-    key = cache.key("testing-dependencies", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, FINDINGS)) is not None:
-        return saved
-    result = tuple(testing_dependencies(source))
-    if cache is not None:
-        cache.write(key, result, FINDINGS)
-    return result
+    return memoized(cache, "testing-dependencies", source, FINDINGS, lambda source: tuple(testing_dependencies(source)))

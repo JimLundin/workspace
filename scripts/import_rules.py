@@ -9,7 +9,7 @@ from typing import Final
 from pydantic import TypeAdapter
 
 from scripts.policy import Finding, Text, within, within_any
-from scripts.source_analysis import DYNAMIC_IMPORTS, Cache, Source, call_name, import_aliases, imports, module_name, parse
+from scripts.source_analysis import DYNAMIC_IMPORTS, Cache, Source, call_name, import_aliases, imports, memoized, module_name, parse
 
 DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
 
@@ -33,14 +33,7 @@ class Placed:
 
 
 def dependencies(name: str, text: str, *, cache: Cache | None = None) -> frozenset[str]:
-    source = Source(name, text)
-    key = cache.key("dependencies", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, DEPENDENCIES)) is not None:
-        return saved
-    result = imports(name, parse(source))
-    if cache is not None:
-        cache.write(key, result, DEPENDENCIES)
-    return result
+    return memoized(cache, "dependencies", Source(name, text), DEPENDENCIES, lambda source: imports(source.name, parse(source)))
 
 
 def _composes(module: str, entries: Sequence[str]) -> bool:
