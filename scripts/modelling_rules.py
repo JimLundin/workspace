@@ -1,4 +1,9 @@
-"""Modelling rules: enum translations as tables, named types for numeric tuples, scripts in .js files."""
+"""Modelling rules: enum translations as tables, named types for numeric tuples, scripts in .js files.
+
+The same walk also applies the function-scope rules of `scope_rules`
+(`loop-accumulation`, `piecemeal-state`, `mirrored-state`) to each function it
+enters, so `value_shapes` reports those findings too, in source order with its own.
+"""
 
 import ast
 import re
@@ -77,13 +82,13 @@ def _translation(cases: Iterable[ast.match_case], function: ast.FunctionDef | as
 def value_shapes(
     tree: ast.AST, module: str, declaration: str = "", function: ast.FunctionDef | ast.AsyncFunctionDef | None = None
 ) -> Iterator[Finding]:
-    """One pass for the modelling rules.
+    """One pass for the modelling rules and, on each function, the scope rules.
 
     A `match` that only maps enum members to constants belongs in an `every_member`
     table; a fixed `tuple` of only ints and floats is a point, size or span that
-    needs its own type; a function doesn't fill a local container in a loop. A
-    function's assigned names are collected only for a `match` whose patterns all
-    name members, the rare case that needs them.
+    needs its own type; a page script belongs in a .js file. Each function is
+    handed to `scope_rules.loop_accumulations` and `scope_rules.state_writes`
+    before its body is walked.
     """
     for child in ast.iter_child_nodes(tree):
         match child:

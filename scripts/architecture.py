@@ -144,6 +144,7 @@ def observation(source: Source, cache: Cache | None) -> Observation:
     tree = parse(source)
     module = module_name(source.name)
     result = Observation(
+        # value_shapes also applies the scope rules (loop accumulation, state writes) to each function it walks.
         (*declarations(tree, module), *value_shapes(tree, module)),
         tuple(dynamic_imports(tree, module)),
         tuple(records(tree, module)),
