@@ -46,7 +46,7 @@ def _declarations_only(tree: ast.Module) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class Shared:
+class ConstantIndex:
     """What the reviewed modules share: their names, the constants each declares, and which are data modules."""
 
     modules: frozenset[str]
@@ -64,21 +64,21 @@ def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterato
     behaviour owns its constants, so it shares them as an enum, a function or a
     type's property instead."""
     trees = {module_name(source.name): ast.parse(source.text) for source in sources}
-    shared = Shared(
+    index = ConstantIndex(
         frozenset(trees),
         frozendict({module: _constants(tree) for module, tree in trees.items()}),
         frozenset(module for module, tree in trees.items() if _declarations_only(tree)),
     )
     for module, tree in sorted(trees.items()):
         if within_any(module, scope):
-            yield from _constant_reads(module, tree, shared)
+            yield from _constant_reads(module, tree, index)
 
 
 def _imported_name(node: ast.Import | ast.ImportFrom, alias: ast.alias) -> str:
     return alias.name if isinstance(node, ast.Import) else f"{node.module}.{alias.name}"
 
 
-def _constant_imports(module: str, imported: Iterable[ast.Import | ast.ImportFrom], shared: Shared) -> Iterator[Finding]:
+def _constant_imports(module: str, imported: Iterable[ast.Import | ast.ImportFrom], index: ConstantIndex) -> Iterator[Finding]:
     """`from x import NAME` of another module's constant, which reads as this module's own."""
     for node in imported:
         match node:
@@ -93,36 +93,36 @@ def _constant_imports(module: str, imported: Iterable[ast.Import | ast.ImportFro
                         f"Import the module and read {base.rsplit('.', 1)[-1]}.{alias.name}: a bare name is this module's own.",
                     )
                     for alias in names
-                    if alias.name in shared.declared(base)
+                    if alias.name in index.declared(base)
                 )
             case _:
                 pass
 
 
-def _shared_constant(read: ast.Attribute, bound: Mapping[str, str], shared: Shared) -> str | None:
+def _shared_constant(read: ast.Attribute, bound: Mapping[str, str], index: ConstantIndex) -> str | None:
     """The constant `module.NAME` reads out of a module with behaviour, if it reads one."""
     match read.value:
-        case ast.Name(id=name) if (source := bound.get(name)) is not None and source not in shared.data:
-            return f"{source}.{read.attr}" if read.attr in shared.declared(source) else None
+        case ast.Name(id=name) if (source := bound.get(name)) is not None and source not in index.data:
+            return f"{source}.{read.attr}" if read.attr in index.declared(source) else None
         case _:
             return None
 
 
-def _constant_reads(module: str, tree: ast.Module, shared: Shared) -> Iterator[Finding]:
+def _constant_reads(module: str, tree: ast.Module, index: ConstantIndex) -> Iterator[Finding]:
     imported = tuple(node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom))
-    yield from _constant_imports(module, imported, shared)
+    yield from _constant_imports(module, imported, index)
     bound = frozendict(
         (alias.asname or alias.name, name)
         for node in imported
         for alias in node.names
-        if (name := _imported_name(node, alias)) in shared.modules or isinstance(node, ast.Import)
+        if (name := _imported_name(node, alias)) in index.modules or isinstance(node, ast.Import)
     )
     detail = "Only a declarations-only module shares constants: move it to one, or share it as an enum, a function or a property."
     reads = (node for node in ast.walk(tree) if isinstance(node, ast.Attribute))
     yield from (
         Finding("shared-constant", module, "", constant, read.lineno, detail)
         for read in reads
-        if (constant := _shared_constant(read, bound, shared)) is not None
+        if (constant := _shared_constant(read, bound, index)) is not None
     )
 
 
