@@ -3,7 +3,9 @@
 import json
 from pathlib import Path
 
-from scripts.architecture import Finding, Report, dependencies, python_sources, review
+from scripts.architecture import Report, python_sources, review
+from scripts.import_rules import dependencies
+from scripts.policy import Finding
 
 
 def others(report: Report) -> tuple[Finding, ...]:

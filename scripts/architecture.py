@@ -6,74 +6,43 @@ may supply Git-listed names to bind the review to their checked source snapshot.
 Parsing uses private mutable ASTs. Traversals are generators over immutable
 breadth-first levels: each level is one tuple and the visited set grows by one
 union per level, not per module, so the walks stay linear in the graph. Only
-immutable policy reports leave this owner.
+immutable policy reports leave this owner. The rules live in the `*_rules`
+modules beside this one; this module reads the tree, observes each module once
+and judges the findings against the declared exceptions.
 """
 
 import ast
-import copy
-import hashlib
 import os
 import re
-import sys
 import tomllib
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
-from functools import reduce
-from itertools import pairwise
 from pathlib import Path
-from typing import Annotated, Final, Literal, override
+from typing import Final, Literal
 
-from pydantic import StrictStr, StringConstraints, TypeAdapter
+from pydantic import TypeAdapter
 
-from scripts.source_analysis import Cache, Source, call_name, import_aliases, imports, module_name, parse
-
-type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
-
-REFLECTION = frozenset({"getattr", "hasattr", "setattr", "delattr"})
-REFLECTION_CALLS = REFLECTION | {"builtins." + name for name in REFLECTION}
-DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})
-MUTABLE_TYPES = frozenset(
-    {
-        "list",
-        "dict",
-        "set",
-        "bytearray",
-        "collections.deque",
-        "typing.List",
-        "typing.Dict",
-        "typing.Set",
-        "typing.MutableMapping",
-        "typing.MutableSequence",
-        "typing.MutableSet",
-        "collections.abc.MutableMapping",
-        "collections.abc.MutableSequence",
-        "collections.abc.MutableSet",
-        "collections.defaultdict",
-        "collections.Counter",
-        "collections.OrderedDict",
-        "typing.DefaultDict",
-        "typing.Deque",
-        "typing.Counter",
-        "typing.OrderedDict",
-    }
+from scripts.constant_rules import enum_shapes, shared_constants
+from scripts.declaration_rules import declarations
+from scripts.import_rules import Layer, contract_isolation, dependencies, dynamic_imports, entry_data, keyboard_isolation, layering
+from scripts.modelling_rules import value_shapes
+from scripts.policy import Finding, Text
+from scripts.record_rules import Candidate, assigned, records
+from scripts.source_analysis import Cache, Source, module_name, parse
+from scripts.testing_rules import cached_testing_dependencies
+from scripts.usage_rules import (
+    Definition,
+    Shape,
+    cached_references,
+    definitions,
+    duplicates,
+    natives,
+    redeclarations,
+    references,
+    shapes,
+    unused_definitions,
 )
-OVERRIDES: Final = frozenset({"typing.override", "typing_extensions.override"})
-"""Decorators marking a method whose signature its base class dictates."""
-
-
-@dataclass(frozen=True, slots=True)
-class Finding:
-    rule: str
-    module: str
-    declaration: str
-    expression: str
-    line: int
-    detail: str
-
-    def describe(self) -> str:
-        location = self.module + ("." + self.declaration if self.declaration else "")
-        return f"{self.rule}: {location}:{self.line}: {self.detail}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,16 +65,6 @@ class Report:
 
 
 @dataclass(frozen=True, slots=True)
-class Layer:
-    """One big module: its packages and, if it keeps insides, the modules others may import from it."""
-
-    name: Text
-    packages: tuple[Text, ...]
-    api: tuple[Text, ...] = ()
-    """The modules (or packages) others may import; empty: all of it."""
-
-
-@dataclass(frozen=True, slots=True)
 class Configuration:
     """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
 
@@ -118,31 +77,6 @@ class Configuration:
     """Modules besides each program's `__main__` that may import `data`."""
     layers: tuple[Layer, ...] = ()
     """The big modules, bottom first: each imports only those below it, and only their APIs."""
-
-
-@dataclass(frozen=True, slots=True)
-class Candidate:
-    """A plain class whose `__init__` only stores its inputs, and the attributes it stores."""
-
-    finding: Finding
-    attributes: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class Definition:
-    """A named definition, unused until a reference outside its own body names it."""
-
-    finding: Finding
-    own: int
-    """How often the definition names itself, as a recursive function or a class's own annotations do."""
-
-
-@dataclass(frozen=True, slots=True)
-class Shape:
-    """A function's structure with its names, attributes and constants erased, which a copy shares."""
-
-    finding: Finding
-    digest: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,9 +96,6 @@ class Observation:
 
 CONFIGURATION = TypeAdapter[Configuration](Configuration)
 OBSERVATION = TypeAdapter[Observation](Observation)
-DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
-REFERENCES = TypeAdapter[frozenset[str]](frozenset[str])
-FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 
 
 def _walked(root: Path) -> Iterator[str]:
@@ -190,17 +121,6 @@ def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str,
     )
 
 
-def dependencies(name: str, text: str, *, cache: Cache | None = None) -> frozenset[str]:
-    source = Source(name, text)
-    key = cache.key("dependencies", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, DEPENDENCIES)) is not None:
-        return saved
-    result = imports(name, parse(source))
-    if cache is not None:
-        cache.write(key, result, DEPENDENCIES)
-    return result
-
-
 def _configuration(root: Path) -> Configuration:
     match tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")):
         case {"tool": {"workspace": {"architecture": object() as value}}}:
@@ -217,768 +137,15 @@ def _configuration(root: Path) -> Configuration:
     return replace(configuration, exceptions=exceptions)
 
 
-CONSTANT: Final = re.compile(r"[A-Z][A-Z0-9_]*")
-"""A module-level constant's name; a leading underscore keeps one private."""
-
-
-def _sentinel(statement: ast.stmt) -> bool:
-    """`NAME = sentinel("NAME")`: a marker that is its own type, shared as freely as a class."""
-    match statement:
-        case ast.Assign(value=ast.Call(func=ast.Name(id="sentinel"))) | ast.AnnAssign(value=ast.Call(func=ast.Name(id="sentinel"))):
-            return True
-        case _:
-            return False
-
-
-def _constants(tree: ast.Module) -> frozenset[str]:
-    """The constants a module declares at its top level; a sentinel is a type, not a constant."""
-    targets = (
-        target
-        for statement in tree.body
-        if isinstance(statement, ast.Assign | ast.AnnAssign) and not _sentinel(statement)
-        for target in _targets(statement)
-    )
-    names = (name for target in targets for name in (target.elts if isinstance(target, ast.Tuple) else (target,)) if isinstance(name, ast.Name))
-    return frozenset(name.id for name in names if CONSTANT.fullmatch(name.id))
-
-
-def _declarations_only(tree: ast.Module) -> bool:
-    """A data module: a docstring, imports and declarations, nothing that runs or defines behaviour."""
-    for statement in tree.body:
-        match statement:
-            case ast.Import() | ast.ImportFrom() | ast.Assign() | ast.AnnAssign() | ast.Expr(value=ast.Constant(value=str())):
-                pass
-            case _:
-                return False
-    return True
-
-
-def entry_data(sources: Iterable[Source], data: Sequence[str], entries: Sequence[str], cache: Cache | None) -> Iterator[Finding]:
-    """Only entry points, and data modules themselves, import the data packages; everything else, tests included, is handed its values."""
-    for source in sources:
-        module = module_name(source.name)
-        if module.endswith(".__main__") or module in entries or any(_within(module, package) for package in data):
-            continue
-        reached = frozenset(
-            target for target in dependencies(source.name, source.text, cache=cache) if any(_within(target, package) for package in data)
-        )
-        # Importing a module also loads its packages; name only the module.
-        for target in sorted(target for target in reached if not any(other.startswith(target + ".") for other in reached)):
-            yield Finding("entry-data", module, "", target, 0, "Take the values as inputs: only entry points and data modules import data.")
-
-
-def _owner(module: str, layers: Sequence[Layer]) -> tuple[int, Layer] | None:
-    """The declared module a source module belongs to, with its place bottom first: the one whose package holds it most closely."""
-    held = ((len(package), place, layer) for place, layer in enumerate(layers) for package in layer.packages if _within(module, package))
-    closest = max(held, key=lambda found: found[0], default=None)
-    return None if closest is None else (closest[1], closest[2])
-
-
-def layering(sources: Iterable[Source], layers: Sequence[Layer], entries: Sequence[str], cache: Cache | None) -> Iterator[Finding]:
-    """Each module imports only modules declared below its own, and from one that declares an API, only that API.
-
-    Entry points (each `__main__`, and `entries`) compose the modules, so only they
-    reach across; tests aren't sources here."""
-    for source in sources:
-        module = module_name(source.name)
-        if module.endswith(".__main__") or module in entries or (mine := _owner(module, layers)) is None:
-            continue
-        place, layer = mine
-        reached = frozenset(dependencies(source.name, source.text, cache=cache))
-        # Importing a module also loads its packages; judge only the deepest names.
-        for target in sorted(target for target in reached if not any(other.startswith(target + ".") for other in reached)):
-            if (theirs := _owner(target, layers)) is None or theirs[1] is layer:
-                continue
-            below, other = theirs
-            if below > place:
-                yield Finding(
-                    "layer-order",
-                    module,
-                    "",
-                    target,
-                    0,
-                    f"{layer.name} sits below {other.name}: move what both need down, or declare {layer.name} higher.",
-                )
-            elif other.api and not any(_within(target, api) for api in other.api):
-                yield Finding(
-                    "module-api",
-                    module,
-                    "",
-                    target,
-                    0,
-                    f"{target} is inside {other.name}: use its API ({', '.join(other.api)}), or add the module to it.",
-                )
-
-
-def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterator[Finding]:
-    """Constants cross a module boundary only as `module.NAME`, and only out of a data module.
-
-    A bare name always means the module's own constant; another module's
-    behaviour owns its constants, so it shares them as an enum, a function or a
-    type's property instead."""
-    trees = {module_name(source.name): ast.parse(source.text) for source in sources}
-    constants = {module: _constants(tree) for module, tree in trees.items()}
-    data = frozenset(module for module, tree in trees.items() if _declarations_only(tree))
-    for module, tree in sorted(trees.items()):
-        if any(_within(module, package) for package in scope):
-            yield from _constant_reads(module, tree, trees.keys(), constants, data)
-
-
-def _constant_reads(
-    module: str, tree: ast.Module, modules: Iterable[str], constants: Mapping[str, frozenset[str]], data: frozenset[str]
-) -> Iterator[Finding]:
-    known = frozenset(modules)
-    imports = tuple(node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom))
-    for node in imports:
-        if isinstance(node, ast.ImportFrom) and node.module is not None:
-            for alias in node.names:
-                if alias.name in constants.get(node.module, frozenset()):
-                    detail = f"Import the module and read {node.module.rsplit('.', 1)[-1]}.{alias.name}: a bare name is this module's own."
-                    yield Finding("constant-import", module, "", f"{node.module}.{alias.name}", node.lineno, detail)
-    bound = frozendict(
-        (alias.asname or alias.name, alias.name if isinstance(node, ast.Import) else f"{node.module}.{alias.name}")
-        for node in imports
-        for alias in node.names
-        if isinstance(node, ast.Import) or f"{node.module}.{alias.name}" in known
-    )
-    detail = "Only a declarations-only module shares constants: move it to one, or share it as an enum, a function or a property."
-    for read in ast.walk(tree):
-        match read:
-            case ast.Attribute(value=ast.Name(id=name), attr=attribute) if (
-                (source := bound.get(name)) is not None and source not in data and attribute in constants.get(source, frozenset())
-            ):
-                yield Finding("shared-constant", module, "", f"{source}.{attribute}", read.lineno, detail)
-            case _:
-                pass
-
-
-ENUM_BASES: Final = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag"})
-
-
-def _enum_members(definition: ast.ClassDef) -> tuple[str, ...] | None:
-    """The members an enum declares, or None for a class that isn't an enum."""
-    bases = frozenset(base.id if isinstance(base, ast.Name) else base.attr for base in definition.bases if isinstance(base, ast.Name | ast.Attribute))
-    if bases.isdisjoint(ENUM_BASES):
-        return None
-    targets = (target for statement in definition.body if isinstance(statement, ast.Assign | ast.AnnAssign) for target in _targets(statement))
-    return tuple(target.id for target in targets if isinstance(target, ast.Name) and not target.id.startswith("_"))
-
-
-def _member_of(node: ast.expr | None, enums: frozenset[str]) -> bool:
-    return isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in enums
-
-
-def _keyed_by(value: ast.expr, enums: frozenset[str]) -> bool:
-    """A table literal keyed by one of the module's enums: `{E.A: ..., E.B: ...}`, `frozenset({E.A, E.B})`, or one built over `E`."""
-    match value:
-        case ast.Call(func=ast.Name(id="frozendict" | "frozenset" | "dict" | "set"), args=[inner]):
-            return _keyed_by(inner, enums)
-        case ast.Dict(keys=keys):
-            return len(keys) > 1 and all(_member_of(key, enums) for key in keys)
-        case ast.Set(elts=elements):
-            return len(elements) > 1 and all(_member_of(item, enums) for item in elements)
-        case (
-            ast.DictComp(generators=[ast.comprehension(iter=ast.Name(id=name)), *_])
-            | ast.SetComp(generators=[ast.comprehension(iter=ast.Name(id=name)), *_])
-        ):
-            return name in enums
-        case _:
-            return False
-
-
-def enum_shapes(sources: Iterable[Source]) -> Iterator[Finding]:
-    """Enums that hide another shape: one member is a sentinel, and a table beside an enum is its members' values."""
-    for source in sources:
-        module, tree = module_name(source.name), ast.parse(source.text)
-        enums: frozendict[str, tuple[str, ...]] = frozendict(
-            (node.name, members) for node in tree.body if isinstance(node, ast.ClassDef) and (members := _enum_members(node)) is not None
-        )
-        for node in tree.body:
-            match node:
-                case ast.ClassDef(name=name) if len(enums.get(name, ())) == 1:
-                    detail = 'An enum with one member is a marker: use sentinel("NAME"), or None for plain absence.'
-                    yield Finding("single-member-enum", module, name, name, node.lineno, detail)
-                case ast.Assign(value=value) | ast.AnnAssign(value=ast.expr() as value) if _keyed_by(value, frozenset(enums)):
-                    names = ", ".join(ast.unparse(target) for target in _targets(node))
-                    detail = "Put each member's value on the member (an enum whose values are records), not in a table beside the enum."
-                    yield Finding("member-table", module, names, names, node.lineno, detail)
-                case _:
-                    pass
-
-
-def _within(module: str, package: str) -> bool:
-    return module == package or module.startswith(package + ".")
-
-
-APPLICATION_LAYERS: Final = ("assistant", "desktop_ui")
-
-
-def _keyboard(module: str) -> bool:
-    """Whether the keyboard process may load module: anything outside the application layers."""
-    return not any(_within(module, layer) for layer in APPLICATION_LAYERS)
-
-
-def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward: Callable[[str], bool]) -> Iterator[tuple[str, ...]]:
-    """One shortest static import route per module, including package initializers, in breadth-first order.
-
-    A route continues past its last module only where `onward` holds. Each level keeps
-    the first route to each module it reaches, in the order the routes were found.
-    """
-    frontier: tuple[tuple[str, ...], ...] = tuple((entry,) for entry in entries)
-    visited: frozenset[str] = frozenset()
-    while frontier:
-        first = frozendict((route[-1], index) for index, route in reversed(tuple(enumerate(frontier))))
-        level: tuple[tuple[str, ...], ...] = tuple(
-            route for index, route in enumerate(frontier) if first[route[-1]] == index and route[-1] not in visited
-        )
-        yield from level
-        visited = visited.union(first)
-        frontier = tuple(
-            (*route, target) for route in level if onward(route[-1]) for target in sorted(graph.get(route[-1], frozenset())) if target not in visited
-        )
-
-
-CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm"})
-"""Beyond the standard library, pydantic, `cell` and each other, all a contract may import:
-the wire protocol and the plain-Python winapi value modules."""
-
-
-def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:
-    """Contracts are values both sides import, so none may reach an effect owner, Qt or a service."""
-    for module in sorted(name for name in imported_by if _within(name, "contracts")):
-        for target in sorted(imported_by[module]):
-            top = target.split(".")[0]
-            # The graph also names imported attributes (`protocol.Tool`), so allowed modules match as prefixes.
-            if (
-                top in sys.stdlib_module_names
-                or top in ("pydantic", "contracts", "cell")
-                or target == "winapi"
-                or any(_within(target, allowed) for allowed in CONTRACT_IMPORTS - {"winapi"})
-            ):
-                continue
-            yield Finding("contract-isolation", module, "", "", 0, f"{module} → {target}")
-
-
-def _scope_nodes(tree: ast.AST) -> Iterator[ast.AST]:
-    """The nodes of tree's own scope, depth first from its last child, skipping nested classes and functions."""
-    for node in reversed(tuple(ast.iter_child_nodes(tree))):
-        match node:
-            case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
-                pass
-            case _:
-                yield node
-                yield from _scope_nodes(node)
-
-
-def _bound_alias(local: frozendict[str, str], node: ast.AST) -> frozendict[str, str]:
-    """The aliases after node: imports bind names, and so does assigning a reflection builtin."""
-    match node:
-        case ast.Import(names=names):
-            return local | {alias.asname or alias.name.split(".")[0]: alias.name if alias.asname else alias.name.split(".")[0] for alias in names}
-        case ast.ImportFrom(module=base, level=0, names=names) if base:
-            return local | {alias.asname or alias.name: base + "." + alias.name for alias in names}
-        case ast.Assign(targets=[ast.Name(id=name)], value=value) if (resolved := call_name(value, local)) in REFLECTION_CALLS:
-            return local | {name: resolved}
-        case _:
-            return local
-
-
-def _scope_aliases(tree: ast.AST, inherited: Mapping[str, str]) -> frozendict[str, str]:
-    # Only an import statement or a reflection alias makes a new map; other nodes pass it on.
-    return reduce(_bound_alias, _scope_nodes(tree), frozendict(inherited))
-
-
-def _constant_tag(annotation: ast.expr, aliases: Mapping[str, str]) -> bool:
-    """`Literal[x]` with one value: the JSON tag of a union member, which decides nothing."""
-    match annotation:
-        case ast.Subscript(value=value, slice=ast.Constant() | ast.Attribute()):
-            return call_name(value, aliases) == "typing.Literal"
-        case _:
-            return False
-
-
-def _declarations(tree: ast.AST, module: str, declaration: str = "", aliases: Mapping[str, str] | None = None) -> Iterator[Finding]:
-    # Copy aliases once per lexical scope, not for every expression. Imports
-    # inside conditional statements still belong to their enclosing scope.
-    local = aliases or frozendict()
-    match tree:
-        case ast.Module() | ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
-            local = _scope_aliases(tree, local)
-        case _:
-            pass
-    match tree:
-        case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-            declaration = ".".join(part for part in (declaration, name) if part)
-        case _:
-            pass
-    match tree:
-        case ast.ClassDef(name=name, decorator_list=decorators, body=fields):
-            for decorator in decorators:
-                flags: dict[str | None, ast.expr] = {}
-                match decorator:
-                    case ast.Call(func=function, keywords=keywords):
-                        flags = {keyword.arg: keyword.value for keyword in keywords}
-                    case _:
-                        function = decorator
-                if call_name(function, local) != "dataclasses.dataclass":
-                    continue
-                yield from (
-                    Finding(
-                        "kind-field",
-                        module,
-                        declaration + ".kind",
-                        ast.unparse(field.annotation),
-                        field.lineno,
-                        "Give each kind its own type and tag it with one constant Literal, or name the attribute for what it is.",
-                    )
-                    for field in fields
-                    if isinstance(field, ast.AnnAssign) and isinstance(field.target, ast.Name) and field.target.id == "kind"
-                    if not _constant_tag(field.annotation, local)
-                )
-                match flags.get("frozen"), flags.get("slots"):
-                    case ast.Constant(value=True), ast.Constant(value=True):
-                        pass
-                    case _:
-                        yield Finding(
-                            "immutable-data",
-                            module,
-                            declaration,
-                            name,
-                            tree.lineno,
-                            "Data records require frozen=True and slots=True, or an exact necessary-mutation exception.",
-                        )
-                # A mutable owner has one state exception. Frozen records need
-                # a separate declaration for each concrete mutable field.
-                match flags.get("frozen"):
-                    case ast.Constant(value=True):
-                        for field in fields:
-                            match field:
-                                case ast.AnnAssign(target=ast.Name(id=field_name), annotation=annotation):
-                                    if any(call_name(node, local) in MUTABLE_TYPES for node in ast.walk(annotation)):
-                                        yield Finding(
-                                            "mutable-field",
-                                            module,
-                                            declaration + "." + field_name,
-                                            ast.unparse(annotation),
-                                            field.lineno,
-                                            "Frozen records must not contain concrete mutable collections without an exact necessity.",
-                                        )
-                                case _:
-                                    pass
-                    case _:
-                        pass
-        case ast.FunctionDef(args=arguments, decorator_list=decorators) | ast.AsyncFunctionDef(args=arguments, decorator_list=decorators) if not any(
-            call_name(decorator, local) in OVERRIDES for decorator in decorators
-        ):
-            yield from (
-                Finding(
-                    "mutable-parameter",
-                    module,
-                    declaration + "." + parameter.arg,
-                    ast.unparse(parameter.annotation),
-                    parameter.lineno,
-                    "Take an immutable type (a tuple, frozendict, frozen record, or Sequence, Mapping, Set or Iterable), "
-                    "or declare the exact signature a dependency dictates.",
-                )
-                for parameter in (
-                    *arguments.posonlyargs,
-                    *arguments.args,
-                    *arguments.kwonlyargs,
-                    *(item for item in (arguments.vararg, arguments.kwarg) if item),
-                )
-                if parameter.annotation is not None and any(call_name(node, local) in MUTABLE_TYPES for node in ast.walk(parameter.annotation))
-            )
-        case ast.Call(func=function) if call_name(function, local) in REFLECTION | {"builtins." + name for name in REFLECTION}:
-            yield Finding(
-                "explicit-attributes",
-                module,
-                declaration,
-                ast.unparse(tree),
-                tree.lineno,
-                "Use typed direct attributes, or declare an exact native/inspection exception.",
-            )
-        case _:
-            pass
-    for child in ast.iter_child_nodes(tree):
-        yield from _declarations(child, module, declaration, local)
-
-
-def _constant(value: ast.expr, bound: frozenset[str]) -> bool:
-    """A literal or a name from outside the function, or a call, tuple or attribute built only from those."""
-    match value:
-        case ast.Constant():
-            return True
-        case ast.Name(id=name):
-            return name not in bound
-        case ast.Attribute(value=base) | ast.UnaryOp(operand=base):
-            return _constant(base, bound)
-        case ast.Tuple(elts=items):
-            return all(_constant(item, bound) for item in items)
-        case ast.Call(func=function, args=arguments, keywords=keywords):
-            return _constant(function, bound) and all(_constant(item, bound) for item in (*arguments, *(keyword.value for keyword in keywords)))
-        case _:
-            return False
-
-
-def _members(pattern: ast.pattern) -> bool:
-    """A case that names only values: enum members or literals."""
-    match pattern:
-        case ast.MatchValue(value=ast.Attribute() | ast.Constant()):
-            return True
-        case ast.MatchOr(patterns=patterns):
-            return all(_members(item) for item in patterns)
-        case _:
-            return False
-
-
-def _translates(cases: Iterable[ast.match_case], bound: frozenset[str]) -> bool:
-    """Every case but a wildcard names enum members and only returns or assigns one constant."""
-
-    def constant(case: ast.match_case) -> bool:
-        match case.body:
-            case [ast.Return(value=ast.expr() as value)] | [ast.Assign(value=value)]:
-                return _constant(value, bound)
-            case _:
-                return False
-
-    named = tuple(case for case in cases if not (isinstance(case.pattern, ast.MatchAs) and case.pattern.pattern is None))
-    return len(named) >= 2 and all(_members(case.pattern) and case.guard is None and constant(case) for case in named)
-
-
-def _bound(function: ast.FunctionDef | ast.AsyncFunctionDef | None) -> frozenset[str]:
-    """The function's parameters and every name it assigns: values that vary between calls."""
-    if function is None:
-        return frozenset()
-    arguments = function.args
-    parameters = (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs, *(item for item in (arguments.vararg, arguments.kwarg) if item))
-    stored = (node.id for node in ast.walk(function) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store))
-    return frozenset((*(item.arg for item in parameters), *stored))
-
-
-def _numeric(items: Iterable[ast.expr]) -> bool:
-    return all(isinstance(item, ast.Name) and item.id in ("int", "float") for item in items)
-
-
-def value_shapes(
-    tree: ast.AST, module: str, declaration: str = "", function: ast.FunctionDef | ast.AsyncFunctionDef | None = None
-) -> Iterator[Finding]:
-    """One pass for the modelling rules.
-
-    A `match` that only maps enum members to constants belongs in an `every_member`
-    table; a fixed `tuple` of only ints and floats is a point, size or span that
-    needs its own type; a function doesn't fill a local container in a loop. A
-    function's assigned names are collected only for a `match` whose patterns all
-    name members, the rare case that needs them.
-    """
-    for child in ast.iter_child_nodes(tree):
-        match child:
-            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                inner = ".".join(part for part in (declaration, name) if part)
-                yield from loop_accumulations(child, module, inner)
-                yield from state_writes(child, module, inner)
-                yield from value_shapes(child, module, inner, child)
-                continue
-            case ast.ClassDef(name=name):
-                yield from value_shapes(child, module, ".".join(part for part in (declaration, name) if part), function)
-                continue
-            case ast.Match(subject=subject, cases=cases) if all(
-                _members(case.pattern) or (isinstance(case.pattern, ast.MatchAs) and case.pattern.pattern is None) for case in cases
-            ) and _translates(cases, _bound(function)):
-                detail = "Translate enum members or Literal values with an every_member or every_literal table, or a frozendict for a partial one."
-                yield Finding("enum-translation", module, declaration, ast.unparse(subject), child.lineno, detail)
-            case ast.Subscript(value=ast.Name(id="tuple"), slice=ast.Tuple(elts=[_, _, *_] as items)) if _numeric(items):
-                detail = "Name the values with a frozen domain type and its bounds, such as winapi.shapes.Point or Size."
-                yield Finding("bare-tuple", module, declaration, ast.unparse(child), child.lineno, detail)
-            case ast.Constant(value=str() as text) if _script(text):
-                detail = "Put a page script in a .js file beside the module that runs it, and pass values as its arguments."
-                yield Finding("inline-script", module, declaration, text.strip().partition("\n")[0], child.lineno, detail)
-            case _:
-                pass
-        yield from value_shapes(child, module, declaration, function)
-
-
-_SCRIPT_MARKS: Final = re.compile(r"=>|\bfunction\s*\w*\(|\bdocument\.[a-z]|querySelector")
-
-
-def _script(text: str) -> bool:
-    """A string that reads as JavaScript: script syntax or DOM calls, over at least two lines that end as code does."""
-    return _SCRIPT_MARKS.search(text) is not None and sum(1 for line in text.splitlines() if line.rstrip().endswith((";", "{", "}"))) >= 2
-
-
-CONTAINERS: Final = frozenset({"list", "dict", "set", "bytearray", "deque", "defaultdict", "Counter", "OrderedDict"})
-"""Constructors of the mutable containers a function might fill in a loop."""
-FILLING: Final = frozenset({"append", "extend", "add", "update", "insert", "setdefault", "appendleft", "extendleft"})
-"""Methods that grow a container in place."""
-
-
-SCOPES: Final = (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-
-
-def _scope_levels(function: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[ast.AST]:
-    """A function's own nodes, one breadth-first level at a time, never entering a nested scope."""
-    frontier = tuple(node for node in ast.iter_child_nodes(function) if not isinstance(node, SCOPES))
-    while frontier:
-        yield from frontier
-        frontier = tuple(child for node in frontier for child in ast.iter_child_nodes(node) if not isinstance(child, SCOPES))
-
-
-def _own_nodes(function: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[ast.AST, ...]:
-    """The nodes of a function's own scope; nested functions and classes are checked as their own scopes."""
-    return tuple(_scope_levels(function))
-
-
-def _creates_container(value: ast.expr) -> bool:
-    match value:
-        case ast.List() | ast.Dict() | ast.Set() | ast.ListComp() | ast.DictComp() | ast.SetComp():
-            return True
-        case ast.Call(func=ast.Name(id=name) | ast.Attribute(attr=name)):
-            return name in CONTAINERS
-        case _:
-            return False
-
-
-def _filled(node: ast.AST) -> str | None:
-    """The local name a statement or call grows in place, if it grows one."""
-    match node:
-        case ast.Call(func=ast.Attribute(value=ast.Name(id=name), attr=method)) if method in FILLING:
-            return name
-        case ast.Assign(targets=[ast.Subscript(value=ast.Name(id=name)), *_]) | ast.AugAssign(target=ast.Subscript(value=ast.Name(id=name))):
-            return name
-        case ast.AugAssign(target=ast.Name(id=name), value=ast.List() | ast.ListComp() | ast.Tuple()):
-            return name
-        case _:
-            return None
-
-
-def _fills(loop: ast.AST, own: frozenset[int]) -> Iterator[str]:
-    """The names a loop grows in place within its own function."""
-    return (name for node in ast.walk(loop) if id(node) in own and (name := _filled(node)) is not None)
-
-
-def loop_accumulations(function: ast.FunctionDef | ast.AsyncFunctionDef, module: str, declaration: str) -> Iterator[Finding]:
-    """A local container created in the function and filled inside one of its loops."""
-    nodes = _own_nodes(function)
-    grown = frozenset(name for node in nodes if (name := _filled(node)) is not None)
-    if not grown:
-        return
-    created = grown & frozenset(
-        target.id
-        for node in nodes
-        if isinstance(node, ast.Assign | ast.AnnAssign) and node.value is not None and _creates_container(node.value)
-        for target in (node.targets if isinstance(node, ast.Assign) else (node.target,))
-        if isinstance(target, ast.Name)
-    )
-    if not created:
-        return
-    own = frozenset(map(id, nodes))
-    filled = frozendict(
-        (name, loop.lineno)
-        for loop in reversed(tuple(node for node in nodes if isinstance(node, ast.For | ast.AsyncFor | ast.While)))
-        for name in _fills(loop, own)
-        if name in created
-    )
-    detail = "Build the collection with a comprehension, generator or generator function; a loop is for a side effect."
-    yield from (Finding("loop-accumulation", module, declaration, name, line, detail) for name, line in sorted(filled.items(), key=_finding_line))
-
-
-STATE_WRITES: Final = frozenset({"set", "update"})
-"""A `Cell`'s two ways to replace its value."""
-
-
-def _written(statement: ast.stmt) -> str | None:
-    """The state a statement replaces, written as its owner reaches it (`self._state`), if it replaces one."""
-    match statement:
-        case ast.Expr(value=ast.Call(func=ast.Attribute(value=ast.Attribute() as cell, attr=method))) if method in STATE_WRITES:
-            return ast.unparse(cell)
-        case _:
-            return None
-
-
-def _blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
-    """The statement sequences a node holds, each run in order: a branch never continues another."""
-    match node:
-        case ast.FunctionDef(body=body) | ast.AsyncFunctionDef(body=body) | ast.With(body=body) | ast.AsyncWith(body=body):
-            yield body
-        case ast.ExceptHandler(body=body) | ast.match_case(body=body):
-            yield body
-        case (
-            ast.If(body=body, orelse=orelse)
-            | ast.For(body=body, orelse=orelse)
-            | ast.AsyncFor(body=body, orelse=orelse)
-            | ast.While(body=body, orelse=orelse)
-        ):
-            yield body
-            yield orelse
-        case ast.Try(body=body, orelse=orelse, finalbody=finalbody) | ast.TryStar(body=body, orelse=orelse, finalbody=finalbody):
-            yield body
-            yield orelse
-            yield finalbody
-        case _:
-            pass
-
-
-def _field_read(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """A property whose whole body returns one field of a held value: `return self._state.get().field`."""
-    body = [statement for statement in function.body if not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))]
-    match body:
-        case [ast.Return(value=ast.Attribute(value=ast.Call(func=ast.Attribute(value=ast.Attribute(), attr="get"), args=[])))]:
-            return True
-        case _:
-            return False
-
-
-def state_writes(function: ast.FunctionDef | ast.AsyncFunctionDef, module: str, declaration: str) -> Iterator[Finding]:
-    """State written one field at a time: a mutable object behind a frozen record.
-
-    Two writes in a row to the same state belong in one `replace`; a private property
-    that returns one field of the state is an old attribute kept alive, so read the
-    record once instead."""
-    detail = "Change several fields in one replace(...), reading the state once; a frozen record is not a set of attributes."
-    for statements in (block for node in (function, *_own_nodes(function)) for block in _blocks(node)):
-        for first, second in pairwise(statements):
-            if (written := _written(second)) is not None and written == _written(first):
-                yield Finding("piecemeal-state", module, declaration, written, second.lineno, detail)
-    decorated = any(isinstance(decorator, ast.Name) and decorator.id == "property" for decorator in function.decorator_list)
-    if decorated and function.name.startswith("_") and _field_read(function):
-        detail = "Read the state once (state = self._state.get()) where it is needed, rather than through a private property per field."
-        yield Finding("mirrored-state", module, declaration, function.name, function.lineno, detail)
-
-
-def _finding_line(entry: tuple[str, int]) -> int:
-    _, line = entry
-    return line
-
-
-def _self_attributes(target: ast.expr) -> Iterator[str]:
-    """The `self` attributes an assignment target binds or deletes, at any depth."""
-    return (
-        node.attr
-        for node in ast.walk(target)
-        if isinstance(node, ast.Attribute)
-        and isinstance(node.ctx, ast.Store | ast.Del)
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "self"
-    )
-
-
-def _targets(node: ast.AST) -> tuple[ast.expr, ...]:
-    match node:
-        case ast.Assign(targets=targets) | ast.Delete(targets=targets):
-            return tuple(targets)
-        case ast.AugAssign(target=target) | ast.AnnAssign(target=target):
-            return (target,)
-        case _:
-            return ()
-
-
-COMPUTED: Final = (
-    ast.Call,
-    ast.Await,
-    ast.Lambda,
-    ast.NamedExpr,
-    ast.List,
-    ast.Dict,
-    ast.Set,
-    ast.ListComp,
-    ast.DictComp,
-    ast.SetComp,
-    ast.GeneratorExp,
-)
-"""Expressions that build something new: an `__init__` holding one makes or owns state, not just inputs."""
-
-
-def _stored(statement: ast.stmt) -> frozenset[str] | None:
-    """The attributes a statement stores from its inputs, or None if it does anything else."""
-    match statement:
-        case ast.Expr(value=ast.Constant(value=str())):
-            return frozenset()
-        case ast.Assign(targets=[target], value=value) | ast.AnnAssign(target=target, value=ast.expr() as value):
-            pass
-        case _:
-            return None
-    names = target.elts if isinstance(target, ast.Tuple) else (target,)
-    stored = tuple(name.attr for name in names if isinstance(name, ast.Attribute) and isinstance(name.value, ast.Name) and name.value.id == "self")
-    built = any(isinstance(node, COMPUTED) or (isinstance(node, ast.Name) and node.id == "self") for node in ast.walk(value))
-    return frozenset(stored) if len(stored) == len(names) and not built else None
-
-
-def _record(node: ast.ClassDef) -> frozenset[str] | None:
-    """The attributes of a class that could be a frozen dataclass: no base or decorator,
-    an `__init__` that only stores its inputs, and no other method rebinding an attribute."""
-    if node.bases or node.keywords or node.decorator_list:
-        return None
-    methods = tuple(item for item in node.body if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef))
-    init = next((method for method in methods if method.name == "__init__"), None)
-    if init is None or any(
-        next(_self_attributes(target), None) is not None
-        for method in methods
-        if method is not init
-        for child in ast.walk(method)
-        for target in _targets(child)
-    ):
-        return None
-    stored = tuple(_stored(statement) for statement in init.body)
-    return frozenset[str]().union(*(item for item in stored if item is not None)) if all(item is not None for item in stored) else None
-
-
-def records(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Candidate]:
-    """Plain classes that only hold their inputs, which a frozen, slotted dataclass would model."""
-    for child in ast.iter_child_nodes(tree):
-        match child:
-            case ast.ClassDef(name=name):
-                inner = ".".join(part for part in (declaration, name) if part)
-                if (attributes := _record(child)) is not None:
-                    detail = "A class that only holds its inputs is a frozen, slotted dataclass, unless a protocol needs writable attributes."
-                    yield Candidate(Finding("plain-record", module, inner, name, child.lineno, detail), attributes)
-                yield from records(child, module, inner)
-            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                yield from records(child, module, ".".join(part for part in (declaration, name) if part))
-            case _:
-                yield from records(child, module, declaration)
-
-
-def assigned(tree: ast.AST) -> frozenset[str]:
-    """Attribute names assigned or deleted through any receiver but `self`: writes from outside an owner."""
-    return frozenset(
-        node.attr
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute)
-        and isinstance(node.ctx, ast.Store | ast.Del)
-        and not (isinstance(node.value, ast.Name) and node.value.id == "self")
-    )
-
-
-def _static_import(call: ast.Call) -> bool:
-    """A dynamic import of a literal absolute module name, which the keyboard graph can follow."""
-    match call.args:
-        case [ast.Constant(value=str() as target), *_]:
-            return not target.startswith(".") and not any(keyword.arg == "level" for keyword in call.keywords)
-        case _:
-            return False
-
-
 def observation(source: Source, cache: Cache | None) -> Observation:
     key = cache.key("architecture", source) if cache is not None else ""
     if cache is not None and (saved := cache.read(key, OBSERVATION)):
         return saved
     tree = parse(source)
     module = module_name(source.name)
-    aliases = import_aliases(tree)
-    dynamic = tuple(
-        Finding(
-            "keyboard-import",
-            module,
-            "",
-            ast.unparse(node),
-            node.lineno,
-            "Keyboard dependencies require statically resolvable absolute import targets.",
-        )
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and call_name(node.func, aliases) in DYNAMIC_IMPORTS and not _static_import(node)
-    )
     result = Observation(
-        (*_declarations(tree, module), *value_shapes(tree, module)),
-        dynamic,
+        (*declarations(tree, module), *value_shapes(tree, module)),
+        tuple(dynamic_imports(tree, module)),
         tuple(records(tree, module)),
         assigned(tree),
         tuple(definitions(tree.body, module)),
@@ -991,278 +158,86 @@ def observation(source: Source, cache: Cache | None) -> Observation:
     return result
 
 
-UNUSED: Final = "Delete it: no production code refers to it."
-TESTS_ONLY: Final = "Only tests refer to it. Delete it with the tests that serve it, or move a test tool into tests/."
 TEXT_REFERENCES: Final = (".cmd", ".ps1", ".js")
 """Tracked text that can name a Python definition: launch scripts and page scripts."""
-_ANNOTATION: Final = re.compile(r"[\w.\[\]]+(?:(?:, | \| )[\w.\[\]]+)*")
-"""A string that could be a forward reference or a dotted name, as opposed to prose."""
 
 
-def _overrides(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """A method whose caller is the base class it overrides, such as Qt or the SDK."""
-    return any(
-        isinstance(decorator, ast.Name | ast.Attribute) and ast.unparse(decorator).endswith("override") for decorator in function.decorator_list
+@dataclass(frozen=True, slots=True)
+class Tree:
+    """The reviewed checkout: its root, every name listed in it, and every Python source read from it."""
+
+    root: Path
+    listed: tuple[str, ...]
+    sources: tuple[Source, ...]
+
+    def production(self) -> tuple[Source, ...]:
+        return tuple(source for source in self.sources if not source.name.startswith("tests/"))
+
+    def tested(self, cache: Cache | None) -> frozenset[str]:
+        """Every name the tests refer to."""
+        return frozenset[str]().union(*(cached_references(source, cache) for source in self.sources if source.name.startswith("tests/")))
+
+    def text_words(self) -> Counter[str]:
+        """The words in tracked launch and page scripts, which can name a Python definition."""
+        texts = (name for name in self.listed if name.endswith(TEXT_REFERENCES) and not name.startswith("tests/") and (self.root / name).is_file())
+        return Counter(word for name in texts for word in re.findall(r"[A-Za-z_]\w*", (self.root / name).read_text(encoding="utf-8")))
+
+
+def _module_findings(observed: tuple[Observation, ...], tree: Tree, cache: Cache | None) -> Iterator[Finding]:
+    """What each module shows on its own: its declarations, its plain records and its patches and mocks."""
+    # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
+    written = frozenset[str]().union(*(item.assigned for item in observed))
+    yield from (finding for item in observed for finding in item.declarations)
+    yield from (record.finding for item in observed for record in item.records if record.attributes.isdisjoint(written))
+    yield from (finding for source in tree.sources for finding in cached_testing_dependencies(source, cache))
+
+
+def _usage_findings(observed: tuple[Observation, ...], tree: Tree, cache: Cache | None) -> Iterator[Finding]:
+    """What only every module together shows: unused definitions, copied functions and Win32 functions declared twice."""
+    production = sum((Counter(item.referenced) for item in observed), tree.text_words())
+    yield from unused_definitions((definition for item in observed for definition in item.definitions), production, tree.tested(cache))
+    yield from duplicates(shape for item in observed for shape in item.shapes)
+    yield from redeclarations(finding for item in observed for finding in item.natives)
+
+
+def _findings(tree: Tree, configuration: Configuration, cache: Cache | None) -> Iterator[Finding]:
+    loaded = tree.production()
+    observations = frozendict({module_name(source.name): observation(source, cache) for source in loaded})
+    imported_by = frozendict({module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded})
+    graph = frozendict({module: imported & frozenset(observations) for module, imported in imported_by.items()})
+    observed = tuple(observations.values())
+    yield from _module_findings(observed, tree, cache)
+    yield from keyboard_isolation(graph, frozendict({module: item.dynamic_imports for module, item in observations.items()}))
+    yield from contract_isolation(imported_by)
+    yield from _usage_findings(observed, tree, cache)
+    yield from shared_constants(loaded, configuration.constants)
+    yield from entry_data(tree.sources, configuration.data, configuration.entries, cache)
+    yield from layering(loaded, configuration.layers, configuration.entries, cache)
+    yield from enum_shapes(loaded)
+
+
+def _judged(sources: tuple[str, ...], findings: tuple[Finding, ...], exceptions: tuple[ExceptionSpec, ...]) -> Report:
+    """The findings no exception accepts, and each exception that accepts none: its expression no longer exists."""
+    accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
+    stale = (
+        Finding(
+            "stale-exception",
+            exception.module,
+            exception.declaration,
+            exception.expression,
+            0,
+            "Remove the exception: its exact expression no longer exists.",
+        )
+        for exception in exceptions
+        if exception not in accepted
     )
-
-
-def _defined(module: str, owner: str, name: str, node: ast.stmt) -> Iterator[Definition]:
-    if not (name.startswith("__") and name.endswith("__")):
-        own = sum(1 for reference in _referenced(node) if reference == name)
-        yield Definition(Finding("unused-definition", module, ".".join(part for part in (owner, name) if part), name, node.lineno, UNUSED), own)
-
-
-def definitions(body: Iterable[ast.stmt], module: str, owner: str = "") -> Iterator[Definition]:
-    """Named definitions in a module and its classes: functions, classes, and module-level values and type aliases."""
-    for node in body:
-        match node:
-            case ast.ClassDef(name=name, body=inner):
-                yield from _defined(module, owner, name, node)
-                yield from definitions(inner, module, ".".join(part for part in (owner, name) if part))
-            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) if not _overrides(node):
-                yield from _defined(module, owner, name, node)
-            case ast.TypeAlias(name=ast.Name(id=name)) if not owner:
-                yield from _defined(module, owner, name, node)
-            case ast.Assign() | ast.AnnAssign() if not owner:
-                for target in _targets(node):
-                    if isinstance(target, ast.Name):
-                        yield from _defined(module, owner, target.id, node)
-            case ast.If(body=inner, orelse=other) | ast.Try(body=inner, orelse=other):
-                yield from definitions((*inner, *other), module, owner)
-            case _:
-                pass
-
-
-def references(tree: ast.AST) -> frozendict[str, int]:
-    """How often a module names each name: loads, attributes, imports, keywords, match attributes and annotation strings."""
-    return frozendict(Counter(_referenced(tree)))
-
-
-def _referenced(tree: ast.AST) -> Iterator[str]:
-    for node in ast.walk(tree):
-        match node:
-            case ast.Name(id=name, ctx=ast.Load() | ast.Del()) | ast.Attribute(attr=name, ctx=ast.Load()) | ast.keyword(arg=str() as name):
-                yield name
-            case ast.alias(name=name):
-                yield from name.split(".")
-            case ast.MatchClass(kwd_attrs=names):
-                yield from names
-            case ast.Constant(value=str() as text) if _ANNOTATION.fullmatch(text):
-                yield from re.findall(r"\w+", text)
-            case _:
-                pass
-
-
-SHAPE_NODES: Final = 40
-"""The smallest function body, in syntax nodes, whose copy the review reports; below it, shapes recur by chance."""
-
-
-class _Erased(ast.NodeTransformer):
-    """Erase what a copy renames: identifiers, attributes, arguments, annotations and constant values."""
-
-    @override
-    def visit_Name(self, node: ast.Name) -> ast.Name:
-        return ast.Name(id="_", ctx=node.ctx)
-
-    @override
-    def visit_Attribute(self, node: ast.Attribute) -> ast.Attribute:
-        return ast.Attribute(value=self.visit(node.value), attr="_", ctx=node.ctx)
-
-    @override
-    def visit_arg(self, node: ast.arg) -> ast.arg:
-        return ast.arg(arg="_")
-
-    @override
-    def visit_Constant(self, node: ast.Constant) -> ast.Constant:
-        return ast.Constant(value=type(node.value).__name__)
-
-
-def _digest(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    body = ast.Module(body=[_Erased().visit(copy.deepcopy(statement)) for statement in function.body], type_ignores=[])
-    return hashlib.sha256((type(function).__name__ + ast.dump(_Erased().visit(copy.deepcopy(function.args))) + ast.dump(body)).encode()).hexdigest()
-
-
-def shapes(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Shape]:
-    """Every function of at least SHAPE_NODES nodes, with its erased structure."""
-    for child in ast.iter_child_nodes(tree):
-        match child:
-            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                inner = ".".join(part for part in (declaration, name) if part)
-                if sum(1 for statement in child.body for _ in ast.walk(statement)) >= SHAPE_NODES:
-                    detail = "Same structure as another function; keep one and give it the parameters the copies differ by."
-                    yield Shape(Finding("duplicate-code", module, inner, name, child.lineno, detail), _digest(child))
-                yield from shapes(child, module, inner)
-            case ast.ClassDef(name=name):
-                yield from shapes(child, module, ".".join(part for part in (declaration, name) if part))
-            case _:
-                yield from shapes(child, module, declaration)
-
-
-def duplicates(observations: Iterable[Observation]) -> Iterator[Finding]:
-    """Each function whose erased structure another function shares, naming the first of its copies."""
-    found = tuple(shape for observed in observations for shape in observed.shapes)
-    copies = Counter(shape.digest for shape in found)
-    first = {shape.digest: shape.finding for shape in reversed(found)}
-    for shape in found:
-        if copies[shape.digest] > 1 and (original := first[shape.digest]) != shape.finding:
-            yield replace(shape.finding, detail=f"{shape.finding.detail} First copy: {original.module}.{original.declaration}.")
-
-
-DECLARES: Final = frozenset({"fn"})
-"""winapi._core's foreign-function declarations: `fn(user32, "GetForegroundWindow", HWND)`."""
-
-
-def natives(tree: ast.AST, module: str) -> Iterator[Finding]:
-    for node in ast.walk(tree):
-        match node:
-            case ast.Call(func=ast.Name(id=name), args=[_, ast.Constant(value=str() as export), *_]) if name in DECLARES:
-                detail = "Declare a Win32 function once, in winapi._core when more than one module calls it."
-                yield Finding("native-redeclaration", module, export, export, node.lineno, detail)
-            case _:
-                pass
-
-
-def redeclarations(observations: Iterable[Observation]) -> Iterator[Finding]:
-    """Each declaration of an export that another module declares as well."""
-    declared = tuple(finding for observed in observations for finding in observed.natives)
-    modules = Counter(export for export, _ in frozenset((finding.expression, finding.module) for finding in declared))
-    return (finding for finding in declared if modules[finding.expression] > 1)
-
-
-def cached_references(source: Source, cache: Cache | None) -> frozenset[str]:
-    key = cache.key("references", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, REFERENCES)) is not None:
-        return saved
-    result = frozenset(references(parse(source)))
-    if cache is not None:
-        cache.write(key, result, REFERENCES)
-    return result
-
-
-def unused_definitions(observations: Iterable[Observation], production: Mapping[str, int], tests: frozenset[str]) -> Iterator[Finding]:
-    """Definitions production never names outside their own bodies; those only tests name say so."""
-    for observed in observations:
-        for definition in observed.definitions:
-            finding = definition.finding
-            if production.get(finding.expression, 0) <= definition.own:
-                yield replace(finding, detail=TESTS_ONLY) if finding.expression in tests else finding
-
-
-FORBIDDEN_TEST_TOOLS = frozenset({"unittest.mock", "mock", "pytest_mock", "mockito", "pytest.MonkeyPatch"})
-
-
-def testing_dependencies(source: Source) -> Iterator[Finding]:
-    """Reject framework replacement seams in production and test source alike."""
-    tree = parse(source)
-    aliases = import_aliases(tree)
-    for node in ast.walk(tree):
-        target = ""
-        match node:
-            case ast.Import(names=names):
-                target = next(
-                    (item.name for item in names if any(item.name == name or item.name.startswith(name + ".") for name in FORBIDDEN_TEST_TOOLS)), ""
-                )
-            case ast.ImportFrom(module=str() as module, names=names):
-                imports = (module, *(module + "." + item.name for item in names))
-                target = next((item for item in imports if any(item == name or item.startswith(name + ".") for name in FORBIDDEN_TEST_TOOLS)), "")
-            case ast.Call(func=function, args=args):
-                call = call_name(function, aliases)
-                if call in ("importlib.import_module", "__import__", "builtins.__import__"):
-                    match args:
-                        case [ast.Constant(value=str() as module), *_] if module in FORBIDDEN_TEST_TOOLS:
-                            target = module
-                        case _:
-                            pass
-                elif any(call == name or call.startswith(name + ".") for name in FORBIDDEN_TEST_TOOLS) or call.split(".")[0] in (
-                    "monkeypatch",
-                    "mocker",
-                ):
-                    target = call
-            case ast.arg(arg="monkeypatch" | "mocker" as name):
-                target = name
-            case _:
-                pass
-        if target:
-            match node:
-                case ast.stmt(lineno=line) | ast.expr(lineno=line) | ast.arg(lineno=line):
-                    yield Finding(
-                        "testing-dependencies",
-                        module_name(source.name),
-                        "",
-                        ast.unparse(node),
-                        line,
-                        "Patches and mocks are disallowed; pass explicit dependencies or use real local resources: " + target,
-                    )
-                case _:
-                    pass
-
-
-def cached_testing_dependencies(source: Source, cache: Cache | None) -> tuple[Finding, ...]:
-    key = cache.key("testing-dependencies", source) if cache is not None else ""
-    if cache is not None and (saved := cache.read(key, FINDINGS)) is not None:
-        return saved
-    result = tuple(testing_dependencies(source))
-    if cache is not None:
-        cache.write(key, result, FINDINGS)
-    return result
+    failures = (*(finding for finding in findings if not any(exception.matches(finding) for exception in accepted)), *stale)
+    return Report(sources, failures, accepted)
 
 
 def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
     listed = tuple(_walked(root) if names is None else names)
     sources = python_sources(root, listed)
     configuration = _configuration(root)
-    exceptions = configuration.exceptions
-    all_source = tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources)
-    loaded = tuple(source for source in all_source if not source.name.startswith("tests/"))
-    observations = {module_name(source.name): observation(source, cache) for source in loaded}
-    imported_by = {module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded}
-    graph = {module: imported & observations.keys() for module, imported in imported_by.items()}
-    texts = (name for name in listed if name.endswith(TEXT_REFERENCES) and not name.startswith("tests/") and (root / name).is_file())
-    production = sum(
-        (Counter(observed.referenced) for observed in observations.values()),
-        Counter(word for name in texts for word in re.findall(r"[A-Za-z_]\w*", (root / name).read_text(encoding="utf-8"))),
-    )
-    tested = frozenset[str]().union(*(cached_references(source, cache) for source in all_source if source.name.startswith("tests/")))
-    # Keyboard routes stop at the first application module they reach.
-    keyboard_routes = _routes(graph, (module for module in sorted(graph) if _within(module, "keyboard")), _keyboard)
-    # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
-    written = frozenset[str]().union(*(observed.assigned for observed in observations.values()))
-    findings = (
-        *(finding for observed in observations.values() for finding in observed.declarations),
-        *(record.finding for observed in observations.values() for record in observed.records if record.attributes.isdisjoint(written)),
-        *(finding for source in all_source for finding in cached_testing_dependencies(source, cache)),
-        *(
-            finding
-            for route in keyboard_routes
-            for finding in (
-                observations[route[-1]].dynamic_imports
-                if _keyboard(route[-1])
-                else (Finding("keyboard-isolation", route[0], "", "", 0, " → ".join(route)),)
-            )
-        ),
-        *contract_isolation(imported_by),
-        *unused_definitions(observations.values(), production, tested),
-        *duplicates(observations.values()),
-        *redeclarations(observations.values()),
-        *shared_constants(loaded, configuration.constants),
-        *entry_data(all_source, configuration.data, configuration.entries, cache),
-        *layering(loaded, configuration.layers, configuration.entries, cache),
-        *enum_shapes(loaded),
-    )
-    accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
-    failures = (
-        *(finding for finding in findings if not any(exception.matches(finding) for exception in accepted)),
-        *(
-            Finding(
-                "stale-exception",
-                exception.module,
-                exception.declaration,
-                exception.expression,
-                0,
-                "Remove the exception: its exact expression no longer exists.",
-            )
-            for exception in exceptions
-            if exception not in accepted
-        ),
-    )
-    return Report(sources, failures, accepted)
+    tree = Tree(root, listed, tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources))
+    return _judged(sources, tuple(_findings(tree, configuration, cache)), configuration.exceptions)

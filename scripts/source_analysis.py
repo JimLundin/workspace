@@ -33,6 +33,21 @@ def parse(source: Source) -> ast.Module:
 
 
 ANALYSIS = Path(tempfile.gettempdir()) / "workspace-analysis"
+ENGINE = (
+    "source_analysis.py",
+    "architecture.py",
+    "policy.py",
+    "constant_rules.py",
+    "declaration_rules.py",
+    "import_rules.py",
+    "modelling_rules.py",
+    "record_rules.py",
+    "scope_rules.py",
+    "testing_rules.py",
+    "usage_rules.py",
+    "quality.py",
+)
+"""The analysis engine's files: a change to any of them invalidates every cached observation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +63,7 @@ class Cache:
         digest = hashlib.sha256(sys.version.encode())
         digest.update(importlib.metadata.version("pydantic").encode())
         digest.update(str(root.resolve()).encode())
-        for name in ("source_analysis.py", "architecture.py", "quality.py"):
+        for name in ENGINE:
             digest.update((engine / name).read_bytes())
         digest.update((root / "pyproject.toml").read_bytes())
         return cls(folder / digest.hexdigest())
