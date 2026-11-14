@@ -87,6 +87,7 @@ class Cache:
 
 
 DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})
+"""Calls that import a module named at run time."""
 
 
 def module_name(name: str) -> str:

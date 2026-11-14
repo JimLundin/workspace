@@ -6,12 +6,10 @@ from collections.abc import Iterator, Mapping, Sequence
 from pydantic import TypeAdapter
 
 from scripts.policy import Finding
-from scripts.source_analysis import Cache, Source, call_name, import_aliases, module_name, parse
+from scripts.source_analysis import DYNAMIC_IMPORTS, Cache, Source, call_name, import_aliases, module_name, parse
 
 FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 FORBIDDEN_TEST_TOOLS = frozenset({"unittest.mock", "mock", "pytest_mock", "mockito", "pytest.MonkeyPatch"})
-LOADERS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})
-"""Calls that import a module named at run time."""
 FIXTURES = frozenset({"monkeypatch", "mocker"})
 """The pytest fixtures that patch."""
 
@@ -23,7 +21,7 @@ def _forbidden(name: str) -> bool:
 
 def _called_seam(call: str, args: Sequence[ast.expr]) -> str:
     """The forbidden tool a call loads or uses, or nothing."""
-    if call in LOADERS:
+    if call in DYNAMIC_IMPORTS:
         match args:
             case [ast.Constant(value=str() as module), *_] if module in FORBIDDEN_TEST_TOOLS:
                 return module
@@ -41,7 +39,7 @@ def _seam(node: ast.AST, aliases: Mapping[str, str]) -> str:
             return next((item for item in (module, *(module + "." + item.name for item in names)) if _forbidden(item)), "")
         case ast.Call(func=function, args=args):
             return _called_seam(call_name(function, aliases), args)
-        case ast.arg(arg="monkeypatch" | "mocker" as name):
+        case ast.arg(arg=name) if name in FIXTURES:
             return name
         case _:
             return ""

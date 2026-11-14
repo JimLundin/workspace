@@ -9,10 +9,9 @@ from typing import Final
 from pydantic import TypeAdapter
 
 from scripts.policy import Finding, Text, within, within_any
-from scripts.source_analysis import Cache, Source, call_name, import_aliases, imports, module_name, parse
+from scripts.source_analysis import DYNAMIC_IMPORTS, Cache, Source, call_name, import_aliases, imports, module_name, parse
 
 DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
-DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})
 
 
 @dataclass(frozen=True, slots=True)
