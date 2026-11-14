@@ -13,6 +13,12 @@ def dot(size: int, colour: Rgb) -> bytes:
         channel
         for y in range(size)
         for x in range(size)
-        for coverage in (min(max(radius - math.hypot(x - centre, y - centre) + 0.5, 0.0), 1.0),)
-        for channel in ((b, g, r, round(255 * coverage)) if coverage else (0, 0, 0, 0))
+        for coverage in (
+            min(
+                max(radius - math.hypot(x - centre, y - centre) + 0.5, 0.0), 1.0
+            ),
+        )
+        for channel in (
+            (b, g, r, round(255 * coverage)) if coverage else (0, 0, 0, 0)
+        )
     )

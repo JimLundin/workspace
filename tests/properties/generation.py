@@ -11,10 +11,14 @@ def cases[T](build: Callable[[DrawFn], T]) -> SearchStrategy[T]:
     return factory()
 
 
-def property_test[T](strategy: SearchStrategy[T]) -> Callable[[Callable[[T], None]], Callable[[], None]]:
+def property_test[T](
+    strategy: SearchStrategy[T],
+) -> Callable[[Callable[[T], None]], Callable[[], None]]:
     decorate = given(strategy)
 
     def configured(test: Callable[[T], None]) -> Callable[[], None]:
-        return settings(max_examples=100, derandomize=True, database=None, deadline=None)(decorate(test))
+        return settings(
+            max_examples=100, derandomize=True, database=None, deadline=None
+        )(decorate(test))
 
     return configured

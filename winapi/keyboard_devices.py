@@ -19,15 +19,38 @@ class RawInputDevice(ctypes.Structure):
 class RawInputRegistration(ctypes.Structure):
     """RAWINPUTDEVICE."""
 
-    _fields_ = (("usUsagePage", wintypes.USHORT), ("usUsage", wintypes.USHORT), ("dwFlags", wintypes.DWORD), ("hwndTarget", wintypes.HWND))
+    _fields_ = (
+        ("usUsagePage", wintypes.USHORT),
+        ("usUsage", wintypes.USHORT),
+        ("dwFlags", wintypes.DWORD),
+        ("hwndTarget", wintypes.HWND),
+    )
 
 
-_RegisterRawInputDevices = fn(user32, "RegisterRawInputDevices", wintypes.BOOL, ctypes.POINTER(RawInputRegistration), wintypes.UINT, wintypes.UINT)
+_RegisterRawInputDevices = fn(
+    user32,
+    "RegisterRawInputDevices",
+    wintypes.BOOL,
+    ctypes.POINTER(RawInputRegistration),
+    wintypes.UINT,
+    wintypes.UINT,
+)
 _GetRawInputDeviceList = fn(
-    user32, "GetRawInputDeviceList", wintypes.UINT, ctypes.POINTER(RawInputDevice), ctypes.POINTER(wintypes.UINT), wintypes.UINT
+    user32,
+    "GetRawInputDeviceList",
+    wintypes.UINT,
+    ctypes.POINTER(RawInputDevice),
+    ctypes.POINTER(wintypes.UINT),
+    wintypes.UINT,
 )
 _GetRawInputDeviceInfo = fn(
-    user32, "GetRawInputDeviceInfoW", wintypes.UINT, wintypes.HANDLE, wintypes.UINT, wintypes.LPVOID, ctypes.POINTER(wintypes.UINT)
+    user32,
+    "GetRawInputDeviceInfoW",
+    wintypes.UINT,
+    wintypes.HANDLE,
+    wintypes.UINT,
+    wintypes.LPVOID,
+    ctypes.POINTER(wintypes.UINT),
 )
 
 
@@ -39,12 +62,25 @@ def names() -> tuple[str, ...]:
     """
     for _ in range(3):
         count = wintypes.UINT()
-        if _GetRawInputDeviceList(None, ctypes.byref(count), ctypes.sizeof(RawInputDevice)) == 0xFFFFFFFF:
+        if (
+            _GetRawInputDeviceList(
+                None, ctypes.byref(count), ctypes.sizeof(RawInputDevice)
+            )
+            == 0xFFFFFFFF
+        ):
             raise last_error()
         devices = (RawInputDevice * count.value)()
-        received = _GetRawInputDeviceList(devices, ctypes.byref(count), ctypes.sizeof(RawInputDevice))
+        received = _GetRawInputDeviceList(
+            devices, ctypes.byref(count), ctypes.sizeof(RawInputDevice)
+        )
         if received != 0xFFFFFFFF:
-            return tuple(name for device in devices[:received] if device.kind == 1 for name in (_name(device.handle),) if name)
+            return tuple(
+                name
+                for device in devices[:received]
+                if device.kind == 1
+                for name in (_name(device.handle),)
+                if name
+            )
         if ctypes.get_last_error() != 122:  # ERROR_INSUFFICIENT_BUFFER
             raise last_error()
     raise OSError("The connected keyboard list kept changing.")
@@ -52,11 +88,17 @@ def names() -> tuple[str, ...]:
 
 def _name(handle: int) -> str:
     size = wintypes.UINT()
-    if _GetRawInputDeviceInfo(handle, 0x20000007, None, ctypes.byref(size)) == 0xFFFFFFFF:  # RIDI_DEVICENAME
+    if (
+        _GetRawInputDeviceInfo(handle, 0x20000007, None, ctypes.byref(size))
+        == 0xFFFFFFFF
+    ):  # RIDI_DEVICENAME
         return ""
     buffer = ctypes.create_unicode_buffer(size.value + 1)
     size.value += 1
-    if _GetRawInputDeviceInfo(handle, 0x20000007, buffer, ctypes.byref(size)) == 0xFFFFFFFF:
+    if (
+        _GetRawInputDeviceInfo(handle, 0x20000007, buffer, ctypes.byref(size))
+        == 0xFFFFFFFF
+    ):
         return ""
     return str(buffer.value)
 
@@ -78,4 +120,8 @@ def stop_watching_input() -> None:
 def _register(flags: int, hwnd: int | None) -> bool:
     page, usage = _KEYBOARD_USAGE
     device = RawInputRegistration(page, usage, flags, hwnd)
-    return bool(_RegisterRawInputDevices(ctypes.byref(device), 1, ctypes.sizeof(RawInputRegistration)))
+    return bool(
+        _RegisterRawInputDevices(
+            ctypes.byref(device), 1, ctypes.sizeof(RawInputRegistration)
+        )
+    )

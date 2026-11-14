@@ -20,21 +20,52 @@ OFF = HookState(engine=EngineState(enabled=False))
 ROUTING = Routing.of(layouts.LAYOUT, Bindings.of(layouts.LAYOUT))
 
 
-def test_our_own_output_and_keys_during_an_engine_step_are_never_routed() -> None:
+def test_our_own_output_and_keys_during_an_engine_step_are_never_routed() -> (
+    None
+):
     # Defects: the layout remaps its own injected keys, or a key the engine sends while it
     # runs re-enters it, even with the Charybdis connected.
-    for state in (HookState(), HookState(firmware=FirmwareKeyboard(resume_layout=True))):
-        assert route(replace(LETTER, extra=Origin.LAYOUT), state, ROUTING, down=True) is Route.OWN
-        assert route(LETTER, replace(state, busy=True), ROUTING, down=True) is Route.OWN
-    assert route(replace(LETTER, flags=LLKHF_INJECTED, extra=Origin.DESKTOP), HookState(), ROUTING, down=True) is Route.OWN
+    for state in (
+        HookState(),
+        HookState(firmware=FirmwareKeyboard(resume_layout=True)),
+    ):
+        assert (
+            route(
+                replace(LETTER, extra=Origin.LAYOUT), state, ROUTING, down=True
+            )
+            is Route.OWN
+        )
+        assert (
+            route(LETTER, replace(state, busy=True), ROUTING, down=True)
+            is Route.OWN
+        )
+    assert (
+        route(
+            replace(LETTER, flags=LLKHF_INJECTED, extra=Origin.DESKTOP),
+            HookState(),
+            ROUTING,
+            down=True,
+        )
+        is Route.OWN
+    )
 
 
-def test_a_captured_shortcut_key_stays_captured_after_the_charybdis_is_unplugged() -> None:
+def test_a_captured_shortcut_key_stays_captured_after_the_charybdis_is_unplugged() -> (
+    None
+):
     # Defect: the release of a shortcut pressed before unplugging reaches the engine or an application.
     state = HookState(shortcuts=(ConsumedKey(identity(LETTER)),))
     assert route(LETTER, state, ROUTING, down=False) is Route.SHORTCUT_HELD
     connected = HookState(firmware=FirmwareKeyboard(resume_layout=True))
-    assert route(KeyEvent(APPS_KEY, 0x38, LLKHF_EXTENDED, 0, 0), connected, ROUTING, down=True) is Route.APPS_THUMB
+    assert (
+        route(
+            KeyEvent(APPS_KEY, 0x38, LLKHF_EXTENDED, 0, 0),
+            connected,
+            ROUTING,
+            down=True,
+        )
+        is Route.APPS_THUMB
+    )
     assert route(LETTER, connected, ROUTING, down=True) is Route.FIRMWARE
 
 
@@ -44,13 +75,17 @@ def test_an_owed_key_up_passes_before_any_other_rule_can_claim_it() -> None:
     for key in (LETTER, NUMPAD_ENTER, TAB):
         owed = HookState(owed=frozenset({identity(key)}))
         assert route(key, owed, ROUTING, down=False) is Route.OWED_UP
-    assert route(NUMPAD_ENTER, HookState(), ROUTING, down=False) is Route.EXTENDED
+    assert (
+        route(NUMPAD_ENTER, HookState(), ROUTING, down=False) is Route.EXTENDED
+    )
     assert route(LETTER, HookState(), ROUTING, down=True) is Route.LAYOUT
 
 
 def test_the_switcher_keeps_its_keys_only_while_it_is_in_front() -> None:
     # Defect: Tab or Enter is remapped while the window switcher reads them, or stays native after it closes.
-    assert route(TAB, HookState(switcher=True), ROUTING, down=True) is Route.NATIVE
+    assert (
+        route(TAB, HookState(switcher=True), ROUTING, down=True) is Route.NATIVE
+    )
     assert route(TAB, HookState(), ROUTING, down=True) is Route.LAYOUT
     assert route(ARROW, HookState(), ROUTING, down=True) is Route.NATIVE
 
@@ -61,6 +96,8 @@ def test_downs_the_layout_will_not_own_are_owed_their_up() -> None:
     assert owes(LETTER, OFF, ROUTING, down=True)
     assert not owes(ESCAPE_KEY, OFF, ROUTING, down=True)
     assert not owes(LETTER, OFF, ROUTING, down=False)
-    assert not owes(replace(LETTER, flags=LLKHF_INJECTED), OFF, ROUTING, down=True)
+    assert not owes(
+        replace(LETTER, flags=LLKHF_INJECTED), OFF, ROUTING, down=True
+    )
     assert owes(TAB, HookState(switcher=True), ROUTING, down=True)
     assert not owes(LETTER, HookState(), ROUTING, down=True)

@@ -3,7 +3,13 @@ import ctypes
 def GetLastError() -> int: ...
 def CloseHandle(handle: int) -> int: ...
 def DuplicateHandle(
-    source_process: int, source: int, target_process: int, target: ctypes.c_void_p, access: int, inherit: int, options: int
+    source_process: int,
+    source: int,
+    target_process: int,
+    target: ctypes.c_void_p,
+    access: int,
+    inherit: int,
+    options: int,
 ) -> int: ...
 
 class PROPERTYKEY(ctypes.Structure): ...

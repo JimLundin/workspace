@@ -12,7 +12,11 @@ from typing import override
 from unittest import TestCase
 
 from assistant.llm import Failure
-from assistant.meeting_store import BacklogFullError, MeetingArchive, MeetingStore
+from assistant.meeting_store import (
+    BacklogFullError,
+    MeetingArchive,
+    MeetingStore,
+)
 from assistant.meetings import Meetings, Spool, SpoolFullError
 from contracts.capture import AudioSource
 from contracts.recording_state import RecordingState, RetryPolicy
@@ -29,17 +33,27 @@ HANG = 60
 
 
 def wait_for(predicate: Callable[[], bool]) -> None:
-    assert until(predicate, HANG), "The meeting worker did not reach the expected state."
+    assert until(predicate, HANG), (
+        "The meeting worker did not reach the expected state."
+    )
 
 
 class GeneratedCapture:
     __slots__ = ("blocks", "finished", "hold", "opened", "tail")
 
-    def __init__(self, blocks: int = 31, tail: bytes = b"", *, hold: bool = False) -> None:
+    def __init__(
+        self, blocks: int = 31, tail: bytes = b"", *, hold: bool = False
+    ) -> None:
         self.blocks, self.tail, self.hold = blocks, tail, hold
         self.opened, self.finished = threading.Event(), threading.Event()
 
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
+    def record(
+        self,
+        stop: threading.Event,
+        consume: Callable[[bytes], None],
+        ready: Callable[[], None],
+        report: Callable[[Problem], None],
+    ) -> None:
         self.opened.set()
         ready()
         for _ in range(self.blocks):
@@ -52,7 +66,9 @@ class GeneratedCapture:
         self.finished.set()
 
 
-def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_second(tmp_path: Path) -> None:
+def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_second(
+    tmp_path: Path,
+) -> None:
     store = MeetingStore.create(tmp_path, "both", "Planning")
     for _ in range(22):
         store.append(SPEECH)
@@ -72,30 +88,48 @@ def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_seco
     store.complete(last, "The last sentence.")
     store.export()
     transcript = store.transcript.read_text(encoding="utf-8")
-    assert transcript.count("First part") == 1 and "retry must not" not in transcript
-    assert "00:00:00 - 00:00:23" in transcript and "The last sentence." in transcript
+    assert (
+        transcript.count("First part") == 1
+        and "retry must not" not in transcript
+    )
+    assert (
+        "00:00:00 - 00:00:23" in transcript
+        and "The last sentence." in transcript
+    )
     assert store.state().pending == 0 and store.batch() is None
     with store.reading() as connection:
-        assert connection.execute("SELECT COUNT(*) FROM audio").fetchone() == (0,)
+        assert connection.execute("SELECT COUNT(*) FROM audio").fetchone() == (
+            0,
+        )
         assert connection.execute("PRAGMA auto_vacuum").fetchone() == (1,)
-    assert (store.folder / "session.sqlite3").stat().st_size < len(first.pcm) // 4
+    assert (store.folder / "session.sqlite3").stat().st_size < len(
+        first.pcm
+    ) // 4
     assert SPEECH[:512] not in (store.folder / "session.sqlite3").read_bytes()
 
 
-def test_an_open_read_snapshot_does_not_hold_up_journaling_audio(tmp_path: Path) -> None:
+def test_an_open_read_snapshot_does_not_hold_up_journaling_audio(
+    tmp_path: Path,
+) -> None:
     # Defect: a transcription or catalog read holding its snapshot makes the
     # audio append wait out the busy timeout and stop the recording.
     store = MeetingStore.create(tmp_path, "both")
     with store.reading() as connection:
-        assert connection.execute("SELECT frames FROM meeting").fetchone() == (0,)
+        assert connection.execute("SELECT frames FROM meeting").fetchone() == (
+            0,
+        )
         began = time.monotonic()
         store.append(SPEECH)
         assert time.monotonic() - began < 1
-        assert connection.execute("SELECT frames FROM meeting").fetchone() == (0,), "The snapshot saw a later commit."
+        assert connection.execute("SELECT frames FROM meeting").fetchone() == (
+            0,
+        ), "The snapshot saw a later commit."
     assert store.state().frames == RATE
 
 
-def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Path) -> None:
+def test_batch_reads_capture_completion_and_audio_from_one_snapshot(
+    tmp_path: Path,
+) -> None:
     store = MeetingStore.create(tmp_path, "microphone")
     store.append(SPEECH)
     tail = SPEECH[:RATE]
@@ -124,7 +158,10 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Pa
 
     def interleave(statement: str) -> None:
         nonlocal attempted
-        if statement == "SELECT finished FROM meeting WHERE id=1" and not attempted:
+        if (
+            statement == "SELECT finished FROM meeting WHERE id=1"
+            and not attempted
+        ):
             attempted = True
             writer.start()
 
@@ -137,7 +174,9 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Pa
     batch = reader.batch()
     writer.join(timeout=30)
     assert attempted and not errors
-    assert batch is None or batch.pcm == SPEECH + tail, "A finished capture was paired with audio read before its final block."
+    assert batch is None or batch.pcm == SPEECH + tail, (
+        "A finished capture was paired with audio read before its final block."
+    )
     if not finished:
         finish()
     final = store.batch()
@@ -146,8 +185,12 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(tmp_path: Pa
     assert store.state().pending == 0
 
 
-def test_pending_audio_is_bounded_and_the_last_saved_block_is_recoverable(tmp_path: Path) -> None:
-    store = MeetingStore.create(tmp_path, "microphone", max_pending_bytes=len(SPEECH) * 2)
+def test_pending_audio_is_bounded_and_the_last_saved_block_is_recoverable(
+    tmp_path: Path,
+) -> None:
+    store = MeetingStore.create(
+        tmp_path, "microphone", max_pending_bytes=len(SPEECH) * 2
+    )
     store.append(SPEECH)
     with TestCase().assertRaises(BacklogFullError):
         store.append(SPEECH)
@@ -160,7 +203,9 @@ def test_pending_audio_is_bounded_and_the_last_saved_block_is_recoverable(tmp_pa
     assert "Recovered text." in reopened.transcript.read_text(encoding="utf-8")
 
 
-def test_text_commit_survives_an_interrupted_markdown_export(tmp_path: Path) -> None:
+def test_text_commit_survives_an_interrupted_markdown_export(
+    tmp_path: Path,
+) -> None:
     store = MeetingStore.create(tmp_path, "microphone")
     store.append(SPEECH)
     store.finish_capture()
@@ -180,10 +225,14 @@ def test_text_commit_survives_an_interrupted_markdown_export(tmp_path: Path) -> 
     reopened = MeetingStore(store.folder)
     assert reopened.batch() is None
     reopened.export()
-    assert "The decision is durable." in reopened.transcript.read_text(encoding="utf-8")
+    assert "The decision is durable." in reopened.transcript.read_text(
+        encoding="utf-8"
+    )
 
 
-def test_recovery_does_not_overwrite_edits_to_a_completed_transcript(tmp_path: Path) -> None:
+def test_recovery_does_not_overwrite_edits_to_a_completed_transcript(
+    tmp_path: Path,
+) -> None:
     store = MeetingStore.create(tmp_path, "microphone")
     store.append(SPEECH)
     store.finish_capture()
@@ -191,12 +240,19 @@ def test_recovery_does_not_overwrite_edits_to_a_completed_transcript(tmp_path: P
     assert batch is not None
     store.complete(batch, "Original transcription.")
     store.export()
-    store.transcript.write_text("The user's corrected transcript.\n", encoding="utf-8")
+    store.transcript.write_text(
+        "The user's corrected transcript.\n", encoding="utf-8"
+    )
     MeetingStore(store.folder).export()
-    assert store.transcript.read_text(encoding="utf-8") == "The user's corrected transcript.\n"
+    assert (
+        store.transcript.read_text(encoding="utf-8")
+        == "The user's corrected transcript.\n"
+    )
 
 
-def test_recording_and_transcription_continue_while_the_markdown_file_is_locked(tmp_path: Path) -> None:
+def test_recording_and_transcription_continue_while_the_markdown_file_is_locked(
+    tmp_path: Path,
+) -> None:
     locked = threading.Event()
     locked.set()
     capture = GeneratedCapture(31, hold=True)
@@ -204,47 +260,80 @@ def test_recording_and_transcription_continue_while_the_markdown_file_is_locked(
     def busy(temporary: Path, transcript: Path) -> None:
         state = MeetingStore(transcript.parent).state()
         if state.frames and state.pending < state.frames and locked.is_set():
-            raise PermissionError("fixture: another app is reading the transcript")
+            raise PermissionError(
+                "fixture: another app is reading the transcript"
+            )
         temporary.replace(transcript)
 
     with fake_endpoint() as endpoint:
-        service = Meetings.open(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path, publish=busy))
+        service = Meetings.open(
+            settings(endpoint.url),
+            lambda source: capture,
+            archive=MeetingArchive(tmp_path, publish=busy),
+        )
         try:
             service.start()
             wait_for(lambda: "refresh its file" in service.snapshot().detail)
             wait_for(lambda: service.snapshot().seconds == 31)
-            assert service.snapshot().capturing and service.snapshot().pending_seconds == 1
+            assert (
+                service.snapshot().capturing
+                and service.snapshot().pending_seconds == 1
+            )
             assert "hello there" in service.snapshot().preview
             locked.clear()
             service.stop()
             wait_for(lambda: service.snapshot().phase == "saved")
-            assert Path(service.snapshot().path).read_text(encoding="utf-8").count("hello there") == 2
+            assert (
+                Path(service.snapshot().path)
+                .read_text(encoding="utf-8")
+                .count("hello there")
+                == 2
+            )
         finally:
             locked.clear()
             service.close()
 
 
-def test_recording_uses_the_configured_endpoint_and_saves_incremental_text(tmp_path: Path) -> None:
+def test_recording_uses_the_configured_endpoint_and_saves_incremental_text(
+    tmp_path: Path,
+) -> None:
     capture = GeneratedCapture(tail=SPEECH[:1000])
     states: list[RecordingState] = []
     with fake_endpoint() as endpoint:
-        service = Meetings.open(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=states.append)
+        service = Meetings.open(
+            settings(endpoint.url),
+            lambda source: capture,
+            archive=MeetingArchive(tmp_path),
+            on_update=states.append,
+        )
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase == "saved")
             requests = endpoint.received
             assert len(requests) == 2
-            assert all(request.path.endswith("/audio/transcriptions") for request in requests)
+            assert all(
+                request.path.endswith("/audio/transcriptions")
+                for request in requests
+            )
             assert b'name="prompt"\r\n\r\nhello there\r\n' in requests[1].body
             state = service.snapshot()
-            assert state.seconds == 31 + 500 / RATE and state.pending_seconds == 0
-            assert Path(state.path).read_text(encoding="utf-8").count("hello there") == 2
+            assert (
+                state.seconds == 31 + 500 / RATE and state.pending_seconds == 0
+            )
+            assert (
+                Path(state.path)
+                .read_text(encoding="utf-8")
+                .count("hello there")
+                == 2
+            )
             assert any(state.phase == "recording" for state in states)
         finally:
             service.close()
 
 
-def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> None:
+def test_a_locked_journal_does_not_block_the_capture_thread(
+    tmp_path: Path,
+) -> None:
     # Defect: the capture thread writes the journal itself, so another connection
     # holding the meeting journal stalls the device drain and ends the recording.
     handed: list[float] = []
@@ -253,10 +342,16 @@ def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> N
         __slots__ = ()
 
         def record(
-            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+            self,
+            stop: threading.Event,
+            consume: Callable[[bytes], None],
+            ready: Callable[[], None],
+            report: Callable[[Problem], None],
         ) -> None:
             ready()
-            holder = sqlite3.connect(next(tmp_path.glob("*/session.sqlite3")), isolation_level=None)
+            holder = sqlite3.connect(
+                next(tmp_path.glob("*/session.sqlite3")), isolation_level=None
+            )
             try:
                 holder.execute("BEGIN EXCLUSIVE")
                 for _ in range(31):
@@ -268,19 +363,29 @@ def test_a_locked_journal_does_not_block_the_capture_thread(tmp_path: Path) -> N
                 holder.close()
 
     with fake_endpoint() as endpoint:
-        service = Meetings.open(settings(endpoint.url), lambda source: LockingCapture(), archive=MeetingArchive(tmp_path))
+        service = Meetings.open(
+            settings(endpoint.url),
+            lambda source: LockingCapture(),
+            archive=MeetingArchive(tmp_path),
+        )
         try:
             service.start()
-            wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
+            wait_for(
+                lambda: service.snapshot().phase in ("saved", "interrupted")
+            )
             state = service.snapshot()
             assert state.phase == "saved", state.detail
             assert state.seconds == 31 and len(handed) == 31
-            assert max(handed) < 1, "Handing audio to the journal waited for storage."
+            assert max(handed) < 1, (
+                "Handing audio to the journal waited for storage."
+            )
         finally:
             service.close()
 
 
-def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(tmp_path: Path) -> None:
+def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(
+    tmp_path: Path,
+) -> None:
     # Defect: on_update runs under the service lock, so a view that waits for
     # another thread reading snapshot() deadlocks the recorder; or every
     # journaled second publishes, running reads and view work once a second.
@@ -300,7 +405,12 @@ def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(tm
 
     capture = GeneratedCapture(31, hold=True)
     with fake_endpoint() as endpoint:
-        service = Meetings.open(settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path), on_update=update)
+        service = Meetings.open(
+            settings(endpoint.url),
+            lambda source: capture,
+            archive=MeetingArchive(tmp_path),
+            on_update=update,
+        )
         try:
             service.start()
             wait_for(lambda: bool(service.snapshot().path))
@@ -308,20 +418,28 @@ def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(tm
             wait_for(lambda: store.state().frames == RATE * 31)
             service.stop()
             wait_for(lambda: service.snapshot().phase == "saved")
-            assert not blocked, "A view reading the recording state from another thread waited for the publisher."
+            assert not blocked, (
+                "A view reading the recording state from another thread waited for the publisher."
+            )
             assert len(capturing) < 10, [state.seconds for state in capturing]
         finally:
             service.close()
 
 
-def test_recovered_capture_gaps_are_noted_without_ending_the_recording(tmp_path: Path) -> None:
+def test_recovered_capture_gaps_are_noted_without_ending_the_recording(
+    tmp_path: Path,
+) -> None:
     # Defect: a recovered timing problem ends or interrupts the recording, or
     # the saved transcript never says that audio is missing.
     class GappedCapture:
         __slots__ = ()
 
         def record(
-            self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]
+            self,
+            stop: threading.Event,
+            consume: Callable[[bytes], None],
+            ready: Callable[[], None],
+            report: Callable[[Problem], None],
         ) -> None:
             ready()
             consume(SPEECH)
@@ -335,19 +453,38 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(tmp_path:
     # or a stall without lost audio is counted as a gap.
     logged: list[str] = []
     with fake_endpoint() as endpoint:
-        service = Meetings.open(settings(endpoint.url), lambda source: GappedCapture(), archive=MeetingArchive(tmp_path), log=logged.append)
+        service = Meetings.open(
+            settings(endpoint.url),
+            lambda source: GappedCapture(),
+            archive=MeetingArchive(tmp_path),
+            log=logged.append,
+        )
         try:
             service.start()
-            wait_for(lambda: service.snapshot().phase in ("saved", "interrupted"))
+            wait_for(
+                lambda: service.snapshot().phase in ("saved", "interrupted")
+            )
             state = service.snapshot()
             assert state.phase == "saved" and state.seconds == 2, state.detail
             saved = MeetingStore(Path(state.path).parent).state()
-            assert (saved.gaps, saved.gap_frames, saved.problem) == (2, RATE * 5 // 4, "")
-            assert "through 2 gaps totalling 1.2 s" in Path(state.path).read_text(encoding="utf-8")
+            assert (saved.gaps, saved.gap_frames, saved.problem) == (
+                2,
+                RATE * 5 // 4,
+                "",
+            )
+            assert "through 2 gaps totalling 1.2 s" in Path(
+                state.path
+            ).read_text(encoding="utf-8")
             text = "\n".join(logged)
-            assert "stalled 1x, longest 12.5 s" in text and "late audio clipped" in text and "250 ms" in text, text
+            assert (
+                "stalled 1x, longest 12.5 s" in text
+                and "late audio clipped" in text
+                and "250 ms" in text
+            ), text
             assert "silence inserted" in text and "1000 ms" in text, text
-            assert "ended:" not in text, "A recovered recording was logged as ended by a problem."
+            assert "ended:" not in text, (
+                "A recovered recording was logged as ended by a problem."
+            )
         finally:
             service.close()
 
@@ -363,24 +500,36 @@ def test_a_full_spool_refuses_audio_and_says_the_recording_stopped() -> None:
     spool.put(bytes(8))
 
 
-def test_a_tiny_final_fragment_is_padded_for_upload_without_changing_recorded_duration(tmp_path: Path) -> None:
+def test_a_tiny_final_fragment_is_padded_for_upload_without_changing_recorded_duration(
+    tmp_path: Path,
+) -> None:
     tail = SPEECH[:1000]
     with fake_endpoint() as endpoint:
-        service = Meetings.open(settings(endpoint.url), lambda source: GeneratedCapture(0, tail), archive=MeetingArchive(tmp_path))
+        service = Meetings.open(
+            settings(endpoint.url),
+            lambda source: GeneratedCapture(0, tail),
+            archive=MeetingArchive(tmp_path),
+        )
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase == "saved")
             body = endpoint.last.body
-            with wave.open(io.BytesIO(body[body.index(b"RIFF") :]), "rb") as uploaded:
+            with wave.open(
+                io.BytesIO(body[body.index(b"RIFF") :]), "rb"
+            ) as uploaded:
                 assert uploaded.getnframes() == RATE
                 audio = uploaded.readframes(RATE)
-                assert audio[: len(tail)] == tail and not any(audio[len(tail) :])
+                assert audio[: len(tail)] == tail and not any(
+                    audio[len(tail) :]
+                )
             assert service.snapshot().seconds == len(tail) / (RATE * 2)
         finally:
             service.close()
 
 
-def test_slow_transcription_does_not_block_capture_stop_or_shutdown(tmp_path: Path) -> None:
+def test_slow_transcription_does_not_block_capture_stop_or_shutdown(
+    tmp_path: Path,
+) -> None:
     entered, release = threading.Event(), threading.Event()
     capture = GeneratedCapture(40, tail=SPEECH[:500], hold=True)
 
@@ -401,14 +550,18 @@ def test_slow_transcription_does_not_block_capture_stop_or_shutdown(tmp_path: Pa
         wait_for(lambda: service.snapshot().seconds == 40)
         service.close(timeout=0.2)
         store = MeetingStore(Path(service.snapshot().path).parent)
-        assert store.state().finished and store.state().frames == RATE * 40 + 250
+        assert (
+            store.state().finished and store.state().frames == RATE * 40 + 250
+        )
         assert store.state().pending == store.state().frames
     finally:
         release.set()
         service.close()
 
 
-def test_restart_recovers_pending_audio_without_opening_the_microphone(tmp_path: Path) -> None:
+def test_restart_recovers_pending_audio_without_opening_the_microphone(
+    tmp_path: Path,
+) -> None:
     store = MeetingStore.create(tmp_path, "both")
     store.append(SPEECH)
     opened: list[str] = []
@@ -420,11 +573,20 @@ def test_restart_recovers_pending_audio_without_opening_the_microphone(tmp_path:
         return capture
 
     def published(state: RecordingState) -> None:
-        if state.phase == "interrupted" and state.pending_seconds == 0 and state.revision == state.exported_revision:
+        if (
+            state.phase == "interrupted"
+            and state.pending_seconds == 0
+            and state.revision == state.exported_revision
+        ):
             exported.set()
 
     with fake_endpoint() as endpoint:
-        service = Meetings.open(settings(endpoint.url), create, archive=MeetingArchive(tmp_path), on_update=published)
+        service = Meetings.open(
+            settings(endpoint.url),
+            create,
+            archive=MeetingArchive(tmp_path),
+            on_update=published,
+        )
         try:
             service.start_worker()
             # Committing text to the journal precedes publishing its file. Wait
@@ -433,13 +595,22 @@ def test_restart_recovers_pending_audio_without_opening_the_microphone(tmp_path:
         finally:
             service.close()
         saved = store.state()
-        assert saved.finished and saved.pending == 0 and saved.revision == saved.exported_revision
+        assert (
+            saved.finished
+            and saved.pending == 0
+            and saved.revision == saved.exported_revision
+        )
         assert not opened
         transcript = store.transcript.read_text(encoding="utf-8")
-        assert "hello there" in transcript and "capture was not restarted" in transcript
+        assert (
+            "hello there" in transcript
+            and "capture was not restarted" in transcript
+        )
 
 
-def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_path: Path) -> None:
+def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(
+    tmp_path: Path,
+) -> None:
     capture = GeneratedCapture(1)
     failed, resume = threading.Event(), threading.Event()
     calls = 0
@@ -463,17 +634,27 @@ def test_failed_requests_retain_the_audio_and_retry_without_duplicate_text(tmp_p
     try:
         service.start()
         assert failed.wait(HANG)
-        assert MeetingStore(Path(service.snapshot().path).parent).state().pending == RATE
+        assert (
+            MeetingStore(Path(service.snapshot().path).parent).state().pending
+            == RATE
+        )
         resume.set()
         wait_for(lambda: service.snapshot().phase == "saved")
-        assert Path(service.snapshot().path).read_text(encoding="utf-8").count("Recovered after the outage.") == 1
+        assert (
+            Path(service.snapshot().path)
+            .read_text(encoding="utf-8")
+            .count("Recovered after the outage.")
+            == 1
+        )
         assert calls == 2
     finally:
         resume.set()
         service.close()
 
 
-def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: Path) -> None:
+def test_a_full_backlog_stops_capture_and_saves_every_completed_block(
+    tmp_path: Path,
+) -> None:
     capture = GeneratedCapture(50)
     # Defect: a recording that ends early leaves no reason in the assistant log.
     logged: list[str] = []
@@ -494,12 +675,17 @@ def test_a_full_backlog_stops_capture_and_saves_every_completed_block(tmp_path: 
         store = MeetingStore(Path(service.snapshot().path).parent)
         assert store.state().finished and store.state().frames == RATE * 2
         assert "storage limit" in store.state().problem
-        assert any(f"{store.folder.name} ended: Recording stopped because" in line for line in logged), logged
+        assert any(
+            f"{store.folder.name} ended: Recording stopped because" in line
+            for line in logged
+        ), logged
     finally:
         service.close()
 
 
-def test_export_failure_can_be_retried_immediately_without_uploading_audio_again(tmp_path: Path) -> None:
+def test_export_failure_can_be_retried_immediately_without_uploading_audio_again(
+    tmp_path: Path,
+) -> None:
     failed = False
     retried = threading.Event()
     capture = GeneratedCapture(1)
@@ -519,26 +705,35 @@ def test_export_failure_can_be_retried_immediately_without_uploading_audio_again
 
     with fake_endpoint() as endpoint:
         service = Meetings.open(
-            settings(endpoint.url), lambda source: capture, archive=MeetingArchive(tmp_path, publish=interrupted), on_update=changed
+            settings(endpoint.url),
+            lambda source: capture,
+            archive=MeetingArchive(tmp_path, publish=interrupted),
+            on_update=changed,
         )
         try:
             service.start()
             wait_for(lambda: service.snapshot().phase == "saved")
             assert failed and retried.is_set()
             assert len(endpoint.received) == 1
-            assert "hello there" in Path(service.snapshot().path).read_text(encoding="utf-8")
+            assert "hello there" in Path(service.snapshot().path).read_text(
+                encoding="utf-8"
+            )
         finally:
             service.close()
 
 
-def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_path: Path) -> None:
+def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(
+    tmp_path: Path,
+) -> None:
     entered, release_response = threading.Event(), threading.Event()
     creating, release_create = threading.Event(), threading.Event()
     requests = 0
 
     class DelayedArchive(MeetingArchive):
         @override
-        def create(self, source: AudioSource, title: str = "Meeting") -> MeetingStore:
+        def create(
+            self, source: AudioSource, title: str = "Meeting"
+        ) -> MeetingStore:
             if title == "Second":
                 creating.set()
                 assert release_create.wait(HANG)
@@ -555,7 +750,11 @@ def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_pa
 
     with fake_endpoint() as endpoint:
         endpoint.respond = reply
-        service = Meetings.open(settings(endpoint.url), lambda source: GeneratedCapture(1), archive=DelayedArchive(tmp_path))
+        service = Meetings.open(
+            settings(endpoint.url),
+            lambda source: GeneratedCapture(1),
+            archive=DelayedArchive(tmp_path),
+        )
         try:
             service.start(title="First")
             assert entered.wait(HANG)
@@ -565,11 +764,18 @@ def test_a_new_meeting_keeps_its_state_when_the_previous_request_finishes(tmp_pa
             assert creating.wait(HANG)
             release_response.set()
             wait_for(lambda: original.state().pending == 0)
-            assert service.snapshot().phase == "starting" and service.snapshot().title == "Second"
+            assert (
+                service.snapshot().phase == "starting"
+                and service.snapshot().title == "Second"
+            )
             release_create.set()
             wait_for(lambda: service.snapshot().phase == "saved")
-            assert "Second meeting." in Path(service.snapshot().path).read_text(encoding="utf-8")
-            assert "First meeting." in original.transcript.read_text(encoding="utf-8")
+            assert "Second meeting." in Path(service.snapshot().path).read_text(
+                encoding="utf-8"
+            )
+            assert "First meeting." in original.transcript.read_text(
+                encoding="utf-8"
+            )
         finally:
             release_response.set()
             release_create.set()

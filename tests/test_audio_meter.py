@@ -7,7 +7,9 @@ from desktop_ui.audio_meter import AudioMeter
 
 
 def test_stopped_capture_cannot_publish_into_the_next_waveform() -> None:
-    first, release_first, second, release_second = (threading.Event() for _ in range(4))
+    first, release_first, second, release_second = (
+        threading.Event() for _ in range(4)
+    )
     calls = 0
 
     def read() -> float:
@@ -31,7 +33,9 @@ def test_stopped_capture_cannot_publish_into_the_next_waveform() -> None:
         meter.listen(enabled=True)
         release_first.set()
         assert second.wait(1)
-        assert meter.level() is None, "An old capture's sample leaked into the new waveform."
+        assert meter.level() is None, (
+            "An old capture's sample leaked into the new waveform."
+        )
         release_second.set()
         deadline = time.monotonic() + 1
         while meter.level() is None and time.monotonic() < deadline:
@@ -45,7 +49,9 @@ def test_stopped_capture_cannot_publish_into_the_next_waveform() -> None:
         meter.close()
 
 
-def test_blocked_observer_does_not_keep_old_audio_alive_or_read_after_close() -> None:
+def test_blocked_observer_does_not_keep_old_audio_alive_or_read_after_close() -> (
+    None
+):
     first, blocked, release = (threading.Event() for _ in range(3))
     now = [100.0]
     calls = 0
@@ -66,7 +72,9 @@ def test_blocked_observer_does_not_keep_old_audio_alive_or_read_after_close() ->
         assert first.wait(1) and blocked.wait(1)
         assert meter.level() == 0.5
         now[0] += 0.3
-        assert meter.level() is None, "A stalled driver must not show stale speech as current."
+        assert meter.level() is None, (
+            "A stalled driver must not show stale speech as current."
+        )
         meter.close()
         release.set()
         meter.finished.wait(timeout=1)

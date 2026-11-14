@@ -18,7 +18,18 @@ from typing import assert_never
 
 from desktop_ui.components.typeface import Font
 from desktop_ui.island_menu import COLUMNS, Cell, Menu
-from desktop_ui.island_model import CapsuleView, Charge, Control, Glyph, Key, Marker, Part, Slot, Text, Zone
+from desktop_ui.island_model import (
+    CapsuleView,
+    Charge,
+    Control,
+    Glyph,
+    Key,
+    Marker,
+    Part,
+    Slot,
+    Text,
+    Zone,
+)
 from winapi.shapes import Rect
 
 # ---- the bar's sizes, in device-independent pixels (DIPs) -----------------------------
@@ -279,7 +290,11 @@ def extent(part: Part, measure: Callable[[Text], float], sizes: Sizes) -> float:
     capsule = sizes.capsule
     match part:
         case Text(tone=tone, reserve=reserve):
-            return max(measure(part), measure(Text(reserve, tone))) if reserve else measure(part)
+            return (
+                max(measure(part), measure(Text(reserve, tone)))
+                if reserve
+                else measure(part)
+            )
         case Glyph():
             return capsule.icon
         case Charge():
@@ -314,16 +329,24 @@ class _Step:
     slot: int
 
 
-def _steps(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes) -> Iterator[_Step]:
+def _steps(
+    slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes
+) -> Iterator[_Step]:
     capsule = sizes.capsule
     for index, slot in enumerate(slots):
         for position, part in enumerate(slot):
             width = extent(part, measure, sizes)
             if not position:
-                yield _Step(part, capsule.slot_gap if index else 0.0, width, index)
+                yield _Step(
+                    part, capsule.slot_gap if index else 0.0, width, index
+                )
             elif width:
                 # Two readings side by side keep the space of separate facts.
-                gap = capsule.slot_gap if textual(part) and textual(slot[position - 1]) else capsule.part_gap
+                gap = (
+                    capsule.slot_gap
+                    if textual(part) and textual(slot[position - 1])
+                    else capsule.part_gap
+                )
                 yield _Step(part, gap, width, index)
             else:
                 yield _Step(part, 0.0, width, index)
@@ -338,13 +361,19 @@ def _placed(steps: Iterable[_Step], start: float) -> Iterator[Spot]:
         x += step.width
 
 
-def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes) -> Content:
+def arrange(
+    slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Sizes
+) -> Content:
     """Parts left to right with their gaps. A control at either end sits concentric with the capsule;
     content without text pads like an icon and is never narrower than a circle.
     """
     capsule = sizes.capsule
     parts = tuple(part for slot in slots for part in slot)
-    pad = capsule.text_pad if any(textual(part) for part in parts) else capsule.icon_pad
+    pad = (
+        capsule.text_pad
+        if any(textual(part) for part in parts)
+        else capsule.icon_pad
+    )
     inset = capsule.inset
 
     def edge(part: Part) -> float:
@@ -358,11 +387,19 @@ def arrange(slots: Sequence[Slot], measure: Callable[[Text], float], sizes: Size
     start = edge(parts[0]) if parts else pad
     spots = tuple(_placed(steps, start))
     # Added left to right like the placement, so the end matches the last part exactly.
-    x = reduce(add, chain.from_iterable((step.gap, step.width) for step in steps), start)
+    x = reduce(
+        add,
+        chain.from_iterable((step.gap, step.width) for step in steps),
+        start,
+    )
     end = x + (edge(parts[-1]) if parts else pad)
     width = max(float(capsule.height), end)
     shift = (width - end) / 2
-    return Content(width, tuple(replace(spot, x=spot.x + shift) for spot in spots), capsule.height)
+    return Content(
+        width,
+        tuple(replace(spot, x=spot.x + shift) for spot in spots),
+        capsule.height,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -378,18 +415,24 @@ def _read(sample: tuple[int, float | None]) -> bool:
     return share is not None
 
 
-def plotted(shares: Sequence[float | None], capacity: int, box: Box) -> Iterator[tuple[Plotted, ...]]:
+def plotted(
+    shares: Sequence[float | None], capacity: int, box: Box
+) -> Iterator[tuple[Plotted, ...]]:
     """The samples' runs as lines across `box`: the newest at its right edge, each earlier one a
     step left, a share of 0 on its bottom and 1 on its top. An unread sample breaks the line."""
     step = box.width / max(1, capacity - 1)
     start = capacity - len(shares)
 
     def at(index: int, share: float) -> Plotted:
-        return Plotted(box.x + (start + index) * step, box.y + box.height * (1 - share))
+        return Plotted(
+            box.x + (start + index) * step, box.y + box.height * (1 - share)
+        )
 
     for read, run in groupby(enumerate(shares), key=_read):
         if read:
-            yield tuple(at(index, share) for index, share in run if share is not None)
+            yield tuple(
+                at(index, share) for index, share in run if share is not None
+            )
 
 
 def lit(content: Content, slot: int, capsule: Capsule) -> Box | None:
@@ -403,20 +446,37 @@ def lit(content: Content, slot: int, capsule: Capsule) -> Box | None:
     right = max(spot.x + spot.width for spot in spots) + pad
     width = max(right - left, capsule.control)
     middle = (left + right) / 2
-    return Box(middle - width / 2, (capsule.height - capsule.control) / 2, width, capsule.control)
+    return Box(
+        middle - width / 2,
+        (capsule.height - capsule.control) / 2,
+        width,
+        capsule.control,
+    )
 
 
-def hung_from(status: CapsuleView, content: Content, opened: Menu, edge: float) -> float:
+def hung_from(
+    status: CapsuleView, content: Content, opened: Menu, edge: float
+) -> float:
     """Where `opened` hangs: the centre of its reading in the status capsule, as a distance from the
     screen's right edge, where that capsule is anchored `edge` in. The reading pressed, else the first
     that opens the panel, else the capsule's middle."""
     slot = opened.anchor
     if slot is None:
-        slot = next((index for index, panel in enumerate(status.panels) if panel is opened.panel), None)
+        slot = next(
+            (
+                index
+                for index, panel in enumerate(status.panels)
+                if panel is opened.panel
+            ),
+            None,
+        )
     spots = tuple(spot for spot in content.spots if spot.slot == slot)
     if not spots:
         return edge + content.width / 2
-    centre = (min(spot.x for spot in spots) + max(spot.x + spot.width for spot in spots)) / 2
+    centre = (
+        min(spot.x for spot in spots)
+        + max(spot.x + spot.width for spot in spots)
+    ) / 2
     return edge + content.width - centre
 
 
@@ -452,12 +512,25 @@ class Box:
 
     def on_device(self, scale: float) -> Rect:
         """The box in device pixels, each edge rounded on its own."""
-        return Rect(round(self.x * scale), round(self.y * scale), round((self.x + self.width) * scale), round((self.y + self.height) * scale))
+        return Rect(
+            round(self.x * scale),
+            round(self.y * scale),
+            round((self.x + self.width) * scale),
+            round((self.y + self.height) * scale),
+        )
 
     def on_screen(self, outer: Rect, scale: float) -> Rect:
         """A window-relative box on screen in device pixels: its corner rounds from the window's, its extent from its size."""
-        left, top = outer.left + round(self.x * scale), outer.top + round(self.y * scale)
-        return Rect(left, top, left + round(self.width * scale), top + round(self.height * scale))
+        left, top = (
+            outer.left + round(self.x * scale),
+            outer.top + round(self.y * scale),
+        )
+        return Rect(
+            left,
+            top,
+            left + round(self.width * scale),
+            top + round(self.height * scale),
+        )
 
 
 def on_pixels(value: float, scale: float) -> float:
@@ -488,7 +561,9 @@ def present(value: float) -> float:
     return min(1.0, max(0.0, value))
 
 
-def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> tuple[Framed, ...]:
+def frame(
+    placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]
+) -> tuple[Framed, ...]:
     """Capsules in `order`, left to right; absent ones (presence 0) take no space."""
 
     def shown(capsule: Placed) -> float:
@@ -502,7 +577,12 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
         return order.index(capsule.key)
 
     def zone(name: Zone) -> tuple[Placed, ...]:
-        return tuple(sorted((c for c in placed if c.zone is name and c.presence > 0), key=position))
+        return tuple(
+            sorted(
+                (c for c in placed if c.zone is name and c.presence > 0),
+                key=position,
+            )
+        )
 
     right: tuple[Framed, ...] = ()
     edge = max(0.0, metrics.width - metrics.edge)
@@ -514,14 +594,26 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
         right = (boxed(capsule, edge), *right)
         edge = max(0.0, edge - metrics.gap)
     boundary = edge if right else metrics.width
-    panels = tuple(hung(capsule, right, metrics) for capsule in zone(Zone.PANEL))
+    panels = tuple(
+        hung(capsule, right, metrics) for capsule in zone(Zone.PANEL)
+    )
 
-    def outward(capsules: tuple[Placed, ...], edge: float, before: float, *, leading: bool) -> tuple[Framed, ...]:
+    def outward(
+        capsules: tuple[Placed, ...],
+        edge: float,
+        before: float,
+        *,
+        leading: bool,
+    ) -> tuple[Framed, ...]:
         framed: tuple[Framed, ...] = ()
         for capsule in capsules:
             space = metrics.gap * min(before, present(capsule.presence))
             x = edge - space - shown(capsule) if leading else edge + space
-            framed = (boxed(capsule, x), *framed) if leading else (*framed, boxed(capsule, x))
+            framed = (
+                (boxed(capsule, x), *framed)
+                if leading
+                else (*framed, boxed(capsule, x))
+            )
             edge = x if leading else x + shown(capsule)
             before = present(capsule.presence)
         return framed
@@ -529,8 +621,12 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
     match zone(Zone.ISLAND):
         case (island, *_):
             presence = present(island.presence)
-            lead = outward(tuple(reversed(zone(Zone.LEAD))), 0.0, presence, leading=True)
-            trail = outward(zone(Zone.TRAIL), shown(island), presence, leading=False)
+            lead = outward(
+                tuple(reversed(zone(Zone.LEAD))), 0.0, presence, leading=True
+            )
+            trail = outward(
+                zone(Zone.TRAIL), shown(island), presence, leading=False
+            )
             dynamic = (*lead, boxed(island, 0.0), *trail)
         case _:
             dynamic = outward(zone(Zone.TRAIL), 0.0, 0.0, leading=False)
@@ -544,9 +640,15 @@ def frame(placed: Sequence[Placed], metrics: Metrics, order: Sequence[Key]) -> t
     def bounded(each: Framed) -> Framed:
         x = max(0.0, each.box.x + shift)
         width = max(0.0, min(each.box.width, boundary - x))
-        return Framed(each.key, Box(x, each.box.y, width, each.box.height), each.presence)
+        return Framed(
+            each.key, Box(x, each.box.y, width, each.box.height), each.presence
+        )
 
-    return (*(bounded(each) for each in dynamic if each.box.x + shift < boundary), *right, *panels)
+    return (
+        *(bounded(each) for each in dynamic if each.box.x + shift < boundary),
+        *right,
+        *panels,
+    )
 
 
 def hung(panel: Placed, readings: Sequence[Framed], metrics: Metrics) -> Framed:
@@ -554,8 +656,17 @@ def hung(panel: Placed, readings: Sequence[Framed], metrics: Metrics) -> Framed:
     presence = present(panel.presence)
     width, height = panel.width * presence, panel.height * presence
     centre = metrics.width - panel.anchor
-    x = max(metrics.edge, min(centre - width / 2, metrics.width - metrics.edge - width))
-    top = max((each.box.y + each.box.height for each in readings), default=metrics.top) + metrics.drop
+    x = max(
+        metrics.edge,
+        min(centre - width / 2, metrics.width - metrics.edge - width),
+    )
+    top = (
+        max(
+            (each.box.y + each.box.height for each in readings),
+            default=metrics.top,
+        )
+        + metrics.drop
+    )
     return Framed(panel.key, Box(x, top, width, height), presence)
 
 
@@ -564,6 +675,11 @@ def snap(framed: Sequence[Framed], scale: float) -> tuple[Framed, ...]:
 
     def device(box: Box) -> Box:
         x, y = on_pixels(box.x, scale), on_pixels(box.y, scale)
-        return Box(x, y, on_pixels(box.x + box.width, scale) - x, on_pixels(box.y + box.height, scale) - y)
+        return Box(
+            x,
+            y,
+            on_pixels(box.x + box.width, scale) - x,
+            on_pixels(box.y + box.height, scale) - y,
+        )
 
     return tuple(Framed(f.key, device(f.box), f.presence) for f in framed)

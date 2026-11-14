@@ -34,7 +34,15 @@ class WinDesktop:
     ) -> WinDesktop:
         """The desktop over `mic`, with a follower that keeps it on the default capture device."""
         follower = audio.DefaultFollower.start(mic)
-        return cls(owner, mic, follower, on_state=on_state, on_job=on_job, on_notify=on_notify, on_problem=on_problem)
+        return cls(
+            owner,
+            mic,
+            follower,
+            on_state=on_state,
+            on_job=on_job,
+            on_notify=on_notify,
+            on_problem=on_problem,
+        )
 
     # ---- the microphone ----------------------------------------------------------------
 
@@ -57,7 +65,9 @@ class WinDesktop:
 
     def set_clipboard(self, text: str) -> None:
         if not clipboard.set_text(self.owner, text):
-            raise OSError("The clipboard is busy. Try copying the transcript again.")
+            raise OSError(
+                "The clipboard is busy. Try copying the transcript again."
+            )
 
     # ---- what the desktop shows --------------------------------------------------------
 

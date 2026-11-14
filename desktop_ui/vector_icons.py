@@ -46,7 +46,16 @@ class Badged:
     badge: str
 
 
-OWN: Final = frozendict({"stop": _STOP, "stop.fill": _STOP, "cpu": _CPU, "memory": _MEMORY, "earlier": _EARLIER, "later": _LATER})
+OWN: Final = frozendict(
+    {
+        "stop": _STOP,
+        "stop.fill": _STOP,
+        "cpu": _CPU,
+        "memory": _MEMORY,
+        "earlier": _EARLIER,
+        "later": _LATER,
+    }
+)
 """Symbols drawn here rather than taken from Fluent."""
 BADGED: Final = frozendict(
     {
@@ -67,9 +76,18 @@ def symbol(name: str) -> str:
     if (own := OWN.get(name)) is not None:
         return own
     if (badged := BADGED.get(name)) is not None:
-        return f'<g transform="scale({BADGE_SCALE})">' + REGULAR[badged.base] + "</g>" + badged.badge
+        return (
+            f'<g transform="scale({BADGE_SCALE})">'
+            + REGULAR[badged.base]
+            + "</g>"
+            + badged.badge
+        )
     base, filled = name.removesuffix(".fill"), name.endswith(".fill")
-    return (FILLED.get(base) if filled else None) or REGULAR.get(base) or REGULAR[FALLBACK]
+    return (
+        (FILLED.get(base) if filled else None)
+        or REGULAR.get(base)
+        or REGULAR[FALLBACK]
+    )
 
 
 @lru_cache(maxsize=128)
@@ -85,13 +103,21 @@ def icon(name: str, color: str, size: int = 16) -> QtGui.QIcon:
     return QtGui.QIcon(pixmap)
 
 
-def paint_icon(painter: QtGui.QPainter, name: str, ink: Shade, bounds: QtCore.QRect | QtCore.QRectF) -> None:
+def paint_icon(
+    painter: QtGui.QPainter,
+    name: str,
+    ink: Shade,
+    bounds: QtCore.QRect | QtCore.QRectF,
+) -> None:
     """A symbol in translucent ink, rendered for the device's pixels at `bounds`, which may sit between logical pixels.
 
     SVG fills take no alpha, so the painter's opacity carries it.
     """
     area = QtCore.QRectF(bounds)
-    symbol = icon(name, ink.color).pixmap(QtCore.QSize(round(area.width()), round(area.height())), painter.device().devicePixelRatioF())
+    symbol = icon(name, ink.color).pixmap(
+        QtCore.QSize(round(area.width()), round(area.height())),
+        painter.device().devicePixelRatioF(),
+    )
     painter.save()
     painter.setOpacity(ink.opacity)
     painter.drawPixmap(area, symbol, QtCore.QRectF(symbol.rect()))

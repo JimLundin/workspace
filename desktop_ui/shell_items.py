@@ -72,30 +72,60 @@ type Seats = Mapping[int, Seat]
 """Newly seen windows' seats, by handle; a minimized window or one on no known desktop has none."""
 
 
-def retained(current: Sequence[Window], before: Sequence[Window], seats: Seats) -> tuple[Window, ...]:
+def retained(
+    current: Sequence[Window], before: Sequence[Window], seats: Seats
+) -> tuple[Window, ...]:
     """Windows seen before keep their places; new ones follow in the order they sit, those with no seat last.
 
     Placement fills an app's places in this order, so windows already placed by an
     earlier run, or restored where they were by their program, keep their places.
     """
     by_handle = frozendict((window.handle, window) for window in current)
-    kept = tuple(window.handle for window in before if window.handle in by_handle)
+    kept = tuple(
+        window.handle for window in before if window.handle in by_handle
+    )
     new = tuple(window for window in current if window.handle not in kept)
-    seated = sorted((window for window in new if window.handle in seats), key=lambda window: seats[window.handle])
-    return (*(by_handle[handle] for handle in kept), *seated, *(window for window in new if window.handle not in seats))
+    seated = sorted(
+        (window for window in new if window.handle in seats),
+        key=lambda window: seats[window.handle],
+    )
+    return (
+        *(by_handle[handle] for handle in kept),
+        *seated,
+        *(window for window in new if window.handle not in seats),
+    )
 
 
-def applications(observed: Sequence[Window], previous: tuple[Application, ...], seats: Seats) -> tuple[Application, ...]:
-    identities = tuple(dict.fromkeys((window.exe or str(window.handle) for window in observed), 0))
-    order = tuple(app.identity for app in previous if app.identity in identities)
-    order = (*order, *(identity for identity in identities if identity not in order))
+def applications(
+    observed: Sequence[Window], previous: tuple[Application, ...], seats: Seats
+) -> tuple[Application, ...]:
+    identities = tuple(
+        dict.fromkeys(
+            (window.exe or str(window.handle) for window in observed), 0
+        )
+    )
+    order = tuple(
+        app.identity for app in previous if app.identity in identities
+    )
+    order = (
+        *order,
+        *(identity for identity in identities if identity not in order),
+    )
 
     def grouped(identity: str) -> Application:
-        current = tuple(window for window in observed if (window.exe or str(window.handle)) == identity)
-        before = next((app for app in previous if app.identity == identity), None)
+        current = tuple(
+            window
+            for window in observed
+            if (window.exe or str(window.handle)) == identity
+        )
+        before = next(
+            (app for app in previous if app.identity == identity), None
+        )
         if before is None:
             return Application(identity, retained(current, (), seats))
-        return Application(identity, retained(current, before.windows, seats), before.image)
+        return Application(
+            identity, retained(current, before.windows, seats), before.image
+        )
 
     return tuple(grouped(identity) for identity in order)
 
@@ -103,28 +133,62 @@ def applications(observed: Sequence[Window], previous: tuple[Application, ...], 
 def pinned_app(app_id: str | None, web_apps: WebApps) -> PinnedApp | None:
     if app_id is None:
         return None
-    return next((app for app, web in web_apps.items() if app_id == web.app_id), None)
+    return next(
+        (app for app, web in web_apps.items() if app_id == web.app_id), None
+    )
 
 
-def not_kept_away(observed: Iterable[Window], app_ids: Mapping[int, str | None], kept_away: frozenset[str]) -> Iterator[Window]:
+def not_kept_away(
+    observed: Iterable[Window],
+    app_ids: Mapping[int, str | None],
+    kept_away: frozenset[str],
+) -> Iterator[Window]:
     """The windows Workspace handles: all but those another program keeps for itself, by their AppUserModelID."""
-    return (window for window in observed if app_ids.get(window.handle) not in kept_away)
+    return (
+        window
+        for window in observed
+        if app_ids.get(window.handle) not in kept_away
+    )
 
 
-def shelf(observed: Sequence[Window], app_ids: Mapping[int, str | None], previous: Shelf, seats: Seats, web_apps: WebApps) -> Shelf:
+def shelf(
+    observed: Sequence[Window],
+    app_ids: Mapping[int, str | None],
+    previous: Shelf,
+    seats: Seats,
+    web_apps: WebApps,
+) -> Shelf:
     """Pinned web-app windows fill their slots; every other window joins its running application."""
-    owners = tuple(pinned_app(app_ids.get(window.handle), web_apps) for window in observed)
+    owners = tuple(
+        pinned_app(app_ids.get(window.handle), web_apps) for window in observed
+    )
 
     def slot(app: PinnedApp) -> Pinned:
-        current = tuple(window for window, owner in zip(observed, owners, strict=True) if owner is app)
-        before = next((pinned.windows for pinned in previous.pinned if pinned.app is app), ())
+        current = tuple(
+            window
+            for window, owner in zip(observed, owners, strict=True)
+            if owner is app
+        )
+        before = next(
+            (pinned.windows for pinned in previous.pinned if pinned.app is app),
+            (),
+        )
         return Pinned(app, retained(current, before, seats))
 
-    others = tuple(window for window, owner in zip(observed, owners, strict=True) if owner is None)
-    return Shelf(tuple(slot(app) for app in web_apps), applications(others, previous.running, seats))
+    others = tuple(
+        window
+        for window, owner in zip(observed, owners, strict=True)
+        if owner is None
+    )
+    return Shelf(
+        tuple(slot(app) for app in web_apps),
+        applications(others, previous.running, seats),
+    )
 
 
-def launch(pending: Launches, app: PinnedApp, now: float, grace: float) -> Launches | None:
+def launch(
+    pending: Launches, app: PinnedApp, now: float, grace: float
+) -> Launches | None:
     """The pending launches after launching `app` now; None while an earlier launch may still open its window,
     which it may take `grace` seconds to show."""
     if pending.get(app, now) > now:
@@ -134,10 +198,18 @@ def launch(pending: Launches, app: PinnedApp, now: float, grace: float) -> Launc
 
 def outstanding(pending: Launches, current: Shelf) -> Launches:
     """A launch whose window has appeared is no longer pending, so reopening after closing it launches again."""
-    return frozendict((app, due) for app, due in pending.items() if all(slot.app is not app or not slot.windows for slot in current.pinned))
+    return frozendict(
+        (app, due)
+        for app, due in pending.items()
+        if all(
+            slot.app is not app or not slot.windows for slot in current.pinned
+        )
+    )
 
 
-def caption_clip(outer: Rect, caption: Rect, region: Rect | None) -> Rect | None:
+def caption_clip(
+    outer: Rect, caption: Rect, region: Rect | None
+) -> Rect | None:
     """The window region hiding a slot window's caption, which Edge paints inside its client
     area; None when the current region already does. Regions don't follow resizing."""
     wanted = Rect(0, caption.bottom, outer.width, outer.height)
@@ -146,4 +218,8 @@ def caption_clip(outer: Rect, caption: Rect, region: Rect | None) -> Rect | None
 
 def next_window(handles: Sequence[int], foreground: int) -> int:
     """The window after the one in front, or the first: repeated presses visit them all."""
-    return handles[(handles.index(foreground) + 1) % len(handles)] if foreground in handles else handles[0]
+    return (
+        handles[(handles.index(foreground) + 1) % len(handles)]
+        if foreground in handles
+        else handles[0]
+    )

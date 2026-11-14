@@ -21,27 +21,44 @@ def through(tmp_path: Path, gateway: Gateway) -> Settings:
     """Assistant settings whose requests go through `gateway`'s published endpoint."""
     path = tmp_path / "endpoint-gateway"
     publish(path, Endpoint(gateway.port, TOKEN))
-    return Settings("https://provider.invalid/v1", "unused", "gpt-4o-transcribe", "", gateway=path)
+    return Settings(
+        "https://provider.invalid/v1",
+        "unused",
+        "gpt-4o-transcribe",
+        "",
+        gateway=path,
+    )
 
 
-def test_requests_reach_the_provider_with_its_key_not_the_gateway_token(tmp_path: Path) -> None:
+def test_requests_reach_the_provider_with_its_key_not_the_gateway_token(
+    tmp_path: Path,
+) -> None:
     # Defect: the gateway forwards the client's token (or no key) to the provider,
     # loses the path, or the assistant still calls the provider directly.
     with fake_endpoint() as provider:
         gateway = Gateway.listen(Upstream(provider.url, "provider-key"), TOKEN)
         gateway.start()
         try:
-            assert transcribe(through(tmp_path, gateway), wav(bytes(2 * RATE), RATE)) == "hello there"
+            assert (
+                transcribe(
+                    through(tmp_path, gateway), wav(bytes(2 * RATE), RATE)
+                )
+                == "hello there"
+            )
         finally:
             gateway.close()
         assert provider.last.path == "/v1/audio/transcriptions"
         assert provider.last.authorization == "Bearer provider-key"
 
 
-def test_a_wrong_token_is_refused_before_the_provider_is_called(tmp_path: Path) -> None:
+def test_a_wrong_token_is_refused_before_the_provider_is_called(
+    tmp_path: Path,
+) -> None:
     # Defect: any local program reaching the port spends the provider key.
     with fake_endpoint() as provider:
-        gateway = Gateway.listen(Upstream(provider.url, "provider-key"), "another-boot")
+        gateway = Gateway.listen(
+            Upstream(provider.url, "provider-key"), "another-boot"
+        )
         gateway.start()
         try:
             result = transcribe(through(tmp_path, gateway), wav(b"", RATE))
@@ -52,7 +69,9 @@ def test_a_wrong_token_is_refused_before_the_provider_is_called(tmp_path: Path) 
         assert provider.received == []
 
 
-def test_an_unconfigured_gateway_names_the_missing_variables(tmp_path: Path) -> None:
+def test_an_unconfigured_gateway_names_the_missing_variables(
+    tmp_path: Path,
+) -> None:
     # Defect: a gateway started without credentials crashes (and the keeper gives
     # up on it) or answers with an error that doesn't say what to set.
     gateway = Gateway.listen(Unconfigured(("OPENAI_API_KEY",)), TOKEN)
@@ -81,7 +100,12 @@ def test_streamed_replies_are_relayed_as_they_arrive() -> None:
         gateway.start()
         try:
             url = f"http://127.0.0.1:{gateway.port}/v1/responses"
-            with httpx.stream("POST", url, headers={"Authorization": f"Bearer {TOKEN}"}, content=b"{}") as reply:
+            with httpx.stream(
+                "POST",
+                url,
+                headers={"Authorization": f"Bearer {TOKEN}"},
+                content=b"{}",
+            ) as reply:
                 lines = reply.iter_lines()
                 assert next(lines) == "data: first"
                 arrived_early = not first_read.is_set()
@@ -104,10 +128,18 @@ def test_a_restarted_gateway_takes_back_its_port() -> None:
         second.close()
 
 
-def test_settings_without_a_published_gateway_call_the_provider(tmp_path: Path) -> None:
+def test_settings_without_a_published_gateway_call_the_provider(
+    tmp_path: Path,
+) -> None:
     # Defect: before the gateway first listens, the assistant's requests go nowhere.
     with fake_endpoint() as provider:
-        settings = Settings(provider.url, "provider-key", "gpt-4o-transcribe", "", gateway=tmp_path / "missing")
+        settings = Settings(
+            provider.url,
+            "provider-key",
+            "gpt-4o-transcribe",
+            "",
+            gateway=tmp_path / "missing",
+        )
         assert transcribe(settings, wav(b"", RATE)) == "hello there"
         assert_called(provider)
 

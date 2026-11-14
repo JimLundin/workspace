@@ -24,7 +24,12 @@ def main() -> None:
         sys.exit("Workspace only runs on Windows")
     root = Path(__file__).resolve().parent.parent
     keyboard = KeyboardView.of(layout.LAYOUT, apps.APPS)
-    hints = frozendict({tool: shortcut_hint(keyboard.shortcut(tool), compact=True) for tool in Tool})
+    hints = frozendict(
+        {
+            tool: shortcut_hint(keyboard.shortcut(tool), compact=True)
+            for tool in Tool
+        }
+    )
     island = BarSpec(
         island=bar.ISLAND,
         controls=bar.CONTROLS,
@@ -40,7 +45,9 @@ def main() -> None:
         DesktopSettings(
             programs=programs.PROGRAMS,
             places=Places.of(os.environ, programs.PROGRAMS),
-            launcher=Launcher((str(interpreter(root)), str(root / "launch.py")), root),
+            launcher=Launcher(
+                (str(interpreter(root)), str(root / "launch.py")), root
+            ),
             apps=apps.APPS,
             keyboard=keyboard,
             design=look.DESIGN,

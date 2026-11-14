@@ -6,7 +6,17 @@ from dataclasses import dataclass
 REQUIRED = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
 
 HOP_BY_HOP = frozenset(
-    {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "trailers", "transfer-encoding", "upgrade"}
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+    }
 )
 """Headers that describe one connection, not the request; never forwarded."""
 _REQUEST_DROPPED = HOP_BY_HOP | {"host", "authorization", "content-length"}
@@ -42,12 +52,22 @@ def target(upstream: Upstream, path: str) -> str | None:
     return upstream.base_url + path.removeprefix("/v1")
 
 
-def request_headers(headers: Iterable[tuple[str, str]], upstream: Upstream) -> Headers:
+def request_headers(
+    headers: Iterable[tuple[str, str]], upstream: Upstream
+) -> Headers:
     """The client's headers with the gateway token swapped for the provider's key."""
-    kept = tuple((name, value) for name, value in headers if name.lower() not in _REQUEST_DROPPED)
+    kept = tuple(
+        (name, value)
+        for name, value in headers
+        if name.lower() not in _REQUEST_DROPPED
+    )
     return (*kept, ("Authorization", f"Bearer {upstream.api_key}"))
 
 
 def response_headers(headers: Iterable[tuple[str, str]]) -> Headers:
     """The provider's headers; the gateway re-frames the body itself, chunk by chunk."""
-    return tuple((name, value) for name, value in headers if name.lower() not in _RESPONSE_DROPPED)
+    return tuple(
+        (name, value)
+        for name, value in headers
+        if name.lower() not in _RESPONSE_DROPPED
+    )

@@ -170,7 +170,9 @@ def keyboard_height(keys: KeysSpec) -> float:
 
 
 class KeymapCanvas(QtWidgets.QWidget):
-    def __init__(self, theme: Tokens, keys: KeysSpec, view: KeyboardView) -> None:
+    def __init__(
+        self, theme: Tokens, keys: KeysSpec, view: KeyboardView
+    ) -> None:
         super().__init__()
         self.theme: Tokens = theme
         self.keys = keys
@@ -186,18 +188,35 @@ class KeymapCanvas(QtWidgets.QWidget):
         self.caps.clear()
         self.boxes.clear()
         keys = self.keys
-        for row_number, (caps, start) in enumerate(zip(self.view.keymap(layer), keys.rows, strict=True)):
-            x, y = start * keys.unit * scale, row_number * (keys.height + keys.gap) * scale
+        for row_number, (caps, start) in enumerate(
+            zip(self.view.keymap(layer), keys.rows, strict=True)
+        ):
+            x, y = (
+                start * keys.unit * scale,
+                row_number * (keys.height + keys.gap) * scale,
+            )
             for cap in caps:
                 size = keys.widths.get(cap.physical, 1.0)
                 self.caps[cap.physical] = cap
-                self.boxes[cap.physical] = QtCore.QRectF(x, y, (size * keys.unit - keys.gap) * scale, keys.height * scale)
+                self.boxes[cap.physical] = QtCore.QRectF(
+                    x,
+                    y,
+                    (size * keys.unit - keys.gap) * scale,
+                    keys.height * scale,
+                )
                 x += size * keys.unit * scale
-        self.setFixedSize(round(keys.columns * keys.unit * scale), round(keyboard_height(keys) * scale))
+        self.setFixedSize(
+            round(keys.columns * keys.unit * scale),
+            round(keyboard_height(keys) * scale),
+        )
         self.update()
 
     def colors(self, name: str) -> Lit:
-        return self.keys.pressed[self.theme.scheme] if name in self.highlighted else _keycap(self.caps[name].role, self.theme, self.keys)
+        return (
+            self.keys.pressed[self.theme.scheme]
+            if name in self.highlighted
+            else _keycap(self.caps[name].role, self.theme, self.keys)
+        )
 
     def press(self, names: frozenset[str]) -> None:
         changed = names ^ self.highlighted
@@ -215,28 +234,64 @@ class KeymapCanvas(QtWidgets.QWidget):
             lit = self.colors(name)
             fill, ink, keys = lit.fill, lit.ink, self.keys
             pressed = name in self.highlighted
-            painter.setPen(QtGui.QPen(QtGui.QColor(fill if pressed else self.theme.solid_edge.argb), 1))
+            painter.setPen(
+                QtGui.QPen(
+                    QtGui.QColor(
+                        fill if pressed else self.theme.solid_edge.argb
+                    ),
+                    1,
+                )
+            )
             painter.setBrush(QtGui.QColor(fill))
             corner = max(keys.corner_least, keys.corner * self.scale)
-            painter.drawRoundedRect(bounds.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner)
-            small = inter(Font(max(keys.name_least, round(keys.name.pixels * self.scale)), keys.name.weight))
+            painter.drawRoundedRect(
+                bounds.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner
+            )
+            small = inter(
+                Font(
+                    max(keys.name_least, round(keys.name.pixels * self.scale)),
+                    keys.name.weight,
+                )
+            )
             painter.setFont(small)
-            painter.setPen(QtGui.QColor(ink if pressed else self.theme.ink3.argb))
+            painter.setPen(
+                QtGui.QColor(ink if pressed else self.theme.ink3.argb)
+            )
             inset = keys.name_inset
-            named = bounds.adjusted((inset + 2) * self.scale, inset * self.scale, -inset, -inset)
-            painter.drawText(named, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, name)
+            named = bounds.adjusted(
+                (inset + 2) * self.scale, inset * self.scale, -inset, -inset
+            )
+            painter.drawText(
+                named,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+                name,
+            )
             # Long labels shrink until they fit their key.
-            legend = keys.legend if len(cap.label) <= keys.legend_short else keys.legend_long
+            legend = (
+                keys.legend
+                if len(cap.label) <= keys.legend_short
+                else keys.legend_long
+            )
             size = round(legend.pixels * self.scale)
             room = bounds.width() - keys.legend_fit * self.scale
-            while size > keys.legend_least and QtGui.QFontMetricsF(inter(Font(size, legend.weight))).horizontalAdvance(cap.label) > room:
+            while (
+                size > keys.legend_least
+                and QtGui.QFontMetricsF(
+                    inter(Font(size, legend.weight))
+                ).horizontalAdvance(cap.label)
+                > room
+            ):
                 size -= 1
-            painter.setFont(inter(Font(max(keys.legend_least, size), legend.weight)))
+            painter.setFont(
+                inter(Font(max(keys.legend_least, size), legend.weight))
+            )
             painter.setPen(QtGui.QColor(ink))
             painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, cap.label)
             painter.setFont(small)
             painter.drawText(
-                bounds.adjusted(0, 0, 0, -keys.hold_bottom * self.scale), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom, cap.hold
+                bounds.adjusted(0, 0, 0, -keys.hold_bottom * self.scale),
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                cap.hold,
             )
 
 
@@ -250,7 +305,13 @@ class OverlayDrag:
 class OverlayHandle(QtWidgets.QWidget):
     """A small capsule above the overlay; the overlay itself lets clicks through."""
 
-    def __init__(self, drag: OverlayDrag, cursor: Callable[[], Point], spec: OverlaySpec, design: Design) -> None:
+    def __init__(
+        self,
+        drag: OverlayDrag,
+        cursor: Callable[[], Point],
+        spec: OverlaySpec,
+        design: Design,
+    ) -> None:
         super().__init__()
         self.drag: OverlayDrag = drag
         self.read_cursor: Callable[[], Point] = cursor
@@ -258,9 +319,16 @@ class OverlayHandle(QtWidgets.QWidget):
         self.setAccessibleName("Drag to move the keyboard overlay")
         theme = design.tokens()
         self.setStyleSheet(window_style(theme, design))
-        layout = row(surface(self, theme, round(spec.handle_radius), design.kit))
+        layout = row(
+            surface(self, theme, round(spec.handle_radius), design.kit)
+        )
         padding = round(spec.handle_padding)
-        layout.setContentsMargins(round(spec.handle_leading), padding, round(spec.handle_trailing), padding)
+        layout.setContentsMargins(
+            round(spec.handle_leading),
+            padding,
+            round(spec.handle_trailing),
+            padding,
+        )
         layout.setSpacing(round(spec.handle_spacing))
         grip = QtWidgets.QLabel()
         grip.setPixmap(glyph(spec.handle_glyph, theme.ink2))
@@ -312,7 +380,13 @@ class KeymapOverlay:
     _state: Cell[_Overlaid]
 
     @classmethod
-    def open(cls, spec: KeymapSpec, position: Path, design: Design, view: KeyboardView) -> KeymapOverlay:
+    def open(
+        cls,
+        spec: KeymapSpec,
+        position: Path,
+        design: Design,
+        view: KeyboardView,
+    ) -> KeymapOverlay:
         """The overlay, its dragged position kept at `position`."""
         shown, look = NativeOverlayDesktop(), spec.overlay
         theme = design.tokens()
@@ -321,7 +395,12 @@ class KeymapOverlay:
         window.setStyleSheet(window_style(theme, design))
         window.setWindowOpacity(look.opacity)
         layout = column(surface(window, theme, round(look.radius), design.kit))
-        layout.setContentsMargins(round(look.side), round(look.top), round(look.side), round(look.bottom))
+        layout.setContentsMargins(
+            round(look.side),
+            round(look.top),
+            round(look.side),
+            round(look.bottom),
+        )
         layout.setSpacing(round(look.spacing))
         heading = label("", "muted")
         heading.setContentsMargins(round(look.heading_inset), 0, 0, 0)
@@ -343,10 +422,29 @@ class KeymapOverlay:
         drag = OverlayDrag(start, move, end)
         handle = OverlayHandle(drag, shown.cursor, look, design)
         handle_frame = shown.prepare(handle, click_through=False)
-        overlay = cls(spec, shown, window, heading, canvas, frame, handle, handle_frame, position, Cell(_Overlaid(load_position(position))))
+        overlay = cls(
+            spec,
+            shown,
+            window,
+            heading,
+            canvas,
+            frame,
+            handle,
+            handle_frame,
+            position,
+            Cell(_Overlaid(load_position(position))),
+        )
         return overlay
 
-    def show(self, layer: Layer, title: str, work: Rect, *, visible: bool, pressed: frozenset[Scancode] = frozenset()) -> None:
+    def show(
+        self,
+        layer: Layer,
+        title: str,
+        work: Rect,
+        *,
+        visible: bool,
+        pressed: frozenset[Scancode] = frozenset(),
+    ) -> None:
         if not visible:
             self._finish_drag()
             self.set_pressed(frozenset(), reset=True)
@@ -361,8 +459,14 @@ class KeymapOverlay:
             return
         if placed := self._state.get().position:
             work = nearest_work_area(placed, areas)
-        density, look, keys = self._window.devicePixelRatioF(), self._spec.overlay, self._spec.keys
-        across = (work.width / density - look.margin) / (keys.columns * keys.unit)
+        density, look, keys = (
+            self._window.devicePixelRatioF(),
+            self._spec.overlay,
+            self._spec.keys,
+        )
+        across = (work.width / density - look.margin) / (
+            keys.columns * keys.unit
+        )
         down = (work.height / density - look.reserve) / keyboard_height(keys)
         scale = max(look.smallest, min(look.largest, across, down))
         self._heading.setText(f"{look.heading} · {title}")
@@ -372,38 +476,74 @@ class KeymapOverlay:
         self._window.adjustSize()
         placed = self._state.get().position
         if placed is None:
-            placed = Point(work.left + work.width // 2, work.bottom - round((self._window.height() + self._handle.height() + look.rest) * density))
+            placed = Point(
+                work.left + work.width // 2,
+                work.bottom
+                - round(
+                    (self._window.height() + self._handle.height() + look.rest)
+                    * density
+                ),
+            )
         self._move(placed)
         self._desktop.present(self._window)
         self._desktop.present(self._handle)
 
-    def set_pressed(self, pressed: frozenset[Scancode], *, reset: bool = False) -> None:
+    def set_pressed(
+        self, pressed: frozenset[Scancode], *, reset: bool = False
+    ) -> None:
         if reset:
             new_highlights = KeyHighlights()
-            self._state.set(replace(self._state.get(), highlights=new_highlights))
+            self._state.set(
+                replace(self._state.get(), highlights=new_highlights)
+            )
         if self._state.get().view is not None:
-            new_highlights = self._state.get().highlights.updated(pressed, self._desktop.clock(), self._spec.overlay.tap)
-            self._state.set(replace(self._state.get(), highlights=new_highlights))
+            new_highlights = self._state.get().highlights.updated(
+                pressed, self._desktop.clock(), self._spec.overlay.tap
+            )
+            self._state.set(
+                replace(self._state.get(), highlights=new_highlights)
+            )
             self._paint_highlights()
 
     def _paint_highlights(self) -> None:
         cancel(self._state.get().highlight_timer)
         self._state.set(replace(self._state.get(), highlight_timer=None))
         now = self._desktop.clock()
-        self._canvas.press(frozenset(PHYSICAL_NAMES[key] for key in self._state.get().highlights.visible(now)))
+        self._canvas.press(
+            frozenset(
+                PHYSICAL_NAMES[key]
+                for key in self._state.get().highlights.visible(now)
+            )
+        )
         if (delay := self._state.get().highlights.delay(now)) is not None:
-            new_highlight_timer = later(self._window, delay, self._paint_highlights)
-            self._state.set(replace(self._state.get(), highlight_timer=new_highlight_timer))
+            new_highlight_timer = later(
+                self._window, delay, self._paint_highlights
+            )
+            self._state.set(
+                replace(self._state.get(), highlight_timer=new_highlight_timer)
+            )
 
     def _move(self, position: Point) -> None:
         self._state.set(replace(self._state.get(), position=position))
         x, y = position.x, position.y
         scale = self._window.devicePixelRatioF()
-        window, handle = device_size(self._window, scale), device_size(self._handle, scale)
-        left, top = x - window.width // 2, y + handle.height + self._spec.overlay.handle_gap
-        self._desktop.move(self._frame, Rect(left, top, left + window.width, top + window.height))
+        window, handle = (
+            device_size(self._window, scale),
+            device_size(self._handle, scale),
+        )
+        left, top = (
+            x - window.width // 2,
+            y + handle.height + self._spec.overlay.handle_gap,
+        )
+        self._desktop.move(
+            self._frame,
+            Rect(left, top, left + window.width, top + window.height),
+        )
         left = x - handle.width // 2
-        self._desktop.move(self._handle_frame, Rect(left, y, left + handle.width, y + handle.height))
+        self._desktop.move(
+            self._handle_frame,
+            Rect(left, y, left + handle.width, y + handle.height),
+        )
 
     def _start_drag(self, point: Point) -> None:
         overlaid = self._state.get()
@@ -426,7 +566,14 @@ class KeymapOverlay:
                     placed,
                     Size(
                         round(self._window.width() * scale),
-                        round((self._window.height() + self._handle.height() + self._spec.overlay.handle_gap) * scale),
+                        round(
+                            (
+                                self._window.height()
+                                + self._handle.height()
+                                + self._spec.overlay.handle_gap
+                            )
+                            * scale
+                        ),
                     ),
                     nearest_work_area(placed, areas),
                 )
@@ -445,7 +592,9 @@ class KeymapWindow:
     shortcuts: tuple[QtGui.QShortcut, ...]
 
     @classmethod
-    def open(cls, spec: KeymapSpec, design: Design, view: KeyboardView) -> KeymapWindow:
+    def open(
+        cls, spec: KeymapSpec, design: Design, view: KeyboardView
+    ) -> KeymapWindow:
         # The buttons and shortcuts act on the window record made just after them.
         def close() -> None:
             window.hide()
@@ -455,13 +604,26 @@ class KeymapWindow:
             return lambda: shown.draw(layer)
 
         size = spec.window
-        window = Window("Workspace key map", close, design, width=size.width, height=size.height)
+        window = Window(
+            "Workspace key map",
+            close,
+            design,
+            width=size.width,
+            height=size.height,
+        )
         layout = column(window)
-        layout.setContentsMargins(round(size.side), round(size.top), round(size.side), round(size.top))
-        keys = tuple(button(layer.name.title(), chooser(layer)) for layer in _LAYERS)
+        layout.setContentsMargins(
+            round(size.side), round(size.top), round(size.side), round(size.top)
+        )
+        keys = tuple(
+            button(layer.name.title(), chooser(layer)) for layer in _LAYERS
+        )
         for key in keys:
             key.setCheckable(True)
-        shortcuts = tuple(QtGui.QShortcut(QtGui.QKeySequence(str(index + 1)), window) for index in range(len(_LAYERS)))
+        shortcuts = tuple(
+            QtGui.QShortcut(QtGui.QKeySequence(str(index + 1)), window)
+            for index in range(len(_LAYERS))
+        )
         for shortcut, layer in zip(shortcuts, _LAYERS, strict=True):
             shortcut.activated.connect(chooser(layer))
         buttons = row()

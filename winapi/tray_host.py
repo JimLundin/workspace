@@ -87,20 +87,32 @@ def position_reply(data: bytes, locations: tuple[Located, ...]) -> int | None:
     if len(data) < 40:
         return None
     operation = int.from_bytes(data[4:8], "little")
-    window, identity = (int.from_bytes(data[offset : offset + 4], "little") for offset in (16, 20))
+    window, identity = (
+        int.from_bytes(data[offset : offset + 4], "little")
+        for offset in (16, 20)
+    )
     guid = data[24:40]
     located = next(
         (
             location
             for location in locations
-            if (location.entry.guid == guid if any(guid) else (location.entry.window, location.entry.identity) == (window, identity))
+            if (
+                location.entry.guid == guid
+                if any(guid)
+                else (location.entry.window, location.entry.identity)
+                == (window, identity)
+            )
         ),
         None,
     )
     if located is None or operation not in (1, 2):
         return None
     bounds = located.bounds
-    x, y = (bounds.left, bounds.top) if operation == 1 else (bounds.width, bounds.height)
+    x, y = (
+        (bounds.left, bounds.top)
+        if operation == 1
+        else (bounds.width, bounds.height)
+    )
     return (x & 0xFFFF) | ((y & 0xFFFF) << 16)
 
 
@@ -108,25 +120,54 @@ def registration(data: bytes) -> Registration | None:
     if len(data) < 296:
         return None
     magic, operation, size, window, identity, flags, callback, icon = (
-        int.from_bytes(data[offset : offset + 4], "little") for offset in range(0, 32, 4)
+        int.from_bytes(data[offset : offset + 4], "little")
+        for offset in range(0, 32, 4)
     )
-    if magic != 0x34753423 or operation not in (0, 1, 2, 4) or size < 288 or size > len(data) - 8 or not window:
+    if (
+        magic != 0x34753423
+        or operation not in (0, 1, 2, 4)
+        or size < 288
+        or size > len(data) - 8
+        or not window
+    ):
         return None
     tip = data[32:288].decode("utf-16-le", errors="replace").split("\0", 1)[0]
-    state, mask = (int.from_bytes(data[offset : offset + 4], "little") for offset in (288, 292))
+    state, mask = (
+        int.from_bytes(data[offset : offset + 4], "little")
+        for offset in (288, 292)
+    )
     version = int.from_bytes(data[808:812], "little") if len(data) >= 812 else 0
     guid = data[944:960] if flags & 0x20 and len(data) >= 960 else b""
     if flags & 0x20 and len(guid) != 16:
         return None
-    return Registration(operation, window, identity, flags, callback, icon, tip, state, mask, version, guid)
+    return Registration(
+        operation,
+        window,
+        identity,
+        flags,
+        callback,
+        icon,
+        tip,
+        state,
+        mask,
+        version,
+        guid,
+    )
 
 
-def update(entries: tuple[Entry, ...], observed: Registration, image: Pixels | None) -> tuple[Entry, ...]:
+def update(
+    entries: tuple[Entry, ...], observed: Registration, image: Pixels | None
+) -> tuple[Entry, ...]:
     previous = next(
         (
             entry
             for entry in entries
-            if (entry.guid == observed.guid if observed.guid else (entry.window, entry.identity) == (observed.window, observed.identity))
+            if (
+                entry.guid == observed.guid
+                if observed.guid
+                else (entry.window, entry.identity)
+                == (observed.window, observed.identity)
+            )
         ),
         None,
     )
@@ -135,7 +176,9 @@ def update(entries: tuple[Entry, ...], observed: Registration, image: Pixels | N
     if previous is None:
         if observed.operation != 0 or len(entries) >= 128:
             return entries
-        previous = Entry(observed.window, observed.identity, observed.guid, 0, None, "")
+        previous = Entry(
+            observed.window, observed.identity, observed.guid, 0, None, ""
+        )
         entries = (*entries, previous)
     changed = replace(
         previous,
@@ -144,7 +187,9 @@ def update(entries: tuple[Entry, ...], observed: Registration, image: Pixels | N
         callback=observed.callback if observed.flags & 1 else previous.callback,
         image=image if observed.flags & 2 else previous.image,
         tip=observed.tip if observed.flags & 4 else previous.tip,
-        hidden=bool(observed.state & 1) if observed.flags & 8 and observed.mask & 1 else previous.hidden,
+        hidden=bool(observed.state & 1)
+        if observed.flags & 8 and observed.mask & 1
+        else previous.hidden,
         version=0 if observed.operation == 0 else previous.version,
     )
     if observed.operation == 4:
@@ -162,10 +207,17 @@ class Notify:
 
 def callbacks(entry: Entry, click: Click, point: Point) -> tuple[Notify, ...]:
     messages = click.value
-    events = (*messages.mouse, *messages.selected) if entry.version >= 3 else messages.mouse
+    events = (
+        (*messages.mouse, *messages.selected)
+        if entry.version >= 3
+        else messages.mouse
+    )
     if entry.version >= 4:
         coordinates = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)
-        return tuple(Notify(coordinates, event | ((entry.identity & 0xFFFF) << 16)) for event in events)
+        return tuple(
+            Notify(coordinates, event | ((entry.identity & 0xFFFF) << 16))
+            for event in events
+        )
     return tuple(Notify(entry.identity, event) for event in events)
 
 
@@ -178,7 +230,9 @@ class _Hosted:
     closed: bool = False
 
 
-def _proxied(hosted: Cell[_Hosted], message: int, wparam: int, lparam: int) -> int | None:
+def _proxied(
+    hosted: Cell[_Hosted], message: int, wparam: int, lparam: int
+) -> int | None:
     """The proxy window's procedure: answer icon positions and registrations, forward the rest to Explorer."""
     # Required Windows WNDPROC ABI; WM_COPYDATA pointers exist only during this callback.
     if hosted.get().closed:
@@ -186,14 +240,26 @@ def _proxied(hosted: Cell[_Hosted], message: int, wparam: int, lparam: int) -> i
     if message == WM_COPYDATA and lparam:
         copy = COPYDATASTRUCT.from_address(lparam)
         if copy.dwData == 3 and copy.lpData and 40 <= copy.cbData <= 128:
-            reply = position_reply(ctypes.string_at(copy.lpData, copy.cbData), hosted.get().locations)
+            reply = position_reply(
+                ctypes.string_at(copy.lpData, copy.cbData),
+                hosted.get().locations,
+            )
             if reply is not None:
                 return reply
         if copy.dwData == 1 and copy.lpData and 296 <= copy.cbData <= 4096:
             observed = registration(ctypes.string_at(copy.lpData, copy.cbData))
             if observed is not None:
-                pixels = native_pixels(observed.icon) if observed.flags & 2 and observed.operation in (0, 1) else None
-                hosted.update(lambda current: replace(current, entries=update(current.entries, observed, pixels)))
+                pixels = (
+                    native_pixels(observed.icon)
+                    if observed.flags & 2 and observed.operation in (0, 1)
+                    else None
+                )
+                hosted.update(
+                    lambda current: replace(
+                        current,
+                        entries=update(current.entries, observed, pixels),
+                    )
+                )
     if message == TASKBAR_CREATED:
         return 0
     if message == WM_COPYDATA or message >= WM_USER:
@@ -202,7 +268,15 @@ def _proxied(hosted: Cell[_Hosted], message: int, wparam: int, lparam: int) -> i
             hosted.update(lambda current: replace(current, explorer=explorer))
         if explorer := hosted.get().explorer:
             result = ctypes.c_size_t()
-            if SendMessageTimeoutW(explorer, message, wparam, lparam, SMTO_ABORTIFHUNG, 100, ctypes.byref(result)):
+            if SendMessageTimeoutW(
+                explorer,
+                message,
+                wparam,
+                lparam,
+                SMTO_ABORTIFHUNG,
+                100,
+                ctypes.byref(result),
+            ):
                 return ctypes.c_ssize_t(result.value).value
         return 0
     return None
@@ -219,10 +293,14 @@ class TrayHost:
     def start(cls) -> TrayHost:
         hosted = Cell(_Hosted(explorer=next(iter(desktop_shell.taskbars()), 0)))
 
-        def message(_hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
+        def message(
+            _hwnd: int, message: int, wparam: int, lparam: int
+        ) -> int | None:
             return _proxied(hosted, message, wparam, lparam)
 
-        window = AppWindow.create("workspace tray proxy", message, class_name="Shell_TrayWnd")
+        window = AppWindow.create(
+            "workspace tray proxy", message, class_name="Shell_TrayWnd"
+        )
         host = cls(window, hosted)
         SetPropW(window.handle, "workspace tray proxy", 1)
         SetPropW(window.handle, "TaskbandHWND", window.handle)
@@ -235,21 +313,44 @@ class TrayHost:
         return self._hosted.get().entries
 
     def poll(self) -> tuple[Entry, ...]:
-        SetWindowPos(self.window.handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE)
-        hosted = self._hosted.update(
-            lambda current: replace(current, entries=tuple(entry for entry in current.entries if windows.exists(entry.window)))
+        SetWindowPos(
+            self.window.handle,
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE,
         )
-        return tuple(entry for entry in hosted.entries if not entry.hidden and entry.callback)
+        hosted = self._hosted.update(
+            lambda current: replace(
+                current,
+                entries=tuple(
+                    entry
+                    for entry in current.entries
+                    if windows.exists(entry.window)
+                ),
+            )
+        )
+        return tuple(
+            entry
+            for entry in hosted.entries
+            if not entry.hidden and entry.callback
+        )
 
     def locate(self, locations: tuple[Located, ...]) -> None:
-        self._hosted.update(lambda current: replace(current, locations=locations))
+        self._hosted.update(
+            lambda current: replace(current, locations=locations)
+        )
 
     def click(self, entry: Entry, click: Click, point: Point) -> None:
         # The three inputs are the registered owner, action, and native click coordinates.
         if entry in self.entries and windows.exists(entry.window):
             AllowSetForegroundWindow(windows.process_id(entry.window))
             for notify in callbacks(entry, click, point):
-                SendNotifyMessageW(entry.window, entry.callback, notify.wparam, notify.lparam)
+                SendNotifyMessageW(
+                    entry.window, entry.callback, notify.wparam, notify.lparam
+                )
 
     def close(self) -> None:
         self._hosted.update(lambda current: replace(current, closed=True))

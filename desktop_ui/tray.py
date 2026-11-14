@@ -31,14 +31,29 @@ class Tray:
 
     @classmethod
     def add(cls, window: int, message: int, spec: TraySpec) -> Tray:
-        icons = frozendict((state, shell.Icon.draw(spec.size, dot(spec.size, spec.colours[state]))) for state in State)
-        return cls(spec, icons, shell.TrayIcon.add(window, message, icons[State.READY], spec.name))
+        icons = frozendict(
+            (
+                state,
+                shell.Icon.draw(spec.size, dot(spec.size, spec.colours[state])),
+            )
+            for state in State
+        )
+        return cls(
+            spec,
+            icons,
+            shell.TrayIcon.add(window, message, icons[State.READY], spec.name),
+        )
 
     def show(self, state: State) -> None:
-        self._icon.update(self._icons[state], f"{self._spec.name}: {state.name.lower().replace('_', ' ')}")
+        self._icon.update(
+            self._icons[state],
+            f"{self._spec.name}: {state.name.lower().replace('_', ' ')}",
+        )
 
     def notify(self, title: str, text: str, *, warning: bool = False) -> None:
-        self._icon.notify(title, text, shell.NIIF_WARNING if warning else shell.NIIF_INFO)
+        self._icon.notify(
+            title, text, shell.NIIF_WARNING if warning else shell.NIIF_INFO
+        )
 
     def remove(self) -> None:
         self._icon.remove()

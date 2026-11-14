@@ -29,23 +29,64 @@ class Beat:
 
 def level(value: float | None) -> float:
     """A microphone level as a wave bar's height, on a perceptual scale."""
-    return min(1.0, math.log10(1 + max(0.0, value or 0.0) * 90) / math.log10(91))
+    return min(
+        1.0, math.log10(1 + max(0.0, value or 0.0) * 90) / math.log10(91)
+    )
 
 
-def paint_wave(painter: QtGui.QPainter, start: QtCore.QPointF, trace: Iterable[float], capsule: Capsule, markers: Markers) -> None:
+def paint_wave(
+    painter: QtGui.QPainter,
+    start: QtCore.QPointF,
+    trace: Iterable[float],
+    capsule: Capsule,
+    markers: Markers,
+) -> None:
     """One bar per sample from `start`, centred on its height, in the painter's brush."""
     painter.setPen(Qt.PenStyle.NoPen)
     pitch, corner = capsule.wave_bar + capsule.wave_gap, markers.wave_corner
     for index, sample in enumerate(trace):
         height = markers.wave_floor + sample * markers.wave_reach
-        painter.drawRoundedRect(QtCore.QRectF(start.x() + index * pitch, start.y() - height / 2, capsule.wave_bar, height), corner, corner)
+        painter.drawRoundedRect(
+            QtCore.QRectF(
+                start.x() + index * pitch,
+                start.y() - height / 2,
+                capsule.wave_bar,
+                height,
+            ),
+            corner,
+            corner,
+        )
 
 
-def paint_dots(painter: QtGui.QPainter, room: QtCore.QRectF, beat: Beat, markers: Markers, ink: Shade) -> None:
+def paint_dots(
+    painter: QtGui.QPainter,
+    room: QtCore.QRectF,
+    beat: Beat,
+    markers: Markers,
+    ink: Shade,
+) -> None:
     """Dots pulsing in turn, each centred in an equal share of `room`'s width."""
-    pitch, radius, middle = room.width() / markers.dot_count, markers.dots_radius, room.center().y()
+    pitch, radius, middle = (
+        room.width() / markers.dot_count,
+        markers.dots_radius,
+        room.center().y(),
+    )
     painter.setPen(Qt.PenStyle.NoPen)
     for index in range(markers.dot_count):
         lift = max(0.0, math.sin((beat.cycle - index * beat.lag) * 2 * math.pi))
-        painter.setBrush(color(Shade(ink.color, ink.opacity * (beat.resting + (1 - beat.resting) * lift))))
-        painter.drawEllipse(QtCore.QPointF(room.left() + pitch * (index + 0.5), middle - lift * markers.dots_lift), radius, radius)
+        painter.setBrush(
+            color(
+                Shade(
+                    ink.color,
+                    ink.opacity * (beat.resting + (1 - beat.resting) * lift),
+                )
+            )
+        )
+        painter.drawEllipse(
+            QtCore.QPointF(
+                room.left() + pitch * (index + 0.5),
+                middle - lift * markers.dots_lift,
+            ),
+            radius,
+            radius,
+        )

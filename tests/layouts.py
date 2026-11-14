@@ -40,7 +40,13 @@ English (US), where Right Alt is a plain Alt rather than AltGr."""
 
 # ---- Shortcuts the layers send ----------------------------------------------------
 
-UNDO, REDO, COPY, PASTE, CUT = Chord.ctrl(Key.Z), Chord.ctrl(Key.Y), Chord.ctrl(Key.C), Chord.ctrl(Key.V), Chord.ctrl(Key.X)
+UNDO, REDO, COPY, PASTE, CUT = (
+    Chord.ctrl(Key.Z),
+    Chord.ctrl(Key.Y),
+    Chord.ctrl(Key.C),
+    Chord.ctrl(Key.V),
+    Chord.ctrl(Key.X),
+)
 
 # ---- The layout ----------------------------------------------------------------
 # Each row is written across the keyboard: the left hand's half, then the right
@@ -169,6 +175,11 @@ LAYOUT: Final = Layout(
     escape=ESCAPE,
     apps_key=APPS_KEY,
     firmware=UsbIdentity(FIRMWARE_VENDOR, FIRMWARE_PRODUCT),
-    timings=Timings(tapping_term=TAPPING_TERM_MS, streak=STREAK_MS, quick_tap=QUICK_TAP_MS, quit_hold=QUIT_HOLD_MS),
+    timings=Timings(
+        tapping_term=TAPPING_TERM_MS,
+        streak=STREAK_MS,
+        quick_tap=QUICK_TAP_MS,
+        quit_hold=QUIT_HOLD_MS,
+    ),
 )
 """The layout the keyboard tests run."""

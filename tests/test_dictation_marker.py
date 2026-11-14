@@ -63,11 +63,17 @@ def test_a_capture_too_short_to_transcribe_just_hides() -> None:
 
 def test_a_failure_with_nothing_showing_stays_in_the_tray() -> None:
     # Defect: a capture that couldn't start flashes a cross at the previous dictation's caret.
-    finished = faded(job_changed(job_changed(listened(started(), listening=False), TYPING), None))
+    finished = faded(
+        job_changed(
+            job_changed(listened(started(), listening=False), TYPING), None
+        )
+    )
     assert marked(failed(finished)) is None
 
 
-def test_an_earlier_dictation_finishing_during_a_capture_doesnt_flash_after_it() -> None:
+def test_an_earlier_dictation_finishing_during_a_capture_doesnt_flash_after_it() -> (
+    None
+):
     # Defect: the previous dictation's tick appears once the new capture ends.
     typing = job_changed(listened(started(), listening=False), TYPING)
     state = job_changed(started(typing), None)
@@ -110,10 +116,16 @@ def test_the_marker_stays_on_its_monitor() -> None:
     edge = Caret(Rect(-5, 400, -3, 420))
     assert placed(edge, SIZE, left_monitor, 6) == Rect(-120, 362, 0, 394)
     corner = Field(Rect(-1280, -200, -600, 300))
-    assert placed(corner, SIZE, left_monitor, 6) == Rect(-1274, -194, -1154, -162)
+    assert placed(corner, SIZE, left_monitor, 6) == Rect(
+        -1274, -194, -1154, -162
+    )
 
 
 def test_a_field_is_marked_outside_its_corner_and_a_window_at_its_top() -> None:
     # Defect: the marker hides the field's text when there's room above it, or sits off-centre on a window.
-    assert placed(Field(Rect(100, 200, 700, 260)), SIZE, WORK, 6) == Rect(100, 162, 220, 194)
-    assert placed(Window(Rect(100, 100, 1100, 900)), SIZE, WORK, 6) == Rect(540, 106, 660, 138)
+    assert placed(Field(Rect(100, 200, 700, 260)), SIZE, WORK, 6) == Rect(
+        100, 162, 220, 194
+    )
+    assert placed(Window(Rect(100, 100, 1100, 900)), SIZE, WORK, 6) == Rect(
+        540, 106, 660, 138
+    )

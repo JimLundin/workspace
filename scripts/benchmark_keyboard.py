@@ -37,13 +37,20 @@ class Options:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument(
+        "--root", type=Path, default=Path(__file__).resolve().parent.parent
+    )
     parser.add_argument("--events", type=int, default=100_000)
     parser.add_argument("--rounds", type=int, default=5)
     parser.add_argument("--output", type=Path)
     parsed = dict(inspect.getmembers(parser.parse_args()))
     match parsed:
-        case {"root": Path() as source_root, "events": int() as events, "rounds": int() as repetitions, "output": (Path() | None) as output}:
+        case {
+            "root": Path() as source_root,
+            "events": int() as events,
+            "rounds": int() as repetitions,
+            "output": (Path() | None) as output,
+        }:
             options = Options(source_root, events, repetitions, output)
         case _:
             parser.error("Invalid benchmark arguments.")
@@ -92,10 +99,16 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         (0x39, True),
         (0x39, False),
     )
-    events = tuple((Scancode(key), down, index * 20) for index in range(count) for key, down in (pattern[index % len(pattern)],))
+    events = tuple(
+        (Scancode(key), down, index * 20)
+        for index in range(count)
+        for key, down in (pattern[index % len(pattern)],)
+    )
     host = Host()
     rules = Engine.of(layout.LAYOUT, Bindings.of(layout.LAYOUT))
-    measurements, collections, pauses = measure_latencies(rules, host, events, rounds)
+    measurements, collections, pauses = measure_latencies(
+        rules, host, events, rounds
+    )
     gc.collect()
     tracemalloc.start()
     try:
@@ -129,15 +142,24 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         "events_per_round": count,
         "rounds": rounds,
         "gc_enabled": gc.isenabled(),
-        "assistant_imported": any(name == "assistant" or name.startswith("assistant.") for name in sys.modules),
+        "assistant_imported": any(
+            name == "assistant" or name.startswith("assistant.")
+            for name in sys.modules
+        ),
         "latency_rounds": measurements,
-        "median": {name: statistics.median(row[name] for row in measurements) for name in measurements[0]},
+        "median": {
+            name: statistics.median(row[name] for row in measurements)
+            for name in measurements[0]
+        },
         "gc_collections_during_latency": len(collections),
         "gc_generations": collections,
         "longest_observed_gc_us": max(pauses, default=0) / 1000,
         "traced_peak_bytes": peak,
         "traced_retained_bytes": retained,
-        "source": {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in names},
+        "source": {
+            name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+            for name in names
+        },
         "scope": "Synthetic engine events; no native input, capture, or agent work. Traced peak is live memory, not total allocation churn.",
     }
     rendered = json.dumps(report, indent=2)
@@ -178,7 +200,9 @@ def measure_latencies(
     host: Host,
     events: Sequence[tuple[Scancode, bool, int]],
     rounds: int,
-) -> tuple[tuple[frozendict[str, float], ...], tuple[int, ...], tuple[int, ...]]:
+) -> tuple[
+    tuple[frozendict[str, float], ...], tuple[int, ...], tuple[int, ...]
+]:
     collections: list[int] = []
     pauses: list[int] = []
     gc_started = 0
@@ -194,7 +218,9 @@ def measure_latencies(
     gc.enable()
     # Warm up adaptive bytecode and tables before collecting latency samples.
     play(rules, host, events[:1000])
-    measurements = tuple(round_latencies(rules, host, events, rounds, observe_gc))
+    measurements = tuple(
+        round_latencies(rules, host, events, rounds, observe_gc)
+    )
     return measurements, tuple(collections), tuple(pauses)
 
 
@@ -216,7 +242,9 @@ def round_latencies(
             for index, (key, down, now) in enumerate(events):
                 started = perf_counter_ns()
                 if key:
-                    state, _ = rules.on_key(state, host, key, down=down, now=now)
+                    state, _ = rules.on_key(
+                        state, host, key, down=down, now=now
+                    )
                 else:
                     state = rules.timeout(state, host, 1)
                 latencies[index] = perf_counter_ns() - started
@@ -234,7 +262,9 @@ def round_latencies(
         )
 
 
-def play(rules: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]) -> EngineState:
+def play(
+    rules: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]
+) -> EngineState:
     """The engine's state after `events`, from a fresh start."""
     state = EngineState()
     for key, down, now in events:

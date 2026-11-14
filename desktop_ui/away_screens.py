@@ -49,16 +49,24 @@ def step(*, dark: bool, locked: bool, enabled: bool) -> Change | None:
     return None
 
 
-def dark_after(dark: frozenset[Monitor], applied: Mapping[Monitor, Applied]) -> frozenset[Monitor]:
+def dark_after(
+    dark: frozenset[Monitor], applied: Mapping[Monitor, Applied]
+) -> frozenset[Monitor]:
     """The monitors left dark by this owner: those it turned off, until it turns them on again.
 
     A refused request changes nothing, so a failed restore is tried again."""
-    off = frozenset(monitor for monitor, result in applied.items() if result is Power.OFF)
-    on = frozenset(monitor for monitor, result in applied.items() if result is Power.ON)
+    off = frozenset(
+        monitor for monitor, result in applied.items() if result is Power.OFF
+    )
+    on = frozenset(
+        monitor for monitor, result in applied.items() if result is Power.ON
+    )
     return (dark | off) - on
 
 
-def set_power(sources: Sequence[PhysicalMonitors], monitor: Monitor, wanted: Power) -> Applied:
+def set_power(
+    sources: Sequence[PhysicalMonitors], monitor: Monitor, wanted: Power
+) -> Applied:
     """The first source whose handles carry the request; the last refusal otherwise."""
     result: Applied = Detached()
     for source in sources:
@@ -99,17 +107,26 @@ class AwayScreens:
     """Replaced whole on the bar's thread."""
 
     @classmethod
-    def start(cls, directory: Path, setups: Setups, firmware: UsbIdentity) -> AwayScreens:
+    def start(
+        cls, directory: Path, setups: Setups, firmware: UsbIdentity
+    ) -> AwayScreens:
         """Started, or restarted, behind the lock screen as well as in front of it.
 
         A previous Workspace may have left the light and the panel dark; what they
         should go back to is kept on disk in `directory`, and they go back now unless still locked."""
-        light = KeyboardLight.resume(ViaBacklight(firmware), KeptFile(directory / "dark-keyboard-effect"))
-        panel = LaptopPanel.resume(WmiBrightness(), KeptFile(directory / "dark-panel-brightness"))
+        light = KeyboardLight.resume(
+            ViaBacklight(firmware), KeptFile(directory / "dark-keyboard-effect")
+        )
+        panel = LaptopPanel.resume(
+            WmiBrightness(), KeptFile(directory / "dark-panel-brightness")
+        )
         locked = session.locked() is True
         if not locked:
             light, panel = light.restore(), panel.restore()
-        screens = cls(setups, Cell(_Away(light, panel, PhysicalMonitors.open(), locked=locked)))
+        screens = cls(
+            setups,
+            Cell(_Away(light, panel, PhysicalMonitors.open(), locked=locked)),
+        )
         screens.settle()
         return screens
 
@@ -123,7 +140,9 @@ class AwayScreens:
             away.kept.close()
             # A panel that refused while the lid was closed is back.
             panel = away.panel.restore() if not away.darkened else away.panel
-            self._state.set(replace(away, kept=PhysicalMonitors.open(), panel=panel))
+            self._state.set(
+                replace(away, kept=PhysicalMonitors.open(), panel=panel)
+            )
         match session.change(message, wparam):
             case session.Change.LOCKED:
                 self._state.update(lambda away: replace(away, locked=True))
@@ -140,15 +159,32 @@ class AwayScreens:
 
     def settle(self) -> None:
         away = self._state.get()
-        match step(dark=away.darkened, locked=away.locked, enabled=away.enabled):
+        match step(
+            dark=away.darkened, locked=away.locked, enabled=away.enabled
+        ):
             case Change.DARKEN:
                 self._state.set(replace(away, darkened=True))
-                self.apply(dark_when_away(screen.monitors(), self.setups) - away.dark, Power.OFF)
-                self._state.update(lambda current: replace(current, light=current.light.darken(), panel=current.panel.darken()))
+                self.apply(
+                    dark_when_away(screen.monitors(), self.setups) - away.dark,
+                    Power.OFF,
+                )
+                self._state.update(
+                    lambda current: replace(
+                        current,
+                        light=current.light.darken(),
+                        panel=current.panel.darken(),
+                    )
+                )
             case Change.RESTORE:
                 self._state.set(replace(away, darkened=False))
                 self.apply(away.dark, Power.ON)
-                self._state.update(lambda current: replace(current, light=current.light.restore(), panel=current.panel.restore()))
+                self._state.update(
+                    lambda current: replace(
+                        current,
+                        light=current.light.restore(),
+                        panel=current.panel.restore(),
+                    )
+                )
             case None:
                 pass
 
@@ -157,13 +193,27 @@ class AwayScreens:
             return
         fresh = PhysicalMonitors.open()
         try:
-            powered = frozendict((monitor, set_power((fresh, self._state.get().kept), monitor, wanted)) for monitor in monitors)
+            powered = frozendict(
+                (
+                    monitor,
+                    set_power((fresh, self._state.get().kept), monitor, wanted),
+                )
+                for monitor in monitors
+            )
         finally:
             fresh.close()
-        self._state.update(lambda away: replace(away, dark=dark_after(away.dark, powered)))
+        self._state.update(
+            lambda away: replace(away, dark=dark_after(away.dark, powered))
+        )
 
     def close(self) -> None:
         """Workspace leaving while away turns the screens back on rather than leaving them dark."""
         self.apply(self._state.get().dark, Power.ON)
-        away = self._state.update(lambda current: replace(current, light=current.light.restore(), panel=current.panel.restore()))
+        away = self._state.update(
+            lambda current: replace(
+                current,
+                light=current.light.restore(),
+                panel=current.panel.restore(),
+            )
+        )
         away.kept.close()

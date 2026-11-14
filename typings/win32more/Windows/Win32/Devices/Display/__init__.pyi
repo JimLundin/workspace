@@ -7,9 +7,15 @@ from win32more._win32 import ByReference
 class PHYSICAL_MONITOR(ctypes.Structure):
     hPhysicalMonitor: int | None
 
-def GetNumberOfPhysicalMonitorsFromHMONITOR(monitor: int, count: ByReference[ctypes.c_uint32]) -> int: ...
-def GetPhysicalMonitorsFromHMONITOR(monitor: int, count: int, monitors: ctypes.Array[PHYSICAL_MONITOR]) -> int: ...
-def DestroyPhysicalMonitors(count: int, monitors: ctypes.Array[PHYSICAL_MONITOR]) -> int: ...
+def GetNumberOfPhysicalMonitorsFromHMONITOR(
+    monitor: int, count: ByReference[ctypes.c_uint32]
+) -> int: ...
+def GetPhysicalMonitorsFromHMONITOR(
+    monitor: int, count: int, monitors: ctypes.Array[PHYSICAL_MONITOR]
+) -> int: ...
+def DestroyPhysicalMonitors(
+    count: int, monitors: ctypes.Array[PHYSICAL_MONITOR]
+) -> int: ...
 
 DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME: int
 DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EMBEDDED: int
@@ -45,7 +51,11 @@ class DISPLAYCONFIG_SOURCE_DEVICE_NAME(ctypes.Structure):
     header: _Header
     viewGdiDeviceName: str
 
-def GetDisplayConfigBufferSizes(flags: int, paths: ByReference[ctypes.c_uint32], modes: ByReference[ctypes.c_uint32]) -> int: ...
+def GetDisplayConfigBufferSizes(
+    flags: int,
+    paths: ByReference[ctypes.c_uint32],
+    modes: ByReference[ctypes.c_uint32],
+) -> int: ...
 def QueryDisplayConfig(
     flags: int,
     path_count: ByReference[ctypes.c_uint32],

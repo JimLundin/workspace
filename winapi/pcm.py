@@ -68,10 +68,20 @@ class Converter:
         position = self._position.get()
         if format == PcmFormat(RATE, 1, 16):
             frames = len(pcm) // 2
-            self._position.set(replace(position, input_frames=position.input_frames + frames, output_frames=position.output_frames + frames))
+            self._position.set(
+                replace(
+                    position,
+                    input_frames=position.input_frames + frames,
+                    output_frames=position.output_frames + frames,
+                )
+            )
             return pcm
         if format.bits == 24:
-            samples = [float(int.from_bytes(pcm[i : i + 3], "little", signed=True)) / 256 for i in range(0, len(pcm), 3)]
+            samples = [
+                float(int.from_bytes(pcm[i : i + 3], "little", signed=True))
+                / 256
+                for i in range(0, len(pcm), 3)
+            ]
         elif format.floating:
             samples = [float(value) * 32768 for value in array("f", pcm)]
         elif format.bits == 16:
@@ -80,7 +90,10 @@ class Converter:
             samples = [float(value) / 65536 for value in array("i", pcm)]
         if not all(math.isfinite(sample) for sample in samples):
             raise ValueError("The audio device returned a non-finite sample.")
-        mono = [sum(samples[i : i + format.channels]) / format.channels for i in range(0, len(samples), format.channels)]
+        mono = [
+            sum(samples[i : i + format.channels]) / format.channels
+            for i in range(0, len(samples), format.channels)
+        ]
         beginning = position.input_frames
         if beginning:
             mono.insert(0, position.last)
@@ -97,7 +110,13 @@ class Converter:
                 sample += (mono[local + 1] - sample) * fraction / RATE
             result.append(max(-32768, min(32767, round(sample))))
             output_frames += 1
-        self._position.set(Position(position.input_frames + len(pcm) // format.frame_bytes, output_frames, mono[-1]))
+        self._position.set(
+            Position(
+                position.input_frames + len(pcm) // format.frame_bytes,
+                output_frames,
+                mono[-1],
+            )
+        )
         return result.tobytes()
 
 
@@ -149,9 +168,15 @@ DROPOUT_TOLERANCE: Final = RATE // 100
 """Timestamp rounding across a flagged discontinuity is not lost audio."""
 
 
-def dropout(previous_end: int | None, start: int, *, discontinuous: bool) -> Dropout | None:
+def dropout(
+    previous_end: int | None, start: int, *, discontinuous: bool
+) -> Dropout | None:
     """A continuous stream's flagged hole between its previous packet and this one."""
-    if previous_end is None or not discontinuous or start - previous_end <= DROPOUT_TOLERANCE:
+    if (
+        previous_end is None
+        or not discontinuous
+        or start - previous_end <= DROPOUT_TOLERANCE
+    ):
         return None
     return Dropout(previous_end, start - previous_end)
 
@@ -168,10 +193,16 @@ class Placement:
     """Frames of the forced advance after the last mixed audio."""
 
 
-def place(cursor: int, end: int, start: int, length: int, capacity: int) -> Placement:
+def place(
+    cursor: int, end: int, start: int, length: int, capacity: int
+) -> Placement:
     """Push the cursor just far enough for the packet's end to fit, then clip what precedes it."""
     advanced = max(cursor, start + length - capacity)
-    return Placement(advanced, min(length, max(0, advanced - start)), max(0, advanced - max(cursor, end)))
+    return Placement(
+        advanced,
+        min(length, max(0, advanced - start)),
+        max(0, advanced - max(cursor, end)),
+    )
 
 
 def jump(cursor: int, end: int, until: int, capacity: int) -> int:
@@ -209,8 +240,12 @@ class Mixer:
     _mixed: Cell[_Mixed]
 
     @classmethod
-    def ring(cls, capacity: int = CAPACITY, limit: int = MAX_JUMP, *, cursor: int = 0) -> Mixer:
-        return cls(array("i", [0]) * capacity, limit, Cell(_Mixed(cursor, cursor)))
+    def ring(
+        cls, capacity: int = CAPACITY, limit: int = MAX_JUMP, *, cursor: int = 0
+    ) -> Mixer:
+        return cls(
+            array("i", [0]) * capacity, limit, Cell(_Mixed(cursor, cursor))
+        )
 
     @property
     def cursor(self) -> int:
@@ -229,18 +264,27 @@ class Mixer:
         if not any(samples):
             return
         mixed = self._mixed.get()
-        placement = place(mixed.cursor, mixed.end, start, len(samples), len(self._samples))
+        placement = place(
+            mixed.cursor, mixed.end, start, len(samples), len(self._samples)
+        )
         if placement.cursor > mixed.cursor:
             silence_at = max(mixed.cursor, mixed.end)
             mixed = self._published(mixed, placement.cursor)
             if placement.silence:
-                mixed = replace(mixed, gaps=(*mixed.gaps, Skipped(silence_at, placement.silence)))
+                mixed = replace(
+                    mixed,
+                    gaps=(*mixed.gaps, Skipped(silence_at, placement.silence)),
+                )
         # One overlapping sample is packet-boundary rounding, not lost audio;
         # before the first take, audio timestamped before Start is not part of the recording.
         if placement.clipped > 1 and mixed.cursor:
-            mixed = replace(mixed, gaps=(*mixed.gaps, LateAudio(start, placement.clipped)))
+            mixed = replace(
+                mixed, gaps=(*mixed.gaps, LateAudio(start, placement.clipped))
+            )
         for index in range(placement.clipped, len(samples)):
-            self._samples[(start + index) % len(self._samples)] += samples[index]
+            self._samples[(start + index) % len(self._samples)] += samples[
+                index
+            ]
         if placement.clipped < len(samples):
             mixed = replace(mixed, end=max(mixed.end, start + len(samples)))
         self._mixed.set(mixed)
@@ -249,7 +293,13 @@ class Mixer:
         mixed = self._mixed.get()
         until = max(mixed.cursor, until)
         if silence := jump(mixed.cursor, mixed.end, until, len(self._samples)):
-            mixed = replace(mixed, gaps=(*mixed.gaps, Skipped(max(mixed.cursor, mixed.end), silence)))
+            mixed = replace(
+                mixed,
+                gaps=(
+                    *mixed.gaps,
+                    Skipped(max(mixed.cursor, mixed.end), silence),
+                ),
+            )
         mixed = self._published(mixed, until)
         self._mixed.set(replace(mixed, ready=b""))
         return mixed.ready
@@ -268,11 +318,21 @@ class Mixer:
             )
         capacity = len(self._samples)
         frames = range(cursor, min(until, cursor + capacity))
-        published = array("h", (max(-32768, min(32767, self._samples[frame % capacity])) for frame in frames))
+        published = array(
+            "h",
+            (
+                max(-32768, min(32767, self._samples[frame % capacity]))
+                for frame in frames
+            ),
+        )
         for frame in frames:
             self._samples[frame % capacity] = 0
         silence = bytes(2 * max(0, until - cursor - capacity))
-        return replace(mixed, cursor=until, ready=mixed.ready + published.tobytes() + silence)
+        return replace(
+            mixed,
+            cursor=until,
+            ready=mixed.ready + published.tobytes() + silence,
+        )
 
 
 def quiet_tail(pcm: bytes) -> bool:

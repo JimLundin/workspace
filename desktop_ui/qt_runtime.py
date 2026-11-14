@@ -17,4 +17,10 @@ def prepare() -> None:
     first native binding access. This module owns ordering, not Qt exports.
     """
     _executor = concurrent.futures.ThreadPoolExecutor
-    _validation = (pydantic.BeforeValidator, pydantic.ConfigDict, pydantic.Field, pydantic.TypeAdapter, pydantic.ValidationError)
+    _validation = (
+        pydantic.BeforeValidator,
+        pydantic.ConfigDict,
+        pydantic.Field,
+        pydantic.TypeAdapter,
+        pydantic.ValidationError,
+    )

@@ -20,9 +20,14 @@ class FailureInfo:
     expected: int | None
 
     def details(self) -> dict[str, Detail]:
-        details: dict[str, Detail] = {"error_type": self.error_type, "locations": " > ".join(self.locations)}
+        details: dict[str, Detail] = {
+            "error_type": self.error_type,
+            "locations": " > ".join(self.locations),
+        }
         if self.accepted is not None and self.expected is not None:
-            details.update(input_accepted=self.accepted, input_expected=self.expected)
+            details.update(
+                input_accepted=self.accepted, input_expected=self.expected
+            )
         return details
 
 
@@ -40,8 +45,14 @@ def _location(trace: TracebackType) -> str:
 
 def failure_info(error: Exception) -> FailureInfo:
     """Copy only scalar evidence; a traceback would retain the keyboard's heap."""
-    locations = tuple(_location(trace) for trace in tuple(_traces(error.__traceback__))[-8:])
-    accepted, expected = (error.accepted, error.expected) if isinstance(error, InputRejectedError) else (None, None)
+    locations = tuple(
+        _location(trace) for trace in tuple(_traces(error.__traceback__))[-8:]
+    )
+    accepted, expected = (
+        (error.accepted, error.expected)
+        if isinstance(error, InputRejectedError)
+        else (None, None)
+    )
     return FailureInfo(type(error).__name__, locations, accepted, expected)
 
 
@@ -55,4 +66,6 @@ def append(log: Path, text: str) -> None:
 
 def evidence(event: str, details: Mapping[str, Detail]) -> str:
     """An event and its scalar details, as one line for a program's own log."""
-    return " ".join((f"{event}:", *(f"{name}={value}" for name, value in details.items())))
+    return " ".join(
+        (f"{event}:", *(f"{name}={value}" for name, value in details.items()))
+    )

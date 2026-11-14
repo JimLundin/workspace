@@ -11,7 +11,13 @@ from winapi import windows
 from winapi.shapes import Rect
 lazy from desktop_ui.components.appearance import Design
 lazy from desktop_ui.components.controls import label
-lazy from desktop_ui.components.widgets import device_size, row, surface, tool_window, window_style
+lazy from desktop_ui.components.widgets import (
+    device_size,
+    row,
+    surface,
+    tool_window,
+    window_style,
+)
 lazy from desktop_ui.qt_ui import cancel, later
 
 prepare()
@@ -50,7 +56,9 @@ class Indicator:
     _window: QtWidgets.QWidget
     _label: QtWidgets.QLabel
     _frame: int
-    _shown: Cell[_Shown] = field(default_factory=lambda: Cell(_Shown()), init=False, repr=False)
+    _shown: Cell[_Shown] = field(
+        default_factory=lambda: Cell(_Shown()), init=False, repr=False
+    )
 
     @classmethod
     def build(cls, spec: IndicatorSpec, design: Design) -> Indicator:
@@ -76,20 +84,27 @@ class Indicator:
         self._label.setStyleSheet(f"color: {colour}; {self._spec.font.css}")
         self._window.adjustSize()
         size = device_size(self._window, self._window.devicePixelRatioF())
-        x, y = work.left + (work.width - size.width) // 2, work.bottom - size.height - self._spec.bottom
+        x, y = (
+            work.left + (work.width - size.width) // 2,
+            work.bottom - size.height - self._spec.bottom,
+        )
         windows.move(self._frame, Rect(x, y, x + size.width, y + size.height))
         self._window.show()
         windows.show_quietly(self._frame, visible=True)
 
     def set(self, text: str | None, work: Rect) -> None:
-        shown = self._shown.update(lambda shown: replace(shown, steady=(text, work)))
+        shown = self._shown.update(
+            lambda shown: replace(shown, steady=(text, work))
+        )
         if shown.flash is None:
             self._show(text, work, self._ink)
 
     def flash(self, text: str, work: Rect) -> None:
         cancel(self._shown.get().flash)
         self._show(text, work, self._spec.flash_ink)
-        timer = later(self._window, round(self._spec.flash * 1000), self._end_flash)
+        timer = later(
+            self._window, round(self._spec.flash * 1000), self._end_flash
+        )
         self._shown.update(lambda shown: replace(shown, flash=timer))
 
     def _end_flash(self) -> None:

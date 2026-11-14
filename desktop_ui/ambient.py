@@ -32,7 +32,9 @@ class SystemStatus:
     speakers: Speakers = Speakers.UNKNOWN
     wifi: Wifi = Wifi.UNKNOWN
     volume: float | None = None  # The speakers' master level, from 0 to 1.
-    cpu: int | None = None  # Busy processor time since the previous sample, in percent.
+    cpu: int | None = (
+        None  # Busy processor time since the previous sample, in percent.
+    )
     memory: Memory | None = None
     cpu_history: History = field(default_factory=History)
     """The processor's percentages."""

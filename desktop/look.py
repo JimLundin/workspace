@@ -6,7 +6,21 @@ shapes `desktop_ui.components` declares; `desktop.__main__` hands them to the de
 from typing import Final
 
 from contracts.members import every_member
-from desktop_ui.components.appearance import Attention, Design, FrostLook, Glass, Kit, Lettering, Padding, Palette, Rim, Scheme, Shade, Tokens, Washes
+from desktop_ui.components.appearance import (
+    Attention,
+    Design,
+    FrostLook,
+    Glass,
+    Kit,
+    Lettering,
+    Padding,
+    Palette,
+    Rim,
+    Scheme,
+    Shade,
+    Tokens,
+    Washes,
+)
 from desktop_ui.components.typeface import Font, TypeScale, Weight
 from winapi import appearance
 from winapi.shapes import Lighting
@@ -96,10 +110,16 @@ GLASS: Final = Glass(
     frosts=every_member(
         appearance.Frost,
         {
-            appearance.Frost.BRIGHT: FrostLook(Scheme.LIGHT, Shade(_WHITE, 0.2), 0.14),
-            appearance.Frost.LIGHT: FrostLook(Scheme.DARK, Shade("#1c1c20", 0.26), 0.36),
+            appearance.Frost.BRIGHT: FrostLook(
+                Scheme.LIGHT, Shade(_WHITE, 0.2), 0.14
+            ),
+            appearance.Frost.LIGHT: FrostLook(
+                Scheme.DARK, Shade("#1c1c20", 0.26), 0.36
+            ),
             # A mixed desktop needs a heavier veil to keep small text legible.
-            appearance.Frost.SMOKED: FrostLook(Scheme.DARK, Shade("#1c1c20", 0.62), 0.36),
+            appearance.Frost.SMOKED: FrostLook(
+                Scheme.DARK, Shade("#1c1c20", 0.62), 0.36
+            ),
         },
     ),
     attention=Attention(
@@ -107,13 +127,24 @@ GLASS: Final = Glass(
         veil=0.9,
         canvas_veil=0.94,
         rim=Rim(0.55, 0.06, 0.10),
-        lettering=Lettering(Shade(_WHITE, 0.96), Shade(_WHITE, 0.8), Shade(_WHITE, 0.16), Shade(_WHITE, 0.26)),
+        lettering=Lettering(
+            Shade(_WHITE, 0.96),
+            Shade(_WHITE, 0.8),
+            Shade(_WHITE, 0.16),
+            Shade(_WHITE, 0.26),
+        ),
         solid_edge=Shade(_WHITE, 0.18),
     ),
     menu_veil=0.64,
     contrast_hover=0.2,
     contrast_press=0.35,
-    lighting=Lighting(shadow_blur=24, shadow_drop=8, shadow_color=_BLACK, rim_stroke=2, rim_angle=160),
+    lighting=Lighting(
+        shadow_blur=24,
+        shadow_drop=8,
+        shadow_color=_BLACK,
+        rim_stroke=2,
+        rim_angle=160,
+    ),
     rim_light=_WHITE,
     rim_fall=0.34,
     rim_rise=0.72,
@@ -121,7 +152,9 @@ GLASS: Final = Glass(
 """Workspace's material; owners pass it in, tests pass their own."""
 
 
-WASHES: Final = Washes(well=0.07, off=0.12, track=0.16, halo=0.25, resting=0.35, gauge=0.45)
+WASHES: Final = Washes(
+    well=0.07, off=0.12, track=0.16, halo=0.25, resting=0.35, gauge=0.45
+)
 
 
 TYPE: Final = TypeScale(

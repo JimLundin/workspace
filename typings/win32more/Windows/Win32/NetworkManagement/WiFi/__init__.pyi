@@ -17,14 +17,25 @@ class WLAN_INTERFACE_INFO(ctypes.Structure):
 
 @type_check_only
 class _Interfaces:
-    def __getitem__(self, index: slice[None, int, None], /) -> list[WLAN_INTERFACE_INFO]: ...
+    def __getitem__(
+        self, index: slice[None, int, None], /
+    ) -> list[WLAN_INTERFACE_INFO]: ...
 
 class WLAN_INTERFACE_INFO_LIST(ctypes.Structure):
     dwNumberOfItems: int
     InterfaceInfo: _Interfaces
 
-def WlanOpenHandle(version: int, reserved: None, negotiated: ByReference[ctypes.c_uint32], handle: ByReference[ctypes.c_void_p]) -> int: ...
-def WlanEnumInterfaces(handle: ctypes.c_void_p, reserved: None, interfaces: ByReference[OutputPointer[WLAN_INTERFACE_INFO_LIST]]) -> int: ...
+def WlanOpenHandle(
+    version: int,
+    reserved: None,
+    negotiated: ByReference[ctypes.c_uint32],
+    handle: ByReference[ctypes.c_void_p],
+) -> int: ...
+def WlanEnumInterfaces(
+    handle: ctypes.c_void_p,
+    reserved: None,
+    interfaces: ByReference[OutputPointer[WLAN_INTERFACE_INFO_LIST]],
+) -> int: ...
 
 class DOT11_SSID(ctypes.Structure):
     uSSIDLength: int
@@ -39,7 +50,9 @@ class WLAN_AVAILABLE_NETWORK(ctypes.Structure):
 
 @type_check_only
 class _Networks:
-    def __getitem__(self, index: slice[None, int, None], /) -> list[WLAN_AVAILABLE_NETWORK]: ...
+    def __getitem__(
+        self, index: slice[None, int, None], /
+    ) -> list[WLAN_AVAILABLE_NETWORK]: ...
 
 class WLAN_AVAILABLE_NETWORK_LIST(ctypes.Structure):
     dwNumberOfItems: int
@@ -50,8 +63,17 @@ class WLAN_CONNECTION_PARAMETERS(ctypes.Structure):
     strProfile: str
     dot11BssType: int
 
-def WlanFreeMemory(memory: OutputPointer[WLAN_INTERFACE_INFO_LIST] | OutputPointer[WLAN_AVAILABLE_NETWORK_LIST]) -> None: ...
-def WlanScan(handle: ctypes.c_void_p, interface: ByReference[Guid], ssid: None, data: None, reserved: None) -> int: ...
+def WlanFreeMemory(
+    memory: OutputPointer[WLAN_INTERFACE_INFO_LIST]
+    | OutputPointer[WLAN_AVAILABLE_NETWORK_LIST],
+) -> None: ...
+def WlanScan(
+    handle: ctypes.c_void_p,
+    interface: ByReference[Guid],
+    ssid: None,
+    data: None,
+    reserved: None,
+) -> int: ...
 def WlanGetAvailableNetworkList(
     handle: ctypes.c_void_p,
     interface: ByReference[Guid],
@@ -60,6 +82,9 @@ def WlanGetAvailableNetworkList(
     networks: ByReference[OutputPointer[WLAN_AVAILABLE_NETWORK_LIST]],
 ) -> int: ...
 def WlanConnect(
-    handle: ctypes.c_void_p, interface: ByReference[Guid], parameters: ByReference[WLAN_CONNECTION_PARAMETERS], reserved: None
+    handle: ctypes.c_void_p,
+    interface: ByReference[Guid],
+    parameters: ByReference[WLAN_CONNECTION_PARAMETERS],
+    reserved: None,
 ) -> int: ...
 def WlanCloseHandle(handle: ctypes.c_void_p, reserved: None) -> int: ...

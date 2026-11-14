@@ -64,13 +64,18 @@ class BadgeSpec:
     """The accent marks the window a chord's next press reaches."""
 
 
-def rim_gradient(bounds: QtCore.QRectF, rim: Rim, glass: Glass) -> QtGui.QLinearGradient:
+def rim_gradient(
+    bounds: QtCore.QRectF, rim: Rim, glass: Glass
+) -> QtGui.QLinearGradient:
     """The rim's CSS-angled gradient: brightest where light catches the upper-leading curve."""
     angle = math.radians(glass.lighting.rim_angle)
     dx, dy = math.sin(angle), -math.cos(angle)
     half = (abs(bounds.width() * dx) + abs(bounds.height() * dy)) / 2
     center = bounds.center()
-    gradient = QtGui.QLinearGradient(center - QtCore.QPointF(dx * half, dy * half), center + QtCore.QPointF(dx * half, dy * half))
+    gradient = QtGui.QLinearGradient(
+        center - QtCore.QPointF(dx * half, dy * half),
+        center + QtCore.QPointF(dx * half, dy * half),
+    )
     for stop in rim_stops(rim, glass):
         gradient.setColorAt(stop.offset, color(Shade(stop.color, stop.opacity)))
     return gradient
@@ -113,13 +118,19 @@ def keycap_face(keycap: Keycap, style: Style) -> Face:
             # High contrast swaps the system colours instead of adding a hue.
             return Face(lettering.ink, background(style.surface), text)
         case AppCap(next=True):
-            return Face(Shade(style.palette.accent), Shade(style.palette.on_accent), text)
+            return Face(
+                Shade(style.palette.accent),
+                Shade(style.palette.on_accent),
+                text,
+            )
         case AppCap():
             return Face(lettering.hover, lettering.ink, text)
         case DirectionCap():
             return Face(None, lettering.ink, text)
         case ActionCap():
-            return Face(None, lettering.ink if style.contrast else lettering.quiet, text)
+            return Face(
+                None, lettering.ink if style.contrast else lettering.quiet, text
+            )
         case _:
             assert_never(keycap)
 
@@ -144,17 +155,29 @@ def style(preference: Preference, spec: BadgeSpec) -> Style:
             assert_never(preference)
 
 
-def keycap_width(keycap: Keycap, metrics: QtGui.QFontMetricsF, spec: BadgeSpec) -> float:
+def keycap_width(
+    keycap: Keycap, metrics: QtGui.QFontMetricsF, spec: BadgeSpec
+) -> float:
     """A circle, widened into a pill with its text inset when the text needs more room."""
-    return max(spec.cap, metrics.horizontalAdvance(keycap_text(keycap, spec.arrows)) + 2 * spec.pad)
+    return max(
+        spec.cap,
+        metrics.horizontalAdvance(keycap_text(keycap, spec.arrows))
+        + 2 * spec.pad,
+    )
 
 
-def badge_width(keycaps: tuple[Keycap, ...], metrics: QtGui.QFontMetricsF, spec: BadgeSpec) -> int:
-    inner = sum(keycap_width(keycap, metrics, spec) for keycap in keycaps) + spec.gap * (len(keycaps) - 1)
+def badge_width(
+    keycaps: tuple[Keycap, ...], metrics: QtGui.QFontMetricsF, spec: BadgeSpec
+) -> int:
+    inner = sum(
+        keycap_width(keycap, metrics, spec) for keycap in keycaps
+    ) + spec.gap * (len(keycaps) - 1)
     return round(inner + (spec.height - spec.cap))
 
 
-def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look, glass: Glass) -> None:
+def paint_surface(
+    painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look, glass: Glass
+) -> None:
     """A capsule. Glass without composition: its veil and rim light, painted by Qt; solid and high contrast fill and edge."""
     edge = bounds.adjusted(0.5, 0.5, -0.5, -0.5)
     path = outline(edge, bounds.height() / 2 - 0.5)
@@ -169,11 +192,15 @@ def paint_surface(painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look,
             assert_never(surface)
 
 
-def paint_keycap(painter: QtGui.QPainter, bounds: QtCore.QRectF, face: Face) -> None:
+def paint_keycap(
+    painter: QtGui.QPainter, bounds: QtCore.QRectF, face: Face
+) -> None:
     if face.fill is not None:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color(face.fill))
-        painter.drawRoundedRect(bounds, bounds.height() / 2, bounds.height() / 2)
+        painter.drawRoundedRect(
+            bounds, bounds.height() / 2, bounds.height() / 2
+        )
     painter.setPen(color(face.ink))
     painter.drawText(bounds, Qt.AlignmentFlag.AlignCenter, face.text)
 
@@ -193,7 +220,12 @@ class BadgeWindow(QtWidgets.QWidget):
 
     def draw(self, keycaps: tuple[Keycap, ...], look: Style) -> None:
         self.keycaps, self.look = keycaps, look
-        self.resize(badge_width(keycaps, QtGui.QFontMetricsF(inter(self.spec.font)), self.spec), round(self.spec.height))
+        self.resize(
+            badge_width(
+                keycaps, QtGui.QFontMetricsF(inter(self.spec.font)), self.spec
+            ),
+            round(self.spec.height),
+        )
         self.update()
 
     @override
@@ -202,12 +234,18 @@ class BadgeWindow(QtWidgets.QWidget):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         spec = self.spec
         painter.setFont(inter(spec.font))
-        paint_surface(painter, QtCore.QRectF(self.rect()), self.look.surface, spec.glass)
+        paint_surface(
+            painter, QtCore.QRectF(self.rect()), self.look.surface, spec.glass
+        )
         metrics = QtGui.QFontMetricsF(inter(spec.font))
         left = inset = (spec.height - spec.cap) / 2
         for keycap in self.keycaps:
             width = keycap_width(keycap, metrics, spec)
-            paint_keycap(painter, QtCore.QRectF(left, inset, width, spec.cap), keycap_face(keycap, self.look))
+            paint_keycap(
+                painter,
+                QtCore.QRectF(left, inset, width, spec.cap),
+                keycap_face(keycap, self.look),
+            )
             left += width + spec.gap
 
 
@@ -216,8 +254,13 @@ def logical(x: int, y: int) -> QtCore.QPoint:
     for screen in QtGui.QGuiApplication.screens():
         geometry, ratio = screen.geometry(), screen.devicePixelRatio()
         left, top = geometry.x(), geometry.y()
-        if left <= x < left + geometry.width() * ratio and top <= y < top + geometry.height() * ratio:
-            return QtCore.QPoint(left + round((x - left) / ratio), top + round((y - top) / ratio))
+        if (
+            left <= x < left + geometry.width() * ratio
+            and top <= y < top + geometry.height() * ratio
+        ):
+            return QtCore.QPoint(
+                left + round((x - left) / ratio), top + round((y - top) / ratio)
+            )
     return QtCore.QPoint(x, y)
 
 
@@ -234,7 +277,9 @@ class KeyHintOverlay:
 
     spec: BadgeSpec
     surface: NativeOverlayDesktop = field(default_factory=NativeOverlayDesktop)
-    _state: Cell[_Badges] = field(default_factory=lambda: Cell(_Badges()), init=False, repr=False)
+    _state: Cell[_Badges] = field(
+        default_factory=lambda: Cell(_Badges()), init=False, repr=False
+    )
 
     def _prepared(self) -> BadgeWindow:
         window = BadgeWindow(self.spec)
@@ -245,12 +290,18 @@ class KeyHintOverlay:
         if self._state.get().shown == (badges, preference):
             return
         pooled = self._state.get().badges
-        grown = (*pooled, *(self._prepared() for _ in range(len(badges) - len(pooled))))
+        grown = (
+            *pooled,
+            *(self._prepared() for _ in range(len(badges) - len(pooled))),
+        )
         self._state.set(_Badges(grown, (badges, preference)))
         look = style(preference, self.spec)
         for window, badge in zip(grown, badges, strict=False):
             window.draw(badge.keycaps, look)
-            window.move(logical(badge.rect.left, badge.rect.top) + QtCore.QPoint(self.spec.corner, self.spec.corner))
+            window.move(
+                logical(badge.rect.left, badge.rect.top)
+                + QtCore.QPoint(self.spec.corner, self.spec.corner)
+            )
             self.surface.present(window)
         for window in grown[len(badges) :]:
             window.hide()

@@ -25,7 +25,15 @@ from pydantic import TypeAdapter
 
 from scripts.constant_rules import enum_shapes, shared_constants
 from scripts.declaration_rules import declarations
-from scripts.import_rules import Layer, contract_isolation, dependencies, dynamic_imports, entry_data, keyboard_isolation, layering
+from scripts.import_rules import (
+    Layer,
+    contract_isolation,
+    dependencies,
+    dynamic_imports,
+    entry_data,
+    keyboard_isolation,
+    layering,
+)
 from scripts.modelling_rules import value_shapes
 from scripts.policy import Finding, Text
 from scripts.record_rules import Candidate, assigned, records
@@ -47,14 +55,27 @@ from scripts.usage_rules import (
 
 @dataclass(frozen=True, slots=True)
 class ExceptionSpec:
-    rule: Literal["explicit-attributes", "immutable-data", "member-table", "mutable-field", "mutable-parameter", "plain-record", "unused-definition"]
+    rule: Literal[
+        "explicit-attributes",
+        "immutable-data",
+        "member-table",
+        "mutable-field",
+        "mutable-parameter",
+        "plain-record",
+        "unused-definition",
+    ]
     module: Text
     declaration: Text
     expression: Text
     reason: Text
 
     def matches(self, finding: Finding) -> bool:
-        return (self.rule, self.module, self.declaration, self.expression) == (finding.rule, finding.module, finding.declaration, finding.expression)
+        return (self.rule, self.module, self.declaration, self.expression) == (
+            finding.rule,
+            finding.module,
+            finding.declaration,
+            finding.expression,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,11 +122,19 @@ OBSERVATION = TypeAdapter[Observation](Observation)
 def _walked(root: Path) -> Iterator[str]:
     """Every file under root, pruning hidden and cache directories as os.walk descends."""
     for folder, directories, files in os.walk(root):
-        directories[:] = sorted(name for name in directories if not name.startswith((".", "__pycache__")))
-        yield from ((Path(folder) / name).relative_to(root).as_posix() for name in files)
+        directories[:] = sorted(
+            name
+            for name in directories
+            if not name.startswith((".", "__pycache__"))
+        )
+        yield from (
+            (Path(folder) / name).relative_to(root).as_posix() for name in files
+        )
 
 
-def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str, ...]:
+def python_sources(
+    root: Path, names: Iterable[str] | None = None
+) -> tuple[str, ...]:
     if names is None:
         names = _walked(root)
     return tuple(
@@ -114,7 +143,10 @@ def python_sources(root: Path, names: Iterable[str] | None = None) -> tuple[str,
                 name
                 for name in names
                 if name.endswith((".py", ".pyw"))
-                and not any(part.startswith((".", "__pycache__")) for part in Path(name).parts)
+                and not any(
+                    part.startswith((".", "__pycache__"))
+                    for part in Path(name).parts
+                )
                 and (root / name).is_file()
             }
         )
@@ -126,14 +158,29 @@ def _configuration(root: Path) -> Configuration:
         case {"tool": {"workspace": {"architecture": object() as value}}}:
             configuration = CONFIGURATION.validate_python(value)
         case _:
-            raise ValueError("Architecture configuration must contain its named table.")
-    exceptions = tuple(replace(entry, expression=ast.unparse(ast.parse(entry.expression, mode="eval").body)) for entry in configuration.exceptions)
-    keys = tuple((entry.rule, entry.module, entry.declaration, entry.expression) for entry in exceptions)
+            raise ValueError(
+                "Architecture configuration must contain its named table."
+            )
+    exceptions = tuple(
+        replace(
+            entry,
+            expression=ast.unparse(
+                ast.parse(entry.expression, mode="eval").body
+            ),
+        )
+        for entry in configuration.exceptions
+    )
+    keys = tuple(
+        (entry.rule, entry.module, entry.declaration, entry.expression)
+        for entry in exceptions
+    )
     if len(frozenset(keys)) != len(keys):
         raise ValueError("Duplicate architecture exception.")
     for entry in exceptions:
         if any("*" in value for value in (entry.module, entry.declaration)):
-            raise ValueError("Architecture exceptions require a supported rule and an exact declaration.")
+            raise ValueError(
+                "Architecture exceptions require a supported rule and an exact declaration."
+            )
     return replace(configuration, exceptions=exceptions)
 
 
@@ -170,54 +217,136 @@ class Checkout:
     sources: tuple[Source, ...]
 
     def production(self) -> tuple[Source, ...]:
-        return tuple(source for source in self.sources if not source.name.startswith("tests/"))
+        return tuple(
+            source
+            for source in self.sources
+            if not source.name.startswith("tests/")
+        )
 
     def tested(self, cache: Cache | None) -> frozenset[str]:
         """Every name the tests refer to."""
-        return frozenset[str]().union(*(cached_references(source, cache) for source in self.sources if source.name.startswith("tests/")))
+        return frozenset[str]().union(
+            *(
+                cached_references(source, cache)
+                for source in self.sources
+                if source.name.startswith("tests/")
+            )
+        )
 
     def text_words(self) -> Counter[str]:
         """The words in tracked launch and page scripts, which can name a Python definition."""
-        texts = (name for name in self.listed if name.endswith(TEXT_REFERENCES) and not name.startswith("tests/") and (self.root / name).is_file())
-        return Counter(word for name in texts for word in re.findall(r"[A-Za-z_]\w*", (self.root / name).read_text(encoding="utf-8")))
+        texts = (
+            name
+            for name in self.listed
+            if name.endswith(TEXT_REFERENCES)
+            and not name.startswith("tests/")
+            and (self.root / name).is_file()
+        )
+        return Counter(
+            word
+            for name in texts
+            for word in re.findall(
+                r"[A-Za-z_]\w*", (self.root / name).read_text(encoding="utf-8")
+            )
+        )
 
 
-def _module_findings(observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None) -> Iterator[Finding]:
+def _module_findings(
+    observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None
+) -> Iterator[Finding]:
     """What each module shows on its own: its declarations, its plain records and its patches and mocks."""
     # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
     written = frozenset[str]().union(*(item.assigned for item in observed))
     yield from (finding for item in observed for finding in item.declarations)
-    yield from (record.finding for item in observed for record in item.records if record.attributes.isdisjoint(written))
-    yield from (finding for source in checkout.sources for finding in cached_testing_dependencies(source, cache))
+    yield from (
+        record.finding
+        for item in observed
+        for record in item.records
+        if record.attributes.isdisjoint(written)
+    )
+    yield from (
+        finding
+        for source in checkout.sources
+        for finding in cached_testing_dependencies(source, cache)
+    )
 
 
-def _usage_findings(observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None) -> Iterator[Finding]:
+def _usage_findings(
+    observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None
+) -> Iterator[Finding]:
     """What only every module together shows: unused definitions, copied functions and Win32 functions declared twice."""
-    production = sum((Counter(item.referenced) for item in observed), checkout.text_words())
-    yield from unused_definitions((definition for item in observed for definition in item.definitions), production, checkout.tested(cache))
+    production = sum(
+        (Counter(item.referenced) for item in observed), checkout.text_words()
+    )
+    yield from unused_definitions(
+        (definition for item in observed for definition in item.definitions),
+        production,
+        checkout.tested(cache),
+    )
     yield from duplicates(shape for item in observed for shape in item.shapes)
-    yield from redeclarations(finding for item in observed for finding in item.natives)
+    yield from redeclarations(
+        finding for item in observed for finding in item.natives
+    )
 
 
-def _findings(checkout: Checkout, configuration: Configuration, cache: Cache | None) -> Iterator[Finding]:
+def _findings(
+    checkout: Checkout, configuration: Configuration, cache: Cache | None
+) -> Iterator[Finding]:
     loaded = checkout.production()
-    observations = frozendict({module_name(source.name): observation(source, cache) for source in loaded})
-    imported_by = frozendict({module_name(source.name): dependencies(source.name, source.text, cache=cache) for source in loaded})
-    graph = frozendict({module: imported & frozenset(observations) for module, imported in imported_by.items()})
+    observations = frozendict(
+        {
+            module_name(source.name): observation(source, cache)
+            for source in loaded
+        }
+    )
+    imported_by = frozendict(
+        {
+            module_name(source.name): dependencies(
+                source.name, source.text, cache=cache
+            )
+            for source in loaded
+        }
+    )
+    graph = frozendict(
+        {
+            module: imported & frozenset(observations)
+            for module, imported in imported_by.items()
+        }
+    )
     observed = tuple(observations.values())
     yield from _module_findings(observed, checkout, cache)
-    yield from keyboard_isolation(graph, frozendict({module: item.dynamic_imports for module, item in observations.items()}))
+    yield from keyboard_isolation(
+        graph,
+        frozendict(
+            {
+                module: item.dynamic_imports
+                for module, item in observations.items()
+            }
+        ),
+    )
     yield from contract_isolation(imported_by)
     yield from _usage_findings(observed, checkout, cache)
     yield from shared_constants(loaded, configuration.constants)
-    yield from entry_data(checkout.sources, configuration.data, configuration.entries, cache)
-    yield from layering(loaded, configuration.layers, configuration.entries, cache)
+    yield from entry_data(
+        checkout.sources, configuration.data, configuration.entries, cache
+    )
+    yield from layering(
+        loaded, configuration.layers, configuration.entries, cache
+    )
     yield from enum_shapes(loaded)
 
 
-def _judged(sources: tuple[str, ...], findings: tuple[Finding, ...], exceptions: tuple[ExceptionSpec, ...]) -> Report:
+def _judged(
+    sources: tuple[str, ...],
+    findings: tuple[Finding, ...],
+    exceptions: tuple[ExceptionSpec, ...],
+) -> Report:
     """The findings no exception accepts, and each exception that accepts none: its expression no longer exists."""
-    accepted = tuple(exception for exception in exceptions if any(exception.matches(finding) for finding in findings))
+    accepted = tuple(
+        exception
+        for exception in exceptions
+        if any(exception.matches(finding) for finding in findings)
+    )
     stale = (
         Finding(
             "stale-exception",
@@ -230,13 +359,36 @@ def _judged(sources: tuple[str, ...], findings: tuple[Finding, ...], exceptions:
         for exception in exceptions
         if exception not in accepted
     )
-    failures = (*(finding for finding in findings if not any(exception.matches(finding) for exception in accepted)), *stale)
+    failures = (
+        *(
+            finding
+            for finding in findings
+            if not any(exception.matches(finding) for exception in accepted)
+        ),
+        *stale,
+    )
     return Report(sources, failures, accepted)
 
 
-def review(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> Report:
+def review(
+    root: Path,
+    names: Iterable[str] | None = None,
+    *,
+    cache: Cache | None = None,
+) -> Report:
     listed = tuple(_walked(root) if names is None else names)
     sources = python_sources(root, listed)
     configuration = _configuration(root)
-    checkout = Checkout(root, listed, tuple(Source(name, (root / name).read_text(encoding="utf-8")) for name in sources))
-    return _judged(sources, tuple(_findings(checkout, configuration, cache)), configuration.exceptions)
+    checkout = Checkout(
+        root,
+        listed,
+        tuple(
+            Source(name, (root / name).read_text(encoding="utf-8"))
+            for name in sources
+        ),
+    )
+    return _judged(
+        sources,
+        tuple(_findings(checkout, configuration, cache)),
+        configuration.exceptions,
+    )

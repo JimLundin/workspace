@@ -41,7 +41,9 @@ def outline(bounds: QRectF, radius: float) -> QPainterPath:
     return path
 
 
-def paint_capsule(painter: QPainter, path: QPainterPath, look: Look, opacity: float = 1.0) -> None:
+def paint_capsule(
+    painter: QPainter, path: QPainterPath, look: Look, opacity: float = 1.0
+) -> None:
     """A capsule's material. Composition draws glass behind the window, so Qt paints only the hit fill;
     solid takes its fill and a 1 px edge at `opacity`."""
     match look:

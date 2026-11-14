@@ -32,7 +32,10 @@ type CapturedKey = HeldShortcut | ConsumedKey
 
 def connected(names: Iterable[str], firmware: UsbIdentity) -> bool:
     """Ignore other HID keyboards, including the YubiKey and laptop controls."""
-    expected = (f"VID_{firmware.vendor:04X}", f"PID_{firmware.product:04X}")  # as a HID device path writes it
+    expected = (
+        f"VID_{firmware.vendor:04X}",
+        f"PID_{firmware.product:04X}",
+    )  # as a HID device path writes it
     for name in names:
         match name.upper().split("#"):
             case [r"\\?\HID", identity, *_]:

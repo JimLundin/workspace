@@ -22,6 +22,10 @@ class WTSINFOEXW(ctypes.Structure):
     Data: _Level
 
 def WTSQuerySessionInformationW(
-    server: None, session: int, info_class: int, buffer: ByReference[ctypes.c_wchar_p], size: ByReference[ctypes.c_ulong]
+    server: None,
+    session: int,
+    info_class: int,
+    buffer: ByReference[ctypes.c_wchar_p],
+    size: ByReference[ctypes.c_ulong],
 ) -> int: ...
 def WTSFreeMemory(memory: ctypes.c_wchar_p) -> None: ...

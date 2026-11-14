@@ -13,7 +13,14 @@ from desktop_ui.components.appearance import Scheme
 from desktop_ui.dictation_marker import Outcome, Step
 from desktop_ui.key_hint_overlay import BadgeSpec
 from desktop_ui.keymap import Role
-from desktop_ui.keymap_views import Bindings, KeymapSpec, KeysSpec, Lit, MapWindowSpec, OverlaySpec
+from desktop_ui.keymap_views import (
+    Bindings,
+    KeymapSpec,
+    KeysSpec,
+    Lit,
+    MapWindowSpec,
+    OverlaySpec,
+)
 from desktop_ui.layer_indicator import IndicatorSpec
 from desktop_ui.marker_window import MarkerSpec
 from desktop_ui.navigation import Direction
@@ -27,7 +34,15 @@ BADGES: Final = BadgeSpec(
     pad=6,
     corner=8,
     font=look.TYPE.label,
-    arrows=every_member(Direction, {Direction.LEFT: "←", Direction.DOWN: "↓", Direction.UP: "↑", Direction.RIGHT: "→"}),
+    arrows=every_member(
+        Direction,
+        {
+            Direction.LEFT: "←",
+            Direction.DOWN: "↓",
+            Direction.UP: "↑",
+            Direction.RIGHT: "→",
+        },
+    ),
     scheme=Scheme.DARK,
     glass=look.GLASS,
     palette=look.PALETTE,
@@ -39,8 +54,17 @@ MARKER: Final = MarkerSpec(
     height=28,
     gap=6,
     flash=1.2,
-    steps=every_member(Step, {Step.LISTENING: "mic.fill", Step.TRANSCRIBING: None, Step.TYPING: "keyboard"}),
-    outcomes=every_member(Outcome, {Outcome.DONE: "check", Outcome.FAILED: "close"}),
+    steps=every_member(
+        Step,
+        {
+            Step.LISTENING: "mic.fill",
+            Step.TRANSCRIBING: None,
+            Step.TYPING: "keyboard",
+        },
+    ),
+    outcomes=every_member(
+        Outcome, {Outcome.DONE: "check", Outcome.FAILED: "close"}
+    ),
     scheme=Scheme.DARK,
 )
 """The dictation marker beside the caret, in the bar's sizes and glass."""
@@ -70,14 +94,38 @@ KEYMAP: Final = KeymapSpec(
             Scheme,
             {
                 Scheme.DARK: Bindings(
-                    0.16, frozendict({Role.MOD: "#64d2ff", Role.LAYER: "#7ab0f2", Role.TOOL: "#ffb340", Role.APP: "#30d158", Role.SPECIAL: "#da8fff"})
+                    0.16,
+                    frozendict(
+                        {
+                            Role.MOD: "#64d2ff",
+                            Role.LAYER: "#7ab0f2",
+                            Role.TOOL: "#ffb340",
+                            Role.APP: "#30d158",
+                            Role.SPECIAL: "#da8fff",
+                        }
+                    ),
                 ),
                 Scheme.LIGHT: Bindings(
-                    0.12, frozendict({Role.MOD: "#0071a4", Role.LAYER: "#2f6fc4", Role.TOOL: "#b25000", Role.APP: "#248a3d", Role.SPECIAL: "#8944ab"})
+                    0.12,
+                    frozendict(
+                        {
+                            Role.MOD: "#0071a4",
+                            Role.LAYER: "#2f6fc4",
+                            Role.TOOL: "#b25000",
+                            Role.APP: "#248a3d",
+                            Role.SPECIAL: "#8944ab",
+                        }
+                    ),
                 ),
             },
         ),
-        pressed=every_member(Scheme, {Scheme.DARK: Lit("#f5f5f7", "#161618"), Scheme.LIGHT: Lit("#1d1d1f", "#ffffff")}),
+        pressed=every_member(
+            Scheme,
+            {
+                Scheme.DARK: Lit("#f5f5f7", "#161618"),
+                Scheme.LIGHT: Lit("#1d1d1f", "#ffffff"),
+            },
+        ),
     ),
     overlay=OverlaySpec(
         opacity=0.55,
@@ -103,7 +151,13 @@ KEYMAP: Final = KeymapSpec(
         handle_gap=4,
         tap=0.12,
     ),
-    window=MapWindowSpec(width=940, height=390, side=20, top=16, hint="Hold . for Apps: L dictate · ' dictation toggle · S windows"),
+    window=MapWindowSpec(
+        width=940,
+        height=390,
+        side=20,
+        top=16,
+        hint="Hold . for Apps: L dictate · ' dictation toggle · S windows",
+    ),
 )
 """Workspace's key map and overlay; the desktop app opens them with it."""
 

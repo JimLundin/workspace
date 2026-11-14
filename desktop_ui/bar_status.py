@@ -33,14 +33,18 @@ class _Sampled:
     sampled: float = 0.0
 
 
-def sampled_resources(last: SystemStatus, cpu: int | None, memory: Memory | None) -> SystemStatus:
+def sampled_resources(
+    last: SystemStatus, cpu: int | None, memory: Memory | None
+) -> SystemStatus:
     """The new processor and memory readings, each added to its history; an unread one leaves a gap."""
     return replace(
         last,
         cpu=cpu,
         memory=memory,
         cpu_history=last.cpu_history.added(cpu),
-        memory_history=last.memory_history.added(memory.used if memory is not None else None),
+        memory_history=last.memory_history.added(
+            memory.used if memory is not None else None
+        ),
     )
 
 
@@ -49,7 +53,9 @@ class Observation:
     """Each observation reads the speakers and Wi-Fi; processor load needs the previous sample to measure against."""
 
     clock: Callable[[], float] = time.monotonic
-    _sampled: Cell[_Sampled] = field(default_factory=lambda: Cell(_Sampled()), init=False, repr=False)
+    _sampled: Cell[_Sampled] = field(
+        default_factory=lambda: Cell(_Sampled()), init=False, repr=False
+    )
 
     def observe(self, *, listing: bool) -> SystemStatus:
         audio = system_status.audio()
@@ -58,10 +64,24 @@ class Observation:
         # Until a first load is known, the next tick measures one; then every interval.
         if sampled.last.cpu is None or now - sampled.sampled >= RESOURCES:
             times = resources.cpu_times()
-            sampled = _Sampled(sampled_resources(sampled.last, cpu_load(sampled.times, times), resources.memory_use()), times, now)
+            sampled = _Sampled(
+                sampled_resources(
+                    sampled.last,
+                    cpu_load(sampled.times, times),
+                    resources.memory_use(),
+                ),
+                times,
+                now,
+            )
             self._sampled.set(sampled)
         networks = system_status.networks() if listing else ()
-        return replace(sampled.last, speakers=audio.speakers, wifi=system_status.wifi(), volume=audio.volume, networks=networks)
+        return replace(
+            sampled.last,
+            speakers=audio.speakers,
+            wifi=system_status.wifi(),
+            volume=audio.volume,
+            networks=networks,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,15 +153,23 @@ class StatusObserver:
     requests: Cell[Pending] = field(default_factory=lambda: Cell(Pending()))
     lock: threading.Lock = field(default_factory=threading.Lock)
     """Serializes the UI thread's requests with the worker taking them."""
-    results: queue.Queue[SystemStatus] = field(default_factory=lambda: queue.Queue[SystemStatus](maxsize=1))
+    results: queue.Queue[SystemStatus] = field(
+        default_factory=lambda: queue.Queue[SystemStatus](maxsize=1)
+    )
     finished: threading.Event = field(default_factory=threading.Event)
     """Set when the worker thread exits."""
 
     @classmethod
-    def start(cls, observe: Observe | None = None, machine: Machine | None = None) -> StatusObserver:
+    def start(
+        cls, observe: Observe | None = None, machine: Machine | None = None
+    ) -> StatusObserver:
         applied = ThisMachine() if machine is None else machine
-        observer = cls(machine=applied) if observe is None else cls(observe, applied)
-        threading.Thread(target=observer.run, name="toolbar system status", daemon=True).start()
+        observer = (
+            cls(machine=applied) if observe is None else cls(observe, applied)
+        )
+        threading.Thread(
+            target=observer.run, name="toolbar system status", daemon=True
+        ).start()
         return observer
 
     def request(self, change: Callable[[Pending], Pending]) -> None:

@@ -10,7 +10,13 @@ lazy from PySide6.QtCore import Qt
 import winapi.shapes
 from desktop_ui.components.appearance import Design, Shade, Tokens
 from desktop_ui.components.text import inter
-from desktop_ui.components.widgets import column, glyph, row, surface_style, window_style
+from desktop_ui.components.widgets import (
+    column,
+    glyph,
+    row,
+    surface_style,
+    window_style,
+)
 from desktop_ui.qt_runtime import prepare
 
 prepare()
@@ -65,15 +71,29 @@ class SwitcherSpec:
     """...in rings this far apart, the innermost at this alpha out of 255, fading outwards."""
 
 
-def matching(windows: Sequence[winapi.shapes.Window], query: str) -> tuple[winapi.shapes.Window, ...]:
+def matching(
+    windows: Sequence[winapi.shapes.Window], query: str
+) -> tuple[winapi.shapes.Window, ...]:
     terms = query.casefold().split()
-    return tuple(window for window in windows if all(term in f"{window.title} {window.exe}".casefold() for term in terms))
+    return tuple(
+        window
+        for window in windows
+        if all(
+            term in f"{window.title} {window.exe}".casefold() for term in terms
+        )
+    )
 
 
 class _Rows(QtWidgets.QStyledItemDelegate):
     """Paints each window as its title over its program, with the selection in the accent."""
 
-    def __init__(self, theme: Tokens, parent: QtWidgets.QListWidget, spec: SwitcherSpec, design: Design) -> None:
+    def __init__(
+        self,
+        theme: Tokens,
+        parent: QtWidgets.QListWidget,
+        spec: SwitcherSpec,
+        design: Design,
+    ) -> None:
         super().__init__(parent)
         self.theme: Tokens = theme
         self.spec = spec
@@ -81,32 +101,77 @@ class _Rows(QtWidgets.QStyledItemDelegate):
         self.rows: QtWidgets.QListWidget = parent
 
     @override
-    def sizeHint(self, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex | QtCore.QPersistentModelIndex) -> QtCore.QSize:
+    def sizeHint(
+        self,
+        option: QtWidgets.QStyleOptionViewItem,
+        index: QtCore.QModelIndex | QtCore.QPersistentModelIndex,
+    ) -> QtCore.QSize:
         return QtCore.QSize(option.rect.width(), self.spec.row)
 
     @override
     def paint(
-        self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem, index: QtCore.QModelIndex | QtCore.QPersistentModelIndex
+        self,
+        painter: QtGui.QPainter,
+        option: QtWidgets.QStyleOptionViewItem,
+        index: QtCore.QModelIndex | QtCore.QPersistentModelIndex,
     ) -> None:
         title, _, detail = self.rows.item(index.row()).text().partition("\n")
-        selected = bool(option.state & QtWidgets.QStyle.StateFlag.State_Selected)
-        bounds, spec = QtCore.QRectF(option.rect).adjusted(0, 1, 0, -1), self.spec
+        selected = bool(
+            option.state & QtWidgets.QStyle.StateFlag.State_Selected
+        )
+        bounds, spec = (
+            QtCore.QRectF(option.rect).adjusted(0, 1, 0, -1),
+            self.spec,
+        )
         painter.save()
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        if selected or option.state & QtWidgets.QStyle.StateFlag.State_MouseOver:
+        if (
+            selected
+            or option.state & QtWidgets.QStyle.StateFlag.State_MouseOver
+        ):
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QtGui.QColor(self.design.palette.accent if selected else self.theme.hover.argb))
-            painter.drawRoundedRect(bounds, spec.radius - spec.inset, spec.radius - spec.inset)
-        text = bounds.adjusted(spec.text_side, spec.text_top, -spec.text_side, -spec.text_top)
+            painter.setBrush(
+                QtGui.QColor(
+                    self.design.palette.accent
+                    if selected
+                    else self.theme.hover.argb
+                )
+            )
+            painter.drawRoundedRect(
+                bounds, spec.radius - spec.inset, spec.radius - spec.inset
+            )
+        text = bounds.adjusted(
+            spec.text_side, spec.text_top, -spec.text_side, -spec.text_top
+        )
         painter.setFont(inter(self.design.type.title))
-        painter.setPen(QtGui.QColor(self.design.palette.on_accent if selected else self.theme.ink.argb))
+        painter.setPen(
+            QtGui.QColor(
+                self.design.palette.on_accent
+                if selected
+                else self.theme.ink.argb
+            )
+        )
         line = QtGui.QFontMetrics(inter(self.design.type.title))
         painter.drawText(
-            text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, line.elidedText(title, Qt.TextElideMode.ElideRight, round(text.width()))
+            text,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+            line.elidedText(
+                title, Qt.TextElideMode.ElideRight, round(text.width())
+            ),
         )
         painter.setFont(inter(self.design.type.detail))
-        painter.setPen(QtGui.QColor(Shade(self.design.palette.on_accent, spec.selected_detail).argb if selected else self.theme.ink2.argb))
-        painter.drawText(text, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, detail)
+        painter.setPen(
+            QtGui.QColor(
+                Shade(self.design.palette.on_accent, spec.selected_detail).argb
+                if selected
+                else self.theme.ink2.argb
+            )
+        )
+        painter.drawText(
+            text,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+            detail,
+        )
         painter.restore()
 
 
@@ -124,10 +189,14 @@ QLabel#hint {{ color: {theme.ink3.css}; {design.type.detail.css} }}
     )
 
 
-def _field(panel: QtWidgets.QWidget, theme: Tokens, spec: SwitcherSpec) -> tuple[QtWidgets.QHBoxLayout, QtWidgets.QLineEdit]:
+def _field(
+    panel: QtWidgets.QWidget, theme: Tokens, spec: SwitcherSpec
+) -> tuple[QtWidgets.QHBoxLayout, QtWidgets.QLineEdit]:
     """Spotlight's field: a large borderless query after its symbol."""
     field = row()
-    field.setContentsMargins(spec.field_side, spec.field_top, spec.field_side, spec.field_bottom)
+    field.setContentsMargins(
+        spec.field_side, spec.field_top, spec.field_side, spec.field_bottom
+    )
     field.setSpacing(spec.field_spacing)
     symbol = QtWidgets.QLabel(panel)
     symbol.setPixmap(glyph(spec.symbol, theme.ink2, spec.symbol_size))
@@ -143,7 +212,14 @@ def _field(panel: QtWidgets.QWidget, theme: Tokens, spec: SwitcherSpec) -> tuple
 class WindowSwitcher(QtWidgets.QDialog):
     """A Spotlight-like panel: a large search field over rows, on the kit's solid window."""
 
-    def __init__(self, windows: Sequence[winapi.shapes.Window], focus: Callable[[int], None], spec: SwitcherSpec, title: str, design: Design) -> None:
+    def __init__(
+        self,
+        windows: Sequence[winapi.shapes.Window],
+        focus: Callable[[int], None],
+        spec: SwitcherSpec,
+        title: str,
+        design: Design,
+    ) -> None:
         """The switcher over `windows`, titled `title`, which the layout recognises to pass it Esc, Enter and Tab."""
         super().__init__()
         self.spec = spec
@@ -151,7 +227,11 @@ class WindowSwitcher(QtWidgets.QDialog):
         self.focus_window = focus
         theme = design.tokens()
         self.setWindowTitle(title)
-        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet(_style(theme, spec, design))
@@ -162,7 +242,9 @@ class WindowSwitcher(QtWidgets.QDialog):
         panel.setObjectName("surface")
         outer.addWidget(panel)
         layout = column(panel)
-        layout.setContentsMargins(round(spec.inset), 0, round(spec.inset), spec.bottom)
+        layout.setContentsMargins(
+            round(spec.inset), 0, round(spec.inset), spec.bottom
+        )
         layout.setSpacing(0)
         field, self.search = _field(panel, theme, spec)
         separator = QtWidgets.QFrame(panel)
@@ -172,10 +254,14 @@ class WindowSwitcher(QtWidgets.QDialog):
         self.items.setAccessibleName(spec.list_name)
         self.items.setItemDelegate(_Rows(theme, self.items, spec, design))
         self.items.setMouseTracking(True)
-        self.items.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.items.setVerticalScrollMode(
+            QtWidgets.QAbstractItemView.ScrollMode.ScrollPerPixel
+        )
         hint = QtWidgets.QLabel(spec.hint, panel)
         hint.setObjectName("hint")
-        hint.setContentsMargins(spec.hint_side, spec.hint_top, spec.hint_side, 0)
+        hint.setContentsMargins(
+            spec.hint_side, spec.hint_top, spec.hint_side, 0
+        )
         layout.addLayout(field)
         layout.addWidget(separator)
         layout.addSpacing(spec.separator_gap)
@@ -191,15 +277,23 @@ class WindowSwitcher(QtWidgets.QDialog):
         self.search.installEventFilter(self)
         self.filter("")
         rows = max(spec.fewest, min(spec.most, len(windows)))
-        self.resize(spec.width + 2 * shadow, min(spec.tallest, spec.chrome + rows * spec.row) + 2 * shadow)
+        self.resize(
+            spec.width + 2 * shadow,
+            min(spec.tallest, spec.chrome + rows * spec.row) + 2 * shadow,
+        )
 
     def filter(self, query: str) -> None:
         self.filtered = matching(self.windows, query)
         self.items.clear()
         for window in self.filtered:
-            self.items.addItem(f"{window.title}\n{window.exe.removesuffix('.exe')}" + (self.spec.minimized if window.minimized else ""))
+            self.items.addItem(
+                f"{window.title}\n{window.exe.removesuffix('.exe')}"
+                + (self.spec.minimized if window.minimized else "")
+            )
         if self.filtered:
-            self.items.setCurrentRow(1 if not query and len(self.filtered) > 1 else 0)
+            self.items.setCurrentRow(
+                1 if not query and len(self.filtered) > 1 else 0
+            )
 
     def activate(self) -> None:
         row = self.items.currentRow()
@@ -209,13 +303,23 @@ class WindowSwitcher(QtWidgets.QDialog):
             self.focus_window(handle)
 
     @override
-    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
-        if event.type() == QtCore.QEvent.Type.KeyPress and isinstance(event, QtGui.QKeyEvent):
+    def eventFilter(
+        self, watched: QtCore.QObject, event: QtCore.QEvent
+    ) -> bool:
+        if event.type() == QtCore.QEvent.Type.KeyPress and isinstance(
+            event, QtGui.QKeyEvent
+        ):
             key = event.key()
             if key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
                 count = self.items.count()
                 if count:
-                    self.items.setCurrentRow((self.items.currentRow() + (1 if key == Qt.Key.Key_Down else -1)) % count)
+                    self.items.setCurrentRow(
+                        (
+                            self.items.currentRow()
+                            + (1 if key == Qt.Key.Key_Down else -1)
+                        )
+                        % count
+                    )
                 return True
         return super().eventFilter(watched, event)
 
@@ -227,9 +331,21 @@ class WindowSwitcher(QtWidgets.QDialog):
         painter.setPen(Qt.PenStyle.NoPen)
         spec = self.spec
         shadow, lift, drop = spec.shadow, spec.shadow_lift, spec.shadow_drop
-        panel = QtCore.QRectF(self.rect()).adjusted(shadow, shadow - lift, -shadow, -shadow - lift)
+        panel = QtCore.QRectF(self.rect()).adjusted(
+            shadow, shadow - lift, -shadow, -shadow - lift
+        )
         for step in range(shadow, 0, -spec.shadow_step):
             # Fading from the innermost ring's alpha to 1 at the outermost.
-            painter.setBrush(QtGui.QColor(0, 0, 0, round((spec.shadow_alpha - 1) * (1 - step / shadow) ** 2) + 1))
+            painter.setBrush(
+                QtGui.QColor(
+                    0,
+                    0,
+                    0,
+                    round((spec.shadow_alpha - 1) * (1 - step / shadow) ** 2)
+                    + 1,
+                )
+            )
             spread = panel.adjusted(-step, -step + drop, step, step + drop)
-            painter.drawRoundedRect(spread, spec.radius + step, spec.radius + step)
+            painter.drawRoundedRect(
+                spread, spec.radius + step, spec.radius + step
+            )

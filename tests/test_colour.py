@@ -20,9 +20,14 @@ def test_a_channel_outside_eight_bits_is_refused() -> None:
     assert "green channel" in refused(lambda: Rgb(0, True, 0))
 
 
-def test_a_written_colour_reads_back_exactly_and_a_malformed_one_is_refused() -> None:
+def test_a_written_colour_reads_back_exactly_and_a_malformed_one_is_refused() -> (
+    None
+):
     # Defect: a token colour like "#2ea078" parses to other channels, or "#2ea07"
     # or "2ea078" is accepted and paints garbage.
-    assert Rgb.parse("#2ea078") == Rgb(46, 160, 120) and Rgb(46, 160, 120).hex == "#2ea078"
+    assert (
+        Rgb.parse("#2ea078") == Rgb(46, 160, 120)
+        and Rgb(46, 160, 120).hex == "#2ea078"
+    )
     for text in ("#2ea07", "2ea078", "#2ea07g", "#2ea0780"):
         assert "#rrggbb" in refused(lambda text=text: Rgb.parse(text))

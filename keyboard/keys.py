@@ -37,7 +37,9 @@ class VirtualKey(Enum):
     def legend(self) -> str:
         """The key as its keycap, the hints and the README write it: its name, else the capital it types."""
         code = self.value
-        return code.named or (code.plain.upper() if code.plain else self.name.title())
+        return code.named or (
+            code.plain.upper() if code.plain else self.name.title()
+        )
 
 
 class Key(VirtualKey):
@@ -118,7 +120,10 @@ class Key(VirtualKey):
 
     def continues_word(self) -> bool:
         """Keys that keep caps word going without being capitalised."""
-        return Key.N0.vk <= self.vk <= Key.N9.vk or self in (Key.BACKSPACE, Key.DELETE)
+        return Key.N0.vk <= self.vk <= Key.N9.vk or self in (
+            Key.BACKSPACE,
+            Key.DELETE,
+        )
 
 
 class Mod(VirtualKey):

@@ -4,8 +4,18 @@ import ctypes
 import time
 
 lazy from win32more.Windows.Win32.Foundation import GlobalFree
-lazy from win32more.Windows.Win32.System.DataExchange import CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData
-lazy from win32more.Windows.Win32.System.Memory import GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock
+lazy from win32more.Windows.Win32.System.DataExchange import (
+    CloseClipboard,
+    EmptyClipboard,
+    OpenClipboard,
+    SetClipboardData,
+)
+lazy from win32more.Windows.Win32.System.Memory import (
+    GMEM_MOVEABLE,
+    GlobalAlloc,
+    GlobalLock,
+    GlobalUnlock,
+)
 lazy from win32more.Windows.Win32.System.Ole import CF_UNICODETEXT
 
 

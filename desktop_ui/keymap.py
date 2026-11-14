@@ -32,7 +32,20 @@ ROWS: Final = (
         Laptop.PLUS,
         Laptop.ACUTE,
     ),
-    (Laptop.Q, Laptop.W, Laptop.E, Laptop.R, Laptop.T, Laptop.Y, Laptop.U, Laptop.I, Laptop.O, Laptop.P, Laptop.ARING, Laptop.DIAERESIS),
+    (
+        Laptop.Q,
+        Laptop.W,
+        Laptop.E,
+        Laptop.R,
+        Laptop.T,
+        Laptop.Y,
+        Laptop.U,
+        Laptop.I,
+        Laptop.O,
+        Laptop.P,
+        Laptop.ARING,
+        Laptop.DIAERESIS,
+    ),
     (
         Laptop.CAPS,
         Laptop.A,
@@ -48,12 +61,26 @@ ROWS: Final = (
         Laptop.AUMLAUT,
         Laptop.APOSTROPHE,
     ),
-    (Laptop.LESS, Laptop.Z, Laptop.X, Laptop.C, Laptop.V, Laptop.B, Laptop.N, Laptop.M, Laptop.COMMA, Laptop.PERIOD, Laptop.MINUS),
+    (
+        Laptop.LESS,
+        Laptop.Z,
+        Laptop.X,
+        Laptop.C,
+        Laptop.V,
+        Laptop.B,
+        Laptop.N,
+        Laptop.M,
+        Laptop.COMMA,
+        Laptop.PERIOD,
+        Laptop.MINUS,
+    ),
     (Laptop.SPACE,),
 )
 """The keyboard's letter block and Spacebar, row by row, as the key map draws it."""
 
-PHYSICAL_NAMES: Final = frozendict({key.scancode: key.legend for row in ROWS for key in row})
+PHYSICAL_NAMES: Final = frozendict(
+    {key.scancode: key.legend for row in ROWS for key in row}
+)
 """Each drawn key's keycap name, by the scancode the layout reports it with."""
 
 
@@ -106,7 +133,13 @@ CHORD_HOLD: Final = "Apps"
 """The Apps key, held for a request's letter: the Tab thumb, on the laptop or the Charybdis."""
 
 _CHORD_NAMES: Final = frozendict(
-    {Chord.ctrl(Key.Z): "Undo", Chord.ctrl(Key.Y): "Redo", Chord.ctrl(Key.C): "Copy", Chord.ctrl(Key.V): "Paste", Chord.ctrl(Key.X): "Cut"}
+    {
+        Chord.ctrl(Key.Z): "Undo",
+        Chord.ctrl(Key.Y): "Redo",
+        Chord.ctrl(Key.C): "Copy",
+        Chord.ctrl(Key.V): "Paste",
+        Chord.ctrl(Key.X): "Cut",
+    }
 )
 TOOL_NAMES: Final = every_member(Tool, {
     Tool.DICTATE: "Talk",
@@ -135,8 +168,20 @@ class KeyboardView:
     def of(cls, layout: Layout, apps: tuple[App, ...]) -> KeyboardView:
         """`layout` as the desktop reads it with `apps` in its slots, or `LayoutError` if the layout is inconsistent."""
         bindings = Bindings.of(layout)
-        reached = ((reaching(request, apps), letter) for request, letter in Chords.of(bindings).letters.items())
-        return cls(layout, bindings, apps, frozendict((target, letter) for target, letter in reached if target is not None))
+        reached = (
+            (reaching(request, apps), letter)
+            for request, letter in Chords.of(bindings).letters.items()
+        )
+        return cls(
+            layout,
+            bindings,
+            apps,
+            frozendict(
+                (target, letter)
+                for target, letter in reached
+                if target is not None
+            ),
+        )
 
     def shortcut(self, tool: Tool) -> Shortcut | None:
         """The first binding in the held layers' order, else the tool's firmware chord."""
@@ -147,7 +192,9 @@ class KeyboardView:
                 continue
             for cell, binding in enumerate(self.bindings.actions(layer)):
                 if binding is tool:
-                    return Shortcut(physical[cell].legend, physical[held].legend)
+                    return Shortcut(
+                        physical[cell].legend, physical[held].legend
+                    )
         letter = self.letters.get(tool)
         return Shortcut(letter, CHORD_HOLD) if letter is not None else None
 
@@ -160,10 +207,14 @@ class KeyboardView:
                 return a.legend, Role.KEY
             case Chord(key, mods) if a in _CHORD_NAMES:
                 return _CHORD_NAMES[a], Role.KEY
-            case Chord(key) if a.only_shifted and (c := key.typed(shifted=True)):
+            case Chord(key) if a.only_shifted and (
+                c := key.typed(shifted=True)
+            ):
                 return c, Role.KEY
             case Chord(key, mods):
-                return "+".join([*(m.legend for m in Mod if m in mods), key.legend]), Role.KEY
+                return "+".join(
+                    [*(m.legend for m in Mod if m in mods), key.legend]
+                ), Role.KEY
             case TapHold(tap):
                 return self.describe(tap)
             case Mod():
@@ -193,7 +244,14 @@ class KeyboardView:
     def _holding(self, layer: Layer) -> int | None:
         """The cell of the base layer's thumb that holds `layer`; None for the base layer itself."""
         base = self.bindings.actions(Layer.BASE)
-        return next((cell for cell, a in enumerate(base) if isinstance(a, TapHold) and a.hold is layer), None)
+        return next(
+            (
+                cell
+                for cell, a in enumerate(base)
+                if isinstance(a, TapHold) and a.hold is layer
+            ),
+            None,
+        )
 
     def _cap(self, layer: Layer, held: int | None, key: Laptop) -> Cap:
         """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
@@ -213,7 +271,9 @@ class KeyboardView:
     def keymap(self, layer: Layer) -> tuple[tuple[Cap, ...], ...]:
         """The keyboard, row by row, as `layer` has it."""
         held = self._holding(layer)
-        return tuple(tuple(self._cap(layer, held, key) for key in row) for row in ROWS)
+        return tuple(
+            tuple(self._cap(layer, held, key) for key in row) for row in ROWS
+        )
 
 
 def indicator_text(layer: Layer, *, caps_word: bool) -> str | None:

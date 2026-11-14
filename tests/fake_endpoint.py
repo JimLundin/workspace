@@ -53,7 +53,12 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length", "0"))
-            request = Received(self.path, self.headers.get("Authorization", ""), self.headers.get("Content-Type", ""), self.rfile.read(length))
+            request = Received(
+                self.path,
+                self.headers.get("Authorization", ""),
+                self.headers.get("Content-Type", ""),
+                self.rfile.read(length),
+            )
             endpoint.received.append(request)
             if endpoint.stream is not None:
                 self.send_response(200)
@@ -63,16 +68,31 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
                     for chunk in endpoint.stream(request):
                         self.wfile.write(chunk)
                         self.wfile.flush()
-                except BrokenPipeError, ConnectionResetError, ConnectionAbortedError:
+                except (
+                    BrokenPipeError,
+                    ConnectionResetError,
+                    ConnectionAbortedError,
+                ):
                     pass  # Stopping a streamed request closes its socket.
                 return
             if endpoint.respond is not None:
                 reply = endpoint.respond(request)
             else:
-                reply = endpoint.replies.pop(0) if len(endpoint.replies) > 1 else endpoint.replies[0]
+                reply = (
+                    endpoint.replies.pop(0)
+                    if len(endpoint.replies) > 1
+                    else endpoint.replies[0]
+                )
             self.send_response(reply.status)
             self.send_header("Content-Type", reply.content_type)
-            self.send_header("Content-Length", str(len(reply.body) if reply.content_length is None else reply.content_length))
+            self.send_header(
+                "Content-Length",
+                str(
+                    len(reply.body)
+                    if reply.content_length is None
+                    else reply.content_length
+                ),
+            )
             if reply.status >= 400 and reply.retry_after_ms is not None:
                 # The client still retries what it would retry, without waiting out its real backoff.
                 self.send_header("retry-after-ms", str(reply.retry_after_ms))
@@ -85,7 +105,9 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     endpoint.url = f"http://127.0.0.1:{server.server_port}/v1"
-    thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.02), daemon=True)
+    thread = threading.Thread(
+        target=lambda: server.serve_forever(poll_interval=0.02), daemon=True
+    )
     thread.start()
     try:
         yield endpoint

@@ -73,15 +73,23 @@ def keyboard_input(watch: Watch, tick: int) -> Watch:
             assert_never(watch)
 
 
-def assess(watch: Watch, hook: int | None, now: int) -> Watch | Probe | Reinstall:
+def assess(
+    watch: Watch, hook: int | None, now: int
+) -> Watch | Probe | Reinstall:
     """`hook` is the newest event time the hook has seen; `now` is the current tick."""
     match watch:
-        case Unanswered(since=since) | Probing(since=since) if hook is not None and offset(since, hook) <= ANSWER_SLACK_MS:
+        case Unanswered(since=since) | Probing(since=since) if (
+            hook is not None and offset(since, hook) <= ANSWER_SLACK_MS
+        ):
             return ANSWERED
         case Unanswered(since=since):
             return Probe(since) if offset(now, since) >= SUSPECT_MS else watch
         case Probing(since=since, sent=sent):
-            return Reinstall(since, hook) if offset(now, sent) >= PROBE_MS else watch
+            return (
+                Reinstall(since, hook)
+                if offset(now, sent) >= PROBE_MS
+                else watch
+            )
         case _ if watch is ANSWERED:
             return watch
         case _:

@@ -19,7 +19,12 @@ prepare()
 
 FAMILY: Final = "Inter"
 FONTS: Final = Path(__file__).resolve().parent.parent / "fonts"
-CUTS: Final = ("Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "Inter-Bold.ttf")
+CUTS: Final = (
+    "Inter-Regular.ttf",
+    "Inter-Medium.ttf",
+    "Inter-SemiBold.ttf",
+    "Inter-Bold.ttf",
+)
 
 
 class Weight(IntEnum):

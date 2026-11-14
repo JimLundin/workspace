@@ -37,7 +37,9 @@ class Step(Enum):
 
 type Shown = Step | Outcome
 
-_STEPS: frozendict[Job, Step] = frozendict({TRANSCRIBING: Step.TRANSCRIBING, TYPING: Step.TYPING})
+_STEPS: frozendict[Job, Step] = frozendict(
+    {TRANSCRIBING: Step.TRANSCRIBING, TYPING: Step.TYPING}
+)
 """The step each of dictation's jobs shows."""
 
 
@@ -62,7 +64,13 @@ class FindAnchor:
 def listened(state: MarkerState, *, listening: bool) -> MarkerState:
     """A capture starting looks for its anchor afresh and drops any flash."""
     if listening and not state.listening:
-        return replace(state, listening=True, flash=None, capture=state.capture + 1, where=PROBING)
+        return replace(
+            state,
+            listening=True,
+            flash=None,
+            capture=state.capture + 1,
+            where=PROBING,
+        )
     return replace(state, listening=listening)
 
 
@@ -75,18 +83,34 @@ def job_changed(state: MarkerState, job: Job | None) -> MarkerState:
     """Typing that ends without a failure is done; a new job ends any flash."""
     if job is not None:
         return replace(state, job=job, flash=None)
-    finished = state.job is TYPING and state.flash is not Outcome.FAILED and not state.listening
-    return replace(state, job=None, flash=Outcome.DONE if finished else state.flash)
+    finished = (
+        state.job is TYPING
+        and state.flash is not Outcome.FAILED
+        and not state.listening
+    )
+    return replace(
+        state, job=None, flash=Outcome.DONE if finished else state.flash
+    )
 
 
 def failed(state: MarkerState) -> MarkerState:
     """A failure flashes only where dictation is showing; the tray reports every failure."""
-    return replace(state, flash=Outcome.FAILED) if shown(state) is not None else state
+    return (
+        replace(state, flash=Outcome.FAILED)
+        if shown(state) is not None
+        else state
+    )
 
 
-def anchored(state: MarkerState, capture: int, where: Anchor | UNFOUND) -> MarkerState:
+def anchored(
+    state: MarkerState, capture: int, where: Anchor | UNFOUND
+) -> MarkerState:
     """The first answer for the current capture places it; later and stale answers are dropped."""
-    return replace(state, where=where) if capture == state.capture and state.where is PROBING else state
+    return (
+        replace(state, where=where)
+        if capture == state.capture and state.where is PROBING
+        else state
+    )
 
 
 def faded(state: MarkerState) -> MarkerState:
@@ -103,7 +127,9 @@ def shown(state: MarkerState) -> Shown | None:
 def marked(state: MarkerState) -> tuple[Anchor, Shown] | None:
     """Where the marker shows and what, or None while it's hidden."""
     match state.where:
-        case Caret() | Field() | Window() as anchor if (step := shown(state)) is not None:
+        case Caret() | Field() | Window() as anchor if (
+            step := shown(state)
+        ) is not None:
             return anchor, step
         case _:
             return None
@@ -126,9 +152,23 @@ def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
     match anchor:
         case Caret(rect):
             above = rect.top - gap - size.height
-            return _clamped(rect.left, above if above >= work.top else rect.bottom + gap, size, work)
+            return _clamped(
+                rect.left,
+                above if above >= work.top else rect.bottom + gap,
+                size,
+                work,
+            )
         case Field(rect):
             above = rect.top - gap - size.height
-            return _clamped(rect.left, above, size, work) if above >= work.top else _clamped(rect.left + gap, rect.top + gap, size, work)
+            return (
+                _clamped(rect.left, above, size, work)
+                if above >= work.top
+                else _clamped(rect.left + gap, rect.top + gap, size, work)
+            )
         case Window(rect):
-            return _clamped(rect.left + (rect.width - size.width) // 2, rect.top + gap, size, work)
+            return _clamped(
+                rect.left + (rect.width - size.width) // 2,
+                rect.top + gap,
+                size,
+                work,
+            )

@@ -21,7 +21,14 @@ from typing import Final, assert_never
 from desktop_ui.ambient import History
 from desktop_ui.month import Month
 from protocol import Tool
-from winapi.machine_status import LOCATION_OFF, Battery, Listing, Network, Power, PowerUnavailable
+from winapi.machine_status import (
+    LOCATION_OFF,
+    Battery,
+    Listing,
+    Network,
+    Power,
+    PowerUnavailable,
+)
 
 
 class Command(Enum):
@@ -86,7 +93,9 @@ class Item:
     key: str = ""  # A shortcut hint, shown quietly at the trailing edge.
 
 
-def tool_item(label: str, icon: str, tool: Tool, hints: frozendict[Tool, str]) -> Item:
+def tool_item(
+    label: str, icon: str, tool: Tool, hints: frozendict[Tool, str]
+) -> Item:
     """Tool cells advertise the physical keys from the layout that triggers them."""
     return Item(label, icon, ToolChoice(tool), hints.get(tool, ""))
 
@@ -152,7 +161,12 @@ NO_TRACE: Final = Trace((), 1, "")
 
 def traced(history: History, ceiling: int | None, reading: str) -> Trace:
     """`history` as shares of `ceiling`, held within it; without a ceiling, nothing reads."""
-    shares = tuple(None if sample is None or ceiling is None or ceiling <= 0 else min(1.0, max(0.0, sample / ceiling)) for sample in history.samples)
+    shares = tuple(
+        None
+        if sample is None or ceiling is None or ceiling <= 0
+        else min(1.0, max(0.0, sample / ceiling))
+        for sample in history.samples
+    )
     return Trace(shares, history.capacity, reading)
 
 
@@ -183,7 +197,9 @@ class Fact:
     detail: str
 
 
-type Entry = Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph | Nearby | Fact
+type Entry = (
+    Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph | Nearby | Fact
+)
 
 
 class Face(StrEnum):
@@ -216,7 +232,9 @@ class Cell:
     span: int
     track: int
     tracks: int
-    caption: str = ""  # A tile's short name; its entry's label stays its accessible name.
+    caption: str = (
+        ""  # A tile's short name; its entry's label stays its accessible name.
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +246,9 @@ class Controls:
     placement_paused: bool = field(default=False, kw_only=True)
     dark_when_away: bool = field(default=False, kw_only=True)
     sound: Slider = Slider("", None, muted=False)
-    tray: tuple[str, ...] = ()  # Each tray icon's label, in the bar's snapshot order.
+    tray: tuple[
+        str, ...
+    ] = ()  # Each tray icon's label, in the bar's snapshot order.
     today: date | None = field(default=None, kw_only=True)
     networks: Listing = field(default=(), kw_only=True)
     power: Power = field(default=PowerUnavailable.UNKNOWN, kw_only=True)
@@ -267,7 +287,9 @@ class EntryId(StrEnum):
     CALENDAR = auto()
     CPU_GRAPH = auto()
     MEMORY_GRAPH = auto()
-    LOCATION = auto()  # Only while Windows withholds the networks for want of location.
+    LOCATION = (
+        auto()
+    )  # Only while Windows withholds the networks for want of location.
     WIFI_SETTINGS = auto()
     BATTERY = auto()
     POWER_SETTINGS = auto()
@@ -382,35 +404,66 @@ def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
     return Toggle(spec.label, detail, spec.icon, choice, on=on)
 
 
-def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | None:
+def entry(
+    spec: CellSpec, controls: Controls, menu: ControlsSpec
+) -> Entry | None:
     """The entry `spec` places, as it reads now; None while it doesn't apply."""
     words = menu.words
     match spec.entry:
         case EntryId.OVERLAY:
-            return toggle(spec, words.on if controls.overlay else words.off, Command.OVERLAY, on=controls.overlay)
+            return toggle(
+                spec,
+                words.on if controls.overlay else words.off,
+                Command.OVERLAY,
+                on=controls.overlay,
+            )
         case EntryId.PLACEMENT:
             paused = controls.placement_paused
-            return toggle(spec, words.paused if paused else words.on, Command.PLACEMENT, on=not paused)
+            return toggle(
+                spec,
+                words.paused if paused else words.on,
+                Command.PLACEMENT,
+                on=not paused,
+            )
         case EntryId.DARK_WHEN_AWAY:
             away = controls.dark_when_away
-            return toggle(spec, words.on if away else words.off, Command.DARK_WHEN_AWAY, on=away)
+            return toggle(
+                spec,
+                words.on if away else words.off,
+                Command.DARK_WHEN_AWAY,
+                on=away,
+            )
         case EntryId.RECORD:
-            return None if controls.recording is not None else Item(spec.label, spec.icon, Command.RECORD)
+            return (
+                None
+                if controls.recording is not None
+                else Item(spec.label, spec.icon, Command.RECORD)
+            )
         case EntryId.SOUND:
             return controls.sound
         case EntryId.MUTE:
             muted = controls.sound.muted
-            return toggle(spec, words.on if muted else words.off, Command.MUTE, on=muted)
+            return toggle(
+                spec, words.on if muted else words.off, Command.MUTE, on=muted
+            )
         case EntryId.CPU_GRAPH:
             return Graph(spec.label, controls.cpu)
         case EntryId.MEMORY_GRAPH:
             return Graph(spec.label, controls.memory)
         case EntryId.CALENDAR:
-            return Calendar(spec.label, controls.month or Month.of(today), today) if (today := controls.today) else None
+            return (
+                Calendar(spec.label, controls.month or Month.of(today), today)
+                if (today := controls.today)
+                else None
+            )
         case EntryId.SWITCH_WINDOWS:
-            return tool_item(spec.label, spec.icon, Tool.WINDOW_SWITCHER, controls.hints)
+            return tool_item(
+                spec.label, spec.icon, Tool.WINDOW_SWITCHER, controls.hints
+            )
         case EntryId.COPY_TRANSCRIPT:
-            return tool_item(spec.label, spec.icon, Tool.COPY_TRANSCRIPT, controls.hints)
+            return tool_item(
+                spec.label, spec.icon, Tool.COPY_TRANSCRIPT, controls.hints
+            )
         case EntryId.KEYMAP:
             return Item(spec.label, spec.icon, Command.KEYMAP)
         case EntryId.NOTIFICATIONS:
@@ -422,7 +475,11 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
         case EntryId.BATTERY:
             return battery(spec, controls.power, words)
         case EntryId.LOCATION:
-            return Item(spec.label, spec.icon, Command.LOCATION_SETTINGS) if controls.networks is LOCATION_OFF else None
+            return (
+                Item(spec.label, spec.icon, Command.LOCATION_SETTINGS)
+                if controls.networks is LOCATION_OFF
+                else None
+            )
         case EntryId.ALL_CONTROLS:
             return Item(spec.label, spec.icon, Command.ALL_CONTROLS)
         case _:
@@ -430,13 +487,21 @@ def entry(spec: CellSpec, controls: Controls, menu: ControlsSpec) -> Entry | Non
 
 
 def activities(controls: Controls, words: MenuWords) -> tuple[Live, ...]:
-    return (Live(words.recording, controls.recording, Command.STOP_RECORDING),) if controls.recording is not None else ()
+    return (
+        (Live(words.recording, controls.recording, Command.STOP_RECORDING),)
+        if controls.recording is not None
+        else ()
+    )
 
 
 def left(seconds: int, words: MenuWords) -> str:
     """The charge left in hours and minutes, or in minutes alone under an hour."""
     hours, minutes = seconds // 3600, seconds // 60 % 60
-    return words.hours_left.format(hours=hours, minutes=minutes) if hours else words.minutes_left.format(minutes=minutes)
+    return (
+        words.hours_left.format(hours=hours, minutes=minutes)
+        if hours
+        else words.minutes_left.format(minutes=minutes)
+    )
 
 
 def battery(spec: CellSpec, power: Power, words: MenuWords) -> Fact | None:
@@ -447,7 +512,9 @@ def battery(spec: CellSpec, power: Power, words: MenuWords) -> Fact | None:
         case Battery(powered=True, percent=percent):
             return Fact(spec.label, spec.icon, f"{percent}%", words.plugged_in)
         case Battery(remaining=int() as seconds, percent=percent):
-            return Fact(spec.label, spec.icon, f"{percent}%", left(seconds, words))
+            return Fact(
+                spec.label, spec.icon, f"{percent}%", left(seconds, words)
+            )
         case Battery(percent=percent):
             return Fact(spec.label, spec.icon, f"{percent}%", words.on_battery)
         case PowerUnavailable.NO_BATTERY:
@@ -458,7 +525,9 @@ def battery(spec: CellSpec, power: Power, words: MenuWords) -> Fact | None:
             assert_never(power)
 
 
-def heard(controls: Controls, row: NetworksRow, words: MenuWords) -> tuple[Nearby, ...]:
+def heard(
+    controls: Controls, row: NetworksRow, words: MenuWords
+) -> tuple[Nearby, ...]:
     """The networks to list, each with what it reads as; none while Windows withholds them."""
     if controls.networks is LOCATION_OFF:
         return ()
@@ -470,12 +539,21 @@ def heard(controls: Controls, row: NetworksRow, words: MenuWords) -> tuple[Nearb
             return words.saved
         return words.secured if network.secured else words.open
 
-    return tuple(Nearby(network.ssid, network, detail(network)) for network in controls.networks[: row.most])
+    return tuple(
+        Nearby(network.ssid, network, detail(network))
+        for network in controls.networks[: row.most]
+    )
 
 
-def present_cells(controls: Controls, specs: tuple[CellSpec, ...], menu: ControlsSpec) -> tuple[tuple[CellSpec, Entry], ...]:
+def present_cells(
+    controls: Controls, specs: tuple[CellSpec, ...], menu: ControlsSpec
+) -> tuple[tuple[CellSpec, Entry], ...]:
     """A row's cells that show now, in order: a cell whose entry is absent leaves no gap."""
-    return tuple((each, present) for each in specs if (present := entry(each, controls, menu)))
+    return tuple(
+        (each, present)
+        for each in specs
+        if (present := entry(each, controls, menu))
+    )
 
 
 def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
@@ -493,37 +571,81 @@ def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
             assert_never(row)
 
 
-def row_cells(row: RowSpec, controls: Controls, top: int, spec: ControlsSpec) -> tuple[Cell, ...]:
+def row_cells(
+    row: RowSpec, controls: Controls, top: int, spec: ControlsSpec
+) -> tuple[Cell, ...]:
     """`row`'s cells from `top`, each following the one before it."""
     match row:
         case ActivitiesRow(tracks=tracks):
             cards = enumerate(activities(controls, spec.words))
-            return tuple(Cell(activity, Face.CARD, 0, COLUMNS, top + tracks * index, tracks) for index, activity in cards)
+            return tuple(
+                Cell(
+                    activity,
+                    Face.CARD,
+                    0,
+                    COLUMNS,
+                    top + tracks * index,
+                    tracks,
+                )
+                for index, activity in cards
+            )
         case TrayRow(tracks=tracks):
             return tuple(
-                Cell(TrayIcon(name, slot), Face.ICON, slot % COLUMNS, 1, top + tracks * (slot // COLUMNS), tracks)
+                Cell(
+                    TrayIcon(name, slot),
+                    Face.ICON,
+                    slot % COLUMNS,
+                    1,
+                    top + tracks * (slot // COLUMNS),
+                    tracks,
+                )
                 for slot, name in enumerate(controls.tray)
             )
         case NetworksRow(tracks=tracks):
             lines = enumerate(heard(controls, row, spec.words))
-            return tuple(Cell(network, Face.NETWORK, 0, COLUMNS, top + tracks * index, tracks) for index, network in lines)
+            return tuple(
+                Cell(
+                    network,
+                    Face.NETWORK,
+                    0,
+                    COLUMNS,
+                    top + tracks * index,
+                    tracks,
+                )
+                for index, network in lines
+            )
         case CellsRow(tracks=tracks, cells=specs):
             shown = present_cells(controls, specs, spec)
             columns = accumulate((each.span for each, _ in shown), initial=0)
             return tuple(
-                Cell(present, each.face, column, each.span, top, tracks, each.caption)
+                Cell(
+                    present,
+                    each.face,
+                    column,
+                    each.span,
+                    top,
+                    tracks,
+                    each.caption,
+                )
                 for (each, present), column in zip(shown, columns, strict=False)
             )
         case _:
             assert_never(row)
 
 
-def entries(controls: Controls, spec: ControlsSpec, panel: Panel) -> tuple[Cell, ...]:
+def entries(
+    controls: Controls, spec: ControlsSpec, panel: Panel
+) -> tuple[Cell, ...]:
     """`panel`'s grid for what's happening now, flowed from its rows: each row
     starts below the one before it, so no two cells overlap. Tracks include the gutters."""
     rows = spec.panels[panel].rows
     tops = accumulate((height(row, controls, spec) for row in rows), initial=0)
-    return tuple(chain.from_iterable(row_cells(row, controls, top, spec) for row, top in zip(rows, tops, strict=False)))
+    return tuple(
+        chain.from_iterable(
+            row_cells(row, controls, top, spec)
+            for row, top in zip(rows, tops, strict=False)
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -597,7 +719,11 @@ type Outcome = Menu | Chosen | Applied | DISMISSED
 
 def current(menu: Menu) -> Cell | None:
     cells = menu.cells
-    return cells[menu.selected] if menu.selected is not None and menu.selected < len(cells) else None
+    return (
+        cells[menu.selected]
+        if menu.selected is not None and menu.selected < len(cells)
+        else None
+    )
 
 
 def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
@@ -605,8 +731,14 @@ def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
     here = cells[index]
 
     def gap(cell: Cell) -> int | None:
-        across = cell.column < here.column + here.span and here.column < cell.column + cell.span
-        along = cell.track < here.track + here.tracks and here.track < cell.track + cell.tracks
+        across = (
+            cell.column < here.column + here.span
+            and here.column < cell.column + cell.span
+        )
+        along = (
+            cell.track < here.track + here.tracks
+            and here.track < cell.track + cell.tracks
+        )
         match key:
             case Key.DOWN if across and cell.track >= here.track + here.tracks:
                 return cell.track - here.track - here.tracks
@@ -622,10 +754,16 @@ def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
     def offset(cell: Cell) -> int:
         # Centres in half units, so odd spans compare exactly.
         if key in (Key.UP, Key.DOWN):
-            return abs(2 * cell.column + cell.span - 2 * here.column - here.span)
+            return abs(
+                2 * cell.column + cell.span - 2 * here.column - here.span
+            )
         return abs(2 * cell.track + cell.tracks - 2 * here.track - here.tracks)
 
-    ranked = sorted((distance, offset(cell), position) for position, cell in enumerate(cells) if (distance := gap(cell)) is not None)
+    ranked = sorted(
+        (distance, offset(cell), position)
+        for position, cell in enumerate(cells)
+        if (distance := gap(cell)) is not None
+    )
     return ranked[0][2] if ranked else None
 
 
@@ -634,10 +772,14 @@ def move(menu: Menu, key: Key) -> Menu:
     if not cells:
         return menu
     if menu.selected is None or menu.selected >= len(cells):
-        return replace(menu, selected=0 if key in (Key.DOWN, Key.RIGHT) else len(cells) - 1)
+        return replace(
+            menu, selected=0 if key in (Key.DOWN, Key.RIGHT) else len(cells) - 1
+        )
     target = towards(cells, menu.selected, key)
     if target is None and key in (Key.DOWN, Key.UP):
-        target = 0 if key is Key.DOWN else len(cells) - 1  # Up and Down wrap; Left and Right stop at the edge.
+        target = (
+            0 if key is Key.DOWN else len(cells) - 1
+        )  # Up and Down wrap; Left and Right stop at the edge.
     return menu if target is None else replace(menu, selected=target)
 
 
@@ -703,8 +845,19 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
 def jump(menu: Menu, character: str) -> Menu:
     cells = menu.cells
     start = menu.selected if menu.selected is not None else -1
-    order = tuple((start + offset) % len(cells) for offset in range(1, len(cells) + 1))
-    target = next((index for index in order if label(cells[index].entry).casefold().startswith(character.casefold())), None)
+    order = tuple(
+        (start + offset) % len(cells) for offset in range(1, len(cells) + 1)
+    )
+    target = next(
+        (
+            index
+            for index in order
+            if label(cells[index].entry)
+            .casefold()
+            .startswith(character.casefold())
+        ),
+        None,
+    )
     return menu if target is None else replace(menu, selected=target)
 
 
@@ -714,7 +867,13 @@ def restores_focus(choice: Choice) -> bool:
         case ToolChoice() | Volume() | Page() | Join():
             return True
         case (
-            Command.OVERLAY | Command.PLACEMENT | Command.DARK_WHEN_AWAY | Command.MUTE | Command.THIS_MONTH | Command.RECORD | Command.STOP_RECORDING
+            Command.OVERLAY
+            | Command.PLACEMENT
+            | Command.DARK_WHEN_AWAY
+            | Command.MUTE
+            | Command.THIS_MONTH
+            | Command.RECORD
+            | Command.STOP_RECORDING
         ):
             return True
         case (

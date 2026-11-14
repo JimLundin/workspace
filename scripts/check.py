@@ -29,7 +29,17 @@ from scripts.architecture import python_sources, review
 from scripts.source_analysis import Cache, module_name
 
 ROOT = Path(__file__).resolve().parent.parent
-WINDOWS_IMPORTS = ("WinDLL", "WINFUNCTYPE", "windll", "winreg", "msvcrt", "_winapi", "PySide6", "shiboken6", "win32more")
+WINDOWS_IMPORTS = (
+    "WinDLL",
+    "WINFUNCTYPE",
+    "windll",
+    "winreg",
+    "msvcrt",
+    "_winapi",
+    "PySide6",
+    "shiboken6",
+    "win32more",
+)
 """Signs that an import failed only because this isn't Windows."""
 STANDARDS = frozendict(
     {
@@ -67,7 +77,9 @@ class Test(Protocol):
 def windows_only(error: BaseException) -> bool:
     """Whether an import failed only because this isn't Windows; on Windows nothing is excused."""
     match sys.platform, error:
-        case platform, ImportError() | AttributeError() | OSError() if platform != "win32":
+        case platform, ImportError() | AttributeError() | OSError() if (
+            platform != "win32"
+        ):
             return any(name in str(error) for name in WINDOWS_IMPORTS)
         case _:
             return False
@@ -75,14 +87,20 @@ def windows_only(error: BaseException) -> bool:
 
 def failed(node: str, error: BaseException, output: str = "") -> Failed:
     captured = f"\nCaptured stderr:\n{output}" if output else ""
-    return Failed(node, f"{node}\n{''.join(traceback.format_exception(error))}{captured}")
+    return Failed(
+        node, f"{node}\n{''.join(traceback.format_exception(error))}{captured}"
+    )
 
 
 def import_failures(root: Path) -> Iterator[Failed]:
     """Import every production module: top-level modules and every module of a top-level package."""
     for name in python_sources(root):
         parts = Path(name).parts
-        if name.endswith(".py") and parts[0] != "tests" and (len(parts) == 1 or (root / parts[0] / "__init__.py").is_file()):
+        if (
+            name.endswith(".py")
+            and parts[0] != "tests"
+            and (len(parts) == 1 or (root / parts[0] / "__init__.py").is_file())
+        ):
             try:
                 importlib.import_module(module_name(name))
             except Exception as error:
@@ -105,7 +123,10 @@ def module_outcomes(selector: str) -> Iterator[Outcome]:
     tests = tuple(
         (label, test)
         for label, test in inspect.getmembers(loaded)
-        if label.startswith("test_") and label == (requested or label) and isinstance(test, Test) and test.__module__ == module
+        if label.startswith("test_")
+        and label == (requested or label)
+        and isinstance(test, Test)
+        and test.__module__ == module
     )
     if separator and not tests:
         yield Failed(selector, f"No test function matched {selector}")
@@ -121,7 +142,10 @@ def test_outcome(node: str, test: Test) -> Outcome:
         if set(parameters) - {"tmp_path"}:
             raise TypeError("Only tmp_path fixtures are supported.")
         # A shallow scratch folder: stores nest digest-named folders under it within Windows MAX_PATH.
-        with contextlib.redirect_stderr(output), tempfile.TemporaryDirectory(prefix="workspace-check-") as scratch:
+        with (
+            contextlib.redirect_stderr(output),
+            tempfile.TemporaryDirectory(prefix="workspace-check-") as scratch,
+        ):
             test(**({"tmp_path": Path(scratch)} if parameters else {}))
     except unittest.SkipTest:
         return Status.SKIPPED
@@ -130,20 +154,52 @@ def test_outcome(node: str, test: Test) -> Outcome:
     return Status.PASSED
 
 
-def standard_failures(name: str, command: tuple[str, ...]) -> tuple[Failed, ...]:
-    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
-    return () if result.returncode == 0 else (Failed(name, f"{name} failed:\n{(result.stdout + result.stderr).strip()}"),)
+def standard_failures(
+    name: str, command: tuple[str, ...]
+) -> tuple[Failed, ...]:
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return (
+        ()
+        if result.returncode == 0
+        else (
+            Failed(
+                name,
+                f"{name} failed:\n{(result.stdout + result.stderr).strip()}",
+            ),
+        )
+    )
 
 
-def collected(standards: tuple[Future[tuple[Failed, ...]], ...]) -> Iterator[Failed]:
+def collected(
+    standards: tuple[Future[tuple[Failed, ...]], ...],
+) -> Iterator[Failed]:
     for standard in standards:
         yield from standard.result()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--standards", action="store_true", help="also apply whole-tree Ruff and mypy, as Dev.cmd check does")
-    parser.add_argument("tests", nargs="*", help="run only these test files or tests/test_x.py::test_name selectors")
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--standards",
+        action="store_true",
+        help="also apply whole-tree Ruff and mypy, as Dev.cmd check does",
+    )
+    parser.add_argument(
+        "tests",
+        nargs="*",
+        help="run only these test files or tests/test_x.py::test_name selectors",
+    )
     args = parser.parse_args()
     started = time.perf_counter()
     # No application import or native effect before the source policies pass.
@@ -154,27 +210,57 @@ def main() -> None:
     if findings or quality.check(ROOT, cache=cache):
         raise SystemExit(1)
     tests = tuple[str, ...](args.tests) or tuple(
-        name for name in python_sources(ROOT) if name.startswith("tests/") and Path(name).name.startswith("test_")
+        name
+        for name in python_sources(ROOT)
+        if name.startswith("tests/") and Path(name).name.startswith("test_")
     )
-    native = tuple(name for name in tests if name.startswith("tests/test_windows_"))
-    generated = tuple(name for name in tests if name.startswith("tests/properties/"))
-    portable = tuple(name for name in tests if name not in native and name not in generated)
+    native = tuple(
+        name for name in tests if name.startswith("tests/test_windows_")
+    )
+    generated = tuple(
+        name for name in tests if name.startswith("tests/properties/")
+    )
+    portable = tuple(
+        name for name in tests if name not in native and name not in generated
+    )
     with ThreadPoolExecutor() as pool:
-        standards = tuple(pool.submit(standard_failures, name, command) for name, command in STANDARDS.items()) if args.standards else ()
+        standards = (
+            tuple(
+                pool.submit(standard_failures, name, command)
+                for name, command in STANDARDS.items()
+            )
+            if args.standards
+            else ()
+        )
         outcomes = (
             # Hypothesis inspects loaded modules for constants: generated tests run before every production import.
-            *(outcome for name in generated for outcome in module_outcomes(name)),
+            *(
+                outcome
+                for name in generated
+                for outcome in module_outcomes(name)
+            ),
             *import_failures(ROOT),
-            *(outcome for name in portable for outcome in module_outcomes(name)),
+            *(
+                outcome
+                for name in portable
+                for outcome in module_outcomes(name)
+            ),
             # Native fixtures have real deadlines: they wait for whole-tree mypy, which saturates the cores.
             *collected(standards),
             *(outcome for name in native for outcome in module_outcomes(name)),
         )
-    failures = tuple(outcome for outcome in outcomes if isinstance(outcome, Failed))
+    failures = tuple(
+        outcome for outcome in outcomes if isinstance(outcome, Failed)
+    )
     for failure in failures:
         print(failure.report)
-    passed, skipped = outcomes.count(Status.PASSED), outcomes.count(Status.SKIPPED)
-    print(f"{passed} passed, {len(failures)} failed, {skipped} skipped in {time.perf_counter() - started:.1f}s")
+    passed, skipped = (
+        outcomes.count(Status.PASSED),
+        outcomes.count(Status.SKIPPED),
+    )
+    print(
+        f"{passed} passed, {len(failures)} failed, {skipped} skipped in {time.perf_counter() - started:.1f}s"
+    )
     raise SystemExit(bool(failures))
 
 

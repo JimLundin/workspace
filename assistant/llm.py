@@ -45,7 +45,9 @@ class Missing:
     names: tuple[str, ...]
 
 
-def settings_from(env: Mapping[str, str], gateway: Path | None = None) -> Settings | Missing:
+def settings_from(
+    env: Mapping[str, str], gateway: Path | None = None
+) -> Settings | Missing:
     """Read from environment variables. The endpoint's are named as OpenAI's own tools name them."""
     required = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
     if missing := tuple(name for name in required if not env.get(name)):
@@ -53,7 +55,9 @@ def settings_from(env: Mapping[str, str], gateway: Path | None = None) -> Settin
     return Settings(
         base_url=env["OPENAI_BASE_URL"].rstrip("/"),
         api_key=env["OPENAI_API_KEY"],
-        transcribe_model=env.get("WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"),
+        transcribe_model=env.get(
+            "WORKSPACE_TRANSCRIBE_MODEL", "gpt-4o-transcribe"
+        ),
         vocabulary=env.get("WORKSPACE_VOCABULARY", ""),
         gateway=gateway,
     )
@@ -114,10 +118,14 @@ def route(settings: Settings) -> tuple[str, str]:
 def _client(settings: Settings, timeout_s: float) -> OpenAI:
     # A failed dictation is reported at once; the user or the meeting worker retries.
     base_url, api_key = route(settings)
-    return OpenAI(base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=0)
+    return OpenAI(
+        base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=0
+    )
 
 
-def _failure(settings: Settings, error: APIStatusError | APIConnectionError) -> Failure:
+def _failure(
+    settings: Settings, error: APIStatusError | APIConnectionError
+) -> Failure:
     match error:
         case APIStatusError():
             try:
@@ -126,7 +134,9 @@ def _failure(settings: Settings, error: APIStatusError | APIConnectionError) -> 
                 detail = error.response.reason_phrase
             return Failure(f"HTTP {error.status_code}: {detail}")
         case APIConnectionError():
-            return Failure(f"can't reach {urlsplit(settings.base_url).netloc}: {error.__cause__ or error.message}")
+            return Failure(
+                f"can't reach {urlsplit(settings.base_url).netloc}: {error.__cause__ or error.message}"
+            )
         case _:
             assert_never(error)
 
@@ -135,9 +145,17 @@ def _unexpected(body: bytes) -> Failure:
     return Failure(f"unexpected reply: {body[:200].decode(errors='replace')}")
 
 
-def transcribe(settings: Settings, audio: bytes, *, timeout_s: float = 60, context: str = "") -> str | Failure:
+def transcribe(
+    settings: Settings,
+    audio: bytes,
+    *,
+    timeout_s: float = 60,
+    context: str = "",
+) -> str | Failure:
     """The text spoken in a WAV file."""
-    prompt = "\n".join(part for part in (settings.vocabulary, context[-600:]) if part)
+    prompt = "\n".join(
+        part for part in (settings.vocabulary, context[-600:]) if part
+    )
     try:
         with _client(settings, timeout_s) as client:
             reply = client.audio.transcriptions.with_raw_response.create(

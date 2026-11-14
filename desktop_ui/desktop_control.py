@@ -22,7 +22,18 @@ from contracts.hotkeys import ROUTES, Route
 from contracts.recording_state import RecordingAction, RecordingState
 from contracts.status import Job, State
 from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
-from desktop_ui.dictation_marker import UNFOUND, FindAnchor, MarkerState, anchored, faded, failed, found, job_changed, listened, on_bar
+from desktop_ui.dictation_marker import (
+    UNFOUND,
+    FindAnchor,
+    MarkerState,
+    anchored,
+    faded,
+    failed,
+    found,
+    job_changed,
+    listened,
+    on_bar,
+)
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, keyed
 from desktop_ui.overlay import OverlayState
@@ -93,16 +104,43 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
     hint = f"\t{item.key}" if item.key else ""
     match item.action:
         case Menu.TOGGLE_LAYOUT:
-            status = "on" if state.layout is LayoutState.ON else "off" if state.layout is LayoutState.OFF else "not running"
+            status = (
+                "on"
+                if state.layout is LayoutState.ON
+                else "off"
+                if state.layout is LayoutState.OFF
+                else "not running"
+            )
             text = f"Layout: {status}" + ("\tTap §" if running else "")
-            return MenuItem(item.action.value, text, enabled=running, checked=state.layout is LayoutState.ON)
+            return MenuItem(
+                item.action.value,
+                text,
+                enabled=running,
+                checked=state.layout is LayoutState.ON,
+            )
         case Menu.RESTART_LAYOUT:
-            return MenuItem(item.action.value, "Restart layout" if running else "Start layout")
+            return MenuItem(
+                item.action.value,
+                "Restart layout" if running else "Start layout",
+            )
         case Menu.MEETING:
-            return MenuItem(item.action.value, "Stop recording" if state.capturing else "Record a meeting")
+            return MenuItem(
+                item.action.value,
+                "Stop recording" if state.capturing else "Record a meeting",
+            )
         case Menu.OVERLAY:
-            return MenuItem(item.action.value, item.label + hint, checked=state.overlay_enabled)
-        case Menu.KEYMAP | Menu.TRANSCRIPTS | Menu.LOGS | Menu.RESTART_DESKTOP | Menu.QUIT:
+            return MenuItem(
+                item.action.value,
+                item.label + hint,
+                checked=state.overlay_enabled,
+            )
+        case (
+            Menu.KEYMAP
+            | Menu.TRANSCRIPTS
+            | Menu.LOGS
+            | Menu.RESTART_DESKTOP
+            | Menu.QUIT
+        ):
             return MenuItem(item.action.value, item.label + hint)
         case _:
             assert_never(item.action)
@@ -144,11 +182,17 @@ class FeatureRequest:
 type ControlAction = PhysicalKey | FeatureRequest
 
 
-def control_event(message: int, wparam: int, lparam: int, apps: Sequence[App]) -> ControlAction | None:
+def control_event(
+    message: int, wparam: int, lparam: int, apps: Sequence[App]
+) -> ControlAction | None:
     """A key state or request message to the control window, keeping key edges and requests' presses and releases."""
     if message == protocol.Message.KEY_STATE:
         return PhysicalKey(Scancode(wparam), down=bool(lparam))
-    if message == protocol.Message.REQUEST and (request := protocol.decode(wparam)) and (target := protocol.reaching(request, apps)):
+    if (
+        message == protocol.Message.REQUEST
+        and (request := protocol.decode(wparam))
+        and (target := protocol.reaching(request, apps))
+    ):
         return FeatureRequest(target, down=bool(lparam))
     return None
 
@@ -330,7 +374,16 @@ class ShowSwitcher:
     choices: tuple[winapi.shapes.Window, ...]
 
 
-type Instruction = ShowVoice | ShowIdle | Record | ExpireCapture | RestoreTray | Chord | Quit | ShowSwitcher
+type Instruction = (
+    ShowVoice
+    | ShowIdle
+    | Record
+    | ExpireCapture
+    | RestoreTray
+    | Chord
+    | Quit
+    | ShowSwitcher
+)
 
 type Event = Fact | Instruction
 
@@ -497,14 +550,33 @@ def tray_state(shown: Shown) -> State:
 
 def idle_state(*, listening: Tool | None, layout_on: bool) -> State:
     """What the keys rest in: listening, ready, or the layout switched off."""
-    return State.LISTENING if listening is not None else State.READY if layout_on else State.LAYOUT_OFF
+    return (
+        State.LISTENING
+        if listening is not None
+        else State.READY
+        if layout_on
+        else State.LAYOUT_OFF
+    )
 
 
-def recording_notice(prior: RecordingState, recording: RecordingState) -> Notified | None:
+def recording_notice(
+    prior: RecordingState, recording: RecordingState
+) -> Notified | None:
     """A warning when a recording pauses, is interrupted, or a capture ends with a problem."""
-    failed_capture = prior.capturing and recording.phase == "finishing" and bool(recording.detail)
-    if (prior.phase != recording.phase and recording.phase in ("paused", "interrupted")) or failed_capture:
-        return Notified("Meeting transcript", recording.detail or "Recording was interrupted. Choose Open meeting transcripts for the saved part.")
+    failed_capture = (
+        prior.capturing
+        and recording.phase == "finishing"
+        and bool(recording.detail)
+    )
+    if (
+        prior.phase != recording.phase
+        and recording.phase in ("paused", "interrupted")
+    ) or failed_capture:
+        return Notified(
+            "Meeting transcript",
+            recording.detail
+            or "Recording was interrupted. Choose Open meeting transcripts for the saved part.",
+        )
     return None
 
 
@@ -534,7 +606,9 @@ def _requested(request: Target, *, down: bool) -> Iterator[Effect]:
             assert_never(request)
 
 
-def _controlled(action: ControlAction | None, overlay: OverlayState) -> Iterator[Effect]:
+def _controlled(
+    action: ControlAction | None, overlay: OverlayState
+) -> Iterator[Effect]:
     match action:
         case PhysicalKey():
             yield PressedKeys(overlay.pressed, reset=action.reset)
@@ -546,7 +620,9 @@ def _controlled(action: ControlAction | None, overlay: OverlayState) -> Iterator
             assert_never(action)
 
 
-def _overlay_after(action: ControlAction | None, overlay: OverlayState) -> OverlayState:
+def _overlay_after(
+    action: ControlAction | None, overlay: OverlayState
+) -> OverlayState:
     match action:
         case PhysicalKey(scancode=scancode, down=down):
             return overlay.key(scancode, down=down)
@@ -554,11 +630,15 @@ def _overlay_after(action: ControlAction | None, overlay: OverlayState) -> Overl
             return overlay
 
 
-def indicated(code: int, overlay: OverlayState) -> tuple[str | None, OverlayState]:
+def indicated(
+    code: int, overlay: OverlayState
+) -> tuple[str | None, OverlayState]:
     """The indicator's words and the overlay after the layout's indicator word."""
     index, caps_word = decode_indicator(code)
     layer = Layer.coded(index) or Layer.BASE
-    return indicator_text(layer, caps_word=caps_word), overlay.indicate(layer, caps_word=caps_word)
+    return indicator_text(layer, caps_word=caps_word), overlay.indicate(
+        layer, caps_word=caps_word
+    )
 
 
 def _layout(value: int, known: LayoutState | None) -> LayoutState | None:
@@ -599,7 +679,9 @@ def _chosen(choice: int) -> Iterator[Effect]:
             assert_never(chosen)
 
 
-def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[Effect]:
+def _reacted(
+    state: DesktopState, after: DesktopState, fact: Fact
+) -> Iterator[Effect]:
     """The effects of `fact`, given the state before it and after it."""
     match fact:
         case VoiceShown():
@@ -616,7 +698,11 @@ def _reacted(state: DesktopState, after: DesktopState, fact: Fact) -> Iterator[E
                 yield TrayNotify(notice.title, notice.text, warning=True)
             yield ShowIdle()
         case MenuRequested():
-            menu = MenuState(layout=state.layout, overlay_enabled=state.overlay.enabled, capturing=state.shown.recording.capturing)
+            menu = MenuState(
+                layout=state.layout,
+                overlay_enabled=state.overlay.enabled,
+                capturing=state.shown.recording.capturing,
+            )
             yield ShowMenu(menu)
         case MenuChosen(choice):
             yield from _chosen(choice)
@@ -662,7 +748,13 @@ def _marked(state: MarkerState, after: MarkerState) -> Iterator[Effect]:
 def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
     match fact:
         case VoiceShown(shown):
-            return replace(state, shown=replace(state.shown, state=shown), marker=listened(state.marker, listening=shown is State.LISTENING))
+            return replace(
+                state,
+                shown=replace(state.shown, state=shown),
+                marker=listened(
+                    state.marker, listening=shown is State.LISTENING
+                ),
+            )
         case JobChanged(job):
             return replace(state, marker=job_changed(state.marker, job))
         case DictationFailed():
@@ -672,26 +764,48 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
         case MarkerFaded():
             return replace(state, marker=faded(state.marker))
         case RecordingChanged(recording):
-            return replace(state, shown=replace(state.shown, recording=recording))
+            return replace(
+                state, shown=replace(state.shown, recording=recording)
+            )
         case Controlled(action):
             return replace(state, overlay=_overlay_after(action, state.overlay))
         case Indicated(code):
             return replace(state, overlay=indicated(code, state.overlay)[1])
         case LayoutReported(value):
             layout = _layout(value, state.layout)
-            return replace(state, layout=layout, overlay=state.overlay.set_layout(on=layout is LayoutState.ON))
+            return replace(
+                state,
+                layout=layout,
+                overlay=state.overlay.set_layout(on=layout is LayoutState.ON),
+            )
         case OverlayToggled():
-            return replace(state, overlay=replace(state.overlay, enabled=not state.overlay.enabled))
+            return replace(
+                state,
+                overlay=replace(
+                    state.overlay, enabled=not state.overlay.enabled
+                ),
+            )
         case Notified() | MenuRequested() | MenuChosen() | Problem():
             return state
         case _:
             assert_never(fact)
 
 
-def transition(state: DesktopState, event: Event) -> tuple[DesktopState, Iterator[Effect]]:
+def transition(
+    state: DesktopState, event: Event
+) -> tuple[DesktopState, Iterator[Effect]]:
     """The state after `event` and the effects it calls for, in order, produced lazily."""
     match event:
-        case ShowVoice() | ShowIdle() | Record() | ExpireCapture() | RestoreTray() | Chord() | Quit() | ShowSwitcher():
+        case (
+            ShowVoice()
+            | ShowIdle()
+            | Record()
+            | ExpireCapture()
+            | RestoreTray()
+            | Chord()
+            | Quit()
+            | ShowSwitcher()
+        ):
             return state, iter((event,))
         case MenuChosen(Menu.OVERLAY.value):
             return transition(state, OverlayToggled())

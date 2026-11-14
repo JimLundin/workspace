@@ -4,7 +4,10 @@ import ctypes
 import uuid
 from ctypes import wintypes
 from typing import Protocol, overload
-lazy from _ctypes import _CData, _SimpleCData  # Only annotations name them; _CData exists only in the stubs.
+lazy from _ctypes import (  # Only annotations name them; _CData exists only in the stubs.
+    _CData,
+    _SimpleCData,
+)
 
 from winapi.shapes import Rect
 
@@ -30,11 +33,18 @@ class NativeFunction[T](Protocol):
 
 
 @overload
-def fn[T](dll: ctypes.WinDLL, name: str, restype: type[_SimpleCData[T]], *argtypes: type[_CData]) -> NativeFunction[T]: ...
+def fn[T](
+    dll: ctypes.WinDLL,
+    name: str,
+    restype: type[_SimpleCData[T]],
+    *argtypes: type[_CData],
+) -> NativeFunction[T]: ...
 
 
 @overload
-def fn(dll: ctypes.WinDLL, name: str, restype: None, *argtypes: type[_CData]) -> NativeFunction[None]: ...
+def fn(
+    dll: ctypes.WinDLL, name: str, restype: None, *argtypes: type[_CData]
+) -> NativeFunction[None]: ...
 
 
 def fn[T](
@@ -49,10 +59,29 @@ def fn[T](
 
 
 # Functions more than one module calls, each declared once.
-FindWindowW = fn(user32, "FindWindowW", wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR)
+FindWindowW = fn(
+    user32, "FindWindowW", wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR
+)
 CloseHandle = fn(kernel32, "CloseHandle", wintypes.BOOL, wintypes.HANDLE)
-CoCreateInstance = fn(ole32, "CoCreateInstance", ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)
-CreateEventW = fn(kernel32, "CreateEventW", wintypes.HANDLE, wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR)
+CoCreateInstance = fn(
+    ole32,
+    "CoCreateInstance",
+    ctypes.c_long,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+    wintypes.DWORD,
+    ctypes.c_void_p,
+    ctypes.c_void_p,
+)
+CreateEventW = fn(
+    kernel32,
+    "CreateEventW",
+    wintypes.HANDLE,
+    wintypes.LPVOID,
+    wintypes.BOOL,
+    wintypes.BOOL,
+    wintypes.LPCWSTR,
+)
 CreateWindowExW = fn(
     user32,
     "CreateWindowExW",
@@ -74,19 +103,63 @@ DeleteObject = fn(gdi32, "DeleteObject", wintypes.BOOL, wintypes.HGDIOBJ)
 DestroyWindow = fn(user32, "DestroyWindow", wintypes.BOOL, wintypes.HWND)
 GetAsyncKeyState = fn(user32, "GetAsyncKeyState", ctypes.c_short, ctypes.c_int)
 GetCurrentThreadId = fn(kernel32, "GetCurrentThreadId", wintypes.DWORD)
-GetCursorPos = fn(user32, "GetCursorPos", wintypes.BOOL, ctypes.POINTER(wintypes.POINT))
-GetForegroundWindow = fn(user32, "GetForegroundWindow", wintypes.HWND)
-GetModuleHandleW = fn(kernel32, "GetModuleHandleW", wintypes.HMODULE, wintypes.LPCWSTR)
-GetWindowThreadProcessId = fn(user32, "GetWindowThreadProcessId", wintypes.DWORD, wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
-IsWindowVisible = fn(user32, "IsWindowVisible", wintypes.BOOL, wintypes.HWND)
-OpenProcess = fn(kernel32, "OpenProcess", wintypes.HANDLE, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-PostMessageW = fn(user32, "PostMessageW", wintypes.BOOL, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
-SetForegroundWindow = fn(user32, "SetForegroundWindow", wintypes.BOOL, wintypes.HWND)
-SetWindowPos = fn(
-    user32, "SetWindowPos", wintypes.BOOL, wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT
+GetCursorPos = fn(
+    user32, "GetCursorPos", wintypes.BOOL, ctypes.POINTER(wintypes.POINT)
 )
-ShowWindow = fn(user32, "ShowWindow", wintypes.BOOL, wintypes.HWND, ctypes.c_int)
-WaitForSingleObject = fn(kernel32, "WaitForSingleObject", wintypes.DWORD, wintypes.HANDLE, wintypes.DWORD)
+GetForegroundWindow = fn(user32, "GetForegroundWindow", wintypes.HWND)
+GetModuleHandleW = fn(
+    kernel32, "GetModuleHandleW", wintypes.HMODULE, wintypes.LPCWSTR
+)
+GetWindowThreadProcessId = fn(
+    user32,
+    "GetWindowThreadProcessId",
+    wintypes.DWORD,
+    wintypes.HWND,
+    ctypes.POINTER(wintypes.DWORD),
+)
+IsWindowVisible = fn(user32, "IsWindowVisible", wintypes.BOOL, wintypes.HWND)
+OpenProcess = fn(
+    kernel32,
+    "OpenProcess",
+    wintypes.HANDLE,
+    wintypes.DWORD,
+    wintypes.BOOL,
+    wintypes.DWORD,
+)
+PostMessageW = fn(
+    user32,
+    "PostMessageW",
+    wintypes.BOOL,
+    wintypes.HWND,
+    wintypes.UINT,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
+)
+SetForegroundWindow = fn(
+    user32, "SetForegroundWindow", wintypes.BOOL, wintypes.HWND
+)
+SetWindowPos = fn(
+    user32,
+    "SetWindowPos",
+    wintypes.BOOL,
+    wintypes.HWND,
+    wintypes.HWND,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    wintypes.UINT,
+)
+ShowWindow = fn(
+    user32, "ShowWindow", wintypes.BOOL, wintypes.HWND, ctypes.c_int
+)
+WaitForSingleObject = fn(
+    kernel32,
+    "WaitForSingleObject",
+    wintypes.DWORD,
+    wintypes.HANDLE,
+    wintypes.DWORD,
+)
 
 
 def rect(r: wintypes.RECT) -> Rect:
@@ -105,10 +178,24 @@ def guid_buffer(value: str) -> GuidBuffer:
     return ctypes.create_string_buffer(uuid.UUID(value).bytes_le, 16)
 
 
-def com_method(owner: str, pointer: ctypes.c_void_p, index: int, *arguments: type[_CData]) -> NativeFunction[int]:
+def com_method(
+    owner: str, pointer: ctypes.c_void_p, index: int, *arguments: type[_CData]
+) -> NativeFunction[int]:
     """The method at `index` in a COM object's table, returning its HRESULT: the object's first pointer is its table."""
-    table = ctypes.c_void_p.from_address(pointer.value).value if pointer.value else None
-    address = ctypes.c_void_p.from_address(table + index * ctypes.sizeof(ctypes.c_void_p)).value if table else None
+    table = (
+        ctypes.c_void_p.from_address(pointer.value).value
+        if pointer.value
+        else None
+    )
+    address = (
+        ctypes.c_void_p.from_address(
+            table + index * ctypes.sizeof(ctypes.c_void_p)
+        ).value
+        if table
+        else None
+    )
     if address is None:
         raise OSError(f"{owner} has no method table.")
-    return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(address)
+    return ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *arguments)(
+        address
+    )

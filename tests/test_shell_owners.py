@@ -46,7 +46,9 @@ class RecoveryGuard:
         self.code = 0
 
 
-def test_taskbar_is_rehidden_after_explorer_reappears_and_restored_on_close() -> None:
+def test_taskbar_is_rehidden_after_explorer_reappears_and_restored_on_close() -> (
+    None
+):
     desktop, guard = TaskbarDesktop(), RecoveryGuard()
     control = TaskbarControl(desktop, lambda: guard)
     control.start()
@@ -62,7 +64,9 @@ def test_taskbar_is_rehidden_after_explorer_reappears_and_restored_on_close() ->
     assert all(desktop.shown.values())
 
 
-def test_lost_recovery_guard_restores_taskbar_instead_of_leaving_it_hidden() -> None:
+def test_lost_recovery_guard_restores_taskbar_instead_of_leaving_it_hidden() -> (
+    None
+):
     desktop, guard = TaskbarDesktop(), RecoveryGuard()
     control = TaskbarControl(desktop, lambda: guard)
     control.start()
@@ -79,7 +83,9 @@ def test_taskbars_are_never_hidden_without_the_recovery_handshake() -> None:
     """Detect acquiring shell ownership after a failed recovery startup."""
     desktop, guard = TaskbarDesktop(), RecoveryGuard(ready=False)
     control = TaskbarControl(desktop, lambda: guard)
-    with unittest.TestCase().assertRaisesRegex(OSError, "recovery could not start"):
+    with unittest.TestCase().assertRaisesRegex(
+        OSError, "recovery could not start"
+    ):
         control.start()
     control.enforce()
     assert desktop.shown == {101: True} and guard.closed
@@ -89,7 +95,10 @@ class LanguageDesktop:
     """Own changing foreground observations and language requests in this scenario."""
 
     def __init__(self) -> None:
-        self.observations = iter(Foreground(*pair) for pair in ((11, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
+        self.observations = iter(
+            Foreground(*pair)
+            for pair in ((11, 0xF002041D), (22, 0x4090409), (22, 0x4090409))
+        )
         self.loads: tuple[str, ...] = ()
         self.activations: tuple[int, ...] = ()
         self.requests: tuple[tuple[int, int], ...] = ()
@@ -111,7 +120,9 @@ class LanguageDesktop:
         self.requests += ((hwnd, layout),)
 
 
-def test_keyboard_language_rechecks_each_foreground_and_both_toggle_states() -> None:
+def test_keyboard_language_rechecks_each_foreground_and_both_toggle_states() -> (
+    None
+):
     desktop = LanguageDesktop()
     languages = keyboard_language.KeyboardLanguages.load(desktop)
     languages.enforce(enabled=True)
@@ -122,10 +133,21 @@ def test_keyboard_language_rechecks_each_foreground_and_both_toggle_states() -> 
     assert desktop.requests == ((11, 0x4090409), (22, 0xF002041D))
 
 
-def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown() -> None:
+def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown() -> (
+    None
+):
     """Detect Colemak being applied a second time to firmware-generated output."""
     desktop = LanguageDesktop()
-    desktop.observations = iter(Foreground(*pair) for pair in ((11, 0x4090409), (11, 0xF002041D), (22, 0xF002041D), (22, 0x4090409), (22, 0x4090409)))
+    desktop.observations = iter(
+        Foreground(*pair)
+        for pair in (
+            (11, 0x4090409),
+            (11, 0xF002041D),
+            (22, 0xF002041D),
+            (22, 0x4090409),
+            (22, 0x4090409),
+        )
+    )
     languages = keyboard_language.KeyboardLanguages.load(desktop)
     driver = KeyboardFixture()
     keyboard = Keyboard.open(layouts.LAYOUT, PEERS, driver)
@@ -136,7 +158,11 @@ def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown()
     maintain_keyboard(keyboard, languages)
     languages.close()
     assert desktop.activations == (0xF002041D, 0x4090409)
-    assert desktop.requests == ((11, 0xF002041D), (11, 0x4090409), (22, 0x4090409))
+    assert desktop.requests == (
+        (11, 0xF002041D),
+        (11, 0x4090409),
+        (22, 0x4090409),
+    )
     driver.devices = ()
     maintain_keyboard(keyboard, languages)
     assert not keyboard.engine_state.enabled
@@ -144,4 +170,7 @@ def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown()
 
 
 def assert_language_restored(desktop: LanguageDesktop) -> None:
-    assert desktop.activations[-1] == 0xF002041D and desktop.requests[-1] == (22, 0xF002041D)
+    assert desktop.activations[-1] == 0xF002041D and desktop.requests[-1] == (
+        22,
+        0xF002041D,
+    )

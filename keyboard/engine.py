@@ -152,12 +152,26 @@ class Modifiers:
         count = self.counts.get(mod, 0)
         if count > 1:
             return Modifiers(self.counts | {mod: count - 1})
-        return Modifiers(frozendict({held: each for held, each in self.counts.items() if held is not mod})) if count else self
+        return (
+            Modifiers(
+                frozendict(
+                    {
+                        held: each
+                        for held, each in self.counts.items()
+                        if held is not mod
+                    }
+                )
+            )
+            if count
+            else self
+        )
 
     def chord(self, host: Host, chord: Chord) -> None:
         """The chord's key goes down with its modifiers around it. Modifiers already
         held are left alone; the ones added are released right after."""
-        added = [mod for mod in Mod if mod in chord.mods and mod not in self.counts]  # in a fixed order
+        added = [
+            mod for mod in Mod if mod in chord.mods and mod not in self.counts
+        ]  # in a fixed order
         for mod in added:
             host.send(mod, down=True)
         host.send(chord.key, down=True)
@@ -179,7 +193,9 @@ class Modifiers:
 NO_KEYS: Final[tuple[Action | None, ...]] = (None,) * Board.SIZE
 
 
-def _put(pressed: tuple[Action | None, ...], cell: int, action: Action | None) -> tuple[Action | None, ...]:
+def _put(
+    pressed: tuple[Action | None, ...], cell: int, action: Action | None
+) -> tuple[Action | None, ...]:
     return (*pressed[:cell], action, *pressed[cell + 1 :])
 
 
@@ -235,12 +251,28 @@ class Engine:
     def of(cls, layout: Layout, bindings: Bindings) -> Engine:
         return cls(bindings, layout.timings, layout.escape)
 
-    def on_key(self, state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
+    def on_key(
+        self,
+        state: EngineState,
+        host: Host,
+        scancode: Scancode,
+        *,
+        down: bool,
+        now: int,
+    ) -> tuple[EngineState, Verdict]:
         """One physical key event, then the indicator. `now` is the event's timestamp in ms (it may wrap around)."""
         state, verdict = self.key(state, host, scancode, down=down, now=now)
         return refresh(state, host), verdict
 
-    def key(self, state: EngineState, host: Host, scancode: Scancode, *, down: bool, now: int) -> tuple[EngineState, Verdict]:
+    def key(
+        self,
+        state: EngineState,
+        host: Host,
+        scancode: Scancode,
+        *,
+        down: bool,
+        now: int,
+    ) -> tuple[EngineState, Verdict]:
         # Escape key: tap = on/off, hold = quit. Checked first, works in both states.
         if scancode == self.escape:
             pressed_at = state.escape_down_at
@@ -261,7 +293,11 @@ class Engine:
             case Unmapped.BLOCKED:
                 return state, Verdict.SWALLOW
             case int(cell):
-                return self.event(state, host, KeyDown(cell, now) if down else KeyUp(cell, now)), Verdict.SWALLOW
+                return self.event(
+                    state,
+                    host,
+                    KeyDown(cell, now) if down else KeyUp(cell, now),
+                ), Verdict.SWALLOW
 
     def in_streak(self, state: EngineState, now: int) -> bool:
         last = state.last_typed_at
@@ -269,7 +305,11 @@ class Engine:
 
     def quick_tap(self, state: EngineState, cell: int, now: int) -> bool:
         last = state.last_tap
-        return last is not None and last.cell == cell and elapsed(now, last.at) < self.timings.quick_tap
+        return (
+            last is not None
+            and last.cell == cell
+            and elapsed(now, last.at) < self.timings.quick_tap
+        )
 
     def event(self, state: EngineState, host: Host, e: Event) -> EngineState:
         if p := state.pending:
@@ -277,27 +317,48 @@ class Engine:
         match e:
             case KeyUp(cell):
                 if current := state.pressed[cell]:
-                    return release(replace(state, pressed=_put(state.pressed, cell, None)), host, current)
+                    return release(
+                        replace(state, pressed=_put(state.pressed, cell, None)),
+                        host,
+                        current,
+                    )
                 return state
             case KeyDown(cell, now):
                 if current := state.pressed[cell]:
                     return repeat(state, host, current, now)
-                if (bound := self.bindings.action(state.layer(), cell)) is BLANK:
+                if (
+                    bound := self.bindings.action(state.layer(), cell)
+                ) is BLANK:
                     return state  # Nothing pressed, so its release has nothing to end.
                 match bound:
                     case TapHold(tap) if self.quick_tap(state, cell, now):
                         a: Action = tap
-                    case TapHold(tap, Mod() as mod) if mod != Mod.SHIFT and self.in_streak(state, now):
+                    case TapHold(tap, Mod() as mod) if (
+                        mod != Mod.SHIFT and self.in_streak(state, now)
+                    ):
                         a = tap
                     case TapHold(tap, hold):
-                        return replace(state, pending=Pending(cell, tap, hold, host.start_timer(), now), buffer=())
+                        return replace(
+                            state,
+                            pending=Pending(
+                                cell, tap, hold, host.start_timer(), now
+                            ),
+                            buffer=(),
+                        )
                     case other:
                         a = other
-                return press(replace(state, pressed=_put(state.pressed, cell, a)), host, a, now)
+                return press(
+                    replace(state, pressed=_put(state.pressed, cell, a)),
+                    host,
+                    a,
+                    now,
+                )
             case _:
                 assert_never(e)
 
-    def event_while_pending(self, state: EngineState, host: Host, p: Pending, e: Event) -> EngineState:
+    def event_while_pending(
+        self, state: EngineState, host: Host, p: Pending, e: Event
+    ) -> EngineState:
         if e.cell == p.cell:
             match e:
                 case KeyUp(_, now):
@@ -309,7 +370,10 @@ class Engine:
         buffer = state.buffer
         match e:
             case KeyDown(cell, now):
-                released_meanwhile = any(isinstance(waiting, KeyUp) and waiting.cell == cell for waiting in buffer)
+                released_meanwhile = any(
+                    isinstance(waiting, KeyUp) and waiting.cell == cell
+                    for waiting in buffer
+                )
                 if not released_meanwhile:
                     # A key held since before is already decided: repeat it now.
                     if current := state.pressed[cell]:
@@ -322,36 +386,64 @@ class Engine:
                             break
                 # The first press on the modifier's own hand is a roll, unless it is
                 # another home row mod: same-hand mods combine, as QMK's Chordal Hold.
-                first_press = not any(isinstance(waiting, KeyDown) for waiting in buffer)
-                if first_press and isinstance(p.hold, Mod) and self.bindings.hand(cell) is self.bindings.hand(p.cell):
+                first_press = not any(
+                    isinstance(waiting, KeyDown) for waiting in buffer
+                )
+                if (
+                    first_press
+                    and isinstance(p.hold, Mod)
+                    and self.bindings.hand(cell) is self.bindings.hand(p.cell)
+                ):
                     match self.bindings.action(state.layer(), cell):
                         case TapHold(hold=Mod()):
                             pass
                         case _:
-                            return self.event(self.resolve(state, host, Decision.TAP, now=now), host, e)
+                            return self.event(
+                                self.resolve(
+                                    state, host, Decision.TAP, now=now
+                                ),
+                                host,
+                                e,
+                            )
             case KeyUp():
                 pass
             case _:
                 assert_never(e)
         if len(buffer) >= MAX_BUFFERED:
             # Too many keys waiting: decide it as a hold, then handle this one.
-            return self.event(self.resolve(state, host, Decision.HOLD, now=e.at), host, e)
+            return self.event(
+                self.resolve(state, host, Decision.HOLD, now=e.at), host, e
+            )
         buffer = (*buffer, e)
         state = replace(state, buffer=buffer)
-        if isinstance(e, KeyUp) and any(isinstance(waiting, KeyDown) and waiting.cell == e.cell for waiting in buffer):
+        if isinstance(e, KeyUp) and any(
+            isinstance(waiting, KeyDown) and waiting.cell == e.cell
+            for waiting in buffer
+        ):
             # A home row mod holds only for a key on the other hand; a same-hand tap inside it is a roll.
             across = isinstance(p.hold, Layer) or any(
-                isinstance(waiting, KeyDown) and self.bindings.hand(waiting.cell) is not self.bindings.hand(p.cell) for waiting in buffer
+                isinstance(waiting, KeyDown)
+                and self.bindings.hand(waiting.cell)
+                is not self.bindings.hand(p.cell)
+                for waiting in buffer
             )
-            return self.resolve(state, host, Decision.HOLD if across else Decision.TAP, now=e.at)
+            return self.resolve(
+                state, host, Decision.HOLD if across else Decision.TAP, now=e.at
+            )
         return state
 
-    def timeout(self, state: EngineState, host: Host, timer: int) -> EngineState:
+    def timeout(
+        self, state: EngineState, host: Host, timer: int
+    ) -> EngineState:
         if (p := state.pending) and p.timer == timer:
-            return refresh(self.resolve(state, host, Decision.HOLD, now=p.pressed_at), host)
+            return refresh(
+                self.resolve(state, host, Decision.HOLD, now=p.pressed_at), host
+            )
         return state
 
-    def resolve(self, state: EngineState, host: Host, decision: Decision, *, now: int) -> EngineState:
+    def resolve(
+        self, state: EngineState, host: Host, decision: Decision, *, now: int
+    ) -> EngineState:
         """Decide the undecided key. `now` is when the decision happened."""
         p = state.pending
         if p is None:
@@ -360,9 +452,16 @@ class Engine:
         host.stop_timer(p.timer)
         match decision:
             case Decision.HOLD:
-                state = press(replace(state, pressed=_put(state.pressed, p.cell, p.hold)), host, p.hold, p.pressed_at)
+                state = press(
+                    replace(state, pressed=_put(state.pressed, p.cell, p.hold)),
+                    host,
+                    p.hold,
+                    p.pressed_at,
+                )
             case Decision.TAP:
-                state = release(press(state, host, p.tap, p.pressed_at), host, p.tap)
+                state = release(
+                    press(state, host, p.tap, p.pressed_at), host, p.tap
+                )
                 state = replace(state, last_tap=LastTap(p.cell, now))
             case _:
                 assert_never(decision)
@@ -376,7 +475,11 @@ def refresh(state: EngineState, host: Host) -> EngineState:
     """Tells the indicator if what it should show has changed; every key event refreshes, so it builds a record only for a change."""
     layer, shown = state.layer(), state.shown
     chord = layer is Layer.APPS
-    if layer is not shown.layer or state.caps_word is not shown.caps_word or chord is not shown.chord:
+    if (
+        layer is not shown.layer
+        or state.caps_word is not shown.caps_word
+        or chord is not shown.chord
+    ):
         indicated = Indicator(layer, caps_word=state.caps_word, chord=chord)
         host.indicate(indicated)
         return replace(state, shown=indicated)
@@ -391,9 +494,15 @@ def toggle(state: EngineState, host: Host) -> EngineState:
     return refresh(state, host)
 
 
-def repeat(state: EngineState, host: Host, current: Action, now: int) -> EngineState:
+def repeat(
+    state: EngineState, host: Host, current: Action, now: int
+) -> EngineState:
     """Auto-repeat: repeat the output already chosen on the first press."""
-    return press(state, host, current, now) if isinstance(current, (Key, Chord)) else state
+    return (
+        press(state, host, current, now)
+        if isinstance(current, (Key, Chord))
+        else state
+    )
 
 
 def release_all(state: EngineState, host: Host) -> EngineState:
@@ -414,17 +523,29 @@ def release_all(state: EngineState, host: Host) -> EngineState:
                 released = release(released, host, a)
             except Exception:
                 failures += 1
-    cleared = replace(released, active_layers=(), last_typed_at=None, last_tap=None, caps_word=False, mods=Modifiers())
+    cleared = replace(
+        released,
+        active_layers=(),
+        last_typed_at=None,
+        last_tap=None,
+        caps_word=False,
+        mods=Modifiers(),
+    )
     try:
         released.mods.release_all(host)
     except Exception:
         failures += 1
     if failures:
-        raise UnreleasedError(cleared, f"Failed to complete {failures} keyboard cleanup operations.")
+        raise UnreleasedError(
+            cleared,
+            f"Failed to complete {failures} keyboard cleanup operations.",
+        )
     return cleared
 
 
-def apply_caps_word(state: EngineState, a: Action) -> tuple[EngineState, Action]:
+def apply_caps_word(
+    state: EngineState, a: Action
+) -> tuple[EngineState, Action]:
     """Caps word: capitalise letters, let word characters through, end on anything else."""
     if not state.caps_word:
         return state, a
@@ -489,7 +610,9 @@ def release(state: EngineState, host: Host, a: Action) -> EngineState:
             if a in layers:
                 # Remove the most recently added copy.
                 index = len(layers) - 1 - layers[::-1].index(a)
-                return replace(state, active_layers=layers[:index] + layers[index + 1 :])
+                return replace(
+                    state, active_layers=layers[:index] + layers[index + 1 :]
+                )
         case Tool() | Slot():
             host.request(a, down=False)
         case TapHold():

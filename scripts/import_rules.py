@@ -9,7 +9,17 @@ from typing import Final
 from pydantic import TypeAdapter
 
 from scripts.policy import Finding, Text, within, within_any
-from scripts.source_analysis import DYNAMIC_IMPORTS, Cache, Source, call_name, import_aliases, imports, memoized, module_name, parse
+from scripts.source_analysis import (
+    DYNAMIC_IMPORTS,
+    Cache,
+    Source,
+    call_name,
+    import_aliases,
+    imports,
+    memoized,
+    module_name,
+    parse,
+)
 
 DEPENDENCIES = TypeAdapter[frozenset[str]](frozenset[str])
 
@@ -32,8 +42,16 @@ class Placed:
     layer: Layer
 
 
-def dependencies(name: str, text: str, *, cache: Cache | None = None) -> frozenset[str]:
-    return memoized(cache, "dependencies", Source(name, text), DEPENDENCIES, lambda source: imports(source.name, parse(source)))
+def dependencies(
+    name: str, text: str, *, cache: Cache | None = None
+) -> frozenset[str]:
+    return memoized(
+        cache,
+        "dependencies",
+        Source(name, text),
+        DEPENDENCIES,
+        lambda source: imports(source.name, parse(source)),
+    )
 
 
 def _composes(module: str, entries: Sequence[str]) -> bool:
@@ -43,28 +61,51 @@ def _composes(module: str, entries: Sequence[str]) -> bool:
 
 def _deepest(reached: frozenset[str]) -> Iterator[str]:
     """Importing a module also loads its packages; only the deepest names count."""
-    return (target for target in reached if not any(other.startswith(target + ".") for other in reached))
+    return (
+        target
+        for target in reached
+        if not any(other.startswith(target + ".") for other in reached)
+    )
 
 
-def entry_data(sources: Iterable[Source], data: Sequence[str], entries: Sequence[str], cache: Cache | None) -> Iterator[Finding]:
+def entry_data(
+    sources: Iterable[Source],
+    data: Sequence[str],
+    entries: Sequence[str],
+    cache: Cache | None,
+) -> Iterator[Finding]:
     """Only entry points, and data modules themselves, import the data packages; everything else, tests included, is handed its values."""
     detail = "Take the values as inputs: only entry points and data modules import data."
     for source in sources:
         module = module_name(source.name)
         if _composes(module, entries) or within_any(module, data):
             continue
-        reached = frozenset(target for target in dependencies(source.name, source.text, cache=cache) if within_any(target, data))
-        yield from (Finding("entry-data", module, "", target, 0, detail) for target in sorted(_deepest(reached)))
+        reached = frozenset(
+            target
+            for target in dependencies(source.name, source.text, cache=cache)
+            if within_any(target, data)
+        )
+        yield from (
+            Finding("entry-data", module, "", target, 0, detail)
+            for target in sorted(_deepest(reached))
+        )
 
 
 def _owner(module: str, layers: Sequence[Layer]) -> Placed | None:
     """The declared module a source module belongs to, with its place bottom first: the one whose package holds it most closely."""
-    held = ((len(package), Placed(place, layer)) for place, layer in enumerate(layers) for package in layer.packages if within(module, package))
+    held = (
+        (len(package), Placed(place, layer))
+        for place, layer in enumerate(layers)
+        for package in layer.packages
+        if within(module, package)
+    )
     _, placed = max(held, key=lambda found: found[0], default=(0, None))
     return placed
 
 
-def _crossing(module: str, mine: Placed, target: str, layers: Sequence[Layer]) -> Finding | None:
+def _crossing(
+    module: str, mine: Placed, target: str, layers: Sequence[Layer]
+) -> Finding | None:
     """What is wrong with module, in mine, importing target: a layer above it, or another layer's insides."""
     theirs = _owner(target, layers)
     if theirs is None or theirs.layer is mine.layer:
@@ -79,38 +120,63 @@ def _crossing(module: str, mine: Placed, target: str, layers: Sequence[Layer]) -
     return None
 
 
-def layering(sources: Iterable[Source], layers: Sequence[Layer], entries: Sequence[str], cache: Cache | None) -> Iterator[Finding]:
+def layering(
+    sources: Iterable[Source],
+    layers: Sequence[Layer],
+    entries: Sequence[str],
+    cache: Cache | None,
+) -> Iterator[Finding]:
     """Each module imports only modules declared below its own, and from one that declares an API, only that API.
 
     Entry points (each `__main__`, and `entries`) compose the modules, so only they
     reach across; tests aren't sources here."""
     for source in sources:
         module = module_name(source.name)
-        if _composes(module, entries) or (mine := _owner(module, layers)) is None:
+        if (
+            _composes(module, entries)
+            or (mine := _owner(module, layers)) is None
+        ):
             continue
         reached = frozenset(dependencies(source.name, source.text, cache=cache))
-        crossings = (_crossing(module, mine, target, layers) for target in sorted(_deepest(reached)))
+        crossings = (
+            _crossing(module, mine, target, layers)
+            for target in sorted(_deepest(reached))
+        )
         yield from (finding for finding in crossings if finding is not None)
 
 
-CONTRACT_IMPORTS: Final = frozenset({"protocol", "winapi", "winapi.shapes", "winapi.pcm"})
+CONTRACT_IMPORTS: Final = frozenset(
+    {"protocol", "winapi", "winapi.shapes", "winapi.pcm"}
+)
 """Beyond the standard library, pydantic, `cell` and each other, all a contract may import:
 the wire protocol and the plain-Python winapi value modules."""
 
 
 def _contract_may_import(target: str) -> bool:
     top, _, _ = target.partition(".")
-    if top in sys.stdlib_module_names or top in ("pydantic", "contracts", "cell"):
+    if top in sys.stdlib_module_names or top in (
+        "pydantic",
+        "contracts",
+        "cell",
+    ):
         return True
     # The graph also names imported attributes (`protocol.Tool`), so allowed modules match as prefixes.
-    return target == "winapi" or within_any(target, CONTRACT_IMPORTS - {"winapi"})
+    return target == "winapi" or within_any(
+        target, CONTRACT_IMPORTS - {"winapi"}
+    )
 
 
-def contract_isolation(imported_by: Mapping[str, frozenset[str]]) -> Iterator[Finding]:
+def contract_isolation(
+    imported_by: Mapping[str, frozenset[str]],
+) -> Iterator[Finding]:
     """Contracts are values both sides import, so none may reach an effect owner, Qt or a service."""
-    for module in sorted(name for name in imported_by if within(name, "contracts")):
+    for module in sorted(
+        name for name in imported_by if within(name, "contracts")
+    ):
         yield from (
-            Finding("contract-isolation", module, "", "", 0, f"{module} → {target}")
+            Finding(
+                "contract-isolation", module, "", "", 0, f"{module} → {target}"
+            )
             for target in sorted(imported_by[module])
             if not _contract_may_import(target)
         )
@@ -124,7 +190,11 @@ def _keyboard(module: str) -> bool:
     return not within_any(module, APPLICATION_LAYERS)
 
 
-def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward: Callable[[str], bool]) -> Iterator[tuple[str, ...]]:
+def _routes(
+    graph: Mapping[str, frozenset[str]],
+    entries: Iterable[str],
+    onward: Callable[[str], bool],
+) -> Iterator[tuple[str, ...]]:
     """One shortest static import route per module, including package initializers, in breadth-first order.
 
     A route continues past its last module only where `onward` holds. Each level keeps
@@ -133,34 +203,54 @@ def _routes(graph: Mapping[str, frozenset[str]], entries: Iterable[str], onward:
     frontier: tuple[tuple[str, ...], ...] = tuple((entry,) for entry in entries)
     visited: frozenset[str] = frozenset()
     while frontier:
-        first = frozendict((route[-1], index) for index, route in reversed(tuple(enumerate(frontier))))
+        first = frozendict(
+            (route[-1], index)
+            for index, route in reversed(tuple(enumerate(frontier)))
+        )
         level: tuple[tuple[str, ...], ...] = tuple(
-            route for index, route in enumerate(frontier) if first[route[-1]] == index and route[-1] not in visited
+            route
+            for index, route in enumerate(frontier)
+            if first[route[-1]] == index and route[-1] not in visited
         )
         yield from level
         visited = visited.union(first)
         frontier = tuple(
-            (*route, target) for route in level if onward(route[-1]) for target in sorted(graph.get(route[-1], frozenset())) if target not in visited
+            (*route, target)
+            for route in level
+            if onward(route[-1])
+            for target in sorted(graph.get(route[-1], frozenset()))
+            if target not in visited
         )
 
 
-def keyboard_isolation(graph: Mapping[str, frozenset[str]], dynamic_imports: Mapping[str, tuple[Finding, ...]]) -> Iterator[Finding]:
+def keyboard_isolation(
+    graph: Mapping[str, frozenset[str]],
+    dynamic_imports: Mapping[str, tuple[Finding, ...]],
+) -> Iterator[Finding]:
     """The keyboard reaches no application module, and imports nothing it can't resolve statically on the way.
 
     Keyboard routes stop at the first application module they reach."""
-    for route in _routes(graph, (module for module in sorted(graph) if within(module, "keyboard")), _keyboard):
+    for route in _routes(
+        graph,
+        (module for module in sorted(graph) if within(module, "keyboard")),
+        _keyboard,
+    ):
         last = route[-1]
         if _keyboard(last):
             yield from dynamic_imports[last]
         else:
-            yield Finding("keyboard-isolation", route[0], "", "", 0, " → ".join(route))
+            yield Finding(
+                "keyboard-isolation", route[0], "", "", 0, " → ".join(route)
+            )
 
 
 def _static_import(call: ast.Call) -> bool:
     """A dynamic import of a literal absolute module name, which the keyboard graph can follow."""
     match call.args:
         case [ast.Constant(value=str() as target), *_]:
-            return not target.startswith(".") and not any(keyword.arg == "level" for keyword in call.keywords)
+            return not target.startswith(".") and not any(
+                keyword.arg == "level" for keyword in call.keywords
+            )
         case _:
             return False
 
@@ -170,7 +260,16 @@ def dynamic_imports(tree: ast.Module, module: str) -> Iterator[Finding]:
     aliases = import_aliases(tree)
     detail = "Keyboard dependencies require statically resolvable absolute import targets."
     return (
-        Finding("keyboard-import", module, "", ast.unparse(node), node.lineno, detail)
+        Finding(
+            "keyboard-import",
+            module,
+            "",
+            ast.unparse(node),
+            node.lineno,
+            detail,
+        )
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and call_name(node.func, aliases) in DYNAMIC_IMPORTS and not _static_import(node)
+        if isinstance(node, ast.Call)
+        and call_name(node.func, aliases) in DYNAMIC_IMPORTS
+        and not _static_import(node)
     )

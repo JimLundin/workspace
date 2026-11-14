@@ -3,7 +3,10 @@
 import ctypes
 
 lazy from win32more.Windows.Win32.Foundation import FILETIME
-lazy from win32more.Windows.Win32.System.SystemInformation import MEMORYSTATUSEX, GlobalMemoryStatusEx
+lazy from win32more.Windows.Win32.System.SystemInformation import (
+    MEMORYSTATUSEX,
+    GlobalMemoryStatusEx,
+)
 lazy from win32more.Windows.Win32.System.Threading import GetSystemTimes
 
 from winapi.machine_status import CpuTimes, Memory
@@ -26,6 +29,12 @@ def memory_use() -> Memory | None:
 
     Windows rejects the call unless `dwLength` is the structure's size."""
     status = MEMORYSTATUSEX(dwLength=ctypes.sizeof(MEMORYSTATUSEX))
-    if not GlobalMemoryStatusEx(status) or not 0 <= status.ullAvailPhys <= status.ullTotalPhys or not status.ullTotalPhys:
+    if (
+        not GlobalMemoryStatusEx(status)
+        or not 0 <= status.ullAvailPhys <= status.ullTotalPhys
+        or not status.ullTotalPhys
+    ):
         return None
-    return Memory(int(status.ullTotalPhys - status.ullAvailPhys), int(status.ullTotalPhys))
+    return Memory(
+        int(status.ullTotalPhys - status.ullAvailPhys), int(status.ullTotalPhys)
+    )

@@ -22,7 +22,9 @@ from scripts.source_analysis import Cache, Source, parse
 
 type LintRule = Literal["FBT001", "FBT002", "PLR0913", "PLC0415", "TID252"]
 type Rule = LintRule | Literal["import-alias", "re-export"]
-type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
+type Text = Annotated[
+    StrictStr, StringConstraints(strip_whitespace=True, min_length=1)
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,18 +56,32 @@ DIAGNOSTICS = TypeAdapter[tuple[Diagnostic, ...]](tuple[Diagnostic, ...])
 FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
 
 
-def located(source: Source, diagnostics: tuple[Diagnostic, ...], cache: Cache | None) -> tuple[Finding, ...]:
-    key = cache.key("quality", source, extra=DIAGNOSTICS.dump_json(diagnostics)) if cache is not None else ""
+def located(
+    source: Source, diagnostics: tuple[Diagnostic, ...], cache: Cache | None
+) -> tuple[Finding, ...]:
+    key = (
+        cache.key("quality", source, extra=DIAGNOSTICS.dump_json(diagnostics))
+        if cache is not None
+        else ""
+    )
     if cache is not None and (saved := cache.read(key, FINDINGS)) is not None:
         return saved
-    lint = (Finding(source.name, item.location.row, item.code, item.message) for item in diagnostics)
+    lint = (
+        Finding(source.name, item.location.row, item.code, item.message)
+        for item in diagnostics
+    )
     result = (*lint, *imports(source.name, parse(source)))
     if cache is not None:
         cache.write(key, result, FINDINGS)
     return result
 
 
-def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> tuple[Finding, ...]:
+def scan(
+    root: Path,
+    names: Iterable[str] | None = None,
+    *,
+    cache: Cache | None = None,
+) -> tuple[Finding, ...]:
     root = root.resolve()
     sources = python_sources(root, names)
     if not sources:
@@ -92,21 +108,40 @@ def scan(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None 
         check=False,
     )
     if result.returncode not in (0, 1) or not result.stdout.strip():
-        raise RuntimeError("Signature lint did not complete: " + result.stderr.strip())
+        raise RuntimeError(
+            "Signature lint did not complete: " + result.stderr.strip()
+        )
     diagnostics = DIAGNOSTICS.validate_json(result.stdout)
     # Group once instead of comparing every diagnostic's Windows path to every
     # source; a stable sort keeps each source's diagnostics in Ruff's order.
-    named = sorted(((Path(item.filename).relative_to(root).as_posix(), item) for item in diagnostics), key=lambda pair: pair[0])
-    grouped = frozendict((name, tuple(item for _, item in group)) for name, group in groupby(named, key=lambda pair: pair[0]))
+    named = sorted(
+        (
+            (Path(item.filename).relative_to(root).as_posix(), item)
+            for item in diagnostics
+        ),
+        key=lambda pair: pair[0],
+    )
+    grouped = frozendict(
+        (name, tuple(item for _, item in group))
+        for name, group in groupby(named, key=lambda pair: pair[0])
+    )
     return tuple(
-        finding for name in sources for finding in located(Source(name, (root / name).read_text(encoding="utf-8")), grouped.get(name, ()), cache)
+        finding
+        for name in sources
+        for finding in located(
+            Source(name, (root / name).read_text(encoding="utf-8")),
+            grouped.get(name, ()),
+            cache,
+        )
     )
 
 
 def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
     for node in ast.walk(tree):
         match node:
-            case ast.Import(names=names) | ast.ImportFrom(names=names) if any(alias.asname for alias in names):
+            case ast.Import(names=names) | ast.ImportFrom(names=names) if any(
+                alias.asname for alias in names
+            ):
                 detail = "Import from the owner and use module-qualified names instead of cosmetic aliases."
                 yield Finding(path, node.lineno, "import-alias", detail)
             case _:
@@ -118,7 +153,11 @@ def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
                 case ast.Import(names=names) | ast.ImportFrom(names=names):
                     for alias in names:
                         yield "import", alias.asname or alias.name
-                case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                case (
+                    ast.ClassDef(name=name)
+                    | ast.FunctionDef(name=name)
+                    | ast.AsyncFunctionDef(name=name)
+                ):
                     yield "local", name
                 case _:
                     pass
@@ -137,16 +176,27 @@ def imports(path: str, tree: ast.Module) -> Iterator[Finding]:
 
     for node in tree.body:
         match node:
-            case ast.Assign(targets=[ast.Name(id="__all__")], value=ast.List(elts=values) | ast.Tuple(elts=values)):
+            case ast.Assign(
+                targets=[ast.Name(id="__all__")],
+                value=ast.List(elts=values) | ast.Tuple(elts=values),
+            ):
                 forwarded = tuple(forwarded_names(values))
                 if forwarded:
-                    detail = "Export local interfaces; consumers should import forwarded names from their owner: " + ", ".join(forwarded)
+                    detail = (
+                        "Export local interfaces; consumers should import forwarded names from their owner: "
+                        + ", ".join(forwarded)
+                    )
                     yield Finding(path, node.lineno, "re-export", detail)
             case _:
                 pass
 
 
-def check(root: Path, names: Iterable[str] | None = None, *, cache: Cache | None = None) -> tuple[Finding, ...]:
+def check(
+    root: Path,
+    names: Iterable[str] | None = None,
+    *,
+    cache: Cache | None = None,
+) -> tuple[Finding, ...]:
     findings = scan(root, names, cache=cache)
     for finding in findings:
         print(finding.describe(), flush=True)

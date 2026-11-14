@@ -35,7 +35,14 @@ _GetVCPFeatureAndVCPFeatureReply = fn(
     ctypes.POINTER(wintypes.DWORD),
     ctypes.POINTER(wintypes.DWORD),
 )
-_SetVCPFeature = fn(dxva2, "SetVCPFeature", wintypes.BOOL, wintypes.HANDLE, wintypes.BYTE, wintypes.DWORD)
+_SetVCPFeature = fn(
+    dxva2,
+    "SetVCPFeature",
+    wintypes.BOOL,
+    wintypes.HANDLE,
+    wintypes.BYTE,
+    wintypes.DWORD,
+)
 
 _POWER_MODE: Final = 0xD6
 
@@ -86,7 +93,12 @@ def _opened() -> Iterator[_Opened]:
     """Open the physical monitors of each attached monitor that has any; the caller owns the arrays."""
     for hmonitor, monitor in attached():
         count = ctypes.c_uint32()
-        if not GetNumberOfPhysicalMonitorsFromHMONITOR(hmonitor, ctypes.byref(count)) or count.value == 0:
+        if (
+            not GetNumberOfPhysicalMonitorsFromHMONITOR(
+                hmonitor, ctypes.byref(count)
+            )
+            or count.value == 0
+        ):
             continue
         array = (PHYSICAL_MONITOR * count.value)()
         if GetPhysicalMonitorsFromHMONITOR(hmonitor, count.value, array):
@@ -111,7 +123,15 @@ class PhysicalMonitors:
     def open(cls) -> PhysicalMonitors:
         opened = tuple(_opened())
         arrays = tuple(physical.array for physical in opened)
-        handles = frozendict((physical.monitor, tuple(int(entry.hPhysicalMonitor or 0) for entry in physical.array)) for physical in opened)
+        handles = frozendict(
+            (
+                physical.monitor,
+                tuple(
+                    int(entry.hPhysicalMonitor or 0) for entry in physical.array
+                ),
+            )
+            for physical in opened
+        )
         return cls(Cell(_Handles(arrays, handles)))
 
     @property
@@ -124,7 +144,13 @@ class PhysicalMonitors:
         if not handles:
             return Detached()
         current, maximum = wintypes.DWORD(), wintypes.DWORD()
-        if not _GetVCPFeatureAndVCPFeatureReply(handles[0], _POWER_MODE, None, ctypes.byref(current), ctypes.byref(maximum)):
+        if not _GetVCPFeatureAndVCPFeatureReply(
+            handles[0],
+            _POWER_MODE,
+            None,
+            ctypes.byref(current),
+            ctypes.byref(maximum),
+        ):
             return Unanswered(ctypes.get_last_error())
         match current.value:
             case 1 | 2 | 3 | 4 | 5 as value:
@@ -137,7 +163,11 @@ class PhysicalMonitors:
         handles = self._opened.get().handles.get(monitor, ())
         if not handles:
             return Detached()
-        refused = tuple(ctypes.get_last_error() for handle in handles if not _SetVCPFeature(handle, _POWER_MODE, power.value))
+        refused = tuple(
+            ctypes.get_last_error()
+            for handle in handles
+            if not _SetVCPFeature(handle, _POWER_MODE, power.value)
+        )
         return Unanswered(refused[0]) if refused else power
 
     def close(self) -> None:

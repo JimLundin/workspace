@@ -37,7 +37,9 @@ class UnknownEnd:
     kind: Literal["unknown_end"] = "unknown_end"
 
 
-type MeetingPeriod = Annotated[InProgress | Ended | UnknownEnd, Field(discriminator="kind")]
+type MeetingPeriod = Annotated[
+    InProgress | Ended | UnknownEnd, Field(discriminator="kind")
+]
 
 
 class TranscriptState(StrEnum):
@@ -55,14 +57,18 @@ class Meeting:
     audio_source: AudioSource
     captured_seconds: Seconds
     pending_seconds: Seconds
-    transcript_path: Annotated[str, StringConstraints(min_length=1, max_length=4000)]
+    transcript_path: Annotated[
+        str, StringConstraints(min_length=1, max_length=4000)
+    ]
     transcript_state: TranscriptState
     revision: Annotated[int, Field(strict=True, ge=0)]
     problem: str = ""
 
     def __post_init__(self) -> None:
         if self.pending_seconds > self.captured_seconds:
-            raise ValueError("Pending transcription exceeds captured meeting audio.")
+            raise ValueError(
+                "Pending transcription exceeds captured meeting audio."
+            )
 
 
 MEETING = TypeAdapter(Meeting)

@@ -9,10 +9,38 @@ from dataclasses import asdict
 from desktop_ui.bar_events import BarSpec
 from desktop_ui.components.appearance import Washes
 from desktop_ui.components.typeface import Font, Weight
-from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Metrics, Placed, Sizes, arrange, frame, tiles
+from desktop_ui.island_layout import (
+    Bar,
+    BarType,
+    Capsule,
+    Cells,
+    Gauge,
+    Markers,
+    MenuGrid,
+    Metrics,
+    Placed,
+    Sizes,
+    arrange,
+    frame,
+    tiles,
+)
 from desktop_ui.island_menu import Menu, Panel, entries
-from desktop_ui.island_model import Action, Control, Glyph, Key, Marker, Text, Zone, order
-from tests import test_glass_look, test_island_menu, test_island_model, test_island_motion
+from desktop_ui.island_model import (
+    Action,
+    Control,
+    Glyph,
+    Key,
+    Marker,
+    Text,
+    Zone,
+    order,
+)
+from tests import (
+    test_glass_look,
+    test_island_menu,
+    test_island_model,
+    test_island_motion,
+)
 
 BASE = Sizes(
     bar=Bar(top=5, edge=20, gap=10, radius=3, shadow=7, pager_gap=11),
@@ -35,8 +63,26 @@ BASE = Sizes(
         current_dot=1,
     ),
     menu=MenuGrid(radius=9, pad=5, drop=3, track=4, gutter=2),
-    markers=Markers(wave_floor=2, wave_reach=9, wave_corner=1, halo=5, dot_count=4, dots_radius=2, dots_lift=1),
-    gauge=Gauge(width=20, height=10, corner=3, stroke=1, inset=1, nub=2, nub_height=4, bolt=8, knockout=1),
+    markers=Markers(
+        wave_floor=2,
+        wave_reach=9,
+        wave_corner=1,
+        halo=5,
+        dot_count=4,
+        dots_radius=2,
+        dots_lift=1,
+    ),
+    gauge=Gauge(
+        width=20,
+        height=10,
+        corner=3,
+        stroke=1,
+        inset=1,
+        nub=2,
+        nub_height=4,
+        bolt=8,
+        knockout=1,
+    ),
     cells=Cells(
         corner=9,
         lead=10,
@@ -72,7 +118,11 @@ BASE = Sizes(
         graph_line=1,
         signal_bar=2,
     ),
-    type=BarType(reading=Font(11, Weight.MEDIUM), strong=Font(11, Weight.SEMIBOLD), detail=Font(9, Weight.REGULAR)),
+    type=BarType(
+        reading=Font(11, Weight.MEDIUM),
+        strong=Font(11, Weight.SEMIBOLD),
+        detail=Font(9, Weight.REGULAR),
+    ),
 )
 """The test's own sizes, unlike the bar's so a test can't pass on its values."""
 
@@ -84,7 +134,9 @@ SPEC = BarSpec(
     sizes=BASE,
     glass=test_glass_look.GLASS,
     palette=test_glass_look.PALETTE,
-    washes=Washes(well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5, gauge=0.7),
+    washes=Washes(
+        well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5, gauge=0.7
+    ),
     hints=frozendict(),
 )
 """The test's own bar, for tests of the bar's decisions."""
@@ -95,12 +147,20 @@ def doubled(sizes: Sizes) -> Sizes:
     capsule = {name: value * 2 for name, value in asdict(sizes.capsule).items()}
     markers = {name: value * 2 for name, value in asdict(sizes.markers).items()}
     return Sizes(
-        bar=Bar(**{name: value * 2 for name, value in asdict(sizes.bar).items()}),
+        bar=Bar(
+            **{name: value * 2 for name, value in asdict(sizes.bar).items()}
+        ),
         capsule=Capsule(**{**capsule, "wave_bars": sizes.capsule.wave_bars}),
-        menu=MenuGrid(**{name: value * 2 for name, value in asdict(sizes.menu).items()}),
+        menu=MenuGrid(
+            **{name: value * 2 for name, value in asdict(sizes.menu).items()}
+        ),
         markers=Markers(**{**markers, "dot_count": sizes.markers.dot_count}),
-        gauge=Gauge(**{name: value * 2 for name, value in asdict(sizes.gauge).items()}),
-        cells=Cells(**{name: value * 2 for name, value in asdict(sizes.cells).items()}),
+        gauge=Gauge(
+            **{name: value * 2 for name, value in asdict(sizes.gauge).items()}
+        ),
+        cells=Cells(
+            **{name: value * 2 for name, value in asdict(sizes.cells).items()}
+        ),
         type=sizes.type,  # Text measures through the test's own widths.
     )
 
@@ -116,17 +176,60 @@ def test_every_size_the_bar_lays_out_comes_from_the_sizes_it_is_given() -> None:
     def wide(text: Text) -> float:
         return 2 * width(text)
 
-    rows = ((Marker.DOT, Text("Reading"), Control("stop", "Stop", Action.OPEN_MENU)),), ((Glyph("mic.fill"), Marker.DOT, Marker.DOTS),)
+    rows = (
+        (
+            (
+                Marker.DOT,
+                Text("Reading"),
+                Control("stop", "Stop", Action.OPEN_MENU),
+            ),
+        ),
+        ((Glyph("mic.fill"), Marker.DOT, Marker.DOTS),),
+    )
     for slots in rows:
         small, big = arrange(slots, width, BASE), arrange(slots, wide, large)
         assert (big.width, big.height) == (2 * small.width, 2 * small.height)
-        assert [spot.x for spot in big.spots] == [2 * spot.x for spot in small.spots]
-    capsules = (Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.STATUS, Zone.RIGHT, 200, 34), Placed(Key.RECORDING, Zone.TRAIL, 40, 34))
-    bars = ((BASE, capsules, 1000.0), (large, tuple(Placed(c.key, c.zone, 2 * c.width, 2 * c.height) for c in capsules), 2000.0))
-    small_frame, big_frame = (
-        frame(placed, Metrics(screen, s.bar.top, s.bar.gap, s.bar.edge), order(test_island_model.SPEC)) for s, placed, screen in bars
+        assert [spot.x for spot in big.spots] == [
+            2 * spot.x for spot in small.spots
+        ]
+    capsules = (
+        Placed(Key.ISLAND, Zone.ISLAND, 112, 34),
+        Placed(Key.STATUS, Zone.RIGHT, 200, 34),
+        Placed(Key.RECORDING, Zone.TRAIL, 40, 34),
     )
-    assert [(f.box.x * 2, f.box.y * 2, f.box.width * 2) for f in small_frame] == [(f.box.x, f.box.y, f.box.width) for f in big_frame]
-    menu = Menu(Panel.WORKSPACE, entries(test_island_menu.RESTING, test_island_menu.SPEC, Panel.WORKSPACE))
-    pairs = zip(tiles(menu, BASE.menu, 200), tiles(menu, large.menu, 400), strict=True)
-    assert all((2 * a.x, 2 * a.y, 2 * a.width, 2 * a.height) == (b.x, b.y, b.width, b.height) for a, b in pairs)
+    bars = (
+        (BASE, capsules, 1000.0),
+        (
+            large,
+            tuple(
+                Placed(c.key, c.zone, 2 * c.width, 2 * c.height)
+                for c in capsules
+            ),
+            2000.0,
+        ),
+    )
+    small_frame, big_frame = (
+        frame(
+            placed,
+            Metrics(screen, s.bar.top, s.bar.gap, s.bar.edge),
+            order(test_island_model.SPEC),
+        )
+        for s, placed, screen in bars
+    )
+    assert [
+        (f.box.x * 2, f.box.y * 2, f.box.width * 2) for f in small_frame
+    ] == [(f.box.x, f.box.y, f.box.width) for f in big_frame]
+    menu = Menu(
+        Panel.WORKSPACE,
+        entries(
+            test_island_menu.RESTING, test_island_menu.SPEC, Panel.WORKSPACE
+        ),
+    )
+    pairs = zip(
+        tiles(menu, BASE.menu, 200), tiles(menu, large.menu, 400), strict=True
+    )
+    assert all(
+        (2 * a.x, 2 * a.y, 2 * a.width, 2 * a.height)
+        == (b.x, b.y, b.width, b.height)
+        for a, b in pairs
+    )

@@ -46,7 +46,9 @@ class Size:
 
     def __post_init__(self) -> None:
         if self.width < 0 or self.height < 0:
-            raise ValueError(f"A size cannot be negative: {self.width} x {self.height}.")
+            raise ValueError(
+                f"A size cannot be negative: {self.width} x {self.height}."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +73,10 @@ class Rect:
         return Size(self.width, self.height)
 
     def __contains__(self, point: Point) -> bool:
-        return self.left <= point.x < self.right and self.top <= point.y < self.bottom
+        return (
+            self.left <= point.x < self.right
+            and self.top <= point.y < self.bottom
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +135,10 @@ class Window:
 def utf16_units(text: str) -> list[int]:
     """Windows types text as UTF-16 code units: two for characters past U+FFFF."""
     data = text.encode("utf-16-le")
-    return [int.from_bytes(data[i : i + 2], "little") for i in range(0, len(data), 2)]
+    return [
+        int.from_bytes(data[i : i + 2], "little")
+        for i in range(0, len(data), 2)
+    ]
 
 
 class InputRejectedError(OSError):
@@ -139,7 +147,9 @@ class InputRejectedError(OSError):
     def __init__(self, accepted: int, expected: int) -> None:
         self.accepted = accepted
         self.expected = expected
-        super().__init__(f"Windows accepted {accepted} of {expected} input events. Switch the layout off with § in elevated applications.")
+        super().__init__(
+            f"Windows accepted {accepted} of {expected} input events. Switch the layout off with § in elevated applications."
+        )
 
 
 def require_input_count(sent: int, expected: int) -> None:

@@ -34,7 +34,13 @@ def face_inset(capsule: Capsule) -> int:
 
 def pixmap(image: Pixels) -> QtGui.QPixmap:
     """A Qt copy of a shell icon's pixels."""
-    copied = QtGui.QImage(image.bgra, image.size, image.size, image.size * 4, QtGui.QImage.Format.Format_ARGB32).copy()
+    copied = QtGui.QImage(
+        image.bgra,
+        image.size,
+        image.size,
+        image.size * 4,
+        QtGui.QImage.Format.Format_ARGB32,
+    ).copy()
     converted = QtGui.QPixmap()
     converted.convertFromImage(copied)
     return converted
@@ -72,7 +78,9 @@ class Target:
     face: Face
     invoke: Callable[[Click], None]
     active: bool = field(default=False, kw_only=True)
-    pick: Callable[[int, Click], None] | None = field(default=None, kw_only=True)
+    pick: Callable[[int, Click], None] | None = field(
+        default=None, kw_only=True
+    )
     """For a stack: a click on its icon at that index, instead of `invoke`."""
 
 
@@ -88,17 +96,26 @@ class ShellButton(KeyboardFocus):
         control = round(capsule.control)
         match target.face:
             case Stack(icons=icons):
-                self.pictures = tuple(pixmap(each) if isinstance(each, Pixels) else None for each in icons)
+                self.pictures = tuple(
+                    pixmap(each) if isinstance(each, Pixels) else None
+                    for each in icons
+                )
                 width = control + round(step(capsule) * (len(icons) - 1))
             case str() as text:
-                advance = QtGui.QFontMetricsF(inter(pager.sizes.type.reading)).horizontalAdvance(text)
-                width = max(control, math.ceil(advance) + 2 * face_inset(capsule))
+                advance = QtGui.QFontMetricsF(
+                    inter(pager.sizes.type.reading)
+                ).horizontalAdvance(text)
+                width = max(
+                    control, math.ceil(advance) + 2 * face_inset(capsule)
+                )
             case _:
                 assert_never(target.face)
         self.setFixedSize(width, control)
         self.setToolTip(target.name)
         self.setAccessibleName(target.name)
-        self.setAttribute(Qt.WidgetAttribute.WA_Hover)  # Qt repaints it as the pointer enters and leaves.
+        self.setAttribute(
+            Qt.WidgetAttribute.WA_Hover
+        )  # Qt repaints it as the pointer enters and leaves.
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.pressed_at = 0.0
@@ -138,13 +155,29 @@ class ShellButton(KeyboardFocus):
 
     @override
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
-        self._choose_on(event, Qt.MouseButton.RightButton, Click.RIGHT, super().mouseReleaseEvent)
+        self._choose_on(
+            event,
+            Qt.MouseButton.RightButton,
+            Click.RIGHT,
+            super().mouseReleaseEvent,
+        )
 
     @override
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
-        self._choose_on(event, Qt.MouseButton.LeftButton, Click.DOUBLE, super().mouseDoubleClickEvent)
+        self._choose_on(
+            event,
+            Qt.MouseButton.LeftButton,
+            Click.DOUBLE,
+            super().mouseDoubleClickEvent,
+        )
 
-    def _choose_on(self, event: QtGui.QMouseEvent, button: Qt.MouseButton, click: Click, otherwise: Callable[[QtGui.QMouseEvent], None]) -> None:
+    def _choose_on(
+        self,
+        event: QtGui.QMouseEvent,
+        button: Qt.MouseButton,
+        click: Click,
+        otherwise: Callable[[QtGui.QMouseEvent], None],
+    ) -> None:
         """Choose `click` for `button`; Qt handles any other button."""
         if event.button() is button:
             self.choose(click)
@@ -157,14 +190,42 @@ class ShellButton(KeyboardFocus):
         whole = QtCore.QRectF(self.rect())
         match self.target.face:
             case Stack(icons=icons) if len(icons) > 1 and self.underMouse():
-                pitch, radius = step(self.pager.sizes.capsule), self.height() / 2
-                centre = (self.width() - pitch * (len(icons) - 1)) / 2 + pitch * self.hovered
-                circle = QtCore.QRectF(centre - radius, 0, 2 * radius, self.height())
-                paint_feedback(painter, lettering, circle, radius, pressed=self.isDown(), hovered=True)
-                paint_feedback(painter, lettering, whole, radius, pressed=False, hovered=False, ringed=self.focus_ringed)
+                pitch, radius = (
+                    step(self.pager.sizes.capsule),
+                    self.height() / 2,
+                )
+                centre = (
+                    self.width() - pitch * (len(icons) - 1)
+                ) / 2 + pitch * self.hovered
+                circle = QtCore.QRectF(
+                    centre - radius, 0, 2 * radius, self.height()
+                )
+                paint_feedback(
+                    painter,
+                    lettering,
+                    circle,
+                    radius,
+                    pressed=self.isDown(),
+                    hovered=True,
+                )
+                paint_feedback(
+                    painter,
+                    lettering,
+                    whole,
+                    radius,
+                    pressed=False,
+                    hovered=False,
+                    ringed=self.focus_ringed,
+                )
             case _:
                 paint_feedback(
-                    painter, lettering, whole, self.height() / 2, pressed=self.isDown(), hovered=self.underMouse(), ringed=self.focus_ringed
+                    painter,
+                    lettering,
+                    whole,
+                    self.height() / 2,
+                    pressed=self.isDown(),
+                    hovered=self.underMouse(),
+                    ringed=self.focus_ringed,
                 )
 
     def snapped(self) -> QtCore.QPointF:
@@ -172,8 +233,15 @@ class ShellButton(KeyboardFocus):
         capsule = self.pager.sizes.capsule
         scale = self.devicePixelRatioF()
         origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
-        corner = origin + QtCore.QPointF((self.width() - capsule.app_icon) / 2, face_inset(capsule))
-        return QtCore.QPointF(on_pixels(corner.x(), scale), on_pixels(corner.y(), scale)) - origin
+        corner = origin + QtCore.QPointF(
+            (self.width() - capsule.app_icon) / 2, face_inset(capsule)
+        )
+        return (
+            QtCore.QPointF(
+                on_pixels(corner.x(), scale), on_pixels(corner.y(), scale)
+            )
+            - origin
+        )
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -189,16 +257,22 @@ class ShellButton(KeyboardFocus):
         face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(side, side))
         if self.target.active:
             # The current desktop: a dot under its apps, as a dock marks a running app.
-            below = QtCore.QPointF(self.width() / 2, self.height() - face_inset(capsule) / 2)
+            below = QtCore.QPointF(
+                self.width() / 2, self.height() - face_inset(capsule) / 2
+            )
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(color(lettering.ink))
             painter.drawEllipse(below, capsule.current_dot, capsule.current_dot)
         match self.target.face:
             case Stack(icons=icons):
-                painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform)
+                painter.setRenderHint(
+                    QtGui.QPainter.RenderHint.SmoothPixmapTransform
+                )
                 pitch = step(self.pager.sizes.capsule)
                 first = face.translated(-pitch * (len(icons) - 1) / 2, 0)
-                for index, (each, picture) in enumerate(zip(icons, self.pictures, strict=True)):
+                for index, (each, picture) in enumerate(
+                    zip(icons, self.pictures, strict=True)
+                ):
                     spot = first.translated(round(pitch * index), 0)
                     match each:
                         case Glyph(name=name):
@@ -206,13 +280,19 @@ class ShellButton(KeyboardFocus):
                         case Pixels():
                             if picture is not None:
                                 painter.setOpacity(1)
-                                painter.drawPixmap(spot, picture, QtCore.QRectF(picture.rect()))
+                                painter.drawPixmap(
+                                    spot, picture, QtCore.QRectF(picture.rect())
+                                )
                         case _:
                             assert_never(each)
             case str() as text:
                 painter.setFont(inter(self.pager.sizes.type.reading))
                 painter.setPen(color(lettering.ink))
-                painter.drawText(QtCore.QRectF(self.rect()), Qt.AlignmentFlag.AlignCenter, text)
+                painter.drawText(
+                    QtCore.QRectF(self.rect()),
+                    Qt.AlignmentFlag.AlignCenter,
+                    text,
+                )
             case _:
                 assert_never(self.target.face)
 
@@ -230,8 +310,12 @@ def spaced_row(widths: Sequence[int], capsule: Capsule) -> Row:
     sit well apart from each other while a desktop's apps keep their small app gap, so space alone groups them.
     """
     gap = round(capsule.slot_gap)
-    lefts = tuple(accumulate((width + gap for width in widths[:-1]), initial=0))[: len(widths)]
-    ends = tuple(left + width for left, width in zip(lefts, widths, strict=True))
+    lefts = tuple(
+        accumulate((width + gap for width in widths[:-1]), initial=0)
+    )[: len(widths)]
+    ends = tuple(
+        left + width for left, width in zip(lefts, widths, strict=True)
+    )
     return Row(lefts, ends[-1] if ends else 0)
 
 
@@ -244,7 +328,9 @@ class HorizontalScroll(QtWidgets.QScrollArea):
         if delta.x() or event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             super().wheelEvent(event)
             return
-        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.y())
+        self.horizontalScrollBar().setValue(
+            self.horizontalScrollBar().value() - delta.y()
+        )
         event.accept()
 
 
@@ -263,7 +349,11 @@ def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
     return invoke
 
 
-def app_icon(app: App, images: Mapping[str, Pixels | None], symbols: Mapping[PinnedApp, str]) -> Icon:
+def app_icon(
+    app: App,
+    images: Mapping[str, Pixels | None],
+    symbols: Mapping[PinnedApp, str],
+) -> Icon:
     """The icon the bar shows an app by: a web app's symbol, else the program's own icon."""
     match app:
         case PinnedApp():
@@ -300,8 +390,12 @@ class Pager(QtWidgets.QWidget):
         self.overflow.setWidget(self.body)
         self.overflow.setWidgetResizable(False)
         self.overflow.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        self.overflow.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.overflow.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.overflow.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.overflow.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         for widget in (self.overflow, self.overflow.viewport(), self.body):
             widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             widget.setAutoFillBackground(False)
@@ -316,7 +410,9 @@ class Pager(QtWidgets.QWidget):
             button.deleteLater()
         self.buttons = tuple(ShellButton(self, target) for target in targets)
         capsule = self.sizes.capsule
-        row = spaced_row(tuple(button.width() for button in self.buttons), capsule)
+        row = spaced_row(
+            tuple(button.width() for button in self.buttons), capsule
+        )
         for button, x in zip(self.buttons, row.lefts, strict=True):
             button.move(x, round(capsule.inset))
             button.show()
@@ -324,10 +420,19 @@ class Pager(QtWidgets.QWidget):
 
     def remember_icons(self, shelf: Shelf) -> None:
         """The running apps' icons, which the pager draws its programs by."""
-        read = frozendict((app.identity, app.image) for app in shelf.running if app.image is not None)
+        read = frozendict(
+            (app.identity, app.image)
+            for app in shelf.running
+            if app.image is not None
+        )
         self.paged.update(lambda paged: _Paged(paged.view, paged.icons | read))
 
-    def desktops(self, view: PagerView, invoke: Callable[[Navigation], None], on_app: Callable[[App, Click], None]) -> bool:
+    def desktops(
+        self,
+        view: PagerView,
+        invoke: Callable[[Navigation], None],
+        on_app: Callable[[App, Click], None],
+    ) -> bool:
         """Each desktop with its apps, a click on an app going to it (and so to its desktop); whether the pager changed.
 
         An empty desktop other than the current one is left out. Programs' icons come from
@@ -343,9 +448,22 @@ class Pager(QtWidgets.QWidget):
 
         def face(index: int, desktop: PagerDesktop) -> Face:
             """The held chord's letter, else the desktop's apps, else its number."""
-            if (hint := hints.desktops[index] if index < len(hints.desktops) else None) is not None:
+            if (
+                hint := hints.desktops[index]
+                if index < len(hints.desktops)
+                else None
+            ) is not None:
                 return hint
-            return Stack(tuple(app_icon(app, images, view.symbols) for app in desktop.apps)) if desktop.apps else desktop.label
+            return (
+                Stack(
+                    tuple(
+                        app_icon(app, images, view.symbols)
+                        for app in desktop.apps
+                    )
+                )
+                if desktop.apps
+                else desktop.label
+            )
 
         def pick(apps: tuple[App, ...]) -> Callable[[int, Click], None] | None:
             if not apps:
@@ -353,7 +471,13 @@ class Pager(QtWidgets.QWidget):
             return lambda index, click: on_app(apps[index], click)
 
         pages = tuple(
-            Target(desktop.name, face(index, desktop), jump(index), active=desktop.current, pick=pick(desktop.apps))
+            Target(
+                desktop.name,
+                face(index, desktop),
+                jump(index),
+                active=desktop.current,
+                pick=pick(desktop.apps),
+            )
             for index, desktop in enumerate(view.desktops)
             if desktop.apps or desktop.current
         )
@@ -371,9 +495,20 @@ class Pager(QtWidgets.QWidget):
 
     def place(self, left: int, right: int) -> None:
         sizes = self.sizes
-        top, height, inset = round(sizes.bar.top), round(sizes.capsule.height), round(sizes.capsule.inset)
-        self.setGeometry(left, top, max(0, min(right - left, self.body.width() + 2 * inset)), height)
-        self.overflow.setGeometry(inset, 0, max(0, self.width() - 2 * inset), height)
+        top, height, inset = (
+            round(sizes.bar.top),
+            round(sizes.capsule.height),
+            round(sizes.capsule.inset),
+        )
+        self.setGeometry(
+            left,
+            top,
+            max(0, min(right - left, self.body.width() + 2 * inset)),
+            height,
+        )
+        self.overflow.setGeometry(
+            inset, 0, max(0, self.width() - 2 * inset), height
+        )
         self.setVisible(bool(self.buttons) and right - left >= height)
 
     @override
@@ -381,4 +516,8 @@ class Pager(QtWidgets.QWidget):
         if self.appearance is not None:
             painter = QtGui.QPainter(self)
             painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-            paint_capsule(painter, outline(QtCore.QRectF(self.rect()), self.height() / 2), self.appearance)
+            paint_capsule(
+                painter,
+                outline(QtCore.QRectF(self.rect()), self.height() / 2),
+                self.appearance,
+            )

@@ -20,7 +20,9 @@ class Spring:
 
     def __post_init__(self) -> None:
         if not 0 < self.damping <= 1 or not self.response > 0:
-            raise ValueError("A spring needs a damping ratio in (0, 1] and a positive response.")
+            raise ValueError(
+                "A spring needs a damping ratio in (0, 1] and a positive response."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +68,9 @@ def settle(motion: Motion, seconds: float) -> Motion:
         cos, sin = math.cos(damped * seconds), math.sin(damped * seconds)
         rate = (velocity + zeta * omega * offset) / damped
         position = decay * (offset * cos + rate * sin)
-        speed = decay * (velocity * cos - (zeta * omega * rate + damped * offset) * sin)
+        speed = decay * (
+            velocity * cos - (zeta * omega * rate + damped * offset) * sin
+        )
     else:
         rate = velocity + omega * offset
         position = decay * (offset + rate * seconds)

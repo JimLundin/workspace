@@ -10,7 +10,17 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import protocol
-from desktop_ui.navigation import AppKey, Direction, Focus, SpatialFocus, World, effect, identity, keyed, launcher
+from desktop_ui.navigation import (
+    AppKey,
+    Direction,
+    Focus,
+    SpatialFocus,
+    World,
+    effect,
+    identity,
+    keyed,
+    launcher,
+)
 from protocol import Target, Tool
 from winapi.shapes import Rect
 
@@ -67,13 +77,23 @@ def reached(world: World, request: Target) -> int | None:
             return None
 
 
-def placed(world: World, request: Target, letter: str) -> Iterator[tuple[int, Keycap]]:
+def placed(
+    world: World, request: Target, letter: str
+) -> Iterator[tuple[int, Keycap]]:
     """The windows this chord's letter is drawn on, each with its keycap."""
     match request:
         case protocol.App(target=target):
             handles = world.windows.get(identity(launcher(target)), ())
             following = reached(world, request)
-            yield from ((handle, AppCap(letter, next=len(handles) > 1 and handle == following)) for handle in handles)
+            yield from (
+                (
+                    handle,
+                    AppCap(
+                        letter, next=len(handles) > 1 and handle == following
+                    ),
+                )
+                for handle in handles
+            )
         case Tool.ZOOM:
             yield world.foreground, ActionCap(letter)
         case Tool():
@@ -97,9 +117,22 @@ def rank(keycap: Keycap) -> int:
 
 def hints(world: World, letters: frozendict[Target, str]) -> tuple[Badge, ...]:
     """The badges while the chord is held, each request's at its chord letter."""
-    drawn = tuple(each for request, letter in letters.items() for each in placed(world, request, letter))
+    drawn = tuple(
+        each
+        for request, letter in letters.items()
+        for each in placed(world, request, letter)
+    )
     badges = (
-        Badge(handle, target.rect, tuple(sorted((keycap for window, keycap in drawn if window == handle), key=rank)))
+        Badge(
+            handle,
+            target.rect,
+            tuple(
+                sorted(
+                    (keycap for window, keycap in drawn if window == handle),
+                    key=rank,
+                )
+            ),
+        )
         for handle, target in world.placement.items()
         if target.desktop == world.current
     )

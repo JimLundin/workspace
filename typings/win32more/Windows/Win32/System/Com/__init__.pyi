@@ -14,7 +14,20 @@ RPC_C_IMP_LEVEL_IMPERSONATE: int
 def CoInitializeEx(reserved: None, flags: int) -> int: ...
 def CoUninitialize() -> None: ...
 def CoTaskMemFree(memory: ctypes.c_void_p) -> None: ...
-def CoCreateInstance(class_id: Guid, outer: ComPtr | None, context: int, interface_id: Guid, result: ComPtr) -> int: ...
+def CoCreateInstance(
+    class_id: Guid,
+    outer: ComPtr | None,
+    context: int,
+    interface_id: Guid,
+    result: ComPtr,
+) -> int: ...
 def CoSetProxyBlanket(
-    proxy: ComPtr, authentication: int, authorization: int, principal: None, level: int, impersonation: int, identity: None, capabilities: int
+    proxy: ComPtr,
+    authentication: int,
+    authorization: int,
+    principal: None,
+    level: int,
+    impersonation: int,
+    identity: None,
+    capabilities: int,
 ) -> int: ...

@@ -32,7 +32,11 @@ def paint_feedback(  # noqa: PLR0913 - one shape, its corner and the three state
     if ringed:
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(QtGui.QPen(color(lettering.ink), 1.5))
-        painter.drawRoundedRect(bounds.adjusted(inset, inset, -inset, -inset), corner - inset, corner - inset)
+        painter.drawRoundedRect(
+            bounds.adjusted(inset, inset, -inset, -inset),
+            corner - inset,
+            corner - inset,
+        )
     painter.restore()
 
 
@@ -41,12 +45,17 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
 
     def __init__(self, parent: QtWidgets.QWidget) -> None:
         super().__init__(parent)
-        self.ringed = False  # Qt owns focus; the widget remembers only how focus arrived.
+        self.ringed = (
+            False  # Qt owns focus; the widget remembers only how focus arrived.
+        )
 
     @override
     def focusInEvent(self, event: QtGui.QFocusEvent) -> None:
         super().focusInEvent(event)
-        self.ringed = event.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
+        self.ringed = event.reason() in (
+            Qt.FocusReason.TabFocusReason,
+            Qt.FocusReason.BacktabFocusReason,
+        )
         self.update()
 
     @override
@@ -59,7 +68,17 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
     def focus_ringed(self) -> bool:
         return self.hasFocus() and self.ringed
 
-    def paint_round(self, painter: QtGui.QPainter, lettering: Lettering) -> None:
+    def paint_round(
+        self, painter: QtGui.QPainter, lettering: Lettering
+    ) -> None:
         """Press or hover fill and the keyboard ring, round at the button's height: a circle, or a pill when wider."""
         bounds = QtCore.QRectF(self.rect())
-        paint_feedback(painter, lettering, bounds, bounds.height() / 2, pressed=self.isDown(), hovered=self.underMouse(), ringed=self.focus_ringed)
+        paint_feedback(
+            painter,
+            lettering,
+            bounds,
+            bounds.height() / 2,
+            pressed=self.isDown(),
+            hovered=self.underMouse(),
+            ringed=self.focus_ringed,
+        )

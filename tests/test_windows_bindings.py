@@ -13,13 +13,30 @@ if sys.platform != "win32":
 from winapi import shell, system, windows
 from winapi._core import LRESULT, fn, user32
 
-_SendMessage = fn(user32, "SendMessageW", LRESULT, wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+_SendMessage = fn(
+    user32,
+    "SendMessageW",
+    LRESULT,
+    wintypes.HWND,
+    wintypes.UINT,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
+)
 
 
-_GetWindowLong = fn(user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int)
+_GetWindowLong = fn(
+    user32, "GetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int
+)
 
 
-_SetWindowLong = fn(user32, "SetWindowLongW", wintypes.LONG, wintypes.HWND, ctypes.c_int, wintypes.LONG)
+_SetWindowLong = fn(
+    user32,
+    "SetWindowLongW",
+    wintypes.LONG,
+    wintypes.HWND,
+    ctypes.c_int,
+    wintypes.LONG,
+)
 
 
 def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
@@ -34,7 +51,9 @@ def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
         windows.destroy(hwnd)  # which kills its timer
 
 
-def test_overlay_handle_accepts_mouse_input_without_taking_keyboard_focus() -> None:
+def test_overlay_handle_accepts_mouse_input_without_taking_keyboard_focus() -> (
+    None
+):
     hwnd = windows.create_hidden("Workspace overlay style fixture")
     try:
         _SetWindowLong(hwnd, -20, 0x28)
@@ -47,16 +66,22 @@ def test_overlay_handle_accepts_mouse_input_without_taking_keyboard_focus() -> N
         windows.destroy(hwnd)
 
 
-def test_overlay_refuses_mouse_activation_but_still_delivers_other_messages() -> None:
+def test_overlay_refuses_mouse_activation_but_still_delivers_other_messages() -> (
+    None
+):
     delivered: list[int] = []
 
-    def default_message(hwnd: int, message: int, wparam: int, lparam: int) -> int | None:
+    def default_message(
+        hwnd: int, message: int, wparam: int, lparam: int
+    ) -> int | None:
         if message in (0x0201, 0x0082):
             delivered.append(message)
             return 7
         return None
 
-    window = shell.AppWindow.create("Workspace overlay delivery " + uuid.uuid4().hex, default_message)
+    window = shell.AppWindow.create(
+        "Workspace overlay delivery " + uuid.uuid4().hex, default_message
+    )
     try:
         windows.make_overlay(window.handle, click_through=False)
         assert int(_SendMessage(window.handle, 0x0021, 0, 0)) == 3

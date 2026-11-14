@@ -1,6 +1,15 @@
 """The message protocol both programs share."""
 
-from protocol import Request, Slot, Tool, decode, decode_indicator, encode, encode_indicator, reaching
+from protocol import (
+    Request,
+    Slot,
+    Tool,
+    decode,
+    decode_indicator,
+    encode,
+    encode_indicator,
+    reaching,
+)
 from tests.layouts import APPS
 
 # ---- protocol --------------------------------------------------------------------------
@@ -8,7 +17,10 @@ from tests.layouts import APPS
 
 def test_tools_and_slots_round_trip() -> None:
     # Defect: a request decodes as another tool or slot than the one sent.
-    requests: list[Request] = [*list(Tool), *(Slot(index) for index in range(10))]
+    requests: list[Request] = [
+        *list(Tool),
+        *(Slot(index) for index in range(10)),
+    ]
     for request in requests:
         assert decode(encode(request)) == request
 
@@ -29,4 +41,6 @@ def test_a_slot_reaches_the_app_in_it_and_an_empty_slot_nothing() -> None:
 def test_indicator_round_trips() -> None:
     for layer in range(6):
         for caps in (False, True):
-            assert decode_indicator(encode_indicator(layer, caps_word=caps)) == (layer, caps)
+            assert decode_indicator(
+                encode_indicator(layer, caps_word=caps)
+            ) == (layer, caps)

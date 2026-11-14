@@ -21,7 +21,15 @@ from assistant.meeting_store import MeetingArchive
 from assistant.meetings import Meetings
 from contracts.recording_state import RecordingAction
 from contracts.status import State
-from desktop_ui.desktop_control import DictationFailed, Event, JobChanged, Notified, RecordingChanged, ShowVoice, idle_state
+from desktop_ui.desktop_control import (
+    DictationFailed,
+    Event,
+    JobChanged,
+    Notified,
+    RecordingChanged,
+    ShowVoice,
+    idle_state,
+)
 from winapi import audio, recording, system
 from winapi.pcm import RATE
 
@@ -35,14 +43,22 @@ def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
             return settings, None
 
 
-def _run_jobs(jobs: queue.Queue[Callable[[], None] | None], report: Callable[[Event], None], log: Callable[[str], None]) -> None:
+def _run_jobs(
+    jobs: queue.Queue[Callable[[], None] | None],
+    report: Callable[[Event], None],
+    log: Callable[[str], None],
+) -> None:
     """The worker thread: slow jobs, one at a time."""
     while job := jobs.get():
         try:
             job()
         except Exception:
             log(traceback.format_exc())
-            report(DictationFailed("Something went wrong; it's in the desktop's log."))
+            report(
+                DictationFailed(
+                    "Something went wrong; it's in the desktop's log."
+                )
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +73,14 @@ class Voice:
     worker: threading.Thread
 
     @classmethod
-    def open(cls, settings: Settings | Missing, owner: int, report: Callable[[Event], None], log: Callable[[str], None], transcripts: Path) -> Voice:
+    def open(
+        cls,
+        settings: Settings | Missing,
+        owner: int,
+        report: Callable[[Event], None],
+        log: Callable[[str], None],
+        transcripts: Path,
+    ) -> Voice:
         """The owners over the default microphone; `owner` is the desktop's control window, which owns the clipboard,
         and meeting transcripts go to `transcripts`."""
         mic_event = system.create_event()
@@ -73,18 +96,36 @@ class Voice:
         usable, missing = configured(settings)
         meetings = Meetings.open(
             usable,
-            lambda source: recording.MeetingAudio(computer_audio=source == "both"),
+            lambda source: recording.MeetingAudio(
+                computer_audio=source == "both"
+            ),
             archive=MeetingArchive(transcripts),
             on_update=lambda recorded: report(RecordingChanged(recorded)),
             log=log,
         )
         jobs: queue.Queue[Callable[[], None] | None] = queue.Queue()
         dictation = Assistant(
-            machine, usable, failed=lambda feature, details: log(diagnostics.evidence(f"{feature} failed", details)), submit=jobs.put, missing=missing
+            machine,
+            usable,
+            failed=lambda feature, details: log(
+                diagnostics.evidence(f"{feature} failed", details)
+            ),
+            submit=jobs.put,
+            missing=missing,
         )
-        worker = threading.Thread(target=_run_jobs, args=(jobs, report, log), name="worker", daemon=True)
+        worker = threading.Thread(
+            target=_run_jobs,
+            args=(jobs, report, log),
+            name="worker",
+            daemon=True,
+        )
         if missing is not None:
-            report(Notified("Workspace", f"Dictation and meeting transcripts need {', '.join(missing.names)}; the layout works without them."))
+            report(
+                Notified(
+                    "Workspace",
+                    f"Dictation and meeting transcripts need {', '.join(missing.names)}; the layout works without them.",
+                )
+            )
         return cls(mic_event, machine, meetings, dictation, jobs, worker)
 
     def start(self) -> None:
@@ -97,10 +138,15 @@ class Voice:
 
     def shown(self, state: State) -> State:
         """What the tray and the bar show for `state`: listening takes precedence."""
-        return State.LISTENING if self.dictation.listening is not None else state
+        return (
+            State.LISTENING if self.dictation.listening is not None else state
+        )
 
     def idle(self) -> State:
-        return idle_state(listening=self.dictation.listening, layout_on=self.dictation.layout_on)
+        return idle_state(
+            listening=self.dictation.listening,
+            layout_on=self.dictation.layout_on,
+        )
 
     def use_layout(self, *, on: bool) -> None:
         self.dictation.use_layout(on=on)
@@ -124,7 +170,11 @@ class Voice:
             case "open" | "folder":
                 self.meetings.root.mkdir(parents=True, exist_ok=True)
                 transcript = self.meetings.snapshot().path
-                path = Path(transcript) if action == "open" and transcript else self.meetings.root
+                path = (
+                    Path(transcript)
+                    if action == "open" and transcript
+                    else self.meetings.root
+                )
                 os.startfile(path if path.exists() else self.meetings.root)
 
     def close(self, log: Callable[[str], None]) -> None:

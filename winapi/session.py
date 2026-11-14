@@ -20,8 +20,16 @@ WM_WTSSESSION_CHANGE: Final = 0x02B1
 WM_DISPLAYCHANGE: Final = 0x007E
 
 
-_WTSRegisterSessionNotification = fn(wtsapi32, "WTSRegisterSessionNotification", wintypes.BOOL, wintypes.HWND, wintypes.DWORD)
-_WTSUnRegisterSessionNotification = fn(wtsapi32, "WTSUnRegisterSessionNotification", wintypes.BOOL, wintypes.HWND)
+_WTSRegisterSessionNotification = fn(
+    wtsapi32,
+    "WTSRegisterSessionNotification",
+    wintypes.BOOL,
+    wintypes.HWND,
+    wintypes.DWORD,
+)
+_WTSUnRegisterSessionNotification = fn(
+    wtsapi32, "WTSUnRegisterSessionNotification", wintypes.BOOL, wintypes.HWND
+)
 
 
 class Change(Enum):
@@ -56,12 +64,22 @@ def locked() -> bool | None:
     """Whether this session is locked now; None when Windows doesn't say."""
     buffer = ctypes.c_wchar_p()
     size = ctypes.c_ulong()
-    if not WTSQuerySessionInformationW(None, WTS_CURRENT_SESSION, WTSSessionInfoEx, ctypes.byref(buffer), ctypes.byref(size)):
+    if not WTSQuerySessionInformationW(
+        None,
+        WTS_CURRENT_SESSION,
+        WTSSessionInfoEx,
+        ctypes.byref(buffer),
+        ctypes.byref(size),
+    ):
         return None
     try:
         if size.value < ctypes.sizeof(WTSINFOEXW):
             return None
         info = ctypes.cast(buffer, ctypes.POINTER(WTSINFOEXW)).contents
-        return _LOCKED.get(info.Data.WTSInfoExLevel1.SessionFlags) if info.Level == 1 else None
+        return (
+            _LOCKED.get(info.Data.WTSInfoExLevel1.SessionFlags)
+            if info.Level == 1
+            else None
+        )
     finally:
         WTSFreeMemory(buffer)

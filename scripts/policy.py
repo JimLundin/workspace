@@ -6,7 +6,9 @@ from typing import Annotated
 
 from pydantic import StrictStr, StringConstraints
 
-type Text = Annotated[StrictStr, StringConstraints(strip_whitespace=True, min_length=1)]
+type Text = Annotated[
+    StrictStr, StringConstraints(strip_whitespace=True, min_length=1)
+]
 """A configured name: present, and trimmed."""
 
 
@@ -20,7 +22,9 @@ class Finding:
     detail: str
 
     def describe(self) -> str:
-        location = self.module + ("." + self.declaration if self.declaration else "")
+        location = self.module + (
+            "." + self.declaration if self.declaration else ""
+        )
         return f"{self.rule}: {location}:{self.line}: {self.detail}"
 
 

@@ -7,7 +7,14 @@ from hypothesis import strategies
 
 from desktop_ui.island_layout import Content, Metrics, frame
 from desktop_ui.island_model import Action, CapsuleView, Key, Zone, order
-from desktop_ui.island_motion import IslandMotion, Shown, advance, placed, retarget, settled
+from desktop_ui.island_motion import (
+    IslandMotion,
+    Shown,
+    advance,
+    placed,
+    retarget,
+    settled,
+)
 from tests import test_island_model, test_island_motion
 from tests.properties.generation import cases, property_test
 
@@ -24,32 +31,78 @@ class Journey:
 
 def arrangement(draw: strategies.DrawFn) -> tuple[Shown, ...]:
     optional = (Key.JOB, Key.RECORDING)
-    included = draw(strategies.lists(strategies.booleans(), min_size=len(optional), max_size=len(optional)))
-    keys = (Key.ISLAND, *(key for key, chosen in zip(optional, included, strict=True) if chosen))
+    included = draw(
+        strategies.lists(
+            strategies.booleans(),
+            min_size=len(optional),
+            max_size=len(optional),
+        )
+    )
+    keys = (
+        Key.ISLAND,
+        *(
+            key
+            for key, chosen in zip(optional, included, strict=True)
+            if chosen
+        ),
+    )
     return tuple(
-        Shown(CapsuleView(key, ZONES[key], (), key.name, Action.OPEN_MENU), Content(draw(strategies.integers(34, 260)), (), 34))
+        Shown(
+            CapsuleView(key, ZONES[key], (), key.name, Action.OPEN_MENU),
+            Content(draw(strategies.integers(34, 260)), (), 34),
+        )
         for key in Key
         if key in keys
     )
 
 
 def journeys(draw: strategies.DrawFn) -> Journey:
-    arrangements = tuple(arrangement(draw) for _ in range(draw(strategies.integers(2, 5))))
-    steps = tuple(draw(strategies.lists(strategies.floats(0.001, 0.25, width=64), min_size=1, max_size=20)))
+    arrangements = tuple(
+        arrangement(draw) for _ in range(draw(strategies.integers(2, 5)))
+    )
+    steps = tuple(
+        draw(
+            strategies.lists(
+                strategies.floats(0.001, 0.25, width=64),
+                min_size=1,
+                max_size=20,
+            )
+        )
+    )
     return Journey(arrangements, steps)
 
 
 @property_test(cases(journeys))
-def test_capsules_never_overlap_in_flight_and_rest_exactly_one_gap_apart(journey: Journey) -> None:
+def test_capsules_never_overlap_in_flight_and_rest_exactly_one_gap_apart(
+    journey: Journey,
+) -> None:
     motion = IslandMotion()
     for target in journey.arrangements:
-        motion = retarget(motion, target, test_island_motion.SPRINGS, animate=True)
+        motion = retarget(
+            motion, target, test_island_motion.SPRINGS, animate=True
+        )
         for step in journey.steps:
             motion = advance(motion, step)
-            boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12), ORDER))
-            assert all(left.x + left.width <= right.x + 1e-9 for left, right in pairwise(boxes)), "Capsules overlapped in flight."
+            boxes = tuple(
+                framed.box
+                for framed in frame(
+                    placed(motion, 34), Metrics(4000, 8, 6, 12), ORDER
+                )
+            )
+            assert all(
+                left.x + left.width <= right.x + 1e-9
+                for left, right in pairwise(boxes)
+            ), "Capsules overlapped in flight."
     while not settled(motion):
         motion = advance(motion, 0.05)
-    boxes = tuple(framed.box for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12), ORDER))
-    assert [box.width for box in boxes] == [shown.content.width for shown in journey.arrangements[-1]]
-    assert all(abs(right.x - (left.x + left.width) - 6) < 1e-9 for left, right in pairwise(boxes))
+    boxes = tuple(
+        framed.box
+        for framed in frame(placed(motion, 34), Metrics(4000, 8, 6, 12), ORDER)
+    )
+    assert [box.width for box in boxes] == [
+        shown.content.width for shown in journey.arrangements[-1]
+    ]
+    assert all(
+        abs(right.x - (left.x + left.width) - 6) < 1e-9
+        for left, right in pairwise(boxes)
+    )

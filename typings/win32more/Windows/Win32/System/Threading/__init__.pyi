@@ -7,7 +7,16 @@ def GetCurrentProcess() -> int: ...
 def ResumeThread(thread: int) -> int: ...
 
 class STARTUPINFOW(ctypes.Structure):
-    def __init__(self, *, cb: int, lpDesktop: str, dwFlags: int, hStdInput: int | None, hStdOutput: int | None, hStdError: int | None) -> None: ...
+    def __init__(
+        self,
+        *,
+        cb: int,
+        lpDesktop: str,
+        dwFlags: int,
+        hStdInput: int | None,
+        hStdOutput: int | None,
+        hStdError: int | None,
+    ) -> None: ...
 
 class PROCESS_INFORMATION(ctypes.Structure):
     hProcess: int

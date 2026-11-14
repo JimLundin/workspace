@@ -32,7 +32,20 @@ from desktop_ui.window_layout import (
 )
 from protocol import App, Installed, PinnedWeb
 from tests import test_window_layout
-from tests.test_window_layout import ABOVE, CODE, EDGE, FOUR_K, FULL, LAPTOP, LEFT_HALF, LEFT_TWO_THIRDS, RIGHT_HALF, RIGHT_THIRD, SIDE, TERMINAL
+from tests.test_window_layout import (
+    ABOVE,
+    CODE,
+    EDGE,
+    FOUR_K,
+    FULL,
+    LAPTOP,
+    LEFT_HALF,
+    LEFT_TWO_THIRDS,
+    RIGHT_HALF,
+    RIGHT_THIRD,
+    SIDE,
+    TERMINAL,
+)
 from winapi.screen import Monitor
 
 # The test's own arrangement: at home, terminals two thirds and Code a third across
@@ -42,7 +55,9 @@ SETUPS = Setups(
     externals=test_window_layout.SETUPS.externals,
     layouts=frozendict(
         {
-            Setup.LAPTOP_ONLY: Layout(frozendict(), others=Position(0, Role.LAPTOP, FULL)),
+            Setup.LAPTOP_ONLY: Layout(
+                frozendict(), others=Position(0, Role.LAPTOP, FULL)
+            ),
             Setup.HOME: Layout(
                 frozendict(
                     {
@@ -50,7 +65,9 @@ SETUPS = Setups(
                         CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
                         PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
                         EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
-                        PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
+                        PinnedApp.OUTLOOK: (
+                            Position(2, Role.MAIN, RIGHT_HALF),
+                        ),
                     }
                 ),
                 others=Position(2, Role.LAPTOP, FULL),
@@ -62,7 +79,9 @@ SETUPS = Setups(
                         TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
                         EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
                         PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                        PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
+                        PinnedApp.OUTLOOK: (
+                            Position(1, Role.LAPTOP, RIGHT_HALF),
+                        ),
                     }
                 ),
                 others=Position(2, Role.LAPTOP, FULL),
@@ -81,12 +100,26 @@ def matched(monitors: tuple[Monitor, ...]) -> Screens:
 
 HOME = matched((LAPTOP, FOUR_K))
 WORK = matched((LAPTOP, ABOVE, SIDE))
-HOME_APPS = (Group(TERMINAL, (1, 2)), Group(CODE, (3,)), Group(PinnedApp.TEAMS, (4,)), Group(EDGE, (5,)), Group(PinnedApp.OUTLOOK, (6,)))
-WORK_APPS = (Group(PinnedApp.TEAMS, (1,)), Group(PinnedApp.OUTLOOK, (2,)), Group(TERMINAL, (3,)), Group(CODE, (4,)), Group(EDGE, (5,)))
+HOME_APPS = (
+    Group(TERMINAL, (1, 2)),
+    Group(CODE, (3,)),
+    Group(PinnedApp.TEAMS, (4,)),
+    Group(EDGE, (5,)),
+    Group(PinnedApp.OUTLOOK, (6,)),
+)
+WORK_APPS = (
+    Group(PinnedApp.TEAMS, (1,)),
+    Group(PinnedApp.OUTLOOK, (2,)),
+    Group(TERMINAL, (3,)),
+    Group(CODE, (4,)),
+    Group(EDGE, (5,)),
+)
 TERMINAL_KEY = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
 
 
-def world(apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1) -> World:
+def world(
+    apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1
+) -> World:
     placement = place(WORK if work else HOME, apps)
     # The test's setups leave the first desktop empty; the apps start on the second.
     return World(
@@ -94,7 +127,9 @@ def world(apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1) -
         1,
         foreground,
         frozendict((group.app, group.windows) for group in apps),
-        frozendict((handle, target.desktop) for handle, target in placement.items()),
+        frozendict(
+            (handle, target.desktop) for handle, target in placement.items()
+        ),
         placement,
         (),
         None,
@@ -111,7 +146,9 @@ def focused(at: World, direction: Direction) -> int | None:
             raise AssertionError(other)
 
 
-def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors() -> None:
+def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors() -> (
+    None
+):
     # Defects: focus skips the adjacent terminal for a farther window, crosses to
     # a window that only touches a corner, wraps around, or leaves the desktop.
     home = world(HOME_APPS)
@@ -131,14 +168,18 @@ def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors
     assert focused(replace(home, foreground=99), Direction.LEFT) is None
 
 
-def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_used_there() -> None:
+def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_used_there() -> (
+    None
+):
     # Defects: a jump leaves the existing desktops, a jump to the current
     # desktop switches anyway, or arriving ignores the last window used.
     home = world(HOME_APPS)
     assert effect(JumpDesktop(4), home) is None
     assert effect(JumpDesktop(1), home) is None
     assert effect(JumpDesktop(2), home) == Switch(2, 5)
-    assert effect(JumpDesktop(2), replace(home, recent=(1, 6, 5))) == Switch(2, 6)
+    assert effect(JumpDesktop(2), replace(home, recent=(1, 6, 5))) == Switch(
+        2, 6
+    )
     assert effect(JumpDesktop(3), home) == Switch(3, None)
     # Defect: the observer keeps the old desktop as current after a switch, or after focusing a window on another desktop.
     assert destination(effect(JumpDesktop(2), home), home) == 2
@@ -146,7 +187,9 @@ def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_use
     assert destination(None, home) == home.current
 
 
-def test_zoom_exempts_the_window_in_front_until_pressed_again_or_focus_leaves() -> None:
+def test_zoom_exempts_the_window_in_front_until_pressed_again_or_focus_leaves() -> (
+    None
+):
     home = world(HOME_APPS, foreground=3)
     assert effect(Zoom(), home) == ZoomIn(3)
     assert effect(Zoom(), replace(home, zoomed=3)) == ZoomOut(3)
@@ -166,4 +209,6 @@ def test_app_keys_cycle_the_apps_windows_or_launch_it() -> None:
     assert effect(AppKey(outlook), home) == Focus(6)
     empty = world(())
     assert effect(AppKey(outlook), empty) == Launch(PinnedApp.OUTLOOK)
-    assert effect(AppKey(TERMINAL_KEY), empty) == Launch(Installed("windowsterminal.exe", "wt.exe"))
+    assert effect(AppKey(TERMINAL_KEY), empty) == Launch(
+        Installed("windowsterminal.exe", "wt.exe")
+    )

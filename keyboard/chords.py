@@ -34,15 +34,36 @@ class Chords:
     @classmethod
     def of(cls, bindings: Bindings) -> Chords:
         """The layout's chords, or `LayoutError` if a request has no base key under it or two share one."""
-        requests = tuple((cell, request) for cell in range(Board.SIZE) if isinstance(request := bindings.action(Layer.APPS, cell), Tool | Slot))
-        chorded = tuple((key, request) for cell, request in requests if (key := _base_key(bindings, cell)))
+        requests = tuple(
+            (cell, request)
+            for cell in range(Board.SIZE)
+            if isinstance(
+                request := bindings.action(Layer.APPS, cell), Tool | Slot
+            )
+        )
+        chorded = tuple(
+            (key, request)
+            for cell, request in requests
+            if (key := _base_key(bindings, cell))
+        )
         if len(chorded) != len(requests):
-            raise LayoutError("an Apps layer request sits where the base layer has no key to chord")
+            raise LayoutError(
+                "an Apps layer request sits where the base layer has no key to chord"
+            )
         keys = frozendict(chorded)
         if len(keys) != len(chorded):
-            repeated = next(key for index, (key, _) in enumerate(chorded) if key in frozendict(chorded[:index]))
-            raise LayoutError(f"two Apps layer requests share the chord key {repeated.name}")
-        return cls(frozendict({request: key.legend for key, request in keys.items()}), frozendict({key.vk: request for key, request in keys.items()}))
+            repeated = next(
+                key
+                for index, (key, _) in enumerate(chorded)
+                if key in frozendict(chorded[:index])
+            )
+            raise LayoutError(
+                f"two Apps layer requests share the chord key {repeated.name}"
+            )
+        return cls(
+            frozendict({request: key.legend for key, request in keys.items()}),
+            frozendict({key.vk: request for key, request in keys.items()}),
+        )
 
     def shortcut(self, vk: int, *, apps_held: bool) -> Request | None:
         """The request a fresh firmware key press makes while the Tab thumb holds Apps; other keys keep their meaning.

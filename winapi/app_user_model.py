@@ -4,11 +4,23 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 lazy from win32more import FAILED
-lazy from win32more.Windows.Win32.Storage.EnhancedStorage import PKEY_AppUserModel_ID
-lazy from win32more.Windows.Win32.System.Com import COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize
-lazy from win32more.Windows.Win32.System.Com.StructuredStorage import PROPVARIANT, PropVariantClear
+lazy from win32more.Windows.Win32.Storage.EnhancedStorage import (
+    PKEY_AppUserModel_ID,
+)
+lazy from win32more.Windows.Win32.System.Com import (
+    COINIT_MULTITHREADED,
+    CoInitializeEx,
+    CoUninitialize,
+)
+lazy from win32more.Windows.Win32.System.Com.StructuredStorage import (
+    PROPVARIANT,
+    PropVariantClear,
+)
 lazy from win32more.Windows.Win32.System.Variant import VT_LPWSTR
-lazy from win32more.Windows.Win32.UI.Shell.PropertiesSystem import IPropertyStore, SHGetPropertyStoreForWindow
+lazy from win32more.Windows.Win32.UI.Shell.PropertiesSystem import (
+    IPropertyStore,
+    SHGetPropertyStoreForWindow,
+)
 
 
 @contextmanager

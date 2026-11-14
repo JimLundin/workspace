@@ -2,9 +2,20 @@
 
 from collections.abc import Callable, Iterator
 
-lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import SW_HIDE, SW_SHOWNOACTIVATE, FindWindowExW, GetPropW
+lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
+    SW_HIDE,
+    SW_SHOWNOACTIVATE,
+    FindWindowExW,
+    GetPropW,
+)
 
-from winapi._core import CloseHandle, IsWindowVisible, OpenProcess, ShowWindow, WaitForSingleObject
+from winapi._core import (
+    CloseHandle,
+    IsWindowVisible,
+    OpenProcess,
+    ShowWindow,
+    WaitForSingleObject,
+)
 
 
 def _windows(name: str) -> Iterator[int]:
@@ -17,7 +28,10 @@ def _windows(name: str) -> Iterator[int]:
 
 def taskbars() -> tuple[int, ...]:
     return tuple(
-        handle for name in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd") for handle in _windows(name) if not GetPropW(handle, "workspace tray proxy")
+        handle
+        for name in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd")
+        for handle in _windows(name)
+        if not GetPropW(handle, "workspace tray proxy")
     )
 
 

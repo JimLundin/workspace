@@ -86,7 +86,12 @@ class Programs:
     @property
     def catalogue(self) -> frozendict[Component, Entry]:
         """Every program by name, in startup order; shutdown reverses it."""
-        return frozendict({entry.name: entry for entry in (self.gateway, self.layout, self.desktop)})
+        return frozendict(
+            {
+                entry.name: entry
+                for entry in (self.gateway, self.layout, self.desktop)
+            }
+        )
 
 
 def interpreter(root: Path) -> Path:
@@ -105,7 +110,10 @@ class Places:
 
     @classmethod
     def of(cls, environ: Mapping[str, str], programs: Programs) -> Places:
-        directory = Path(environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "workspace"
+        directory = (
+            Path(environ.get("LOCALAPPDATA") or tempfile.gettempdir())
+            / "workspace"
+        )
         state = environ.get(programs.state_variable)
         return cls(directory, Path(state) if state else None)
 

@@ -8,7 +8,11 @@ from dataclasses import dataclass, field
 from typing import Final
 
 lazy from win32more.Windows.Win32.Foundation import RECT
-lazy from win32more.Windows.Win32.Graphics.Gdi import DIB_RGB_COLORS, CreateBitmap, CreateDIBSection
+lazy from win32more.Windows.Win32.Graphics.Gdi import (
+    DIB_RGB_COLORS,
+    CreateBitmap,
+    CreateDIBSection,
+)
 lazy from win32more.Windows.Win32.UI.Shell import (
     NIF_ICON,
     NIF_INFO,
@@ -61,7 +65,9 @@ from winapi.shapes import Rect
 
 # Failures read the thread's last error, which win32more's bindings don't keep.
 _RegisterClassW = fn(user32, "RegisterClassW", wintypes.ATOM, ctypes.c_void_p)
-_CreateIconIndirect = fn(user32, "CreateIconIndirect", wintypes.HICON, ctypes.c_void_p)
+_CreateIconIndirect = fn(
+    user32, "CreateIconIndirect", wintypes.HICON, ctypes.c_void_p
+)
 
 TASKBAR_CREATED: Final = RegisterWindowMessageW("TaskbarCreated")
 NIIF_INFO, NIIF_WARNING = 0x01, 0x02
@@ -82,17 +88,42 @@ class AppWindow:
     _class: WNDCLASSW
 
     @classmethod
-    def create(cls, title: str, proc: WindowProc, *, class_name: str | None = None) -> AppWindow:
+    def create(
+        cls, title: str, proc: WindowProc, *, class_name: str | None = None
+    ) -> AppWindow:
         def call(hwnd: int, message: int, wparam: int, lparam: int) -> int:
-            result = proc(int(hwnd or 0), int(message), int(wparam or 0), int(lparam or 0))
-            return DefWindowProcW(hwnd, message, wparam, lparam) if result is None else result
+            result = proc(
+                int(hwnd or 0), int(message), int(wparam or 0), int(lparam or 0)
+            )
+            return (
+                DefWindowProcW(hwnd, message, wparam, lparam)
+                if result is None
+                else result
+            )
 
         callback = WNDPROC(call)
         instance = GetModuleHandleW(None)
-        window_class = WNDCLASSW(lpfnWndProc=callback, hInstance=instance, lpszClassName=class_name or f"{title} class")
+        window_class = WNDCLASSW(
+            lpfnWndProc=callback,
+            hInstance=instance,
+            lpszClassName=class_name or f"{title} class",
+        )
         if not _RegisterClassW(ctypes.byref(window_class)):
             raise last_error()
-        hwnd: int | None = CreateWindowExW(0, window_class.lpszClassName, title, 0, 0, 0, 0, 0, None, None, instance, None)
+        hwnd: int | None = CreateWindowExW(
+            0,
+            window_class.lpszClassName,
+            title,
+            0,
+            0,
+            0,
+            0,
+            0,
+            None,
+            None,
+            instance,
+            None,
+        )
         if not hwnd:
             raise last_error()
         return cls(int(hwnd), callback, window_class)
@@ -112,9 +143,13 @@ class Icon:
     def draw(cls, size: int, bgra: bytes) -> Icon:
         header = top_down(size, size)
         bits = ctypes.c_void_p()
-        color = CreateDIBSection(None, header, DIB_RGB_COLORS, ctypes.byref(bits), None, 0)
+        color = CreateDIBSection(
+            None, header, DIB_RGB_COLORS, ctypes.byref(bits), None, 0
+        )
         ctypes.memmove(bits, bgra, size * size * 4)
-        mask = CreateBitmap(size, size, 1, 1, ctypes.create_string_buffer(size * size // 8))
+        mask = CreateBitmap(
+            size, size, 1, 1, ctypes.create_string_buffer(size * size // 8)
+        )
         info = ICONINFO(fIcon=True, hbmMask=mask, hbmColor=color)
         handle: int | None = _CreateIconIndirect(ctypes.byref(info))
         DeleteObject(mask)
@@ -173,7 +208,10 @@ class TrayIcon:
     def bounds(self) -> Rect | None:
         """Observe the host's icon position for native popup anchoring."""
         identifier = NOTIFYICONIDENTIFIER(
-            cbSize=ctypes.sizeof(NOTIFYICONIDENTIFIER), hWnd=self._data.hWnd, uID=self._data.uID, guidItem=self._data.guidItem
+            cbSize=ctypes.sizeof(NOTIFYICONIDENTIFIER),
+            hWnd=self._data.hWnd,
+            uID=self._data.uID,
+            guidItem=self._data.guidItem,
         )
         rect = RECT()
         if Shell_NotifyIconGetRect(identifier, rect) < 0:
@@ -198,12 +236,28 @@ def show_menu(window: int, items: Sequence[MenuItem]) -> int:
             if item.id == 0:
                 AppendMenuW(menu, MF_SEPARATOR, 0, None)
             else:
-                flags = MF_STRING | (0 if item.enabled else MF_GRAYED) | (MF_CHECKED if item.checked else 0)
+                flags = (
+                    MF_STRING
+                    | (0 if item.enabled else MF_GRAYED)
+                    | (MF_CHECKED if item.checked else 0)
+                )
                 AppendMenuW(menu, flags, item.id, item.text)
         point = wintypes.POINT()
         GetCursorPos(ctypes.byref(point))
-        SetForegroundWindow(window)  # without this the menu doesn't close when clicking elsewhere
-        chosen = int(TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_NONOTIFY | TPM_RETURNCMD, point.x, point.y, 0, window, None))
+        SetForegroundWindow(
+            window
+        )  # without this the menu doesn't close when clicking elsewhere
+        chosen = int(
+            TrackPopupMenu(
+                menu,
+                TPM_RIGHTBUTTON | TPM_NONOTIFY | TPM_RETURNCMD,
+                point.x,
+                point.y,
+                0,
+                window,
+                None,
+            )
+        )
         PostMessageW(window, WM_NULL, 0, 0)
         return chosen
     finally:

@@ -15,7 +15,13 @@ from desktop_ui.shell_items import PinnedApp, WebApps
 from desktop_ui.window_layout import App, Program
 from protocol import Target, Tool
 
-JUMPS: Final = (Tool.DESKTOP_1, Tool.DESKTOP_2, Tool.DESKTOP_3, Tool.DESKTOP_4, Tool.DESKTOP_5)
+JUMPS: Final = (
+    Tool.DESKTOP_1,
+    Tool.DESKTOP_2,
+    Tool.DESKTOP_3,
+    Tool.DESKTOP_4,
+    Tool.DESKTOP_5,
+)
 
 
 def _jump_letters(letters: Mapping[Target, str]) -> tuple[str | None, ...]:
@@ -77,21 +83,38 @@ def label(app: App, web_apps: WebApps) -> str:
             assert_never(app)
 
 
-def pager(placed: Sequence[Sequence[App]], current: int, spec: PagerSpec, letters: Mapping[Target, str], *, chord: bool) -> PagerView:
+def pager(
+    placed: Sequence[Sequence[App]],
+    current: int,
+    spec: PagerSpec,
+    letters: Mapping[Target, str],
+    *,
+    chord: bool,
+) -> PagerView:
     """The pager for these desktops, each with the applications placed on it.
 
     The hints show while an Apps key is held, so the letter alone completes the request.
     """
 
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:
-        listed = ", ".join(label(app, spec.web_apps) for app in apps) or spec.empty
+        listed = (
+            ", ".join(label(app, spec.web_apps) for app in apps) or spec.empty
+        )
         here = f" ({spec.current})" if index == current else ""
-        return PagerDesktop(str(index + 1), f"{spec.desktop} {index + 1}{here} · {listed}", current=index == current, apps=tuple(apps))
+        return PagerDesktop(
+            str(index + 1),
+            f"{spec.desktop} {index + 1}{here} · {listed}",
+            current=index == current,
+            apps=tuple(apps),
+        )
 
     desktops = tuple(desktop(index, apps) for index, apps in enumerate(placed))
     symbols = frozendict((app, web.glyph) for app, web in spec.web_apps.items())
     if not chord:
         return PagerView(desktops, NO_HINTS, symbols)
     jumping = _jump_letters(letters)
-    jumps = tuple(jumping[index] if index < len(jumping) else None for index in range(len(desktops)))
+    jumps = tuple(
+        jumping[index] if index < len(jumping) else None
+        for index in range(len(desktops))
+    )
     return PagerView(desktops, Hints(jumps), symbols)

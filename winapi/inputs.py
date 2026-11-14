@@ -7,7 +7,14 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import Final
 
-from winapi._core import LRESULT, ULONG_PTR, GetCursorPos, GetModuleHandleW, fn, user32
+from winapi._core import (
+    LRESULT,
+    ULONG_PTR,
+    GetCursorPos,
+    GetModuleHandleW,
+    fn,
+    user32,
+)
 from winapi.shapes import Point, require_input_count, utf16_units
 
 
@@ -72,17 +79,53 @@ class INPUT(ctypes.Structure):
 
 # Struct sizes must match Windows exactly, or SendInput silently does nothing.
 if ctypes.sizeof(INPUT) != (40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28):
-    raise ImportError(f"INPUT is {ctypes.sizeof(INPUT)} bytes; Windows expects a different size")
+    raise ImportError(
+        f"INPUT is {ctypes.sizeof(INPUT)} bytes; Windows expects a different size"
+    )
 
-HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
-_SetWindowsHookExW = fn(user32, "SetWindowsHookExW", wintypes.HHOOK, ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD)
-_CallNextHookEx = fn(user32, "CallNextHookEx", LRESULT, wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
-_UnhookWindowsHookEx = fn(user32, "UnhookWindowsHookEx", wintypes.BOOL, wintypes.HHOOK)
-_SendInput = fn(user32, "SendInput", wintypes.UINT, wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
-_MapVirtualKeyW = fn(user32, "MapVirtualKeyW", wintypes.UINT, wintypes.UINT, wintypes.UINT)
+HOOKPROC = ctypes.WINFUNCTYPE(
+    LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM
+)
+_SetWindowsHookExW = fn(
+    user32,
+    "SetWindowsHookExW",
+    wintypes.HHOOK,
+    ctypes.c_int,
+    HOOKPROC,
+    wintypes.HINSTANCE,
+    wintypes.DWORD,
+)
+_CallNextHookEx = fn(
+    user32,
+    "CallNextHookEx",
+    LRESULT,
+    wintypes.HHOOK,
+    ctypes.c_int,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
+)
+_UnhookWindowsHookEx = fn(
+    user32, "UnhookWindowsHookEx", wintypes.BOOL, wintypes.HHOOK
+)
+_SendInput = fn(
+    user32,
+    "SendInput",
+    wintypes.UINT,
+    wintypes.UINT,
+    ctypes.POINTER(INPUT),
+    ctypes.c_int,
+)
+_MapVirtualKeyW = fn(
+    user32, "MapVirtualKeyW", wintypes.UINT, wintypes.UINT, wintypes.UINT
+)
 
 LLKHF_EXTENDED, LLKHF_INJECTED = 0x01, 0x10
-_KEYEVENTF_EXTENDEDKEY, _KEYEVENTF_KEYUP, _KEYEVENTF_UNICODE, _KEYEVENTF_SCANCODE = 0x0001, 0x0002, 0x0004, 0x0008
+(
+    _KEYEVENTF_EXTENDEDKEY,
+    _KEYEVENTF_KEYUP,
+    _KEYEVENTF_UNICODE,
+    _KEYEVENTF_SCANCODE,
+) = 0x0001, 0x0002, 0x0004, 0x0008
 _KEY_DOWNS: Final = frozenset({0x0100, 0x0104})
 """WM_KEYDOWN and WM_SYSKEYDOWN."""
 _KEY_UPS: Final = frozenset({0x0101, 0x0105})
@@ -119,7 +162,9 @@ class KeyEvent:
 
 def transition(wparam: int) -> bool | None:
     """What a low-level keyboard hook message is: True for a key going down, False for up, None for neither."""
-    return True if wparam in _KEY_DOWNS else False if wparam in _KEY_UPS else None
+    return (
+        True if wparam in _KEY_DOWNS else False if wparam in _KEY_UPS else None
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,12 +177,20 @@ class Hook:
 
 def read_key_event(lparam: int) -> KeyEvent:
     kb = ctypes.cast(lparam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-    return KeyEvent(int(kb.vkCode), int(kb.scanCode), int(kb.flags), int(kb.time), int(kb.dwExtraInfo))
+    return KeyEvent(
+        int(kb.vkCode),
+        int(kb.scanCode),
+        int(kb.flags),
+        int(kb.time),
+        int(kb.dwExtraInfo),
+    )
 
 
 def set_keyboard_hook(proc: HookProc) -> Hook | None:
     callback = HOOKPROC(proc)
-    handle: int | None = _SetWindowsHookExW(_WH_KEYBOARD_LL, callback, GetModuleHandleW(None), 0)
+    handle: int | None = _SetWindowsHookExW(
+        _WH_KEYBOARD_LL, callback, GetModuleHandleW(None), 0
+    )
     return Hook(handle, callback) if handle else None
 
 
@@ -155,7 +208,10 @@ def scancode_for(vk: int) -> int:
 
 
 def _key(vk: int, scancode: int, flags: int, extra: int) -> INPUT:
-    return INPUT(_INPUT_KEYBOARD, InputUnion(ki=KEYBDINPUT(vk, scancode, flags, 0, extra)))
+    return INPUT(
+        _INPUT_KEYBOARD,
+        InputUnion(ki=KEYBDINPUT(vk, scancode, flags, 0, extra)),
+    )
 
 
 def _submit(events: Sequence[INPUT]) -> int:
@@ -172,13 +228,25 @@ def _send(events: Sequence[INPUT]) -> int:
 
 def send_key(vk: int, *, down: bool, extended: bool, extra: int) -> None:
     """One key, with the scancode some programs read, from Windows' own layout table."""
-    flags = (0 if down else _KEYEVENTF_KEYUP) | (_KEYEVENTF_EXTENDEDKEY if extended else 0)
+    flags = (0 if down else _KEYEVENTF_KEYUP) | (
+        _KEYEVENTF_EXTENDEDKEY if extended else 0
+    )
     _send([_key(vk, scancode_for(vk), flags, extra)])
 
 
 def send_scancodes(strokes: Sequence[tuple[int, bool]], extra: int) -> None:
     """Physical keys by scancode, as a keyboard would send them (used by tests)."""
-    _send([_key(0, code, _KEYEVENTF_SCANCODE | (0 if down else _KEYEVENTF_KEYUP), extra) for code, down in strokes])
+    _send(
+        [
+            _key(
+                0,
+                code,
+                _KEYEVENTF_SCANCODE | (0 if down else _KEYEVENTF_KEYUP),
+                extra,
+            )
+            for code, down in strokes
+        ]
+    )
 
 
 def type_text(text: str, extra: int) -> None:
@@ -188,8 +256,15 @@ def type_text(text: str, extra: int) -> None:
         event
         for i, line in enumerate(text.split("\n"))
         for event in chain(
-            (_key(_VK_RETURN, enter, flags, extra) for flags in ((0, _KEYEVENTF_KEYUP) if i else ())),
-            (_key(0, unit, _KEYEVENTF_UNICODE | up, extra) for unit in utf16_units(line) for up in (0, _KEYEVENTF_KEYUP)),
+            (
+                _key(_VK_RETURN, enter, flags, extra)
+                for flags in ((0, _KEYEVENTF_KEYUP) if i else ())
+            ),
+            (
+                _key(0, unit, _KEYEVENTF_UNICODE | up, extra)
+                for unit in utf16_units(line)
+                for up in (0, _KEYEVENTF_KEYUP)
+            ),
         )
     )
     if events:

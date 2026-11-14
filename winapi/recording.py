@@ -14,12 +14,26 @@ from ctypes import wintypes
 from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
-lazy from win32more.Windows.Win32.System.Com import COINIT_MULTITHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize
+lazy from win32more.Windows.Win32.System.Com import (
+    COINIT_MULTITHREADED,
+    CoInitializeEx,
+    CoTaskMemFree,
+    CoUninitialize,
+)
 
 from cell import Cell
 from winapi._core import CoCreateInstance, com_method, guid_buffer
 from winapi.audio import WAVEFORMATEX
-from winapi.pcm import RATE, Converter, Gap, Mixer, PcmFormat, Problem, Stall, dropout
+from winapi.pcm import (
+    RATE,
+    Converter,
+    Gap,
+    Mixer,
+    PcmFormat,
+    Problem,
+    Stall,
+    dropout,
+)
 
 _LOOPBACK: Final = 0x0002_0000
 _DISCONTINUITY: Final = 1
@@ -41,7 +55,9 @@ _IID_CAPTURE = guid_buffer("C8ADBD64-E71E-48A0-A4DE-185C395CD317")
 
 def _check(result: int, action: str) -> None:
     if result < 0 and result & 0xFFFF_FFFF == _DEVICE_INVALIDATED:
-        raise OSError(f"{action} failed: the audio device was removed or changed. Recording stopped; the captured part has been saved.")
+        raise OSError(
+            f"{action} failed: the audio device was removed or changed. Recording stopped; the captured part has been saved."
+        )
     if result < 0:
         raise OSError(
             f"{action} failed (Windows audio 0x{result & 0xFFFF_FFFF:08X}). Check the selected audio devices and desktop microphone access."
@@ -49,7 +65,13 @@ def _check(result: int, action: str) -> None:
 
 
 # These are the scalar ABI argument types consumed by WASAPI's COM methods.
-type ArgumentType = type[ctypes.c_int] | type[ctypes.c_uint] | type[ctypes.c_ulong] | type[ctypes.c_longlong] | type[ctypes.c_void_p]
+type ArgumentType = (
+    type[ctypes.c_int]
+    | type[ctypes.c_uint]
+    | type[ctypes.c_ulong]
+    | type[ctypes.c_longlong]
+    | type[ctypes.c_void_p]
+)
 
 
 class NativeCall(Protocol):
@@ -63,7 +85,9 @@ class WasapiApi(Protocol):
     def uninitialize(self) -> None: ...
     def create_enumerator(self, pointer: ctypes.c_void_p) -> int: ...
     def free_format(self, pointer: ctypes.c_void_p) -> None: ...
-    def method(self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType) -> NativeCall: ...
+    def method(
+        self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType
+    ) -> NativeCall: ...
     def clock(self) -> float: ...
     def wait(self, stop: threading.Event, timeout: float) -> bool: ...
 
@@ -77,12 +101,16 @@ class NativeWasapi:
         CoUninitialize()
 
     def create_enumerator(self, pointer: ctypes.c_void_p) -> int:
-        return CoCreateInstance(_ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(pointer))
+        return CoCreateInstance(
+            _ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(pointer)
+        )
 
     def free_format(self, pointer: ctypes.c_void_p) -> None:
         CoTaskMemFree(pointer)
 
-    def method(self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType) -> NativeCall:
+    def method(
+        self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType
+    ) -> NativeCall:
         # The declared c_long restype supplies an integer HRESULT. Keep that
         # native callable directly: packet draining creates no extra wrapper.
         return com_method("The audio interface", pointer, index, *arguments)
@@ -104,19 +132,32 @@ def _release(pointer: ctypes.c_void_p, api: WasapiApi) -> None:
 def _format(pointer: ctypes.c_void_p) -> PcmFormat:
     format = ctypes.cast(pointer, ctypes.POINTER(WAVEFORMATEX)).contents
     tag = int(format.wFormatTag)
-    if tag == 0xFFFE:  # WAVEFORMATEXTENSIBLE: samples, channel mask, and subtype GUID
+    if (
+        tag == 0xFFFE
+    ):  # WAVEFORMATEXTENSIBLE: samples, channel mask, and subtype GUID
         if format.cbSize < 22:
-            raise OSError("The audio device returned an incomplete extended format.")
-        subtype = uuid.UUID(bytes_le=ctypes.string_at((pointer.value or 0) + 24, 16))
+            raise OSError(
+                "The audio device returned an incomplete extended format."
+            )
+        subtype = uuid.UUID(
+            bytes_le=ctypes.string_at((pointer.value or 0) + 24, 16)
+        )
         if subtype == uuid.UUID("00000001-0000-0010-8000-00aa00389b71"):
             tag = 1
         elif subtype == uuid.UUID("00000003-0000-0010-8000-00aa00389b71"):
             tag = 3
     if tag not in (1, 3):
         raise OSError("The audio device does not provide supported PCM audio.")
-    result = PcmFormat(int(format.nSamplesPerSec), int(format.nChannels), int(format.wBitsPerSample), floating=tag == 3)
+    result = PcmFormat(
+        int(format.nSamplesPerSec),
+        int(format.nChannels),
+        int(format.wBitsPerSample),
+        floating=tag == 3,
+    )
     if result.frame_bytes != format.nBlockAlign:
-        raise OSError("The audio device returned an inconsistent sample format.")
+        raise OSError(
+            "The audio device returned an inconsistent sample format."
+        )
     return result
 
 
@@ -149,39 +190,85 @@ class Stream:
     _captured: Cell[_Captured] = field(kw_only=True)
 
     @classmethod
-    def open(cls, enumerator: ctypes.c_void_p, api: WasapiApi, *, loopback: bool) -> Stream:
-        device, client, capture = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    def open(
+        cls, enumerator: ctypes.c_void_p, api: WasapiApi, *, loopback: bool
+    ) -> Stream:
+        device, client, capture = (
+            ctypes.c_void_p(),
+            ctypes.c_void_p(),
+            ctypes.c_void_p(),
+        )
         label = "Computer audio" if loopback else "Microphone"
         try:
             # Multimedia default matches normal app playback and the system's
             # selected microphone. Both use shared mode, including alongside B/N.
             _check(
-                api.method(enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p)(enumerator, 0 if loopback else 1, 1, ctypes.byref(device)),
+                api.method(
+                    enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p
+                )(enumerator, 0 if loopback else 1, 1, ctypes.byref(device)),
                 f"Opening {label.lower()}",
             )
             _check(
-                api.method(device, 3, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.c_void_p)(
-                    device, _IID_CLIENT, 23, None, ctypes.byref(client)
-                ),
+                api.method(
+                    device,
+                    3,
+                    ctypes.c_void_p,
+                    wintypes.DWORD,
+                    ctypes.c_void_p,
+                    ctypes.c_void_p,
+                )(device, _IID_CLIENT, 23, None, ctypes.byref(client)),
                 f"Preparing {label.lower()}",
             )
             format = ctypes.c_void_p()
-            _check(api.method(client, 8, ctypes.c_void_p)(client, ctypes.byref(format)), "Reading audio format")
+            _check(
+                api.method(client, 8, ctypes.c_void_p)(
+                    client, ctypes.byref(format)
+                ),
+                "Reading audio format",
+            )
             try:
                 converter = Converter(_format(format))
                 _check(
-                    api.method(client, 3, ctypes.c_int, wintypes.DWORD, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_void_p, ctypes.c_void_p)(
-                        client, 0, _LOOPBACK if loopback else 0, _BUFFER, 0, format, None
+                    api.method(
+                        client,
+                        3,
+                        ctypes.c_int,
+                        wintypes.DWORD,
+                        ctypes.c_longlong,
+                        ctypes.c_longlong,
+                        ctypes.c_void_p,
+                        ctypes.c_void_p,
+                    )(
+                        client,
+                        0,
+                        _LOOPBACK if loopback else 0,
+                        _BUFFER,
+                        0,
+                        format,
+                        None,
                     ),
                     f"Initializing {label.lower()}",
                 )
             finally:
                 api.free_format(format)
-            _check(api.method(client, 14, ctypes.c_void_p, ctypes.c_void_p)(client, _IID_CAPTURE, ctypes.byref(capture)), "Opening audio capture")
+            _check(
+                api.method(client, 14, ctypes.c_void_p, ctypes.c_void_p)(
+                    client, _IID_CAPTURE, ctypes.byref(capture)
+                ),
+                "Opening audio capture",
+            )
         except BaseException:
             _release_all((capture, client, device), api)
             raise
-        return cls(api, device, client, capture, label, loopback=loopback, _captured=Cell(_Captured(converter)))
+        return cls(
+            api,
+            device,
+            client,
+            capture,
+            label,
+            loopback=loopback,
+            _captured=Cell(_Captured(converter)),
+        )
 
     def reported(self) -> tuple[Gap, ...]:
         """The dropouts since the last report."""
@@ -190,29 +277,61 @@ class Stream:
         return gaps
 
     def start(self) -> None:
-        _check(self.api.method(self.client, 10)(self.client), f"Starting {self.label.lower()}")
+        _check(
+            self.api.method(self.client, 10)(self.client),
+            f"Starting {self.label.lower()}",
+        )
         self._captured.update(lambda captured: replace(captured, started=True))
 
     def packets(self, origin: float) -> Iterator[tuple[int, bytes]]:
         size = wintypes.UINT()
         while True:
-            _check(self.api.method(self.capture, 5, ctypes.c_void_p)(self.capture, ctypes.byref(size)), "Reading audio packet size")
+            _check(
+                self.api.method(self.capture, 5, ctypes.c_void_p)(
+                    self.capture, ctypes.byref(size)
+                ),
+                "Reading audio packet size",
+            )
             if not size.value:
                 return
-            data, frames, flags = ctypes.c_void_p(), wintypes.UINT(), wintypes.DWORD()
+            data, frames, flags = (
+                ctypes.c_void_p(),
+                wintypes.UINT(),
+                wintypes.DWORD(),
+            )
             position, timestamp = ctypes.c_ulonglong(), ctypes.c_ulonglong()
             _check(
-                self.api.method(self.capture, 3, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(
-                    self.capture, ctypes.byref(data), ctypes.byref(frames), ctypes.byref(flags), ctypes.byref(position), ctypes.byref(timestamp)
+                self.api.method(
+                    self.capture,
+                    3,
+                    ctypes.c_void_p,
+                    ctypes.c_void_p,
+                    ctypes.c_void_p,
+                    ctypes.c_void_p,
+                    ctypes.c_void_p,
+                )(
+                    self.capture,
+                    ctypes.byref(data),
+                    ctypes.byref(frames),
+                    ctypes.byref(flags),
+                    ctypes.byref(position),
+                    ctypes.byref(timestamp),
                 ),
                 f"Capturing {self.label.lower()}",
             )
             captured = self._captured.get()
             try:
                 if flags.value & _TIMESTAMP_ERROR:
-                    raise OSError(f"{self.label} lost its audio clock. The captured part has been saved.")
-                if captured.position is not None and position.value < captured.position:
-                    raise OSError(f"{self.label} restarted its audio clock. The captured part has been saved.")
+                    raise OSError(
+                        f"{self.label} lost its audio clock. The captured part has been saved."
+                    )
+                if (
+                    captured.position is not None
+                    and position.value < captured.position
+                ):
+                    raise OSError(
+                        f"{self.label} restarted its audio clock. The captured part has been saved."
+                    )
                 # Compare native positions with each other, never with stream
                 # frame counts. The real shared-mode microphone delivers 480
                 # frames at 48 kHz while its device counter advances 441; adding
@@ -223,29 +342,63 @@ class Stream:
                 # leaves silence for missing samples and keeps the other source.
                 # Reset only the resampler's carried sample/phase across the gap.
                 converter = captured.converter
-                if captured.position is not None and flags.value & _DISCONTINUITY:
+                if (
+                    captured.position is not None
+                    and flags.value & _DISCONTINUITY
+                ):
                     converter = Converter(converter.format)
-                captured = replace(captured, converter=converter, position=position.value)
+                captured = replace(
+                    captured, converter=converter, position=position.value
+                )
                 self._captured.set(captured)
                 count = frames.value * converter.format.frame_bytes
-                raw = bytes(count) if flags.value & _SILENT else ctypes.string_at(data, count)
-                offset = converter.position.output_frames / RATE - converter.position.input_frames / converter.format.rate
-                start = round((timestamp.value / 10_000_000 - origin + offset) * RATE)
+                raw = (
+                    bytes(count)
+                    if flags.value & _SILENT
+                    else ctypes.string_at(data, count)
+                )
+                offset = (
+                    converter.position.output_frames / RATE
+                    - converter.position.input_frames / converter.format.rate
+                )
+                start = round(
+                    (timestamp.value / 10_000_000 - origin + offset) * RATE
+                )
                 pcm = converter.convert(raw)
             finally:
-                _check(self.api.method(self.capture, 4, wintypes.UINT)(self.capture, frames), "Returning audio packet")
+                _check(
+                    self.api.method(self.capture, 4, wintypes.UINT)(
+                        self.capture, frames
+                    ),
+                    "Returning audio packet",
+                )
             # The microphone streams continuously, silence included, so a flagged
             # hole is audio lost before this drain (an overflowed engine buffer).
             # Idle playback sends no packets at all; its holes are not losses.
-            hole = None if self.loopback else dropout(captured.end, start, discontinuous=bool(flags.value & _DISCONTINUITY))
+            hole = (
+                None
+                if self.loopback
+                else dropout(
+                    captured.end,
+                    start,
+                    discontinuous=bool(flags.value & _DISCONTINUITY),
+                )
+            )
             gaps = captured.gaps if hole is None else (*captured.gaps, hole)
-            self._captured.set(replace(captured, end=start + len(pcm) // 2, gaps=gaps))
+            self._captured.set(
+                replace(captured, end=start + len(pcm) // 2, gaps=gaps)
+            )
             yield start, pcm
 
     def stop(self) -> None:
         if self._captured.get().started:
-            _check(self.api.method(self.client, 11)(self.client), f"Stopping {self.label.lower()}")
-            self._captured.update(lambda captured: replace(captured, started=False))
+            _check(
+                self.api.method(self.client, 11)(self.client),
+                f"Stopping {self.label.lower()}",
+            )
+            self._captured.update(
+                lambda captured: replace(captured, started=False)
+            )
 
     def close(self) -> None:
         try:
@@ -261,13 +414,21 @@ class MeetingAudio:
     api: WasapiApi = field(default_factory=NativeWasapi)
     computer_audio: bool = field(default=True, kw_only=True)
 
-    def record(self, stop: threading.Event, consume: Callable[[bytes], None], ready: Callable[[], None], report: Callable[[Problem], None]) -> None:
+    def record(
+        self,
+        stop: threading.Event,
+        consume: Callable[[bytes], None],
+        ready: Callable[[], None],
+        report: Callable[[Problem], None],
+    ) -> None:
         """Capture until `stop`; `consume` and `report` run on this real-time thread and must not block."""
         _check(self.api.initialize(), "Preparing Windows audio")
         enumerator = ctypes.c_void_p()
         streams: list[Stream] = []
         try:
-            _check(self.api.create_enumerator(enumerator), "Finding audio devices")
+            _check(
+                self.api.create_enumerator(enumerator), "Finding audio devices"
+            )
             streams.append(Stream.open(enumerator, self.api, loopback=False))
             if self.computer_audio:
                 streams.append(Stream.open(enumerator, self.api, loopback=True))
@@ -291,7 +452,12 @@ class MeetingAudio:
                 nonlocal delivered
                 now = self.api.clock()
                 if now - delivered > _STALL:
-                    report(Stall(max(0, round((delivered - origin) * RATE)), now - delivered))
+                    report(
+                        Stall(
+                            max(0, round((delivered - origin) * RATE)),
+                            now - delivered,
+                        )
+                    )
                 delivered = now
                 consume(pcm)
                 gaps()
@@ -307,7 +473,14 @@ class MeetingAudio:
             _release(enumerator, self.api)
             self.api.uninitialize()
 
-    def _capture(self, streams: Sequence[Stream], mixer: Mixer, origin: float, stop: threading.Event, consume: Callable[[bytes], None]) -> None:
+    def _capture(
+        self,
+        streams: Sequence[Stream],
+        mixer: Mixer,
+        origin: float,
+        stop: threading.Event,
+        consume: Callable[[bytes], None],
+    ) -> None:
         latest = 0
 
         def drain() -> None:
@@ -320,7 +493,9 @@ class MeetingAudio:
         try:
             while not self.api.wait(stop, 0.02):
                 drain()
-                until = max(0, int((self.api.clock() - origin - _LATENCY) * RATE))
+                until = max(
+                    0, int((self.api.clock() - origin - _LATENCY) * RATE)
+                )
                 if until - mixer.cursor >= RATE // 10:
                     consume(mixer.take(until))
             until = round((self.api.clock() - origin) * RATE)

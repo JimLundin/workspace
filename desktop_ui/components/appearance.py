@@ -42,7 +42,9 @@ class Shade:
     @property
     def css(self) -> str:
         """For Qt stylesheets, which take rgba() but not #AARRGGBB."""
-        red, green, blue = (int(self.color[index : index + 2], 16) for index in (1, 3, 5))
+        red, green, blue = (
+            int(self.color[index : index + 2], 16) for index in (1, 3, 5)
+        )
         return f"rgba({red},{green},{blue},{round(self.opacity * 255)})"
 
     @property
@@ -154,8 +156,17 @@ def tooltip_style(theme: Tokens, kit: Kit) -> str:
 def control_style(theme: Tokens, design: Design) -> str:
     """Workspace's dialogs and controls: Inter, capsule buttons, quiet wells and overlay scroll bars."""
     ink, ink2, ink3 = theme.ink.css, theme.ink2.css, theme.ink3.css
-    fill, hover, press, line = theme.fill.css, theme.hover.css, theme.press.css, theme.separator.css
-    kit, accent, on_accent = design.kit, design.palette.accent, design.palette.on_accent
+    fill, hover, press, line = (
+        theme.fill.css,
+        theme.hover.css,
+        theme.press.css,
+        theme.separator.css,
+    )
+    kit, accent, on_accent = (
+        design.kit,
+        design.palette.accent,
+        design.palette.on_accent,
+    )
     weight, ring, edge = int(design.type.title.weight), kit.ring, kit.hairline
     along, across = kit.scrollbar_along, kit.scrollbar_across
     return f"""
@@ -307,7 +318,12 @@ class Glass:
 def rim_stops(rim: Rim, glass: Glass) -> tuple[Stop, ...]:
     """Brightest where light catches the upper-leading curve, a softer return at the trailing foot."""
     light = glass.rim_light
-    return (Stop(0, light, rim.high), Stop(glass.rim_fall, light, rim.low), Stop(glass.rim_rise, light, rim.low), Stop(1, light, rim.end))
+    return (
+        Stop(0, light, rim.high),
+        Stop(glass.rim_fall, light, rim.low),
+        Stop(glass.rim_rise, light, rim.low),
+        Stop(1, light, rim.end),
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -377,30 +393,59 @@ def _veil(pane: Pane, glass: Glass) -> Shade:
 def _attention(pane: Pane, attention: Attention) -> GlassLook:
     match pane:
         case CanvasBar():
-            return GlassLook(Shade(attention.hue, attention.canvas_veil), attention.rim, attention.lettering)
+            return GlassLook(
+                Shade(attention.hue, attention.canvas_veil),
+                attention.rim,
+                attention.lettering,
+            )
         case Capsule() | Menu():
-            return GlassLook(Shade(attention.hue, attention.veil), attention.rim, attention.lettering)
+            return GlassLook(
+                Shade(attention.hue, attention.veil),
+                attention.rim,
+                attention.lettering,
+            )
         case _:
             assert_never(pane)
 
 
-@lru_cache(maxsize=32)  # Every frame asks again for each capsule; the answers are a handful of values.
-def look(preference: appearance.Preference, pane: Pane, tint: Tint, glass: Glass) -> Look:
+@lru_cache(
+    maxsize=32
+)  # Every frame asks again for each capsule; the answers are a handful of values.
+def look(
+    preference: appearance.Preference, pane: Pane, tint: Tint, glass: Glass
+) -> Look:
     """One material recipe; pane ownership selects the scheme and veil thickness."""
     match preference:
         case appearance.Contrast(background=background, foreground=foreground):
             # System colours, swapped when the surface carries meaning.
-            fill, ink = (foreground, background) if tint is Tint.ATTENTION else (background, foreground)
-            feedback = Lettering(Shade(ink), Shade(ink), Shade(ink, glass.contrast_hover), Shade(ink, glass.contrast_press))
+            fill, ink = (
+                (foreground, background)
+                if tint is Tint.ATTENTION
+                else (background, foreground)
+            )
+            feedback = Lettering(
+                Shade(ink),
+                Shade(ink),
+                Shade(ink, glass.contrast_hover),
+                Shade(ink, glass.contrast_press),
+            )
             return SolidLook(Shade(fill), Shade(ink), feedback)
         case appearance.Material.SOLID:
             match tint:
                 case Tint.ATTENTION:
                     attention = glass.attention
-                    return SolidLook(Shade(attention.hue), attention.solid_edge, attention.lettering)
+                    return SolidLook(
+                        Shade(attention.hue),
+                        attention.solid_edge,
+                        attention.lettering,
+                    )
                 case Tint.NONE:
-                    theme = glass.tokens[_scheme(pane, appearance.Material.SOLID, glass)]
-                    return SolidLook(Shade(theme.solid), theme.solid_edge, lettering(theme))
+                    theme = glass.tokens[
+                        _scheme(pane, appearance.Material.SOLID, glass)
+                    ]
+                    return SolidLook(
+                        Shade(theme.solid), theme.solid_edge, lettering(theme)
+                    )
                 case _:
                     assert_never(tint)
         case appearance.Material.GLASS:
@@ -418,7 +463,9 @@ def look(preference: appearance.Preference, pane: Pane, tint: Tint, glass: Glass
     return GlassLook(_veil(pane, glass), theme.rim, lettering(theme))
 
 
-def reading(lettering: Lettering, tone: Tone, palette: Palette, *, contrast: bool) -> Shade:
+def reading(
+    lettering: Lettering, tone: Tone, palette: Palette, *, contrast: bool
+) -> Shade:
     """A part's ink. High contrast keeps every reading in the system foreground."""
     if contrast:
         return lettering.ink

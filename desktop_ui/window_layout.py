@@ -44,37 +44,76 @@ def _ordered(sizes: Iterable[Size]) -> tuple[Size, ...]:
     return tuple(sorted(sizes, key=lambda size: (size.width, size.height)))
 
 
-def assigned(monitors: Sequence[Monitor], setups: Setups) -> tuple[Setup, frozendict[Role, Monitor]] | None:
+def assigned(
+    monitors: Sequence[Monitor], setups: Setups
+) -> tuple[Setup, frozendict[Role, Monitor]] | None:
     """Match the connected monitors to a setup; any other set is the laptop alone, on its panel or the primary monitor."""
     if not monitors:
         return None
-    panels = tuple(index for index, monitor in enumerate(monitors) if monitor.internal)
-    laptop = panels[0] if len(panels) == 1 else next((index for index, monitor in enumerate(monitors) if monitor.primary), 0)
-    externals = tuple(monitor for index, monitor in enumerate(monitors) if index != laptop)
+    panels = tuple(
+        index for index, monitor in enumerate(monitors) if monitor.internal
+    )
+    laptop = (
+        panels[0]
+        if len(panels) == 1
+        else next(
+            (
+                index
+                for index, monitor in enumerate(monitors)
+                if monitor.primary
+            ),
+            0,
+        )
+    )
+    externals = tuple(
+        monitor for index, monitor in enumerate(monitors) if index != laptop
+    )
     sizes = _ordered(monitor.area.size for monitor in externals)
     alone = (Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: monitors[laptop]}))
     if len(panels) != 1:
         return alone
-    setup = next((setup for setup, wanted in setups.externals.items() if sizes == _ordered(wanted)), None)
+    setup = next(
+        (
+            setup
+            for setup, wanted in setups.externals.items()
+            if sizes == _ordered(wanted)
+        ),
+        None,
+    )
     if setup is None:
         return alone
-    roles = {setups.externals[setup][monitor.area.size]: monitor for monitor in externals}
+    roles = {
+        setups.externals[setup][monitor.area.size]: monitor
+        for monitor in externals
+    }
     return setup, frozendict({Role.LAPTOP: monitors[laptop], **roles})
 
 
 def screens(monitors: Sequence[Monitor], setups: Setups) -> Screens | None:
     match assigned(monitors, setups):
         case (setup, roles):
-            return Screens(setup, frozendict((role, monitor.work) for role, monitor in roles.items()), setups.layouts[setup])
+            return Screens(
+                setup,
+                frozendict(
+                    (role, monitor.work) for role, monitor in roles.items()
+                ),
+                setups.layouts[setup],
+            )
         case None:
             return None
 
 
-def dark_when_away(monitors: Sequence[Monitor], setups: Setups) -> frozenset[Monitor]:
+def dark_when_away(
+    monitors: Sequence[Monitor], setups: Setups
+) -> frozenset[Monitor]:
     """The recognized setup's protected external screens; an unrecognized set protects none."""
     match assigned(monitors, setups):
         case (setup, roles):
-            return frozenset(monitor for role, monitor in roles.items() if role in setups.dark_when_away.get(setup, frozenset()))
+            return frozenset(
+                monitor
+                for role, monitor in roles.items()
+                if role in setups.dark_when_away.get(setup, frozenset())
+            )
         case None:
             return frozenset()
 
@@ -122,7 +161,11 @@ class Layout:
     @property
     def desktops(self) -> int:
         """How many desktops the setup uses: exactly those its places name, counted from the first."""
-        return 1 + max(position.desktop for places in (*self.places.values(), (self.others,)) for position in places)
+        return 1 + max(
+            position.desktop
+            for places in (*self.places.values(), (self.others,))
+            for position in places
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,8 +212,28 @@ class Group:
 
 def groups(shelf: Shelf, eligible: frozenset[int]) -> tuple[Group, ...]:
     """The shelf's applications with their managed windows, keeping the shelf's stable window order."""
-    pinned = (Group(slot.app, tuple(window.handle for window in slot.windows if window.handle in eligible)) for slot in shelf.pinned)
-    running = (Group(Program(app.identity), tuple(window.handle for window in app.windows if window.handle in eligible)) for app in shelf.running)
+    pinned = (
+        Group(
+            slot.app,
+            tuple(
+                window.handle
+                for window in slot.windows
+                if window.handle in eligible
+            ),
+        )
+        for slot in shelf.pinned
+    )
+    running = (
+        Group(
+            Program(app.identity),
+            tuple(
+                window.handle
+                for window in app.windows
+                if window.handle in eligible
+            ),
+        )
+        for app in shelf.running
+    )
     return tuple(group for group in (*pinned, *running) if group.windows)
 
 
@@ -189,27 +252,76 @@ def place(where: Screens, apps: Sequence[Group]) -> Placement:
     """Each managed window's desktop and rectangle; undeclared applications' windows share the layout's place for others."""
     declared = where.layout.places
     windows = frozendict((group.app, group.windows) for group in apps)
-    others = tuple(handle for group in apps if group.app not in declared for handle in group.windows)
+    others = tuple(
+        handle
+        for group in apps
+        if group.app not in declared
+        for handle in group.windows
+    )
     # Each place before an app's last holds one of its windows; its last holds the rest.
     alone = (
-        (handle, Target(position.desktop, pixels(where.roles[position.role], position.region)))
+        (
+            handle,
+            Target(
+                position.desktop,
+                pixels(where.roles[position.role], position.region),
+            ),
+        )
         for app, places in declared.items()
-        for handle, position in zip(windows.get(app, ()), places[:-1], strict=False)
+        for handle, position in zip(
+            windows.get(app, ()), places[:-1], strict=False
+        )
     )
-    lasts = (*((places[-1], windows.get(app, ())[len(places) - 1 :]) for app, places in declared.items()), (where.layout.others, others))
+    lasts = (
+        *(
+            (places[-1], windows.get(app, ())[len(places) - 1 :])
+            for app, places in declared.items()
+        ),
+        (where.layout.others, others),
+    )
     # Apps whose last place is the same share it equally, in the layout's order.
-    shared = frozendict((last, tuple(handle for position, rest in lasts if position == last for handle in rest)) for last, _ in lasts)
+    shared = frozendict(
+        (
+            last,
+            tuple(
+                handle
+                for position, rest in lasts
+                if position == last
+                for handle in rest
+            ),
+        )
+        for last, _ in lasts
+    )
 
-    def split_up(position: Position, handles: Sequence[int]) -> Iterator[tuple[int, Target]]:
-        for handle, rect in zip(handles, split(where.roles[position.role], position.region, len(handles)), strict=True):
+    def split_up(
+        position: Position, handles: Sequence[int]
+    ) -> Iterator[tuple[int, Target]]:
+        for handle, rect in zip(
+            handles,
+            split(where.roles[position.role], position.region, len(handles)),
+            strict=True,
+        ):
             yield handle, Target(position.desktop, rect)
 
-    return frozendict((*alone, *(pair for position, handles in shared.items() for pair in split_up(position, handles))))
+    return frozendict(
+        (
+            *alone,
+            *(
+                pair
+                for position, handles in shared.items()
+                for pair in split_up(position, handles)
+            ),
+        )
+    )
 
 
 def _corner(rects: Iterable[Rect]) -> Point | None:
     """The top-left corner of the leftmost rectangle, then the topmost; None for none."""
-    return min((Point(rect.left, rect.top) for rect in rects), key=lambda point: (point.x, point.y), default=None)
+    return min(
+        (Point(rect.left, rect.top) for rect in rects),
+        key=lambda point: (point.x, point.y),
+        default=None,
+    )
 
 
 def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
@@ -217,11 +329,22 @@ def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
     return frozendict(
         (app, corner)
         for app, places in where.layout.places.items()
-        if (corner := _corner(pixels(where.roles[place.role], place.region) for place in places if place.desktop == desktop))
+        if (
+            corner := _corner(
+                pixels(where.roles[place.role], place.region)
+                for place in places
+                if place.desktop == desktop
+            )
+        )
     )
 
 
-def reading_order(where: Screens | None, windows: Mapping[App, Sequence[int]], placement: Placement, desktop: int) -> tuple[App, ...]:
+def reading_order(
+    where: Screens | None,
+    windows: Mapping[App, Sequence[int]],
+    placement: Placement,
+    desktop: int,
+) -> tuple[App, ...]:
     """The desktop's apps as they read on screen, by their leftmost window and then its top.
 
     An app the setup declares on the desktop is listed even when it isn't running,
@@ -230,11 +353,32 @@ def reading_order(where: Screens | None, windows: Mapping[App, Sequence[int]], p
     placed: frozendict[App, Point] = frozendict(
         (app, corner)
         for app, handles in windows.items()
-        if (corner := _corner(t.rect for h in handles if (t := placement.get(h)) and t.desktop == desktop))
+        if (
+            corner := _corner(
+                t.rect
+                for h in handles
+                if (t := placement.get(h)) and t.desktop == desktop
+            )
+        )
     )
-    declared = _declared_corners(where, desktop) if where is not None else frozendict[App, Point]()
-    corners = frozendict({**placed, **{app: corner for app, corner in declared.items() if app not in placed}})
-    return tuple(sorted(corners, key=lambda app: (corners[app].x, corners[app].y)))
+    declared = (
+        _declared_corners(where, desktop)
+        if where is not None
+        else frozendict[App, Point]()
+    )
+    corners = frozendict(
+        {
+            **placed,
+            **{
+                app: corner
+                for app, corner in declared.items()
+                if app not in placed
+            },
+        }
+    )
+    return tuple(
+        sorted(corners, key=lambda app: (corners[app].x, corners[app].y))
+    )
 
 
 def split(work: Rect, region: Region, parts: int) -> tuple[Rect, ...]:
@@ -243,9 +387,19 @@ def split(work: Rect, region: Region, parts: int) -> tuple[Rect, ...]:
     return tuple(
         pixels(
             work,
-            Region(region.left + region.width * index / parts, region.top, region.width / parts, region.height)
+            Region(
+                region.left + region.width * index / parts,
+                region.top,
+                region.width / parts,
+                region.height,
+            )
             if across
-            else Region(region.left, region.top + region.height * index / parts, region.width, region.height / parts),
+            else Region(
+                region.left,
+                region.top + region.height * index / parts,
+                region.width,
+                region.height / parts,
+            ),
         )
         for index in range(parts)
     )

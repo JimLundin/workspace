@@ -18,7 +18,13 @@ lazy from PySide6.QtCore import Qt
 from cell import Cell
 from desktop_ui.audio_meter import AudioMeter
 from desktop_ui.bar_events import BarSpec
-from desktop_ui.components.appearance import CanvasBar, Look, Scheme, Shade, look
+from desktop_ui.components.appearance import (
+    CanvasBar,
+    Look,
+    Scheme,
+    Shade,
+    look,
+)
 from desktop_ui.components.meaning import Tint
 from desktop_ui.components.text import color
 from desktop_ui.components.widgets import device_size, tool_window
@@ -84,24 +90,35 @@ class MarkerWindow(QtWidgets.QWidget):
 
     __slots__ = ("bar", "drawn", "spec")
 
-    def __init__(self, spec: MarkerSpec, bar: BarSpec, drawn: Cell[_Drawn]) -> None:
+    def __init__(
+        self, spec: MarkerSpec, bar: BarSpec, drawn: Cell[_Drawn]
+    ) -> None:
         super().__init__()
         tool_window(self, "Workspace dictation", on_top=True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.spec, self.bar, self.drawn = spec, bar, drawn
 
-    def parts(self, shown: Shown, surface: Look, *, contrast: bool) -> tuple[Part, ...]:
+    def parts(
+        self, shown: Shown, surface: Look, *, contrast: bool
+    ) -> tuple[Part, ...]:
         ink = surface.lettering.ink
         match shown:
             case Step.LISTENING:
-                lead = Shade(self.bar.palette.microphone) if not contrast else ink
+                lead = (
+                    Shade(self.bar.palette.microphone) if not contrast else ink
+                )
                 mark: Part = WAVE
             case Step.TRANSCRIBING | Step.TYPING:
                 lead, mark = ink, DOTS
             case Outcome.DONE:
                 return (Symbol(self.spec.outcomes[shown], ink),)
             case Outcome.FAILED:
-                return (Symbol(self.spec.outcomes[shown], ink if contrast else Shade(self.bar.palette.red)),)
+                return (
+                    Symbol(
+                        self.spec.outcomes[shown],
+                        ink if contrast else Shade(self.bar.palette.red),
+                    ),
+                )
             case _:
                 assert_never(shown)
         name = self.spec.steps[shown]
@@ -111,7 +128,11 @@ class MarkerWindow(QtWidgets.QWidget):
         """The parts side by side, with the icon's inset at either end so a lone symbol sits in a circle."""
         capsule = self.bar.sizes.capsule
         inner = sum(_part_width(part, self.bar) for part in parts)
-        return inner + capsule.part_gap * (len(parts) - 1) + (self.spec.height - capsule.icon)
+        return (
+            inner
+            + capsule.part_gap * (len(parts) - 1)
+            + (self.spec.height - capsule.icon)
+        )
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -120,22 +141,52 @@ class MarkerWindow(QtWidgets.QWidget):
             return
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        paint_surface(painter, QtCore.QRectF(self.rect()), drawn.surface, self.bar.glass)
+        paint_surface(
+            painter, QtCore.QRectF(self.rect()), drawn.surface, self.bar.glass
+        )
         sizes, timing = self.bar.sizes, self.bar.timing
         capsule, middle = sizes.capsule, self.spec.height / 2
         x = (self.spec.height - capsule.icon) / 2
         now = time.monotonic()
         ink = drawn.surface.lettering.ink
-        for part in self.parts(drawn.shown, drawn.surface, contrast=drawn.contrast):
+        for part in self.parts(
+            drawn.shown, drawn.surface, contrast=drawn.contrast
+        ):
             match part:
                 case Symbol(name, symbol_ink):
-                    paint_icon(painter, name, symbol_ink, QtCore.QRectF(x, middle - capsule.icon / 2, capsule.icon, capsule.icon))
+                    paint_icon(
+                        painter,
+                        name,
+                        symbol_ink,
+                        QtCore.QRectF(
+                            x,
+                            middle - capsule.icon / 2,
+                            capsule.icon,
+                            capsule.icon,
+                        ),
+                    )
                 case _ if part is WAVE:
                     painter.setBrush(color(ink))
-                    paint_wave(painter, QtCore.QPointF(x, middle), _trace(drawn, now, timing.wave_sample), capsule, sizes.markers)
+                    paint_wave(
+                        painter,
+                        QtCore.QPointF(x, middle),
+                        _trace(drawn, now, timing.wave_sample),
+                        capsule,
+                        sizes.markers,
+                    )
                 case _:
-                    beat = Beat(now / timing.pulse % 1, timing.lag, self.bar.washes.resting)
-                    paint_dots(painter, QtCore.QRectF(x, middle, capsule.dots, 0), beat, sizes.markers, ink)
+                    beat = Beat(
+                        now / timing.pulse % 1,
+                        timing.lag,
+                        self.bar.washes.resting,
+                    )
+                    paint_dots(
+                        painter,
+                        QtCore.QRectF(x, middle, capsule.dots, 0),
+                        beat,
+                        sizes.markers,
+                        ink,
+                    )
             x += _part_width(part, self.bar) + capsule.part_gap
         painter.end()
 
@@ -154,7 +205,10 @@ def _part_width(part: Part, bar: BarSpec) -> float:
 def _trace(drawn: _Drawn, now: float, every: float) -> Iterator[float]:
     """The trace moving from its previous samples to its latest across one sampling interval."""
     progress = min(1.0, max(0.0, (now - drawn.sampled_at) / every))
-    return (before + (after - before) * progress for before, after in zip(drawn.wave_from, drawn.samples, strict=True))
+    return (
+        before + (after - before) * progress
+        for before, after in zip(drawn.wave_from, drawn.samples, strict=True)
+    )
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
@@ -174,7 +228,13 @@ class DictationMarker:
     drawn: Cell[_Drawn]
 
     @classmethod
-    def build(cls, spec: MarkerSpec, bar: BarSpec, level_of: Callable[[], float | None], faded: Callable[[], None]) -> DictationMarker:
+    def build(
+        cls,
+        spec: MarkerSpec,
+        bar: BarSpec,
+        level_of: Callable[[], float | None],
+        faded: Callable[[], None],
+    ) -> DictationMarker:
         """`level_of` reads the microphone off the Qt thread; `faded` reports an outcome's flash ending."""
         drawn = Cell(_Drawn())
         window = MarkerWindow(spec, bar, drawn)
@@ -185,7 +245,17 @@ class DictationMarker:
         sampler.setTimerType(Qt.TimerType.PreciseTimer)
         sampler.setInterval(round(bar.timing.wave_sample * 1000))
         frames.timeout.connect(window.update)
-        marker = cls(spec, bar, window, frame, AudioMeter.start(level_of), frames, sampler, faded, drawn)
+        marker = cls(
+            spec,
+            bar,
+            window,
+            frame,
+            AudioMeter.start(level_of),
+            frames,
+            sampler,
+            faded,
+            drawn,
+        )
         sampler.timeout.connect(marker.sample)
         return marker
 
@@ -199,12 +269,21 @@ class DictationMarker:
         if drawn.surface is None:
             return
         parts = self.window.parts(shown, drawn.surface, contrast=drawn.contrast)
-        self.window.resize(round(self.window.content_width(parts)), round(self.spec.height))
+        self.window.resize(
+            round(self.window.content_width(parts)), round(self.spec.height)
+        )
         ratio = self.window.devicePixelRatioF()
         size = device_size(self.window, ratio)
-        centre = Point((anchor.rect.left + anchor.rect.right) // 2, (anchor.rect.top + anchor.rect.bottom) // 2)
-        work = nearest_work_area(centre, tuple(monitor.work for monitor in screen.monitors()))
-        windows.move(self.frame, placed(anchor, size, work, round(self.spec.gap * ratio)))
+        centre = Point(
+            (anchor.rect.left + anchor.rect.right) // 2,
+            (anchor.rect.top + anchor.rect.bottom) // 2,
+        )
+        work = nearest_work_area(
+            centre, tuple(monitor.work for monitor in screen.monitors())
+        )
+        windows.move(
+            self.frame, placed(anchor, size, work, round(self.spec.gap * ratio))
+        )
         self.window.update()
         if not self.window.isVisible():
             self.window.show()
@@ -213,9 +292,15 @@ class DictationMarker:
     def _become(self, shown: Shown, before: _Drawn) -> _Drawn:
         """Start what `shown` needs: the microphone's trace, the frames, an outcome's timer."""
         preference = appearance.preference()
-        surface = look(preference, CanvasBar(self.spec.scheme), Tint.NONE, self.bar.glass)
+        surface = look(
+            preference, CanvasBar(self.spec.scheme), Tint.NONE, self.bar.glass
+        )
         cancel(before.flash)
-        flash = later(self.window, round(self.spec.flash * 1000), self.faded) if isinstance(shown, Outcome) else None
+        flash = (
+            later(self.window, round(self.spec.flash * 1000), self.faded)
+            if isinstance(shown, Outcome)
+            else None
+        )
         listening = shown is Step.LISTENING
         # A capture starts its trace silent; the steps after it keep the last trace.
         silent = (0.0,) * self.bar.sizes.capsule.wave_bars
@@ -237,7 +322,14 @@ class DictationMarker:
     def sample(self) -> None:
         """The microphone's latest level enters the trace, which moves to it over the next interval."""
         reading = level(self.meter.level())
-        self.drawn.update(lambda drawn: replace(drawn, wave_from=drawn.samples, samples=(*drawn.samples[1:], reading), sampled_at=time.monotonic()))
+        self.drawn.update(
+            lambda drawn: replace(
+                drawn,
+                wave_from=drawn.samples,
+                samples=(*drawn.samples[1:], reading),
+                sampled_at=time.monotonic(),
+            )
+        )
 
     def _hide(self) -> None:
         drawn = self.drawn.get()

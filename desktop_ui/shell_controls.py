@@ -43,7 +43,9 @@ class NativeRecoveryGuard:
             finally:
                 received.set()
 
-        threading.Thread(target=read, name="taskbar guard readiness", daemon=True).start()
+        threading.Thread(
+            target=read, name="taskbar guard readiness", daemon=True
+        ).start()
         return received.wait(5) and response in ([b"ready\r\n"], [b"ready\n"])
 
     def poll(self) -> int | None:
@@ -66,7 +68,8 @@ def launch_recovery_guard() -> RecoveryGuard:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_BREAKAWAY_FROM_JOB,
+            creationflags=subprocess.CREATE_NO_WINDOW
+            | subprocess.CREATE_BREAKAWAY_FROM_JOB,
         )
     )
 
@@ -85,7 +88,9 @@ class TaskbarControl:
 
     desktop: TaskbarDesktop = desktop_shell
     launch: Callable[[], RecoveryGuard] = launch_recovery_guard
-    _state: Cell[_Taskbars] = field(default_factory=lambda: Cell(_Taskbars()), init=False, repr=False)
+    _state: Cell[_Taskbars] = field(
+        default_factory=lambda: Cell(_Taskbars()), init=False, repr=False
+    )
     """Replaced whole under the lock."""
     lock: threading.Lock = field(default_factory=threading.Lock, init=False)
 
@@ -99,11 +104,15 @@ class TaskbarControl:
         ready = guard.ready() and guard.poll() is None
         with self.lock:
             if ready and not self._state.get().closed:
-                self._state.update(lambda taskbars: replace(taskbars, guard=guard, ready=True))
+                self._state.update(
+                    lambda taskbars: replace(taskbars, guard=guard, ready=True)
+                )
                 return
         guard.close()
         if not ready:
-            raise OSError("Independent taskbar recovery could not start; Windows taskbars remain available.")
+            raise OSError(
+                "Independent taskbar recovery could not start; Windows taskbars remain available."
+            )
 
     def enforce(self) -> None:
         with self.lock:
@@ -114,7 +123,9 @@ class TaskbarControl:
                 self._state.set(replace(taskbars, ready=False))
                 for hwnd in self.desktop.taskbars():
                     self.desktop.taskbar_visible(hwnd, show=True)
-                raise OSError("Taskbar recovery stopped; Windows taskbars have been restored.")
+                raise OSError(
+                    "Taskbar recovery stopped; Windows taskbars have been restored."
+                )
             for hwnd in self.desktop.taskbars():
                 if self.desktop.visible(hwnd):
                     self.desktop.taskbar_visible(hwnd, show=False)
@@ -122,7 +133,9 @@ class TaskbarControl:
     def close(self) -> None:
         with self.lock:
             taskbars = self._state.get()
-            self._state.set(replace(taskbars, closed=True, ready=False, guard=None))
+            self._state.set(
+                replace(taskbars, closed=True, ready=False, guard=None)
+            )
             if taskbars.ready:
                 for hwnd in self.desktop.taskbars():
                     self.desktop.taskbar_visible(hwnd, show=True)

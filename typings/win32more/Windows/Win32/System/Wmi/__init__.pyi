@@ -12,18 +12,55 @@ WBEM_INFINITE: int
 WbemLocator: Guid
 
 class IWbemClassObject(ComPtr):
-    def Get(self, name: str, flags: int, value: VARIANT, type: None, flavor: None) -> int: ...
+    def Get(
+        self, name: str, flags: int, value: VARIANT, type: None, flavor: None
+    ) -> int: ...
     def Put(self, name: str, flags: int, value: VARIANT, type: int) -> int: ...
     def SpawnInstance(self, flags: int, instance: IWbemClassObject) -> int: ...
-    def GetMethod(self, name: str, flags: int, in_signature: IWbemClassObject, out_signature: None) -> int: ...
+    def GetMethod(
+        self,
+        name: str,
+        flags: int,
+        in_signature: IWbemClassObject,
+        out_signature: None,
+    ) -> int: ...
 
 class IEnumWbemClassObject(ComPtr):
-    def Next(self, timeout: int, count: int, objects: IWbemClassObject, returned: ctypes.c_uint32) -> int: ...
+    def Next(
+        self,
+        timeout: int,
+        count: int,
+        objects: IWbemClassObject,
+        returned: ctypes.c_uint32,
+    ) -> int: ...
 
 class IWbemServices(ComPtr):
-    def GetObject(self, path: str, flags: int, context: None, result: IWbemClassObject, call_result: None) -> int: ...
-    def ExecQuery(self, language: str, query: str, flags: int, context: None, result: IEnumWbemClassObject) -> int: ...
-    def ExecMethod(self, path: str, method: str, flags: int, context: None, arguments: IWbemClassObject, out: None, call_result: None) -> int: ...
+    def GetObject(
+        self,
+        path: str,
+        flags: int,
+        context: None,
+        result: IWbemClassObject,
+        call_result: None,
+    ) -> int: ...
+    def ExecQuery(
+        self,
+        language: str,
+        query: str,
+        flags: int,
+        context: None,
+        result: IEnumWbemClassObject,
+    ) -> int: ...
+    def ExecMethod(
+        self,
+        path: str,
+        method: str,
+        flags: int,
+        context: None,
+        arguments: IWbemClassObject,
+        out: None,
+        call_result: None,
+    ) -> int: ...
 
 class IWbemLocator(ComPtr):
     def ConnectServer(

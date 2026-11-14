@@ -50,17 +50,35 @@ def _stored(statement: ast.stmt) -> frozenset[str] | None:
     match statement:
         case ast.Expr(value=ast.Constant(value=str())):
             return frozenset()
-        case ast.Assign(targets=[target], value=value) | ast.AnnAssign(target=target, value=ast.expr() as value):
+        case (
+            ast.Assign(targets=[target], value=value)
+            | ast.AnnAssign(target=target, value=ast.expr() as value)
+        ):
             pass
         case _:
             return None
     names = target.elts if isinstance(target, ast.Tuple) else (target,)
-    stored = tuple(name.attr for name in names if isinstance(name, ast.Attribute) and isinstance(name.value, ast.Name) and name.value.id == "self")
-    built = any(isinstance(node, COMPUTED) or (isinstance(node, ast.Name) and node.id == "self") for node in ast.walk(value))
-    return frozenset(stored) if len(stored) == len(names) and not built else None
+    stored = tuple(
+        name.attr
+        for name in names
+        if isinstance(name, ast.Attribute)
+        and isinstance(name.value, ast.Name)
+        and name.value.id == "self"
+    )
+    built = any(
+        isinstance(node, COMPUTED)
+        or (isinstance(node, ast.Name) and node.id == "self")
+        for node in ast.walk(value)
+    )
+    return (
+        frozenset(stored) if len(stored) == len(names) and not built else None
+    )
 
 
-def _rebinds(methods: tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...], init: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+def _rebinds(
+    methods: tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...],
+    init: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
     """Whether a method besides `__init__` assigns or deletes an attribute of `self`."""
     return any(
         next(_self_attributes(target), None) is not None
@@ -71,12 +89,16 @@ def _rebinds(methods: tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...], init: 
     )
 
 
-def _held(init: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str] | None:
+def _held(
+    init: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> frozenset[str] | None:
     """The attributes an `__init__` stores, if all it does is store its inputs."""
     stored = tuple(_stored(statement) for statement in init.body)
     if any(item is None for item in stored):
         return None
-    return frozenset[str]().union(*(item for item in stored if item is not None))
+    return frozenset[str]().union(
+        *(item for item in stored if item is not None)
+    )
 
 
 def _record(node: ast.ClassDef) -> frozenset[str] | None:
@@ -84,14 +106,22 @@ def _record(node: ast.ClassDef) -> frozenset[str] | None:
     an `__init__` that only stores its inputs, and no other method rebinding an attribute."""
     if any((node.bases, node.keywords, node.decorator_list)):
         return None
-    methods = tuple(item for item in node.body if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef))
-    init = next((method for method in methods if method.name == "__init__"), None)
+    methods = tuple(
+        item
+        for item in node.body
+        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+    )
+    init = next(
+        (method for method in methods if method.name == "__init__"), None
+    )
     if init is None or _rebinds(methods, init):
         return None
     return _held(init)
 
 
-def records(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Candidate]:
+def records(
+    tree: ast.AST, module: str, declaration: str = ""
+) -> Iterator[Candidate]:
     """Plain classes that only hold their inputs, which a frozen, slotted dataclass would model."""
     for child in ast.iter_child_nodes(tree):
         match child:
@@ -99,7 +129,17 @@ def records(tree: ast.AST, module: str, declaration: str = "") -> Iterator[Candi
                 inner = qualified(declaration, name)
                 if (attributes := _record(child)) is not None:
                     detail = "A class that only holds its inputs is a frozen, slotted dataclass, unless a protocol needs writable attributes."
-                    yield Candidate(Finding("plain-record", module, inner, name, child.lineno, detail), attributes)
+                    yield Candidate(
+                        Finding(
+                            "plain-record",
+                            module,
+                            inner,
+                            name,
+                            child.lineno,
+                            detail,
+                        ),
+                        attributes,
+                    )
                 yield from records(child, module, inner)
             case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
                 yield from records(child, module, qualified(declaration, name))

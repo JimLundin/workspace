@@ -24,7 +24,9 @@ def application(log: Callable[[str], None]) -> QApplication:
     return app
 
 
-def later(parent: QtCore.QObject, milliseconds: int, callback: Callable[[], None]) -> QtCore.QTimer:
+def later(
+    parent: QtCore.QObject, milliseconds: int, callback: Callable[[], None]
+) -> QtCore.QTimer:
     """Schedule one UI-owned callback. Closing its owner cancels delivery."""
     timer = QtCore.QTimer(parent)
     timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
@@ -53,7 +55,9 @@ class EventLoop:
     timer: QtCore.QTimer
     """Every 16 ms while something moves; the bar connects its painting."""
     composition: DesktopComposition | None
-    _closed: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _closed: threading.Event = field(
+        default_factory=threading.Event, init=False, repr=False
+    )
 
     @classmethod
     def start(cls, app: QApplication, log: Callable[[str], None]) -> EventLoop:

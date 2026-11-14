@@ -21,9 +21,25 @@ from keyboard.keys import Key, Mod
 from keyboard.physical import Scancode
 from protocol import LayoutState, Request, Tool
 from tests import layouts
-from tests.layouts import ESCAPE, FUNCTION_KEYS, QUICK_TAP_MS, QUIT_HOLD_MS, STREAK_MS
+from tests.layouts import (
+    ESCAPE,
+    FUNCTION_KEYS,
+    QUICK_TAP_MS,
+    QUIT_HOLD_MS,
+    STREAK_MS,
+)
 
-NAMES = {0xA0: "SFT", 0xA2: "CTL", 0xA4: "ALT", 0x20: "spc", 0x25: "left", 0x08: "bksp", 0xDB: "[", 0xC0: "`", 0xBE: "."}
+NAMES = {
+    0xA0: "SFT",
+    0xA2: "CTL",
+    0xA4: "ALT",
+    0x20: "spc",
+    0x25: "left",
+    0x08: "bksp",
+    0xDB: "[",
+    0xC0: "`",
+    0xBE: ".",
+}
 
 PHYSICAL = {  # physical key by its QWERTY name
     "2": 0x03, "3": 0x04, "4": 0x05, "5": 0x06, "6": 0x07,
@@ -73,11 +89,19 @@ class FakeHost:
         self.log.append(f"!{state.name}")
 
     def request(self, request: Request, *, down: bool) -> None:
-        name = request.name.lower() if isinstance(request, Tool) else f"slot:{request.index}"
+        name = (
+            request.name.lower()
+            if isinstance(request, Tool)
+            else f"slot:{request.index}"
+        )
         self.log.append(f"?{name}{'+' if down else '-'}")
 
     def indicate(self, indicator: Indicator) -> None:
-        parts = [indicator.layer.name.lower()] if indicator.layer is not Layer.BASE else []
+        parts = (
+            [indicator.layer.name.lower()]
+            if indicator.layer is not Layer.BASE
+            else []
+        )
         parts += ["caps"] * indicator.caps_word + ["chord"] * indicator.chord
         self.indicated.append(" ".join(parts) or "-")
 
@@ -93,7 +117,9 @@ class Harness:
         self.state = EngineState()
 
     def key(self, scancode: Scancode, *, down: bool, now: int) -> Verdict:
-        self.state, verdict = ENGINE.on_key(self.state, self.h, scancode, down=down, now=now)
+        self.state, verdict = ENGINE.on_key(
+            self.state, self.h, scancode, down=down, now=now
+        )
         return verdict
 
     def release_all(self) -> None:
@@ -207,7 +233,9 @@ def test_release_all_lets_go() -> None:
     assert t.take() == "-SFT"
 
 
-def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() -> None:
+def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() -> (
+    None
+):
     # Defect: one rejected release stops the cleanup before a held voice request ends.
     class RejectedRelease(FakeHost):
         @override
@@ -219,7 +247,12 @@ def test_rejected_release_does_not_leave_other_keys_modifiers_or_voice_held() ->
     host = RejectedRelease()
     state = EngineState()
     pressed = (Key.A, Key.B, Mod.SHIFT, Tool.DICTATE, *state.pressed[4:])
-    state = replace(state, pressed=pressed, mods=Modifiers(frozendict({Mod.SHIFT: 1})), active_layers=(Layer.NAV,))
+    state = replace(
+        state,
+        pressed=pressed,
+        mods=Modifiers(frozendict({Mod.SHIFT: 1})),
+        active_layers=(Layer.NAV,),
+    )
     with unittest.TestCase().assertRaises(UnreleasedError) as refused:
         engine.release_all(state, host)
     assert host.log == ["-a", "-b", "-SFT", "?dictate-"]
@@ -253,7 +286,9 @@ def test_unbound_keys_cannot_type_or_trigger_physical_shortcuts() -> None:
     assert t.take() == ""
 
 
-def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> None:
+def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> (
+    None
+):
     t = Harness()
     for function in FUNCTION_KEYS:
         assert t.key(function.scancode, down=True, now=0) == Verdict.PASS
@@ -270,7 +305,9 @@ def test_escape_tap_toggles_off_and_on() -> None:
     t = Harness()
     assert t.key(ESC, down=True, now=100) == Verdict.SWALLOW
     assert t.key(ESC, down=False, now=150) == Verdict.SWALLOW
-    assert t.key(sc("q"), down=True, now=200) == Verdict.PASS  # off: plain keyboard
+    assert (
+        t.key(sc("q"), down=True, now=200) == Verdict.PASS
+    )  # off: plain keyboard
     assert t.key(sc("q"), down=False, now=210) == Verdict.PASS
     t.key(ESC, down=True, now=300)
     t.key(ESC, down=False, now=350)
@@ -281,7 +318,9 @@ def test_escape_tap_toggles_off_and_on() -> None:
 def test_escape_hold_quits() -> None:
     t = Harness()
     t.key(ESC, down=True, now=1000)
-    t.key(ESC, down=True, now=1000 + QUIT_HOLD_MS // 2)  # auto-repeat doesn't restart the clock
+    t.key(
+        ESC, down=True, now=1000 + QUIT_HOLD_MS // 2
+    )  # auto-repeat doesn't restart the clock
     assert t.key(ESC, down=False, now=1000 + QUIT_HOLD_MS) == Verdict.QUIT
 
 
@@ -423,7 +462,9 @@ def test_auto_repeat_is_not_buffered() -> None:
     assert t.take() == "+s -s +j", "tap s, then j replayed once"
 
 
-def test_released_key_can_be_pressed_again_while_a_tap_hold_is_pending() -> None:
+def test_released_key_can_be_pressed_again_while_a_tap_hold_is_pending() -> (
+    None
+):
     t = Harness()
     t.d("8")  # j was held before the undecided modifier
     assert t.take() == "+j"
@@ -432,7 +473,9 @@ def test_released_key_can_be_pressed_again_while_a_tap_hold_is_pending() -> None
     t.d("8")  # a new press, not auto-repeat of the still-unreleased output
     assert t.take() == "", "both edges wait for the tap-hold decision"
     t.u("e")
-    assert t.take() == "+s -s -j +j", "the buffered release must precede the new press"
+    assert t.take() == "+s -s -j +j", (
+        "the buffered release must precede the new press"
+    )
     t.u("8")
     t.u("8")  # a duplicate up must not emit another release
     assert t.take() == "-j"
@@ -452,13 +495,35 @@ def test_an_already_held_letter_repeats_while_a_modifier_is_undecided() -> None:
 
 def test_full_buffer_decides_hold() -> None:
     # More distinct keys down than nine fingers can press: decide as a hold.
-    plain = ["2", "3", "4", "5", "6", "8", "9", "0", "-", "=", "t", "i", "caps", "s", "d", "f", "k", "l", ";"]
+    plain = [
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "8",
+        "9",
+        "0",
+        "-",
+        "=",
+        "t",
+        "i",
+        "caps",
+        "s",
+        "d",
+        "f",
+        "k",
+        "l",
+        ";",
+    ]
     assert len(plain) > MAX_BUFFERED
     t = Harness()
     t.d("o")  # n/SFT (right hand); the first key, q, is on the other hand
     for name in plain:
         t.d(name)
-    assert t.take().startswith("+SFT +q"), "a full buffer resolves the key as a hold"
+    assert t.take().startswith("+SFT +q"), (
+        "a full buffer resolves the key as a hold"
+    )
 
 
 # ---- caps word -------------------------------------------------------------
@@ -557,7 +622,9 @@ def test_layer_thumbs_are_not_affected() -> None:
     t.d("c")
     t.tap("e")
     t.u("c")  # Nav thumb (left) + left-hand Ctrl key
-    assert not t.take().startswith("+spc"), "the Nav thumb was not turned into a tap"
+    assert not t.take().startswith("+spc"), (
+        "the Nav thumb was not turned into a tap"
+    )
 
 
 # ---- quick tap -------------------------------------------------------------
@@ -596,8 +663,12 @@ def test_quick_tap_survives_timestamp_wraparound() -> None:
     t = Harness()
     t.at(0xFFFF_FFE0).tap("r")
     assert t.take() == "+t -t"
-    t.at(10).d("r")  # the timestamp wrapped, but this is still within QUICK_TAP_MS
-    assert t.take() == "+t", "a quick second press repeats the letter immediately"
+    t.at(10).d(
+        "r"
+    )  # the timestamp wrapped, but this is still within QUICK_TAP_MS
+    assert t.take() == "+t", (
+        "a quick second press repeats the letter immediately"
+    )
     t.timeout_last()  # the old tap's timer cannot turn the repeated letter into Shift
     assert t.take() == ""
     t.u("r")
@@ -609,7 +680,9 @@ def test_held_shift_survives_a_shifted_symbol() -> None:
     t.d("r")
     t.timeout_last()  # t held: Shift
     t.d("m")
-    t.tap("3")  # Sym layer: & (Shift+7); Shift is already down, so no Shift events
+    t.tap(
+        "3"
+    )  # Sym layer: & (Shift+7); Shift is already down, so no Shift events
     t.u("m")
     t.tap("2")  # q, with Shift still held
     assert t.take() == "+SFT +7 -7 +q -q"
@@ -633,11 +706,15 @@ def test_releasing_one_of_two_ctrl_keys_keeps_ctrl() -> None:
 def test_chords_release_only_the_modifiers_they_added() -> None:
     # Defect: a chord sent while Ctrl is held releases Ctrl too, or leaves Shift down.
     host = FakeHost()
-    Modifiers(frozendict({Mod.CTRL: 1})).chord(host, Chord(Key.Z, frozenset({Mod.CTRL, Mod.SHIFT})))
+    Modifiers(frozendict({Mod.CTRL: 1})).chord(
+        host, Chord(Key.Z, frozenset({Mod.CTRL, Mod.SHIFT}))
+    )
     assert " ".join(host.log) == "+SFT +z -SFT"
 
 
-def test_overlapping_layers_release_the_most_recent_copy_and_preserve_other_layers() -> None:
+def test_overlapping_layers_release_the_most_recent_copy_and_preserve_other_layers() -> (
+    None
+):
     t = Harness()
     for layer in (Layer.NAV, Layer.NUM, Layer.NAV):
         t.press(layer, 0)
@@ -646,7 +723,9 @@ def test_overlapping_layers_release_the_most_recent_copy_and_preserve_other_laye
     t.tap("w")
     assert t.take() == "+4 -4"
     t.press(Layer.NAV, 0)
-    t.release(Layer.NUM)  # removing a layer below the top must preserve both NAV holds
+    t.release(
+        Layer.NUM
+    )  # removing a layer below the top must preserve both NAV holds
     t.release(Layer.NAV)
     assert t.state.layer() is Layer.NAV
     t.tap("o")
@@ -695,7 +774,9 @@ def test_switching_off_and_quitting_release_a_held_voice_request() -> None:
         t.d("l")
         t.take()
         t.key(ESC, down=True, now=10)
-        verdict = t.key(ESC, down=False, now=10 + (QUIT_HOLD_MS if quitting else 10))
+        verdict = t.key(
+            ESC, down=False, now=10 + (QUIT_HOLD_MS if quitting else 10)
+        )
         assert verdict is (Verdict.QUIT if quitting else Verdict.SWALLOW)
         assert t.take() == "?dictate-" + ("" if quitting else " !OFF")
         t.release_all()
@@ -705,7 +786,9 @@ def test_switching_off_and_quitting_release_a_held_voice_request() -> None:
 # ---- requests -------------------------------------------------------------------------
 
 
-def test_an_apps_layer_key_makes_its_request_and_shows_the_chord_hints() -> None:
+def test_an_apps_layer_key_makes_its_request_and_shows_the_chord_hints() -> (
+    None
+):
     # Defects: the key is typed, the request isn't paired, or the pager's
     # hints don't follow the held layer.
     t = Harness()

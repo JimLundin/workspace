@@ -12,7 +12,15 @@ from dataclasses import dataclass, field, replace
 
 from desktop_ui.island_layout import Content, Placed
 from desktop_ui.island_model import CapsuleView, Key, Part, Text
-from desktop_ui.motion import Motion, Spring, jump, resting, settle, still, toward
+from desktop_ui.motion import (
+    Motion,
+    Spring,
+    jump,
+    resting,
+    settle,
+    still,
+    toward,
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -57,7 +65,9 @@ class Shown:
 class Moving:
     view: CapsuleView
     content: Content
-    previous: Content | None  # Fading out under `content`, until the fade rests.
+    previous: (
+        Content | None
+    )  # Fading out under `content`, until the fade rests.
     width: Motion
     height: Motion
     presence: Motion
@@ -76,9 +86,21 @@ class IslandMotion:
 
 def arrive(shown: Shown, springs: Springs, *, animate: bool) -> Moving:
     presence = toward(still(0.0, springs.appear), 1.0, springs.appear)
-    width, height = still(shown.content.width, springs.morph), still(shown.content.height, springs.morph)
+    width, height = (
+        still(shown.content.width, springs.morph),
+        still(shown.content.height, springs.morph),
+    )
     shape = presence if animate else jump(presence, 1.0)
-    return Moving(shown.view, shown.content, None, width, height, shape, still(1.0, springs.fade), still(shown.anchor, springs.morph))
+    return Moving(
+        shown.view,
+        shown.content,
+        None,
+        width,
+        height,
+        shape,
+        still(1.0, springs.fade),
+        still(shown.anchor, springs.morph),
+    )
 
 
 def outline(part: Part) -> object:
@@ -90,21 +112,43 @@ def outline(part: Part) -> object:
             return part
 
 
-def follow(moving: Moving, shown: Shown, springs: Springs, *, animate: bool) -> Moving:
-    width, height = toward(moving.width, shown.content.width, springs.morph), toward(moving.height, shown.content.height, springs.morph)
+def follow(
+    moving: Moving, shown: Shown, springs: Springs, *, animate: bool
+) -> Moving:
+    width, height = (
+        toward(moving.width, shown.content.width, springs.morph),
+        toward(moving.height, shown.content.height, springs.morph),
+    )
     presence = toward(moving.presence, 1.0, springs.appear)
-    before, after = (tuple(outline(spot.part) for spot in content.spots) for content in (moving.content, shown.content))
+    before, after = (
+        tuple(outline(spot.part) for spot in content.spots)
+        for content in (moving.content, shown.content)
+    )
     if before == after:
         fade, previous = moving.fade, moving.previous
     else:
-        fade, previous = toward(still(0.0, springs.fade), 1.0, springs.fade), moving.content
-    changed = Moving(shown.view, shown.content, previous, width, height, presence, fade, toward(moving.anchor, shown.anchor, springs.morph))
+        fade, previous = (
+            toward(still(0.0, springs.fade), 1.0, springs.fade),
+            moving.content,
+        )
+    changed = Moving(
+        shown.view,
+        shown.content,
+        previous,
+        width,
+        height,
+        presence,
+        fade,
+        toward(moving.anchor, shown.anchor, springs.morph),
+    )
     return changed if animate else rest(changed)
 
 
 def depart(moving: Moving, springs: Springs, *, animate: bool) -> Moving:
     presence = toward(moving.presence, 0.0, springs.leave)
-    return replace(moving, presence=presence if animate else jump(presence, 0.0))
+    return replace(
+        moving, presence=presence if animate else jump(presence, 0.0)
+    )
 
 
 def rest(moving: Moving) -> Moving:
@@ -119,7 +163,13 @@ def rest(moving: Moving) -> Moving:
     )
 
 
-def retarget(motion: IslandMotion, shown: Iterable[Shown], springs: Springs, *, animate: bool) -> IslandMotion:
+def retarget(
+    motion: IslandMotion,
+    shown: Iterable[Shown],
+    springs: Springs,
+    *,
+    animate: bool,
+) -> IslandMotion:
     """New targets for every capsule, continuing from where each is now.
 
     Capsules keep their left-to-right key order; departing ones stay until they've collapsed.
@@ -138,7 +188,11 @@ def retarget(motion: IslandMotion, shown: Iterable[Shown], springs: Springs, *, 
             case _:
                 return None
 
-    return IslandMotion(tuple(moving for key in Key if (moving := moved(key)) and not gone(moving)))
+    return IslandMotion(
+        tuple(
+            moving for key in Key if (moving := moved(key)) and not gone(moving)
+        )
+    )
 
 
 def gone(moving: Moving) -> bool:
@@ -158,23 +212,48 @@ def advance(motion: IslandMotion, seconds: float) -> IslandMotion:
         )
         for moving in motion.capsules
     )
-    return IslandMotion(tuple(moving for moving in capsules if not gone(moving)))
+    return IslandMotion(
+        tuple(moving for moving in capsules if not gone(moving))
+    )
 
 
 def finish(motion: IslandMotion) -> IslandMotion:
     """Every capsule where it's headed, at once: departing capsules are gone."""
-    return IslandMotion(tuple(rest(moving) for moving in motion.capsules if moving.presence.target > 0))
+    return IslandMotion(
+        tuple(
+            rest(moving)
+            for moving in motion.capsules
+            if moving.presence.target > 0
+        )
+    )
 
 
 def settled(motion: IslandMotion) -> bool:
     return all(
-        all(resting(spring) for spring in (moving.width, moving.height, moving.presence, moving.fade, moving.anchor)) for moving in motion.capsules
+        all(
+            resting(spring)
+            for spring in (
+                moving.width,
+                moving.height,
+                moving.presence,
+                moving.fade,
+                moving.anchor,
+            )
+        )
+        for moving in motion.capsules
     )
 
 
 def placed(motion: IslandMotion, row: float) -> tuple[Placed, ...]:
     """Each capsule's current frame; none is shorter than a capsule's `row` height."""
     return tuple(
-        Placed(moving.key, moving.view.zone, max(0.0, moving.width.value), max(row, moving.height.value), moving.presence.value, moving.anchor.value)
+        Placed(
+            moving.key,
+            moving.view.zone,
+            max(0.0, moving.width.value),
+            max(row, moving.height.value),
+            moving.presence.value,
+            moving.anchor.value,
+        )
         for moving in motion.capsules
     )

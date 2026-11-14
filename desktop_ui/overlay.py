@@ -63,7 +63,10 @@ def nearest_work_area(position: Point, areas: Sequence[Rect]) -> Rect:
     x, y = position.x, position.y
 
     def distance(area: Rect) -> int:
-        return max(area.left - x, 0, x - (area.right - 1)) ** 2 + max(area.top - y, 0, y - (area.bottom - 1)) ** 2
+        return (
+            max(area.left - x, 0, x - (area.right - 1)) ** 2
+            + max(area.top - y, 0, y - (area.bottom - 1)) ** 2
+        )
 
     return min(areas, key=distance)
 
@@ -71,7 +74,10 @@ def nearest_work_area(position: Point, areas: Sequence[Rect]) -> Rect:
 def fit_position(position: Point, size: Size, work: Rect) -> Point:
     """Keep the keyboard and handle on this monitor, with the handle always reachable."""
     visible_width = min(size.width, work.width)
-    x = max(work.left + visible_width // 2, min(position.x, work.right - (visible_width - visible_width // 2)))
+    x = max(
+        work.left + visible_width // 2,
+        min(position.x, work.right - (visible_width - visible_width // 2)),
+    )
     y = max(work.top, min(position.y, work.bottom - size.height))
     return Point(x, y)
 
@@ -84,19 +90,37 @@ class KeyHighlights:
     until: frozendict[Scancode, float] = frozendict()
     """When each recently pressed key may go dark."""
 
-    def updated(self, held: frozenset[Scancode], now: float, tap: float) -> KeyHighlights:
+    def updated(
+        self, held: frozenset[Scancode], now: float, tap: float
+    ) -> KeyHighlights:
         """The highlights once `held` are the keys down at `now`; a newly pressed key stays lit for at least `tap` seconds."""
         pressed = frozendict((key, now + tap) for key in held - self.held)
-        kept = frozendict((key, until) for key, until in self.until.items() if key not in pressed and (key in held or until > now))
+        kept = frozendict(
+            (key, until)
+            for key, until in self.until.items()
+            if key not in pressed and (key in held or until > now)
+        )
         return KeyHighlights(held, kept | pressed)
 
     def visible(self, now: float) -> frozenset[Scancode]:
-        return self.held | frozenset(key for key, until in self.until.items() if key in self.held or until > now)
+        return self.held | frozenset(
+            key
+            for key, until in self.until.items()
+            if key in self.held or until > now
+        )
 
     def delay(self, now: float) -> int | None:
         """Milliseconds until the next released key goes dark; no polling while held."""
-        deadlines = tuple(until for key, until in self.until.items() if key not in self.held and until > now)
-        return max(1, math.ceil((min(deadlines) - now) * 1000)) if deadlines else None
+        deadlines = tuple(
+            until
+            for key, until in self.until.items()
+            if key not in self.held and until > now
+        )
+        return (
+            max(1, math.ceil((min(deadlines) - now) * 1000))
+            if deadlines
+            else None
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +149,13 @@ class OverlayState:
         return (
             replace(self, layout_on=True, pressed=frozenset())
             if on
-            else replace(self, layout_on=False, pressed=frozenset(), layer=Layer.BASE, caps_word=False)
+            else replace(
+                self,
+                layout_on=False,
+                pressed=frozenset(),
+                layer=Layer.BASE,
+                caps_word=False,
+            )
         )
 
     def indicate(self, layer: Layer, *, caps_word: bool) -> OverlayState:
@@ -135,6 +165,8 @@ class OverlayState:
         if not scancode:
             return replace(self, pressed=frozenset())
         if self.layout_on and scancode in PHYSICAL_NAMES:
-            pressed = self.pressed | {scancode} if down else self.pressed - {scancode}
+            pressed = (
+                self.pressed | {scancode} if down else self.pressed - {scancode}
+            )
             return replace(self, pressed=pressed)
         return self

@@ -40,7 +40,9 @@ def badges(world: World) -> dict[int, tuple[Keycap, ...]]:
     return {badge.window: badge.keycaps for badge in hints(world, LETTERS)}
 
 
-def test_badges_carry_each_apps_letter_and_mark_the_window_its_next_press_reaches() -> None:
+def test_badges_carry_each_apps_letter_and_mark_the_window_its_next_press_reaches() -> (
+    None
+):
     # Defects: the wrong app's letter, a cycle mark on the focused window instead
     # of the next one, a mark on an app's only window, or Zoom off focus.
     def kind(cap: Keycap) -> object:
@@ -64,8 +66,14 @@ def test_badges_carry_each_apps_letter_and_mark_the_window_its_next_press_reache
     assert kinds(shown[5]) == ((AppCap, True), (DirectionCap, Direction.DOWN))
     assert kinds(shown[2]) == ((AppCap, False), (DirectionCap, Direction.RIGHT))
     assert kinds(shown[3]) == ((AppCap, True),)
-    assert app(shown[1]) == app(shown[5]) and len({app(shown[1]), app(shown[2]), app(shown[3])}) == 3
-    assert kinds(badges(replace(WORLD, foreground=5))[1]) == ((AppCap, False), (DirectionCap, Direction.UP))
+    assert (
+        app(shown[1]) == app(shown[5])
+        and len({app(shown[1]), app(shown[2]), app(shown[3])}) == 3
+    )
+    assert kinds(badges(replace(WORLD, foreground=5))[1]) == (
+        (AppCap, False),
+        (DirectionCap, Direction.UP),
+    )
 
 
 def test_direction_letters_name_the_window_spatial_focus_reaches() -> None:
@@ -82,7 +90,13 @@ def test_direction_letters_name_the_window_spatial_focus_reaches() -> None:
                     expected = frozenset()
                 case other:
                     raise AssertionError(other)
-            drawn = frozenset(window for window, caps in shown.items() if any(cap == DirectionCap(cap.letter, direction) for cap in caps))
+            drawn = frozenset(
+                window
+                for window, caps in shown.items()
+                if any(
+                    cap == DirectionCap(cap.letter, direction) for cap in caps
+                )
+            )
             assert drawn == expected, (foreground, direction)
 
 

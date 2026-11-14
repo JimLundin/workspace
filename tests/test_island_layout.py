@@ -6,9 +6,34 @@ capsules and parts relative to the sizes it is given, never the bar's real posit
 
 from itertools import pairwise
 
-from desktop_ui.island_layout import Box, Content, Framed, Metrics, Placed, Plotted, Spot, arrange, frame, hung_from, lit, plotted, reading_at, snap
+from desktop_ui.island_layout import (
+    Box,
+    Content,
+    Framed,
+    Metrics,
+    Placed,
+    Plotted,
+    Spot,
+    arrange,
+    frame,
+    hung_from,
+    lit,
+    plotted,
+    reading_at,
+    snap,
+)
 from desktop_ui.island_menu import Menu, Panel
-from desktop_ui.island_model import Action, CapsuleView, Control, Glyph, Key, Marker, Text, Zone, order
+from desktop_ui.island_model import (
+    Action,
+    CapsuleView,
+    Control,
+    Glyph,
+    Key,
+    Marker,
+    Text,
+    Zone,
+    order,
+)
 from tests import test_bar_specs, test_island_model
 
 ORDER = order(test_island_model.SPEC)
@@ -34,32 +59,69 @@ def test_activity_sits_one_gap_left_of_the_right_capsule_in_order() -> None:
     # Defect: activity drifts away from the status capsule, touches it, flips its order,
     # or the gap differs between neighbours.
     status = Placed(Key.STATUS, Zone.RIGHT, 216, 34)
-    placed = [Placed(Key.RECORDING, Zone.TRAIL, 86, 34), status, Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.JOB, Zone.LEAD, 70, 34)]
+    placed = [
+        Placed(Key.RECORDING, Zone.TRAIL, 86, 34),
+        status,
+        Placed(Key.ISLAND, Zone.ISLAND, 112, 34),
+        Placed(Key.JOB, Zone.LEAD, 70, 34),
+    ]
     framed = frame(placed, metrics(1000), ORDER)
-    assert [(f.key, f.box.width) for f in framed] == [(Key.JOB, 70), (Key.ISLAND, 112), (Key.RECORDING, 86), (Key.STATUS, 216)]
+    assert [(f.key, f.box.width) for f in framed] == [
+        (Key.JOB, 70),
+        (Key.ISLAND, 112),
+        (Key.RECORDING, 86),
+        (Key.STATUS, 216),
+    ]
     assert end(framed[-1]) == 1000 - BAR.edge
     assert gaps(framed) == [BAR.gap] * 3
     assert all(f.box.y == BAR.top for f in framed)
-    alone = frame([Placed(Key.RECORDING, Zone.TRAIL, 86, 34), status], metrics(1000), ORDER)
+    alone = frame(
+        [Placed(Key.RECORDING, Zone.TRAIL, 86, 34), status],
+        metrics(1000),
+        ORDER,
+    )
     assert gaps(alone) == [BAR.gap]
 
 
 def test_a_capsule_part_way_in_opens_a_gap_scaled_by_its_presence() -> None:
     # Defect: an entering capsule opens a full gap at once, or an absent one still takes space.
     status = Placed(Key.STATUS, Zone.RIGHT, 216, 34)
-    entering = frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0.5), status], metrics(1000), ORDER)
+    entering = frame(
+        [
+            Placed(Key.ISLAND, Zone.ISLAND, 112, 34),
+            Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0.5),
+            status,
+        ],
+        metrics(1000),
+        ORDER,
+    )
     assert [f.box.width for f in entering] == [112, 43, 216]
     assert gaps(entering) == [BAR.gap / 2, BAR.gap]
-    absent = frame([Placed(Key.ISLAND, Zone.ISLAND, 112, 34), Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0), status], metrics(1000), ORDER)
+    absent = frame(
+        [
+            Placed(Key.ISLAND, Zone.ISLAND, 112, 34),
+            Placed(Key.RECORDING, Zone.TRAIL, 86, 34, 0),
+            status,
+        ],
+        metrics(1000),
+        ORDER,
+    )
     assert [f.key for f in absent] == [Key.ISLAND, Key.STATUS]
     assert gaps(absent) == [BAR.gap]
 
 
 def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
     # Defect: Qt and composition round edges differently, so content and glass disagree by a pixel.
-    framed = frame([Placed(Key.ISLAND, Zone.ISLAND, 111.3, 34)], metrics(1001), ORDER)
+    framed = frame(
+        [Placed(Key.ISLAND, Zone.ISLAND, 111.3, 34)], metrics(1001), ORDER
+    )
     (snapped,) = snap(framed, 1.25)
-    edges = (snapped.box.x, snapped.box.x + snapped.box.width, snapped.box.y, snapped.box.y + snapped.box.height)
+    edges = (
+        snapped.box.x,
+        snapped.box.x + snapped.box.width,
+        snapped.box.y,
+        snapped.box.y + snapped.box.height,
+    )
     assert all(abs(edge * 1.25 - round(edge * 1.25)) < 1e-9 for edge in edges)
 
 
@@ -70,10 +132,19 @@ def test_the_fixed_right_cluster_survives_activity_changes() -> None:
         baseline = frame(fixed, metrics(screen), ORDER)
         assert tuple(each.key for each in baseline) == (Key.STATUS,)
         assert end(baseline[-1]) == screen - BAR.edge
-        framed = frame((Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed), metrics(screen), ORDER)
-        assert tuple(each for each in framed if each.key is not Key.ISLAND) == baseline
+        framed = frame(
+            (Placed(Key.ISLAND, Zone.ISLAND, 272, 320), *fixed),
+            metrics(screen),
+            ORDER,
+        )
+        assert (
+            tuple(each for each in framed if each.key is not Key.ISLAND)
+            == baseline
+        )
         assert all(0 <= each.box.x <= end(each) <= screen for each in framed)
-        activity = next((each for each in framed if each.key is Key.ISLAND), None)
+        activity = next(
+            (each for each in framed if each.key is Key.ISLAND), None
+        )
         if activity is not None:
             assert end(activity) <= baseline[0].box.x - BAR.gap
 
@@ -82,20 +153,40 @@ def width_of(text: Text) -> float:
     return len(text.text) * 7
 
 
-def test_text_content_pads_its_ends_and_separates_slots_and_readings_further_than_parts() -> None:
+def test_text_content_pads_its_ends_and_separates_slots_and_readings_further_than_parts() -> (
+    None
+):
     # Defects: readings crowd the capsule edge, two slots read as one, two
     # readings run together, a meter's symbol drifts from its value, or Stop
     # drifts from the reading it stops.
-    content = arrange(((Marker.DOTS,), (Text("10:22"), Text("73%"))), width_of, SIZES)
+    content = arrange(
+        ((Marker.DOTS,), (Text("10:22"), Text("73%"))), width_of, SIZES
+    )
     pad, slot = CAPSULE.text_pad, CAPSULE.slot_gap
-    assert [spot.x for spot in content.spots] == [pad, pad + CAPSULE.dots + slot, pad + CAPSULE.dots + slot + 35 + slot]
+    assert [spot.x for spot in content.spots] == [
+        pad,
+        pad + CAPSULE.dots + slot,
+        pad + CAPSULE.dots + slot + 35 + slot,
+    ]
     assert content.width == content.spots[-1].x + 21 + pad
     stop = Control("stop", "Stop recording", Action.STOP_RECORDING)
     labelled = arrange(((Text("Recording"), stop),), width_of, SIZES)
-    assert [spot.x for spot in labelled.spots] == [pad, pad + 63 + CAPSULE.part_gap]
-    meters = arrange(((Text("5%"), Glyph("cpu")), (Text("9%"), Glyph("memory"))), width_of, SIZES)
+    assert [spot.x for spot in labelled.spots] == [
+        pad,
+        pad + 63 + CAPSULE.part_gap,
+    ]
+    meters = arrange(
+        ((Text("5%"), Glyph("cpu")), (Text("9%"), Glyph("memory"))),
+        width_of,
+        SIZES,
+    )
     second = pad + 14 + CAPSULE.part_gap + CAPSULE.icon + slot
-    assert [spot.x for spot in meters.spots] == [pad, pad + 14 + CAPSULE.part_gap, second, second + 14 + CAPSULE.part_gap]
+    assert [spot.x for spot in meters.spots] == [
+        pad,
+        pad + 14 + CAPSULE.part_gap,
+        second,
+        second + 14 + CAPSULE.part_gap,
+    ]
 
 
 def test_a_control_at_the_edge_sits_concentric() -> None:
@@ -103,98 +194,180 @@ def test_a_control_at_the_edge_sits_concentric() -> None:
     stop = Control("stop", "Stop recording", Action.STOP_RECORDING)
     content = arrange(((Marker.DOT, Text("02:05"), stop),), width_of, SIZES)
     last = content.spots[-1]
-    assert last.width == CAPSULE.control and content.width - (last.x + last.width) == CAPSULE.inset
+    assert (
+        last.width == CAPSULE.control
+        and content.width - (last.x + last.width) == CAPSULE.inset
+    )
 
 
-def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> None:
+def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> (
+    None
+):
     # Defect: a shorter reading moves the power glyph or resizes fixed controls;
     # an unexpected wider reading must not clip to its representative reserve.
     def measured(clock: str, battery: str) -> Content:
-        return arrange(((Text(clock, reserve="00:00"), Glyph("battery"), Text(battery, reserve="100%")),), width_of, SIZES)
+        return arrange(
+            (
+                (
+                    Text(clock, reserve="00:00"),
+                    Glyph("battery"),
+                    Text(battery, reserve="100%"),
+                ),
+            ),
+            width_of,
+            SIZES,
+        )
 
     baseline = measured("00:00", "100%")
     for clock, battery in (("11:11", "9%"), ("23:59", "—"), ("09:41", "AC")):
         content = measured(clock, battery)
         assert content.width == baseline.width
-        assert tuple((spot.x, spot.width) for spot in content.spots) == tuple((spot.x, spot.width) for spot in baseline.spots)
+        assert tuple((spot.x, spot.width) for spot in content.spots) == tuple(
+            (spot.x, spot.width) for spot in baseline.spots
+        )
     assert measured("00:00:00", "100%").width > baseline.width
 
 
 def test_content_narrower_than_a_circle_centres_in_one() -> None:
     # Defect: a lone marker collapses the capsule below its height, losing its round shape.
     content = arrange(((Marker.DOT,),), width_of, SIZES)
-    assert content.width == CAPSULE.height and content.spots == (Spot(Marker.DOT, (CAPSULE.height - CAPSULE.dot) / 2, CAPSULE.dot, 0),)
+    assert content.width == CAPSULE.height and content.spots == (
+        Spot(Marker.DOT, (CAPSULE.height - CAPSULE.dot) / 2, CAPSULE.dot, 0),
+    )
 
 
-def test_a_press_goes_to_the_nearest_reading_and_the_ends_to_the_outer_ones() -> None:
+def test_a_press_goes_to_the_nearest_reading_and_the_ends_to_the_outer_ones() -> (
+    None
+):
     # Defects: a press in the gap opens the far reading's panel, the gap between a
     # reading's value and its symbol belongs to the neighbour, or the capsule's ends open nothing.
-    content = arrange(((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)), width_of, SIZES)
+    content = arrange(
+        ((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)),
+        width_of,
+        SIZES,
+    )
     value, symbol, second, _ = content.spots
     assert reading_at(content, (value.x + value.width + symbol.x) / 2) == 0
     gap = second.x - symbol.x - symbol.width
     assert reading_at(content, symbol.x + symbol.width + gap * 0.4) == 0
     assert reading_at(content, second.x - gap * 0.4) == 1
-    assert reading_at(content, 0.0) == 0 and reading_at(content, content.width) == 2
+    assert (
+        reading_at(content, 0.0) == 0
+        and reading_at(content, content.width) == 2
+    )
     assert reading_at(Content(0.0, (), 0.0), 5.0) is None
 
 
-def test_a_graph_ends_at_its_right_edge_spans_its_height_and_breaks_at_an_unread_sample() -> None:
+def test_a_graph_ends_at_its_right_edge_spans_its_height_and_breaks_at_an_unread_sample() -> (
+    None
+):
     # Defects: a young history stretches across the whole graph instead of growing from
     # the right, shares plot upside down, or an unread sample draws as a drop to zero.
     box = Box(10, 20, 100, 50)
-    assert tuple(plotted((0.0, 1.0), 11, box)) == ((Plotted(100, 70), Plotted(110, 20)),)
+    assert tuple(plotted((0.0, 1.0), 11, box)) == (
+        (Plotted(100, 70), Plotted(110, 20)),
+    )
     first, second = plotted((0.5, None, 0.25, 0.75), 5, box)
     assert first == (Plotted(35, 45),)
     assert second == (Plotted(85, 57.5), Plotted(110, 32.5))
     assert tuple(plotted((None, None), 5, box)) == ()
 
 
-def test_a_reading_lights_as_a_pill_around_its_own_parts_and_a_lone_symbol_as_a_circle() -> None:
+def test_a_reading_lights_as_a_pill_around_its_own_parts_and_a_lone_symbol_as_a_circle() -> (
+    None
+):
     # Defects: the pill misses part of a reading (its symbol beside its value), spills over
     # the next reading's parts, or a lone symbol lights as a sliver instead of a circle.
-    content = arrange(((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)), width_of, SIZES)
+    content = arrange(
+        ((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)),
+        width_of,
+        SIZES,
+    )
     value, symbol, wifi, clock = content.spots
     pill = lit(content, 0, CAPSULE)
     assert pill is not None
-    assert pill.x <= value.x and symbol.x + symbol.width <= pill.x + pill.width < wifi.x
+    assert (
+        pill.x <= value.x
+        and symbol.x + symbol.width <= pill.x + pill.width < wifi.x
+    )
     circle = lit(content, 1, CAPSULE)
-    assert circle is not None and circle.width == circle.height == CAPSULE.control
+    assert (
+        circle is not None and circle.width == circle.height == CAPSULE.control
+    )
     assert lit(content, 3, CAPSULE) is None
     assert clock.x > circle.x + circle.width
 
 
-def test_a_panel_hangs_centred_under_its_reading_below_the_capsule_and_stays_on_screen() -> None:
+def test_a_panel_hangs_centred_under_its_reading_below_the_capsule_and_stays_on_screen() -> (
+    None
+):
     # Defects: the panel opens at the capsule's left or the screen's corner instead of under
     # its reading, overlaps the readings, runs off the screen's edge, or appears at full size.
     metrics = Metrics(1000, 8, 6, 12, drop=6)
     status = Placed(Key.STATUS, Zone.RIGHT, 400, 34)
-    under = {each.key: each for each in frame((status, Placed(Key.PANEL, Zone.PANEL, 200, 300, anchor=300)), metrics, (Key.STATUS, Key.PANEL))}
+    under = {
+        each.key: each
+        for each in frame(
+            (status, Placed(Key.PANEL, Zone.PANEL, 200, 300, anchor=300)),
+            metrics,
+            (Key.STATUS, Key.PANEL),
+        )
+    }
     panel, readings = under[Key.PANEL].box, under[Key.STATUS].box
-    assert panel.x + panel.width / 2 == 700 and panel.y == readings.y + readings.height + 6
+    assert (
+        panel.x + panel.width / 2 == 700
+        and panel.y == readings.y + readings.height + 6
+    )
     (edge,) = (
         each.box
-        for each in frame((status, Placed(Key.PANEL, Zone.PANEL, 200, 300, anchor=40)), metrics, (Key.STATUS, Key.PANEL))
+        for each in frame(
+            (status, Placed(Key.PANEL, Zone.PANEL, 200, 300, anchor=40)),
+            metrics,
+            (Key.STATUS, Key.PANEL),
+        )
         if each.key is Key.PANEL
     )
     assert edge.x + edge.width == 1000 - 12
     (growing,) = (
         each.box
-        for each in frame((status, Placed(Key.PANEL, Zone.PANEL, 200, 300, 0.5, 300)), metrics, (Key.STATUS, Key.PANEL))
+        for each in frame(
+            (status, Placed(Key.PANEL, Zone.PANEL, 200, 300, 0.5, 300)),
+            metrics,
+            (Key.STATUS, Key.PANEL),
+        )
         if each.key is Key.PANEL
     )
-    assert (growing.width, growing.height, growing.x + growing.width / 2) == (100, 150, 700)
+    assert (growing.width, growing.height, growing.x + growing.width / 2) == (
+        100,
+        150,
+        700,
+    )
 
 
-def test_a_panel_hangs_from_the_reading_pressed_or_else_the_first_that_opens_it() -> None:
+def test_a_panel_hangs_from_the_reading_pressed_or_else_the_first_that_opens_it() -> (
+    None
+):
     # Defects: the panel hangs from the wrong reading when two open it (processor and
     # memory), or measures its reading from the capsule's left instead of the screen's right.
-    content = arrange(((Glyph("cpu"),), (Glyph("memory"),), (Text("10:22"),)), width_of, SIZES)
-    status = CapsuleView(Key.STATUS, Zone.RIGHT, (), "", Action.OPEN_MENU, panels=(Panel.PERFORMANCE, Panel.PERFORMANCE, Panel.CALENDAR))
+    content = arrange(
+        ((Glyph("cpu"),), (Glyph("memory"),), (Text("10:22"),)), width_of, SIZES
+    )
+    status = CapsuleView(
+        Key.STATUS,
+        Zone.RIGHT,
+        (),
+        "",
+        Action.OPEN_MENU,
+        panels=(Panel.PERFORMANCE, Panel.PERFORMANCE, Panel.CALENDAR),
+    )
     cpu, memory, _ = content.spots
 
     def centre(spot: Spot) -> float:
         return 12 + content.width - (spot.x + spot.width / 2)
 
-    assert hung_from(status, content, Menu(Panel.PERFORMANCE, ()), 12) == centre(cpu)
-    assert hung_from(status, content, Menu(Panel.PERFORMANCE, (), anchor=1), 12) == centre(memory)
+    assert hung_from(
+        status, content, Menu(Panel.PERFORMANCE, ()), 12
+    ) == centre(cpu)
+    assert hung_from(
+        status, content, Menu(Panel.PERFORMANCE, (), anchor=1), 12
+    ) == centre(memory)

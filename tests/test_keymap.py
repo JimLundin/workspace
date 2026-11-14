@@ -8,7 +8,9 @@ VIEW = KeyboardView.of(layouts.LAYOUT, layouts.APPS)
 """The tests' own layout, as the desktop reads it."""
 
 
-def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first() -> None:
+def test_shortcuts_use_physical_keys_the_right_thumb_and_dedicated_voice_first() -> (
+    None
+):
     # Defects: using BASE outputs as keycaps, selecting another layer's thumb,
     # advertising the Tools-layer dictation copy instead of its dedicated key, or
     # dropping the hint of a tool only a chord reaches.

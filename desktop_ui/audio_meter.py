@@ -36,14 +36,27 @@ class AudioMeter:
     stopped: threading.Event
     finished: threading.Event
     """Set when the observing thread exits."""
-    _reading: Cell[_Reading] = field(default_factory=lambda: Cell(_Reading()), init=False, repr=False)
+    _reading: Cell[_Reading] = field(
+        default_factory=lambda: Cell(_Reading()), init=False, repr=False
+    )
     """Replaced whole under the lock."""
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False
+    )
 
     @classmethod
-    def start(cls, read: Callable[[], float | None], *, clock: Callable[[], float] = time.monotonic) -> AudioMeter:
-        meter = cls(read, clock, threading.Event(), threading.Event(), threading.Event())
-        threading.Thread(target=meter.run, name="microphone level observer", daemon=True).start()
+    def start(
+        cls,
+        read: Callable[[], float | None],
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> AudioMeter:
+        meter = cls(
+            read, clock, threading.Event(), threading.Event(), threading.Event()
+        )
+        threading.Thread(
+            target=meter.run, name="microphone level observer", daemon=True
+        ).start()
         return meter
 
     def listen(self, *, enabled: bool) -> None:
@@ -56,7 +69,11 @@ class AudioMeter:
     def level(self) -> float | None:
         with self._lock:
             sample = self._reading.get().sample
-            if self.stopped.is_set() or not self.enabled.is_set() or sample is None:
+            if (
+                self.stopped.is_set()
+                or not self.enabled.is_set()
+                or sample is None
+            ):
                 return None
         return sample.level if self.clock() - sample.at <= 0.25 else None
 
@@ -77,7 +94,10 @@ class AudioMeter:
             level = self.read()
             sample = Sample(revision, self.clock(), level)
             with self._lock:
-                if revision == self._reading.get().revision and self.enabled.is_set():
+                if (
+                    revision == self._reading.get().revision
+                    and self.enabled.is_set()
+                ):
                     self._reading.set(_Reading(revision, sample))
             self.stopped.wait(0.05)
 

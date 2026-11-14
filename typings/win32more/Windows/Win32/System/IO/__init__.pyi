@@ -6,6 +6,17 @@ from win32more._win32 import ByReference
 class OVERLAPPED(ctypes.Structure):
     def __init__(self, *, hEvent: int) -> None: ...
 
-def GetOverlappedResultEx(handle: int, overlapped: OVERLAPPED, moved: ByReference[ctypes.c_uint32], milliseconds: int, alertable: bool) -> int: ...
-def GetOverlappedResult(handle: int, overlapped: OVERLAPPED, moved: ByReference[ctypes.c_uint32], wait: bool) -> int: ...
+def GetOverlappedResultEx(
+    handle: int,
+    overlapped: OVERLAPPED,
+    moved: ByReference[ctypes.c_uint32],
+    milliseconds: int,
+    alertable: bool,
+) -> int: ...
+def GetOverlappedResult(
+    handle: int,
+    overlapped: OVERLAPPED,
+    moved: ByReference[ctypes.c_uint32],
+    wait: bool,
+) -> int: ...
 def CancelIoEx(handle: int, overlapped: OVERLAPPED) -> int: ...

@@ -17,9 +17,15 @@ lazy from keyboard.win import Exit, run, show_error
 def main() -> None:
     if sys.platform != "win32":
         sys.exit("keyboard only runs on Windows")
-    match run(layout.LAYOUT, programs.PROGRAMS, Places.of(os.environ, programs.PROGRAMS)):
+    match run(
+        layout.LAYOUT,
+        programs.PROGRAMS,
+        Places.of(os.environ, programs.PROGRAMS),
+    ):
         case Exit.QUIT:
-            sys.exit(0)  # a normal quit: the assistant doesn't restart the layout
+            sys.exit(
+                0
+            )  # a normal quit: the assistant doesn't restart the layout
         case Exit.ALREADY_RUNNING:
             show_error("The Workspace keyboard is already running.")
             sys.exit(0)

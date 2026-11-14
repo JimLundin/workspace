@@ -19,7 +19,9 @@ class Month:
             raise ValueError("A month runs from 1 to 12.")
         # A month's six weeks reach a week into the months on either side.
         if not date.min.year < self.year < date.max.year:
-            raise ValueError("A month's weeks must stay within the dates Python represents.")
+            raise ValueError(
+                "A month's weeks must stay within the dates Python represents."
+            )
 
     @classmethod
     def of(cls, day: date) -> Month:

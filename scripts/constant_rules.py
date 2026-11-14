@@ -16,7 +16,10 @@ CONSTANT: Final = re.compile(r"[A-Z][A-Z0-9_]*")
 def _sentinel(statement: ast.stmt) -> bool:
     """`NAME = sentinel("NAME")`: a marker that is its own type, shared as freely as a class."""
     match statement:
-        case ast.Assign(value=ast.Call(func=ast.Name(id="sentinel"))) | ast.AnnAssign(value=ast.Call(func=ast.Name(id="sentinel"))):
+        case (
+            ast.Assign(value=ast.Call(func=ast.Name(id="sentinel")))
+            | ast.AnnAssign(value=ast.Call(func=ast.Name(id="sentinel")))
+        ):
             return True
         case _:
             return False
@@ -27,10 +30,18 @@ def _constants(tree: ast.Module) -> frozenset[str]:
     assigned = (
         target
         for statement in tree.body
-        if isinstance(statement, ast.Assign | ast.AnnAssign) and not _sentinel(statement)
+        if isinstance(statement, ast.Assign | ast.AnnAssign)
+        and not _sentinel(statement)
         for target in targets(statement)
     )
-    names = (name for target in assigned for name in (target.elts if isinstance(target, ast.Tuple) else (target,)) if isinstance(name, ast.Name))
+    names = (
+        name
+        for target in assigned
+        for name in (
+            target.elts if isinstance(target, ast.Tuple) else (target,)
+        )
+        if isinstance(name, ast.Name)
+    )
     return frozenset(name.id for name in names if CONSTANT.fullmatch(name.id))
 
 
@@ -38,7 +49,13 @@ def _declarations_only(tree: ast.Module) -> bool:
     """A data module: a docstring, imports and declarations, nothing that runs or defines behaviour."""
     for statement in tree.body:
         match statement:
-            case ast.Import() | ast.ImportFrom() | ast.Assign() | ast.AnnAssign() | ast.Expr(value=ast.Constant(value=str())):
+            case (
+                ast.Import()
+                | ast.ImportFrom()
+                | ast.Assign()
+                | ast.AnnAssign()
+                | ast.Expr(value=ast.Constant(value=str()))
+            ):
                 pass
             case _:
                 return False
@@ -57,17 +74,25 @@ class ConstantIndex:
         return self.constants.get(module, frozenset())
 
 
-def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterator[Finding]:
+def shared_constants(
+    sources: Iterable[Source], scope: Sequence[str]
+) -> Iterator[Finding]:
     """Constants cross a module boundary only as `module.NAME`, and only out of a data module.
 
     A bare name always means the module's own constant; another module's
     behaviour owns its constants, so it shares them as an enum, a function or a
     type's property instead."""
-    trees = {module_name(source.name): ast.parse(source.text) for source in sources}
+    trees = {
+        module_name(source.name): ast.parse(source.text) for source in sources
+    }
     index = ConstantIndex(
         frozenset(trees),
-        frozendict({module: _constants(tree) for module, tree in trees.items()}),
-        frozenset(module for module, tree in trees.items() if _declarations_only(tree)),
+        frozendict(
+            {module: _constants(tree) for module, tree in trees.items()}
+        ),
+        frozenset(
+            module for module, tree in trees.items() if _declarations_only(tree)
+        ),
     )
     for module, tree in sorted(trees.items()):
         if within_any(module, scope):
@@ -75,10 +100,18 @@ def shared_constants(sources: Iterable[Source], scope: Sequence[str]) -> Iterato
 
 
 def _imported_name(node: ast.Import | ast.ImportFrom, alias: ast.alias) -> str:
-    return alias.name if isinstance(node, ast.Import) else f"{node.module}.{alias.name}"
+    return (
+        alias.name
+        if isinstance(node, ast.Import)
+        else f"{node.module}.{alias.name}"
+    )
 
 
-def _constant_imports(module: str, imported: Iterable[ast.Import | ast.ImportFrom], index: ConstantIndex) -> Iterator[Finding]:
+def _constant_imports(
+    module: str,
+    imported: Iterable[ast.Import | ast.ImportFrom],
+    index: ConstantIndex,
+) -> Iterator[Finding]:
     """`from x import NAME` of another module's constant, which reads as this module's own."""
     for node in imported:
         match node:
@@ -99,23 +132,38 @@ def _constant_imports(module: str, imported: Iterable[ast.Import | ast.ImportFro
                 pass
 
 
-def _shared_constant(read: ast.Attribute, bound: Mapping[str, str], index: ConstantIndex) -> str | None:
+def _shared_constant(
+    read: ast.Attribute, bound: Mapping[str, str], index: ConstantIndex
+) -> str | None:
     """The constant `module.NAME` reads out of a module with behaviour, if it reads one."""
     match read.value:
-        case ast.Name(id=name) if (source := bound.get(name)) is not None and source not in index.data:
-            return f"{source}.{read.attr}" if read.attr in index.declared(source) else None
+        case ast.Name(id=name) if (
+            source := bound.get(name)
+        ) is not None and source not in index.data:
+            return (
+                f"{source}.{read.attr}"
+                if read.attr in index.declared(source)
+                else None
+            )
         case _:
             return None
 
 
-def _constant_reads(module: str, tree: ast.Module, index: ConstantIndex) -> Iterator[Finding]:
-    imported = tuple(node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom))
+def _constant_reads(
+    module: str, tree: ast.Module, index: ConstantIndex
+) -> Iterator[Finding]:
+    imported = tuple(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import | ast.ImportFrom)
+    )
     yield from _constant_imports(module, imported, index)
     bound = frozendict(
         (alias.asname or alias.name, name)
         for node in imported
         for alias in node.names
-        if (name := _imported_name(node, alias)) in index.modules or isinstance(node, ast.Import)
+        if (name := _imported_name(node, alias)) in index.modules
+        or isinstance(node, ast.Import)
     )
     detail = "Only a declarations-only module shares constants: move it to one, or share it as an enum, a function or a property."
     reads = (node for node in ast.walk(tree) if isinstance(node, ast.Attribute))
@@ -131,29 +179,55 @@ ENUM_BASES: Final = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag"})
 
 def _enum_members(definition: ast.ClassDef) -> tuple[str, ...] | None:
     """The members an enum declares, or None for a class that isn't an enum."""
-    bases = frozenset(base.id if isinstance(base, ast.Name) else base.attr for base in definition.bases if isinstance(base, ast.Name | ast.Attribute))
+    bases = frozenset(
+        base.id if isinstance(base, ast.Name) else base.attr
+        for base in definition.bases
+        if isinstance(base, ast.Name | ast.Attribute)
+    )
     if bases.isdisjoint(ENUM_BASES):
         return None
-    assigned = (target for statement in definition.body if isinstance(statement, ast.Assign | ast.AnnAssign) for target in targets(statement))
-    return tuple(target.id for target in assigned if isinstance(target, ast.Name) and not target.id.startswith("_"))
+    assigned = (
+        target
+        for statement in definition.body
+        if isinstance(statement, ast.Assign | ast.AnnAssign)
+        for target in targets(statement)
+    )
+    return tuple(
+        target.id
+        for target in assigned
+        if isinstance(target, ast.Name) and not target.id.startswith("_")
+    )
 
 
 def _member_of(node: ast.expr | None, enums: frozenset[str]) -> bool:
-    return isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in enums
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id in enums
+    )
 
 
 def _keyed_by(value: ast.expr, enums: frozenset[str]) -> bool:
     """A table literal keyed by one of the module's enums: `{E.A: ..., E.B: ...}`, `frozenset({E.A, E.B})`, or one built over `E`."""
     match value:
-        case ast.Call(func=ast.Name(id="frozendict" | "frozenset" | "dict" | "set"), args=[inner]):
+        case ast.Call(
+            func=ast.Name(id="frozendict" | "frozenset" | "dict" | "set"),
+            args=[inner],
+        ):
             return _keyed_by(inner, enums)
         case ast.Dict(keys=keys):
             return len(keys) > 1 and all(_member_of(key, enums) for key in keys)
         case ast.Set(elts=elements):
-            return len(elements) > 1 and all(_member_of(item, enums) for item in elements)
+            return len(elements) > 1 and all(
+                _member_of(item, enums) for item in elements
+            )
         case (
-            ast.DictComp(generators=[ast.comprehension(iter=ast.Name(id=name)), *_])
-            | ast.SetComp(generators=[ast.comprehension(iter=ast.Name(id=name)), *_])
+            ast.DictComp(
+                generators=[ast.comprehension(iter=ast.Name(id=name)), *_]
+            )
+            | ast.SetComp(
+                generators=[ast.comprehension(iter=ast.Name(id=name)), *_]
+            )
         ):
             return name in enums
         case _:
@@ -165,16 +239,38 @@ def enum_shapes(sources: Iterable[Source]) -> Iterator[Finding]:
     for source in sources:
         module, tree = module_name(source.name), ast.parse(source.text)
         enums: frozendict[str, tuple[str, ...]] = frozendict(
-            (node.name, members) for node in tree.body if isinstance(node, ast.ClassDef) and (members := _enum_members(node)) is not None
+            (node.name, members)
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and (members := _enum_members(node)) is not None
         )
         for node in tree.body:
             match node:
                 case ast.ClassDef(name=name) if len(enums.get(name, ())) == 1:
                     detail = 'An enum with one member is a marker: use sentinel("NAME"), or None for plain absence.'
-                    yield Finding("single-member-enum", module, name, name, node.lineno, detail)
-                case ast.Assign(value=value) | ast.AnnAssign(value=ast.expr() as value) if _keyed_by(value, frozenset(enums)):
-                    names = ", ".join(ast.unparse(target) for target in targets(node))
+                    yield Finding(
+                        "single-member-enum",
+                        module,
+                        name,
+                        name,
+                        node.lineno,
+                        detail,
+                    )
+                case (
+                    ast.Assign(value=value)
+                    | ast.AnnAssign(value=ast.expr() as value)
+                ) if _keyed_by(value, frozenset(enums)):
+                    names = ", ".join(
+                        ast.unparse(target) for target in targets(node)
+                    )
                     detail = "Put each member's value on the member (an enum whose values are records), not in a table beside the enum."
-                    yield Finding("member-table", module, names, names, node.lineno, detail)
+                    yield Finding(
+                        "member-table",
+                        module,
+                        names,
+                        names,
+                        node.lineno,
+                        detail,
+                    )
                 case _:
                     pass

@@ -39,8 +39,25 @@ from desktop_ui.island_menu import (
     restores_focus,
     traced,
 )
-from desktop_ui.island_model import Action, CapsuleView, IslandSpec, Key, Marker, capture, gigabytes, memory_used, usage
-from desktop_ui.island_motion import IslandMotion, Springs, Timing, advance, finish, settled
+from desktop_ui.island_model import (
+    Action,
+    CapsuleView,
+    IslandSpec,
+    Key,
+    Marker,
+    capture,
+    gigabytes,
+    memory_used,
+    usage,
+)
+from desktop_ui.island_motion import (
+    IslandMotion,
+    Springs,
+    Timing,
+    advance,
+    finish,
+    settled,
+)
 from desktop_ui.month import Month
 from desktop_ui.navigation import Order, Placing
 from protocol import Tool
@@ -58,7 +75,9 @@ class Surroundings:
     """What the tick observed of the desktop, the shell and the system, as the bar shows it."""
 
     system: SystemStatus = field(default_factory=SystemStatus)
-    ambient: Ambient = field(default_factory=lambda: Ambient("", PowerUnavailable.UNKNOWN))
+    ambient: Ambient = field(
+        default_factory=lambda: Ambient("", PowerUnavailable.UNKNOWN)
+    )
     preference: appearance.Preference = appearance.Material.SOLID
     frost: appearance.Frost = appearance.Frost.SMOKED
     arrangement: Arrangement = EMPTY_ARRANGEMENT
@@ -125,7 +144,11 @@ def memory_trace(model: BarModel) -> Trace:
     used = memory_used(system.memory, status).text
     match system.memory:
         case Memory(total=total):
-            return traced(system.memory_history, total, f"{used} {model.spec.island.words.of} {gigabytes(total, status)}")
+            return traced(
+                system.memory_history,
+                total,
+                f"{used} {model.spec.island.words.of} {gigabytes(total, status)}",
+            )
         case None:
             return traced(system.memory_history, None, used)
         case _:
@@ -134,11 +157,21 @@ def memory_trace(model: BarModel) -> Trace:
 
 def menu(model: BarModel, panel: Panel) -> Menu:
     """`panel` for what's happening now, keeping its selection and month while it stays open."""
-    recorded = capture(model.recording, model.spec.island.words.phases) if model.recording.capturing else None
+    recorded = (
+        capture(model.recording, model.spec.island.words.phases)
+        if model.recording.capturing
+        else None
+    )
     seen = model.seen
-    kept = opened if (opened := model.opened) and opened.panel is panel else None
+    kept = (
+        opened if (opened := model.opened) and opened.panel is panel else None
+    )
     month = kept.month if kept else None
-    sound = Slider(model.spec.controls.words.sound, seen.system.volume, muted=seen.system.speakers is Speakers.MUTED)
+    sound = Slider(
+        model.spec.controls.words.sound,
+        seen.system.volume,
+        muted=seen.system.speakers is Speakers.MUTED,
+    )
     built = Menu(
         panel,
         entries(
@@ -153,7 +186,11 @@ def menu(model: BarModel, panel: Panel) -> Menu:
                 today=seen.ambient.today,
                 networks=seen.system.networks,
                 power=seen.ambient.power,
-                cpu=traced(seen.system.cpu_history, 100, usage(seen.system.cpu, model.spec.island.status).text),
+                cpu=traced(
+                    seen.system.cpu_history,
+                    100,
+                    usage(seen.system.cpu, model.spec.island.status).text,
+                ),
                 memory=memory_trace(model),
                 month=month,
             ),
@@ -252,7 +289,9 @@ class LayoutShown:
 
 
 # The views' publisher changed one of the activities the bar shows.
-type ActivityChange = OverlayShown | DictationShown | JobShown | RecordingShown | LayoutShown
+type ActivityChange = (
+    OverlayShown | DictationShown | JobShown | RecordingShown | LayoutShown
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,14 +488,22 @@ type Effect = (
 )
 
 
-def _closed(model: BarModel, *, restore: bool) -> tuple[BarModel, tuple[Effect, ...]]:
+def _closed(
+    model: BarModel, *, restore: bool
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """The menu closes, giving the keyboard back to who had it if `restore`."""
     if model.opened is None:
         return model, ()
-    return replace(model, opened=None), (Release(model.menu_target if restore else 0), Survey(listing=False), Render())
+    return replace(model, opened=None), (
+        Release(model.menu_target if restore else 0),
+        Survey(listing=False),
+        Render(),
+    )
 
 
-def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[Effect, ...]]:
+def _ran(
+    model: BarModel, choice: island_menu.Choice
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """What a menu choice does."""
     match choice:
         case ToolChoice(tool=tool):
@@ -474,7 +521,9 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
         case Command.DARK_WHEN_AWAY:
             return model, (ToggleAway(),)
         case Command.MUTE:
-            return _muted(model, muted=model.seen.system.speakers is not Speakers.MUTED)
+            return _muted(
+                model, muted=model.seen.system.speakers is not Speakers.MUTED
+            )
         case Command.THIS_MONTH:
             return _turned(model, None), ()
         case Page(months=months):
@@ -499,22 +548,32 @@ def _ran(model: BarModel, choice: island_menu.Choice) -> tuple[BarModel, tuple[E
             assert_never(choice)
 
 
-def _volume(model: BarModel, level: float) -> tuple[BarModel, tuple[Effect, ...]]:
+def _volume(
+    model: BarModel, level: float
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """The status observer applies it; the slider follows at once rather than at the next reading."""
     seen = replace(model.seen, system=replace(model.seen.system, volume=level))
     return replace(model, seen=seen), (SetVolume(level), Render())
 
 
-def _muted(model: BarModel, *, muted: bool) -> tuple[BarModel, tuple[Effect, ...]]:
+def _muted(
+    model: BarModel, *, muted: bool
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """Like the level, the toggle and the capsule's speaker follow at once."""
     speakers = Speakers.MUTED if muted else Speakers.AUDIBLE
-    seen = replace(model.seen, system=replace(model.seen.system, speakers=speakers))
+    seen = replace(
+        model.seen, system=replace(model.seen.system, speakers=speakers)
+    )
     return replace(model, seen=seen), (SetMute(muted=muted), Render())
 
 
 def _turned(model: BarModel, month: Month | None) -> BarModel:
     """The open calendar shows `month`; None returns it to today's."""
-    return replace(model, opened=replace(model.opened, month=month)) if model.opened is not None else model
+    return (
+        replace(model, opened=replace(model.opened, month=month))
+        if model.opened is not None
+        else model
+    )
 
 
 def _paged(model: BarModel, months: int) -> BarModel:
@@ -527,13 +586,17 @@ def _paged(model: BarModel, months: int) -> BarModel:
         return model
 
 
-def _tray(model: BarModel, slot: int, click: Click) -> tuple[BarModel, tuple[Effect, ...]]:
+def _tray(
+    model: BarModel, slot: int, click: Click
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """The application gets the click and the keyboard; the island closes without taking it back."""
     model, closing = _closed(model, restore=False)
     return model, (*closing, ClickTray(slot, click))
 
 
-def _settled(model: BarModel, outcome: island_menu.Outcome) -> tuple[BarModel, tuple[Effect, ...]]:
+def _settled(
+    model: BarModel, outcome: island_menu.Outcome
+) -> tuple[BarModel, tuple[Effect, ...]]:
     match outcome:
         case Menu() as opened:
             return replace(model, opened=opened), (Render(),)
@@ -550,7 +613,9 @@ def _settled(model: BarModel, outcome: island_menu.Outcome) -> tuple[BarModel, t
             assert_never(outcome)
 
 
-def _pressed(model: BarModel, action: Action) -> tuple[BarModel, tuple[Effect, ...]]:
+def _pressed(
+    model: BarModel, action: Action
+) -> tuple[BarModel, tuple[Effect, ...]]:
     match action:
         case Action.OPEN_MENU:
             return _opened(model, Panel.WORKSPACE)
@@ -565,15 +630,22 @@ def _pressed(model: BarModel, action: Action) -> tuple[BarModel, tuple[Effect, .
             assert_never(action)
 
 
-def _opened(model: BarModel, panel: Panel, anchor: int | None = None) -> tuple[BarModel, tuple[Effect, ...]]:
+def _opened(
+    model: BarModel, panel: Panel, anchor: int | None = None
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """Open `panel` under the reading at `anchor`, from the closed bar or from another panel."""
     if model.closed:
         return model, ()
     opening = replace(menu(model, panel), anchor=anchor)
-    return model, (Expand(opening, remember=model.opened is None), Survey(listing=panel is Panel.NETWORK))
+    return model, (
+        Expand(opening, remember=model.opened is None),
+        Survey(listing=panel is Panel.NETWORK),
+    )
 
 
-def _panel(model: BarModel, panel: Panel, slot: int | None) -> tuple[BarModel, tuple[Effect, ...]]:
+def _panel(
+    model: BarModel, panel: Panel, slot: int | None
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """A reading's press opens its panel under it; pressed again it closes."""
     if (opened := model.opened) and opened.panel is panel:
         return _closed(model, restore=True)
@@ -596,12 +668,16 @@ def _shown(model: BarModel, change: ActivityChange) -> BarModel:
             assert_never(change)
 
 
-def _changed(before: BarModel, after: BarModel) -> tuple[BarModel, tuple[Effect, ...]]:
+def _changed(
+    before: BarModel, after: BarModel
+) -> tuple[BarModel, tuple[Effect, ...]]:
     """`after`, rendered only when it differs from `before`."""
     return after, ((Render(),) if after != before else ())
 
 
-def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]]:
+def _folded(
+    model: BarModel, event: Event
+) -> tuple[BarModel, tuple[Effect, ...]]:
     match event:
         case Pressed(action):
             return _pressed(model, action)
@@ -614,11 +690,19 @@ def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]
         case Selected(index):
             if model.opened is None:
                 return model, ()
-            return _changed(model, replace(model, opened=replace(model.opened, selected=index)))
+            return _changed(
+                model,
+                replace(model, opened=replace(model.opened, selected=index)),
+            )
         case Picked(index):
             if model.opened is None:
                 return model, ()
-            return _settled(model, island_menu.choose(model.opened, model.opened.cells[index].entry))
+            return _settled(
+                model,
+                island_menu.choose(
+                    model.opened, model.opened.cells[index].entry
+                ),
+            )
         case MenuKey(press):
             if model.opened is None:
                 return model, ()
@@ -629,16 +713,31 @@ def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]
             return _volume(model, level)
         case TrayClicked(slot, click):
             return _tray(model, slot, click)
-        case OverlayShown() | DictationShown() | JobShown() | RecordingShown() | LayoutShown():
+        case (
+            OverlayShown()
+            | DictationShown()
+            | JobShown()
+            | RecordingShown()
+            | LayoutShown()
+        ):
             return _changed(model, _shown(model, event))
         case ChordHeld(held):
             return replace(model, chord_held=held), (ShowHints(),)
         case Opening(opened, target):
-            return replace(model, opened=opened, menu_target=target if target is not None else model.menu_target), (Render(),)
+            return replace(
+                model,
+                opened=opened,
+                menu_target=target if target is not None else model.menu_target,
+            ), (Render(),)
         case Ticked(seen, next_power, next_material):
             # A changed reading re-measures, so a growing timer pushes its neighbours out.
             rendered = (Render(),) if seen != model.seen else ()
-            return replace(model, seen=seen, next_power=next_power, next_material=next_material), rendered
+            return replace(
+                model,
+                seen=seen,
+                next_power=next_power,
+                next_material=next_material,
+            ), rendered
         case Retargeted(views, motion, opened):
             return replace(model, views=views, motion=motion, opened=opened), ()
         case Framed(motion, last_frame):
@@ -651,7 +750,9 @@ def _folded(model: BarModel, event: Event) -> tuple[BarModel, tuple[Effect, ...]
             assert_never(event)
 
 
-def transition(model: BarModel, event: Event) -> tuple[BarModel, Iterator[Effect]]:
+def transition(
+    model: BarModel, event: Event
+) -> tuple[BarModel, Iterator[Effect]]:
     """The model after `event` and the effects it calls for, in order."""
     model, effects = _folded(model, event)
     return model, iter(effects)
@@ -662,7 +763,12 @@ def transition(model: BarModel, event: Event) -> tuple[BarModel, Iterator[Effect
 
 def spinning(model: BarModel) -> bool:
     """Work is running where the bar shows it: a capsule's dots."""
-    return any(part is Marker.DOTS for view in model.views for slot in view.slots for part in slot)
+    return any(
+        part is Marker.DOTS
+        for view in model.views
+        for slot in view.slots
+        for part in slot
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -689,7 +795,11 @@ def next_frame(model: BarModel, now: float, *, animate: bool) -> Frame:
     spins = animate and working
     waving = animate and model.dictating and model.opened is None
     timing = model.spec.timing
-    wave = min(1.0, max(0.0, (now - model.sampled_at) / timing.wave_sample)) if waving and model.sampled_at is not None else 1.0
+    wave = (
+        min(1.0, max(0.0, (now - model.sampled_at) / timing.wave_sample))
+        if waving and model.sampled_at is not None
+        else 1.0
+    )
     return Frame(
         motion,
         now / timing.pulse % 1 if spins else 0.0,

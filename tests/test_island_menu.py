@@ -47,7 +47,13 @@ from desktop_ui.island_menu import (
     restores_focus,
 )
 from protocol import Tool
-from winapi.machine_status import LOCATION_OFF, Battery, Network, Power, PowerUnavailable
+from winapi.machine_status import (
+    LOCATION_OFF,
+    Battery,
+    Network,
+    Power,
+    PowerUnavailable,
+)
 
 TRAY_TRACKS = 3
 
@@ -58,51 +64,123 @@ SPEC = ControlsSpec(
                 200,
                 (
                     ActivitiesRow(3),
-                    CellsRow(2, (CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"), CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"))),
-                    CellsRow(2, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"),)),
-                    CellsRow(2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)),
+                    CellsRow(
+                        2,
+                        (
+                            CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"),
+                            CellSpec(
+                                EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        2,
+                        (
+                            CellSpec(
+                                EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)
+                    ),
                     CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
                     CellsRow(
                         2,
                         (
-                            CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"),
-                            CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"),
+                            CellSpec(
+                                EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"
+                            ),
+                            CellSpec(
+                                EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"
+                            ),
                             CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Key map"),
                         ),
                     ),
                     TrayRow(TRAY_TRACKS),
-                    CellsRow(1, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),)),
-                    CellsRow(1, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"),)),
+                    CellsRow(
+                        1,
+                        (
+                            CellSpec(
+                                EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        1,
+                        (
+                            CellSpec(
+                                EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"
+                            ),
+                        ),
+                    ),
                 ),
             ),
             Panel.NETWORK: PanelSpec(
                 160,
                 (
                     NetworksRow(3, most=2),
-                    CellsRow(2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)),
-                    CellsRow(1, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"),)),
+                    CellsRow(
+                        2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)
+                    ),
+                    CellsRow(
+                        1,
+                        (
+                            CellSpec(
+                                EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"
+                            ),
+                        ),
+                    ),
                 ),
             ),
             Panel.POWER: PanelSpec(
                 160,
                 (
-                    CellsRow(3, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Cell"),)),
-                    CellsRow(1, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Energy"),)),
+                    CellsRow(
+                        3, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Cell"),)
+                    ),
+                    CellsRow(
+                        1,
+                        (
+                            CellSpec(
+                                EntryId.POWER_SETTINGS, Face.LINK, 8, "Energy"
+                            ),
+                        ),
+                    ),
                 ),
             ),
             Panel.PERFORMANCE: PanelSpec(
                 160,
                 (
-                    CellsRow(4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)),
-                    CellsRow(4, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"),)),
+                    CellsRow(
+                        4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)
+                    ),
+                    CellsRow(
+                        4,
+                        (
+                            CellSpec(
+                                EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"
+                            ),
+                        ),
+                    ),
                 ),
             ),
-            Panel.CALENDAR: PanelSpec(160, (CellsRow(10, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),)),)),
+            Panel.CALENDAR: PanelSpec(
+                160,
+                (
+                    CellsRow(
+                        10,
+                        (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),),
+                    ),
+                ),
+            ),
             Panel.SOUND: PanelSpec(
                 120,
                 (
                     CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                    CellsRow(2, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Hush"),)),
+                    CellsRow(
+                        2, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Hush"),)
+                    ),
                 ),
             ),
         }
@@ -135,7 +213,14 @@ RESTING = Controls(None, sound=Slider("Volume", 0.4, muted=False))
 
 
 def at(menu: Menu, name: str) -> Menu:
-    return replace(menu, selected=next(index for index, cell in enumerate(menu.cells) if label(cell.entry) == name))
+    return replace(
+        menu,
+        selected=next(
+            index
+            for index, cell in enumerate(menu.cells)
+            if label(cell.entry) == name
+        ),
+    )
 
 
 def selected(outcome: Outcome) -> str:
@@ -143,7 +228,9 @@ def selected(outcome: Outcome) -> str:
         case Menu(selected=int() as index) as menu:
             return label(menu.cells[index].entry)
         case other:
-            raise AssertionError(f"Expected a menu with a selection, got {other}")
+            raise AssertionError(
+                f"Expected a menu with a selection, got {other}"
+            )
 
 
 def opened(outcome: Outcome) -> Menu:
@@ -157,9 +244,19 @@ def opened(outcome: Outcome) -> Menu:
 def test_a_running_recording_leads_as_a_card_and_replaces_its_start() -> None:
     # Defects: a running recording still offers its start, or has no Stop in the menu.
     cells = entries(Controls("02:05"), SPEC, Panel.WORKSPACE)
-    assert cells[0].face is Face.CARD and isinstance(cells[0].entry, Live) and cells[0].entry.stop is Command.STOP_RECORDING
-    assert not any(isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD for cell in cells)
-    assert any(isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD for cell in entries(RESTING, SPEC, Panel.WORKSPACE))
+    assert (
+        cells[0].face is Face.CARD
+        and isinstance(cells[0].entry, Live)
+        and cells[0].entry.stop is Command.STOP_RECORDING
+    )
+    assert not any(
+        isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD
+        for cell in cells
+    )
+    assert any(
+        isinstance(cell.entry, Item) and cell.entry.choice is Command.RECORD
+        for cell in entries(RESTING, SPEC, Panel.WORKSPACE)
+    )
 
 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
@@ -168,7 +265,11 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
     width = 200
     tray = tuple(f"App {index}" for index in range(11))
     for controls in (RESTING, Controls("02:05"), replace(RESTING, tray=tray)):
-        laid = tiles(Menu(Panel.WORKSPACE, entries(controls, SPEC, Panel.WORKSPACE)), grid, width)
+        laid = tiles(
+            Menu(Panel.WORKSPACE, entries(controls, SPEC, Panel.WORKSPACE)),
+            grid,
+            width,
+        )
         for tile in laid:
             assert tile.x > 0 and tile.x + tile.width < width
         for first in laid:
@@ -180,16 +281,30 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
                         or first.y + first.height <= second.y
                         or second.y + second.height <= first.y
                     )
-                    assert apart, f"{label(first.cell.entry)} overlaps {label(second.cell.entry)}"
+                    assert apart, (
+                        f"{label(first.cell.entry)} overlaps {label(second.cell.entry)}"
+                    )
 
 
 def test_toggles_show_their_state_and_apply_in_place() -> None:
     # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
     def states(controls: Controls) -> dict[Command, bool]:
-        return {cell.entry.choice: cell.entry.on for cell in entries(controls, SPEC, Panel.WORKSPACE) if isinstance(cell.entry, Toggle)}
+        return {
+            cell.entry.choice: cell.entry.on
+            for cell in entries(controls, SPEC, Panel.WORKSPACE)
+            if isinstance(cell.entry, Toggle)
+        }
 
-    assert states(Controls(None, overlay=True, dark_when_away=True)) == {Command.OVERLAY: True, Command.PLACEMENT: True, Command.DARK_WHEN_AWAY: True}
-    assert states(Controls(None, placement_paused=True)) == {Command.OVERLAY: False, Command.PLACEMENT: False, Command.DARK_WHEN_AWAY: False}
+    assert states(Controls(None, overlay=True, dark_when_away=True)) == {
+        Command.OVERLAY: True,
+        Command.PLACEMENT: True,
+        Command.DARK_WHEN_AWAY: True,
+    }
+    assert states(Controls(None, placement_paused=True)) == {
+        Command.OVERLAY: False,
+        Command.PLACEMENT: False,
+        Command.DARK_WHEN_AWAY: False,
+    }
     menu = Menu(Panel.WORKSPACE, entries(RESTING, SPEC, Panel.WORKSPACE))
     assert press(at(menu, "Keys"), Key.ENTER) == Applied(Command.OVERLAY)
     assert press(at(menu, "Key map"), Key.ENTER) == Chosen(Command.KEYMAP)
@@ -216,7 +331,20 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
     # a step leaves the 0 to 1 range, or an unknown level invents one.
     def stepped(level: float | None, key: Key) -> Outcome:
         return press(
-            at(Menu(Panel.WORKSPACE, entries(replace(RESTING, sound=Slider("Volume", level, muted=False)), SPEC, Panel.WORKSPACE)), "Volume"), key
+            at(
+                Menu(
+                    Panel.WORKSPACE,
+                    entries(
+                        replace(
+                            RESTING, sound=Slider("Volume", level, muted=False)
+                        ),
+                        SPEC,
+                        Panel.WORKSPACE,
+                    ),
+                ),
+                "Volume",
+            ),
+            key,
         )
 
     match stepped(0.4, Key.RIGHT), stepped(0.4, Key.LEFT):
@@ -226,16 +354,34 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
             raise AssertionError(f"Expected two volume changes, got {other}")
     assert stepped(1.0, Key.RIGHT) == Applied(Volume(1.0))
     assert stepped(0.0, Key.LEFT) == Applied(Volume(0.0))
-    unknown = at(Menu(Panel.WORKSPACE, entries(replace(RESTING, sound=Slider("Volume", None, muted=False)), SPEC, Panel.WORKSPACE)), "Volume")
+    unknown = at(
+        Menu(
+            Panel.WORKSPACE,
+            entries(
+                replace(RESTING, sound=Slider("Volume", None, muted=False)),
+                SPEC,
+                Panel.WORKSPACE,
+            ),
+        ),
+        "Volume",
+    )
     assert press(unknown, Key.RIGHT) == unknown
-    menu = at(Menu(Panel.WORKSPACE, entries(RESTING, SPEC, Panel.WORKSPACE)), "Volume")
+    menu = at(
+        Menu(Panel.WORKSPACE, entries(RESTING, SPEC, Panel.WORKSPACE)), "Volume"
+    )
     assert press(menu, Key.ENTER) == menu
 
 
-def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> None:
+def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> (
+    None
+):
     # Defects: Enter on a card doesn't stop its activity, Escape chooses something,
     # or a repeated letter stays on its first match.
-    menu = Menu(Panel.WORKSPACE, entries(Controls("02:05"), SPEC, Panel.WORKSPACE), selected=0)
+    menu = Menu(
+        Panel.WORKSPACE,
+        entries(Controls("02:05"), SPEC, Panel.WORKSPACE),
+        selected=0,
+    )
     assert press(menu, Key.ENTER) == Chosen(Command.STOP_RECORDING)
     assert press(menu, Key.ESCAPE) is DISMISSED
     first = opened(press(menu, Letter("k")))
@@ -243,76 +389,171 @@ def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -
     assert selected(press(first, Letter("K"))) == "Key map"
 
 
-def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> None:
+def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> (
+    None
+):
     # Defects: a window tool acts on the menu instead of the user's window, or a Workspace
     # view that just opened loses the keyboard to the previous window.
-    assert restores_focus(ToolChoice(Tool.COPY_TRANSCRIPT)) and restores_focus(Command.PLACEMENT)
-    assert not restores_focus(Command.KEYMAP) and not restores_focus(TrayChoice(0))
+    assert restores_focus(ToolChoice(Tool.COPY_TRANSCRIPT)) and restores_focus(
+        Command.PLACEMENT
+    )
+    assert not restores_focus(Command.KEYMAP) and not restores_focus(
+        TrayChoice(0)
+    )
 
 
-def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot() -> None:
+def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot() -> (
+    None
+):
     # Defects: an icon lands on the wrong line or slot, the links overlap the tray,
     # or Enter on an icon clicks another application's icon.
     count = 30
-    menu = Menu(Panel.WORKSPACE, entries(replace(RESTING, tray=tuple(f"App {index}" for index in range(count))), SPEC, Panel.WORKSPACE))
+    menu = Menu(
+        Panel.WORKSPACE,
+        entries(
+            replace(
+                RESTING, tray=tuple(f"App {index}" for index in range(count))
+            ),
+            SPEC,
+            Panel.WORKSPACE,
+        ),
+    )
     icons = [cell for cell in menu.cells if cell.face is Face.ICON]
-    assert [cell.entry for cell in icons] == [TrayIcon(f"App {index}", index) for index in range(count)]
+    assert [cell.entry for cell in icons] == [
+        TrayIcon(f"App {index}", index) for index in range(count)
+    ]
     assert (icons[0].column, icons[0].span) == (0, 1)
     for before, after in pairwise(icons):
-        same_line = (after.column, after.track) == (before.column + 1, before.track)
-        next_line = (after.column, after.track) == (0, before.track + TRAY_TRACKS)
-        assert same_line or next_line, f"{label(after.entry)} doesn't follow {label(before.entry)}"
-    assert len({cell.track for cell in icons}) > 1, "Expected the icons to wrap."
+        same_line = (after.column, after.track) == (
+            before.column + 1,
+            before.track,
+        )
+        next_line = (after.column, after.track) == (
+            0,
+            before.track + TRAY_TRACKS,
+        )
+        assert same_line or next_line, (
+            f"{label(after.entry)} doesn't follow {label(before.entry)}"
+        )
+    assert len({cell.track for cell in icons}) > 1, (
+        "Expected the icons to wrap."
+    )
 
     def below(icon: Cell) -> Cell | None:
-        return next((cell for cell in icons if cell.column == icon.column and cell.track == icon.track + TRAY_TRACKS), None)
+        return next(
+            (
+                cell
+                for cell in icons
+                if cell.column == icon.column
+                and cell.track == icon.track + TRAY_TRACKS
+            ),
+            None,
+        )
 
     assert selected(press(at(menu, "Switch"), Key.DOWN)) == "App 0"
     for icon in icons:
         if (under := below(icon)) is not None:
-            assert selected(press(at(menu, label(icon.entry)), Key.DOWN)) == label(under.entry)
+            assert selected(
+                press(at(menu, label(icon.entry)), Key.DOWN)
+            ) == label(under.entry)
     assert selected(press(at(menu, f"App {count - 1}"), Key.DOWN)) == "Notices"
     assert press(at(menu, "App 9"), Key.ENTER) == Chosen(TrayChoice(9))
-    assert not any(cell.face is Face.ICON for cell in entries(RESTING, SPEC, Panel.WORKSPACE))
+    assert not any(
+        cell.face is Face.ICON
+        for cell in entries(RESTING, SPEC, Panel.WORKSPACE)
+    )
 
 
-def test_a_saved_network_joins_in_place_and_any_other_opens_windows_wifi_settings() -> None:
+def test_a_saved_network_joins_in_place_and_any_other_opens_windows_wifi_settings() -> (
+    None
+):
     # Defects: choosing an unsaved network tries a join that can only fail, a saved one
     # closes the panel before showing it connect, or the connected one rejoins.
-    def network(ssid: str, *, connected: bool = False, profile: str | None = None) -> Network:
-        return Network(ssid, 80, secured=True, connected=connected, profile=profile)
+    def network(
+        ssid: str, *, connected: bool = False, profile: str | None = None
+    ) -> Network:
+        return Network(
+            ssid, 80, secured=True, connected=connected, profile=profile
+        )
 
-    networks = (network("Home", connected=True, profile="Home"), network("Office", profile="Office profile"), network("Cafe"))
-    menu = Menu(Panel.NETWORK, entries(replace(RESTING, networks=networks), SPEC, Panel.NETWORK))
-    shown = [cell.entry for cell in menu.cells if isinstance(cell.entry, Nearby)]
-    assert [entry.label for entry in shown] == ["Home", "Office"], "Expected the row's limit to hold."
-    assert press(at(menu, "Office"), Key.ENTER) == Applied(Join("Office profile"))
+    networks = (
+        network("Home", connected=True, profile="Home"),
+        network("Office", profile="Office profile"),
+        network("Cafe"),
+    )
+    menu = Menu(
+        Panel.NETWORK,
+        entries(replace(RESTING, networks=networks), SPEC, Panel.NETWORK),
+    )
+    shown = [
+        cell.entry for cell in menu.cells if isinstance(cell.entry, Nearby)
+    ]
+    assert [entry.label for entry in shown] == ["Home", "Office"], (
+        "Expected the row's limit to hold."
+    )
+    assert press(at(menu, "Office"), Key.ENTER) == Applied(
+        Join("Office profile")
+    )
     assert press(at(menu, "Home"), Key.ENTER) == at(menu, "Home")
-    alone = Menu(Panel.NETWORK, entries(replace(RESTING, networks=(network("Cafe"),)), SPEC, Panel.NETWORK))
+    alone = Menu(
+        Panel.NETWORK,
+        entries(
+            replace(RESTING, networks=(network("Cafe"),)), SPEC, Panel.NETWORK
+        ),
+    )
     assert press(at(alone, "Cafe"), Key.ENTER) == Chosen(Command.WIFI_SETTINGS)
 
 
-def test_location_is_offered_only_while_windows_withholds_the_networks() -> None:
+def test_location_is_offered_only_while_windows_withholds_the_networks() -> (
+    None
+):
     # Defects: the location link shows beside a working list, or a withheld list leaves
     # the panel with no way to fix it.
     def labels(controls: Controls) -> list[str]:
-        return [label(cell.entry) for cell in entries(controls, SPEC, Panel.NETWORK)]
+        return [
+            label(cell.entry) for cell in entries(controls, SPEC, Panel.NETWORK)
+        ]
 
-    assert labels(replace(RESTING, networks=LOCATION_OFF)) == ["Locate", "Radio"]
-    assert "Locate" not in labels(replace(RESTING, networks=(Network("Home", 50, secured=False, connected=True, profile=None),)))
+    assert labels(replace(RESTING, networks=LOCATION_OFF)) == [
+        "Locate",
+        "Radio",
+    ]
+    assert "Locate" not in labels(
+        replace(
+            RESTING,
+            networks=(
+                Network(
+                    "Home", 50, secured=False, connected=True, profile=None
+                ),
+            ),
+        )
+    )
 
 
 def test_the_battery_says_whether_it_charges_or_how_long_it_lasts() -> None:
     # Defects: a battery on mains power reads as draining, an estimate under an hour reads
     # as zero hours, a known estimate is dropped, or an unread battery invents a reading.
     def said(power: Power) -> tuple[str, str] | None:
-        found = [cell.entry for cell in entries(replace(RESTING, power=power), SPEC, Panel.POWER) if isinstance(cell.entry, Fact)]
+        found = [
+            cell.entry
+            for cell in entries(
+                replace(RESTING, power=power), SPEC, Panel.POWER
+            )
+            if isinstance(cell.entry, Fact)
+        ]
         return next(((fact.value, fact.detail) for fact in found), None)
 
     assert said(Battery(80, powered=True, charging=True)) == ("80%", "Filling")
     assert said(Battery(100, powered=True, charging=False)) == ("100%", "Wired")
-    assert said(Battery(55, powered=False, charging=False, remaining=2 * 3600 + 5 * 60)) == ("55%", "2:05")
-    assert said(Battery(9, powered=False, charging=False, remaining=45 * 60 + 30)) == ("9%", "45m")
-    assert said(Battery(40, powered=False, charging=False)) == ("40%", "Draining")
+    assert said(
+        Battery(55, powered=False, charging=False, remaining=2 * 3600 + 5 * 60)
+    ) == ("55%", "2:05")
+    assert said(
+        Battery(9, powered=False, charging=False, remaining=45 * 60 + 30)
+    ) == ("9%", "45m")
+    assert said(Battery(40, powered=False, charging=False)) == (
+        "40%",
+        "Draining",
+    )
     assert said(PowerUnavailable.NO_BATTERY) == ("Wall", "")
     assert said(PowerUnavailable.UNKNOWN) is None

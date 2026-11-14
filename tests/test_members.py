@@ -24,7 +24,12 @@ def test_a_translation_missing_a_member_is_refused_by_name() -> None:
         assert str(error) == "Light has no value for: AMBER, GREEN"
     else:
         raise AssertionError("A partial translation was accepted.")
-    assert every_member(Light, {Light.RED: 1, Light.AMBER: 2, Light.GREEN: 3})[Light.AMBER] == 2
+    assert (
+        every_member(Light, {Light.RED: 1, Light.AMBER: 2, Light.GREEN: 3})[
+            Light.AMBER
+        ]
+        == 2
+    )
 
 
 def test_a_literal_translation_missing_a_value_is_refused_by_name() -> None:

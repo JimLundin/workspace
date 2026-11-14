@@ -7,7 +7,13 @@ from typing import override
 lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
-from desktop_ui.components.appearance import Design, Kit, Shade, Tokens, control_style
+from desktop_ui.components.appearance import (
+    Design,
+    Kit,
+    Shade,
+    Tokens,
+    control_style,
+)
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.vector_icons import icon
 from winapi import windows
@@ -38,12 +44,16 @@ def surface_style(theme: Tokens, radius: int, kit: Kit) -> str:
     return f"QFrame#surface {{ background: {theme.window}; border: {edge}; border-radius: {radius}px; }}"
 
 
-def tool_window(window: QtWidgets.QWidget, title: str | None, *, on_top: bool) -> None:
+def tool_window(
+    window: QtWidgets.QWidget, title: str | None, *, on_top: bool
+) -> None:
     """A frameless, translucent tool window that shows without activating; `on_top` keeps it above other windows."""
     if title is not None:
         window.setWindowTitle(title)
     flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
-    window.setWindowFlags(flags | Qt.WindowType.WindowStaysOnTopHint if on_top else flags)
+    window.setWindowFlags(
+        flags | Qt.WindowType.WindowStaysOnTopHint if on_top else flags
+    )
     window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
@@ -53,7 +63,9 @@ def device_size(widget: QtWidgets.QWidget, scale: float) -> Size:
     return Size(round(widget.width() * scale), round(widget.height() * scale))
 
 
-def surface(window: QtWidgets.QWidget, theme: Tokens, radius: int, kit: Kit) -> QtWidgets.QFrame:
+def surface(
+    window: QtWidgets.QWidget, theme: Tokens, radius: int, kit: Kit
+) -> QtWidgets.QFrame:
     """Draw a `tool_window` as one rounded surface; its corners stay transparent."""
     frame = QtWidgets.QFrame(window)
     frame.setObjectName("surface")
@@ -62,7 +74,9 @@ def surface(window: QtWidgets.QWidget, theme: Tokens, radius: int, kit: Kit) -> 
     return frame
 
 
-def segmented(buttons: Sequence[QtWidgets.QToolButton], kit: Kit) -> QtWidgets.QFrame:
+def segmented(
+    buttons: Sequence[QtWidgets.QToolButton], kit: Kit
+) -> QtWidgets.QFrame:
     """Checkable choices in one well; the checked choice carries the thumb."""
     frame = QtWidgets.QFrame()
     frame.setObjectName("segmented")
@@ -89,7 +103,15 @@ def glyph(name: str, ink: Shade, size: int = 16) -> QtGui.QPixmap:
 
 
 class Window(QtWidgets.QWidget):
-    def __init__(self, title: str, close: Callable[[], None], design: Design, *, width: int, height: int) -> None:
+    def __init__(
+        self,
+        title: str,
+        close: Callable[[], None],
+        design: Design,
+        *,
+        width: int,
+        height: int,
+    ) -> None:
         super().__init__()
         self.on_close = close
         self.setObjectName("workspaceWindow")
@@ -111,7 +133,12 @@ class Window(QtWidgets.QWidget):
         self.on_close()
 
 
-def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWidget | None = None) -> None:
+def show_window(
+    window: QtWidgets.QWidget,
+    *,
+    focus: bool,
+    target: QtWidgets.QWidget | None = None,
+) -> None:
     handle = int(window.winId())
     windows.allow_activation(handle, allowed=False)
     try:
@@ -125,7 +152,11 @@ def show_window(window: QtWidgets.QWidget, *, focus: bool, target: QtWidgets.QWi
     finally:
         windows.allow_activation(handle, allowed=True)
     if focus:
-        threading.Thread(target=lambda: windows.focus(handle), name="focus workspace", daemon=True).start()
+        threading.Thread(
+            target=lambda: windows.focus(handle),
+            name="focus workspace",
+            daemon=True,
+        ).start()
         (target or window).setFocus(Qt.FocusReason.OtherFocusReason)
 
 
@@ -136,7 +167,8 @@ def near_pointer(window: QtWidgets.QWidget, width: int, height: int) -> None:
     area = display.availableGeometry()
     window.resize(width, height)
     window.move(
-        max(area.left(), min(point.x() - width // 2, area.right() - width)), max(area.top(), min(point.y() - height // 3, area.bottom() - height))
+        max(area.left(), min(point.x() - width // 2, area.right() - width)),
+        max(area.top(), min(point.y() - height // 3, area.bottom() - height)),
     )
 
 
@@ -147,8 +179,18 @@ def _spaced[L: QtWidgets.QBoxLayout](layout: L, spacing: int) -> L:
 
 
 def row(parent: QtWidgets.QWidget | None = None) -> QtWidgets.QHBoxLayout:
-    return _spaced(QtWidgets.QHBoxLayout(parent) if parent is not None else QtWidgets.QHBoxLayout(), 8)
+    return _spaced(
+        QtWidgets.QHBoxLayout(parent)
+        if parent is not None
+        else QtWidgets.QHBoxLayout(),
+        8,
+    )
 
 
 def column(parent: QtWidgets.QWidget | None = None) -> QtWidgets.QVBoxLayout:
-    return _spaced(QtWidgets.QVBoxLayout(parent) if parent is not None else QtWidgets.QVBoxLayout(), 10)
+    return _spaced(
+        QtWidgets.QVBoxLayout(parent)
+        if parent is not None
+        else QtWidgets.QVBoxLayout(),
+        10,
+    )

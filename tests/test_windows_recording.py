@@ -14,7 +14,9 @@ from assistant.meeting_store import MeetingStore
 from winapi.pcm import RATE
 
 
-def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(tmp_path: Path) -> None:
+def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(
+    tmp_path: Path,
+) -> None:
     store = MeetingStore.create(tmp_path, "microphone")
     store.append(array("h", [1200] * RATE).tobytes())
     store.finish_capture()
@@ -33,4 +35,6 @@ def test_transcript_refresh_waits_for_a_real_windows_reader_to_release_the_file(
             store.export()
         finally:
             closer.join(timeout=2)
-    assert "The complete transcript." in store.transcript.read_text(encoding="utf-8")
+    assert "The complete transcript." in store.transcript.read_text(
+        encoding="utf-8"
+    )

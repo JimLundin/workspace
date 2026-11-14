@@ -42,10 +42,14 @@ class Memory:
 
 
 def light(keyboard: Keyboard, memory: Memory | None = None) -> KeyboardLight:
-    return KeyboardLight.resume(keyboard, memory if memory is not None else Memory())
+    return KeyboardLight.resume(
+        keyboard, memory if memory is not None else Memory()
+    )
 
 
-def test_darkening_turns_the_lights_off_and_restoring_puts_back_the_effect_the_person_set() -> None:
+def test_darkening_turns_the_lights_off_and_restoring_puts_back_the_effect_the_person_set() -> (
+    None
+):
     # Defects: restoring writes a fixed effect instead of the person's, or the lights stay off.
     keyboard = Keyboard(current=7)
     owner = light(keyboard).darken()
@@ -68,13 +72,18 @@ def test_restoring_what_was_never_darkened_leaves_the_keyboard_alone() -> None:
     assert keyboard.sets == []
 
 
-def test_an_unplug_while_dark_does_not_carry_a_stale_effect_to_the_next_darkening() -> None:
+def test_an_unplug_while_dark_does_not_carry_a_stale_effect_to_the_next_darkening() -> (
+    None
+):
     # Defect: a failed restore keeps the old effect and the next darkening skips reading the new setting.
     keyboard = Keyboard(current=1)
     owner = light(keyboard).darken()
     keyboard.attached = False
     owner = owner.restore()
-    keyboard.attached, keyboard.current = True, 5  # Replugged: lit from its saved setting, then changed.
+    keyboard.attached, keyboard.current = (
+        True,
+        5,
+    )  # Replugged: lit from its saved setting, then changed.
     owner.darken().restore()
     assert keyboard.current == 5
 
@@ -82,9 +91,17 @@ def test_an_unplug_while_dark_does_not_carry_a_stale_effect_to_the_next_darkenin
 def test_the_effect_is_read_from_the_answer_to_the_same_request() -> None:
     # Defects: the effect is read from the wrong byte, or a refusal or another command's report counts as an answer.
     sent = via.effect_message(read=True)
-    assert via.effect_reply(sent, bytes((0x08, 3, 2, 9)).ljust(32, b"\0")) == via.Effect(9)
-    assert via.effect_reply(sent, bytes((0xFF, 3, 2, 9)).ljust(32, b"\0")) == via.Absent()
-    assert via.effect_reply(sent, bytes((0x12, 0, 0, 9)).ljust(32, b"\0")) == via.Absent()
+    assert via.effect_reply(
+        sent, bytes((0x08, 3, 2, 9)).ljust(32, b"\0")
+    ) == via.Effect(9)
+    assert (
+        via.effect_reply(sent, bytes((0xFF, 3, 2, 9)).ljust(32, b"\0"))
+        == via.Absent()
+    )
+    assert (
+        via.effect_reply(sent, bytes((0x12, 0, 0, 9)).ljust(32, b"\0"))
+        == via.Absent()
+    )
 
 
 def test_a_restart_while_dark_puts_back_the_effect_the_person_set() -> None:

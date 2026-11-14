@@ -7,7 +7,16 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Final, NewType
 
-from winapi._core import ULONG_PTR, CloseHandle, CreateEventW, PostMessageW, fn, kernel32, last_error, user32
+from winapi._core import (
+    ULONG_PTR,
+    CloseHandle,
+    CreateEventW,
+    PostMessageW,
+    fn,
+    kernel32,
+    last_error,
+    user32,
+)
 
 
 class WindowMessage(IntEnum):
@@ -32,29 +41,86 @@ _MB_ICONHAND: Final = 0x10
 _ERROR_ALREADY_EXISTS: Final = 183
 _INFINITE: Final = 0xFFFF_FFFF
 
-_GetMessageW = fn(user32, "GetMessageW", wintypes.BOOL, ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT)
-_TranslateMessage = fn(user32, "TranslateMessage", wintypes.BOOL, ctypes.POINTER(wintypes.MSG))
-_DispatchMessageW = fn(user32, "DispatchMessageW", ULONG_PTR, ctypes.POINTER(wintypes.MSG))
+_GetMessageW = fn(
+    user32,
+    "GetMessageW",
+    wintypes.BOOL,
+    ctypes.POINTER(wintypes.MSG),
+    wintypes.HWND,
+    wintypes.UINT,
+    wintypes.UINT,
+)
+_TranslateMessage = fn(
+    user32, "TranslateMessage", wintypes.BOOL, ctypes.POINTER(wintypes.MSG)
+)
+_DispatchMessageW = fn(
+    user32, "DispatchMessageW", ULONG_PTR, ctypes.POINTER(wintypes.MSG)
+)
 _PostQuitMessage = fn(user32, "PostQuitMessage", None, ctypes.c_int)
-_SetTimer = fn(user32, "SetTimer", ULONG_PTR, wintypes.HWND, ULONG_PTR, wintypes.UINT, ctypes.c_void_p)
+_SetTimer = fn(
+    user32,
+    "SetTimer",
+    ULONG_PTR,
+    wintypes.HWND,
+    ULONG_PTR,
+    wintypes.UINT,
+    ctypes.c_void_p,
+)
 _KillTimer = fn(user32, "KillTimer", wintypes.BOOL, wintypes.HWND, ULONG_PTR)
-_MessageBoxW = fn(user32, "MessageBoxW", ctypes.c_int, wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT)
+_MessageBoxW = fn(
+    user32,
+    "MessageBoxW",
+    ctypes.c_int,
+    wintypes.HWND,
+    wintypes.LPCWSTR,
+    wintypes.LPCWSTR,
+    wintypes.UINT,
+)
 _GetTickCount = fn(kernel32, "GetTickCount", wintypes.DWORD)
 _GetCurrentProcess = fn(kernel32, "GetCurrentProcess", wintypes.HANDLE)
-_SetPriorityClass = fn(kernel32, "SetPriorityClass", wintypes.BOOL, wintypes.HANDLE, wintypes.DWORD)
-_SetProcessInformation = fn(kernel32, "SetProcessInformation", wintypes.BOOL, wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
-_CreateMutexW = fn(kernel32, "CreateMutexW", wintypes.HANDLE, ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
+_SetPriorityClass = fn(
+    kernel32, "SetPriorityClass", wintypes.BOOL, wintypes.HANDLE, wintypes.DWORD
+)
+_SetProcessInformation = fn(
+    kernel32,
+    "SetProcessInformation",
+    wintypes.BOOL,
+    wintypes.HANDLE,
+    ctypes.c_int,
+    ctypes.c_void_p,
+    wintypes.DWORD,
+)
+_CreateMutexW = fn(
+    kernel32,
+    "CreateMutexW",
+    wintypes.HANDLE,
+    ctypes.c_void_p,
+    wintypes.BOOL,
+    wintypes.LPCWSTR,
+)
 _WaitForMultipleObjects = fn(
-    kernel32, "WaitForMultipleObjects", wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE), wintypes.BOOL, wintypes.DWORD
+    kernel32,
+    "WaitForMultipleObjects",
+    wintypes.DWORD,
+    wintypes.DWORD,
+    ctypes.POINTER(wintypes.HANDLE),
+    wintypes.BOOL,
+    wintypes.DWORD,
 )
 
 _HIGH_PRIORITY_CLASS: Final = 0x0080
-_PROCESS_POWER_THROTTLING: Final = 4  # PROCESS_INFORMATION_CLASS.ProcessPowerThrottling
+_PROCESS_POWER_THROTTLING: Final = (
+    4  # PROCESS_INFORMATION_CLASS.ProcessPowerThrottling
+)
 _THROTTLE_EXECUTION_SPEED: Final = 0x1
 
 
 class _PowerThrottling(ctypes.Structure):
-    _fields_ = (("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG))
+    _fields_ = (
+        ("Version", wintypes.ULONG),
+        ("ControlMask", wintypes.ULONG),
+        ("StateMask", wintypes.ULONG),
+    )
 
 
 Lock = NewType("Lock", int)
@@ -76,7 +142,13 @@ def messages() -> Iterator[Message]:
     window procedure), until a quit message arrives."""
     msg = wintypes.MSG()
     while _GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-        yield Message(int(msg.hWnd or 0), int(msg.message), int(msg.wParam), int(msg.lParam), int(msg.time))
+        yield Message(
+            int(msg.hWnd or 0),
+            int(msg.message),
+            int(msg.wParam),
+            int(msg.lParam),
+            int(msg.time),
+        )
 
 
 def run_message_loop() -> None:
@@ -148,10 +220,19 @@ def close_event(event: EventHandle) -> None:
     CloseHandle(event)
 
 
-def wait_any(events: Sequence[EventHandle], timeout_ms: int | None = None) -> int | None:
+def wait_any(
+    events: Sequence[EventHandle], timeout_ms: int | None = None
+) -> int | None:
     """Blocks until one of the events is set; its index, or None on timeout."""
     handles = (wintypes.HANDLE * len(events))(*events)
-    index = int(_WaitForMultipleObjects(len(events), handles, False, _INFINITE if timeout_ms is None else timeout_ms))
+    index = int(
+        _WaitForMultipleObjects(
+            len(events),
+            handles,
+            False,
+            _INFINITE if timeout_ms is None else timeout_ms,
+        )
+    )
     if index < len(events):
         return index
     if index == 0x102:  # WAIT_TIMEOUT
@@ -172,5 +253,10 @@ def keep_responsive() -> None:
         raise last_error()
     # Control execution speed and set its state to off: never throttle.
     state = _PowerThrottling(1, _THROTTLE_EXECUTION_SPEED, 0)
-    if not _SetProcessInformation(process, _PROCESS_POWER_THROTTLING, ctypes.byref(state), ctypes.sizeof(state)):
+    if not _SetProcessInformation(
+        process,
+        _PROCESS_POWER_THROTTLING,
+        ctypes.byref(state),
+        ctypes.sizeof(state),
+    ):
         raise last_error()

@@ -10,9 +10,40 @@ from contracts.status import TRANSCRIBING, TYPING
 from desktop import look, placement
 from desktop_ui import ambient
 from desktop_ui.desktop_pager import PagerSpec
-from desktop_ui.island_layout import Bar, BarType, Capsule, Cells, Gauge, Markers, MenuGrid, Sizes
-from desktop_ui.island_menu import ActivitiesRow, CellSpec, CellsRow, ControlsSpec, EntryId, Face, MenuWords, NetworksRow, Panel, PanelSpec, TrayRow
-from desktop_ui.island_model import ELAPSED, ActivitiesSpec, Activity, IslandSpec, Phased, Reading, StatusSpec, Symbols, Words
+from desktop_ui.island_layout import (
+    Bar,
+    BarType,
+    Capsule,
+    Cells,
+    Gauge,
+    Markers,
+    MenuGrid,
+    Sizes,
+)
+from desktop_ui.island_menu import (
+    ActivitiesRow,
+    CellSpec,
+    CellsRow,
+    ControlsSpec,
+    EntryId,
+    Face,
+    MenuWords,
+    NetworksRow,
+    Panel,
+    PanelSpec,
+    TrayRow,
+)
+from desktop_ui.island_model import (
+    ELAPSED,
+    ActivitiesSpec,
+    Activity,
+    IslandSpec,
+    Phased,
+    Reading,
+    StatusSpec,
+    Symbols,
+    Words,
+)
 from desktop_ui.island_motion import Springs, Timing
 from desktop_ui.motion import Spring
 from winapi.machine_status import Speakers, Wifi
@@ -22,7 +53,9 @@ SPEAKERS: Final = every_member(
     {
         Speakers.AUDIBLE: ambient.Reading("speaker-on", "Speakers unmuted"),
         Speakers.MUTED: ambient.Reading("speaker-muted", "Speakers muted"),
-        Speakers.UNKNOWN: ambient.Reading("speaker-unknown", "Speaker status unavailable"),
+        Speakers.UNKNOWN: ambient.Reading(
+            "speaker-unknown", "Speaker status unavailable"
+        ),
     },
 )
 
@@ -33,7 +66,9 @@ WIFI: Final = every_member(
         Wifi.CONNECTED: ambient.Reading("wifi", "Wi-Fi connected"),
         Wifi.DISCONNECTED: ambient.Reading("wifi-off", "Wi-Fi disconnected"),
         Wifi.NO_ADAPTER: ambient.Reading("wifi-absent", "No Wi-Fi adapter"),
-        Wifi.UNKNOWN: ambient.Reading("wifi-unknown", "Wi-Fi status unavailable"),
+        Wifi.UNKNOWN: ambient.Reading(
+            "wifi-unknown", "Wi-Fi status unavailable"
+        ),
     },
 )
 
@@ -59,8 +94,26 @@ SIZES: Final = Sizes(
         current_dot=1.5,
     ),
     menu=MenuGrid(radius=21, pad=6, drop=6, track=10, gutter=8),
-    markers=Markers(wave_floor=3, wave_reach=13, wave_corner=1, halo=7, dot_count=3, dots_radius=2.2, dots_lift=1.5),
-    gauge=Gauge(width=24, height=12, corner=3.5, stroke=1, inset=1.5, nub=1.5, nub_height=4.5, bolt=10, knockout=1),
+    markers=Markers(
+        wave_floor=3,
+        wave_reach=13,
+        wave_corner=1,
+        halo=7,
+        dot_count=3,
+        dots_radius=2.2,
+        dots_lift=1.5,
+    ),
+    gauge=Gauge(
+        width=24,
+        height=12,
+        corner=3.5,
+        stroke=1,
+        inset=1.5,
+        nub=1.5,
+        nub_height=4.5,
+        bolt=10,
+        knockout=1,
+    ),
     cells=Cells(
         corner=12,
         lead=12,
@@ -96,7 +149,11 @@ SIZES: Final = Sizes(
         graph_line=1.5,
         signal_bar=2.5,
     ),
-    type=BarType(reading=look.TYPE.reading, strong=look.TYPE.strong, detail=look.TYPE.detail),
+    type=BarType(
+        reading=look.TYPE.reading,
+        strong=look.TYPE.strong,
+        detail=look.TYPE.detail,
+    ),
 )
 
 
@@ -111,54 +168,212 @@ CONTROLS: Final = ControlsSpec(
                     CellsRow(
                         4,
                         (
-                            CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keyboard overlay", "layers"),
-                            CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placement", "grid"),
+                            CellSpec(
+                                EntryId.OVERLAY,
+                                Face.TOGGLE,
+                                4,
+                                "Keyboard overlay",
+                                "layers",
+                            ),
+                            CellSpec(
+                                EntryId.PLACEMENT,
+                                Face.TOGGLE,
+                                4,
+                                "Placement",
+                                "grid",
+                            ),
                         ),
                     ),
-                    CellsRow(4, (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark when away", "lock"),)),
-                    CellsRow(5, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record a meeting", "mic"),)),
+                    CellsRow(
+                        4,
+                        (
+                            CellSpec(
+                                EntryId.DARK_WHEN_AWAY,
+                                Face.TOGGLE,
+                                8,
+                                "Dark when away",
+                                "lock",
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        5,
+                        (
+                            CellSpec(
+                                EntryId.RECORD,
+                                Face.WIDE,
+                                8,
+                                "Record a meeting",
+                                "mic",
+                            ),
+                        ),
+                    ),
                     CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
                     CellsRow(
                         7,
                         (
-                            CellSpec(EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch windows", "search", "Switch"),
-                            CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy latest transcript", "doc", "Transcript"),
-                            CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Keyboard map", "keyboard", "Key map"),
+                            CellSpec(
+                                EntryId.SWITCH_WINDOWS,
+                                Face.TOOL,
+                                2,
+                                "Switch windows",
+                                "search",
+                                "Switch",
+                            ),
+                            CellSpec(
+                                EntryId.COPY_TRANSCRIPT,
+                                Face.TOOL,
+                                2,
+                                "Copy latest transcript",
+                                "doc",
+                                "Transcript",
+                            ),
+                            CellSpec(
+                                EntryId.KEYMAP,
+                                Face.TOOL,
+                                2,
+                                "Keyboard map",
+                                "keyboard",
+                                "Key map",
+                            ),
                         ),
                     ),
                     TrayRow(4),
-                    CellsRow(3, (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Windows notification settings", "bell"),)),
-                    CellsRow(3, (CellSpec(EntryId.ALL_CONTROLS, Face.LINK, 8, "All Workspace controls…", "more"),)),
+                    CellsRow(
+                        3,
+                        (
+                            CellSpec(
+                                EntryId.NOTIFICATIONS,
+                                Face.LINK,
+                                8,
+                                "Windows notification settings",
+                                "bell",
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        3,
+                        (
+                            CellSpec(
+                                EntryId.ALL_CONTROLS,
+                                Face.LINK,
+                                8,
+                                "All Workspace controls…",
+                                "more",
+                            ),
+                        ),
+                    ),
                 ),
             ),
             Panel.NETWORK: PanelSpec(
                 300,
                 (
                     NetworksRow(5, most=8),
-                    CellsRow(5, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Turn on location to list networks", "lock"),)),
-                    CellsRow(3, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Wi-Fi settings", "wifi"),)),
+                    CellsRow(
+                        5,
+                        (
+                            CellSpec(
+                                EntryId.LOCATION,
+                                Face.WIDE,
+                                8,
+                                "Turn on location to list networks",
+                                "lock",
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        3,
+                        (
+                            CellSpec(
+                                EntryId.WIFI_SETTINGS,
+                                Face.LINK,
+                                8,
+                                "Wi-Fi settings",
+                                "wifi",
+                            ),
+                        ),
+                    ),
                 ),
             ),
             Panel.POWER: PanelSpec(
                 280,
                 (
-                    CellsRow(5, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Battery", "battery"),)),
-                    CellsRow(3, (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Power & battery settings", "charger"),)),
+                    CellsRow(
+                        5,
+                        (
+                            CellSpec(
+                                EntryId.BATTERY,
+                                Face.FACT,
+                                8,
+                                "Battery",
+                                "battery",
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        3,
+                        (
+                            CellSpec(
+                                EntryId.POWER_SETTINGS,
+                                Face.LINK,
+                                8,
+                                "Power & battery settings",
+                                "charger",
+                            ),
+                        ),
+                    ),
                 ),
             ),
             Panel.PERFORMANCE: PanelSpec(
                 300,
                 (
-                    CellsRow(11, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Processor"),)),
-                    CellsRow(11, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"),)),
+                    CellsRow(
+                        11,
+                        (
+                            CellSpec(
+                                EntryId.CPU_GRAPH, Face.GRAPH, 8, "Processor"
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        11,
+                        (
+                            CellSpec(
+                                EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"
+                            ),
+                        ),
+                    ),
                 ),
             ),
-            Panel.CALENDAR: PanelSpec(300, (CellsRow(25, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Calendar"),)),)),
+            Panel.CALENDAR: PanelSpec(
+                300,
+                (
+                    CellsRow(
+                        25,
+                        (
+                            CellSpec(
+                                EntryId.CALENDAR, Face.CALENDAR, 8, "Calendar"
+                            ),
+                        ),
+                    ),
+                ),
+            ),
             Panel.SOUND: PanelSpec(
                 280,
                 (
                     CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                    CellsRow(4, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Mute", "speaker-muted"),)),
+                    CellsRow(
+                        4,
+                        (
+                            CellSpec(
+                                EntryId.MUTE,
+                                Face.TOGGLE,
+                                8,
+                                "Mute",
+                                "speaker-muted",
+                            ),
+                        ),
+                    ),
                 ),
             ),
         },
@@ -207,10 +422,25 @@ ISLAND: Final = IslandSpec(
     # evenly spaced, each opening its panel. Leave a reading out to hide it.
     # The keyboard shows only while it types plainly.
     status=StatusSpec(
-        (Reading.WORKSPACE, Reading.KEYBOARD, Reading.SPEAKER, Reading.WIFI, Reading.CPU, Reading.MEMORY, Reading.BATTERY, Reading.CLOCK),
+        (
+            Reading.WORKSPACE,
+            Reading.KEYBOARD,
+            Reading.SPEAKER,
+            Reading.WIFI,
+            Reading.CPU,
+            Reading.MEMORY,
+            Reading.BATTERY,
+            Reading.CLOCK,
+        ),
         SPEAKERS,
         WIFI,
-        Symbols(workspace="menu", keyboard="keyboard", charger="charger", cpu="cpu", memory="memory"),
+        Symbols(
+            workspace="menu",
+            keyboard="keyboard",
+            charger="charger",
+            cpu="cpu",
+            memory="memory",
+        ),
         every_member(
             Reading,
             {
@@ -236,7 +466,9 @@ ISLAND: Final = IslandSpec(
     # Where activities sit beside the island, left to right. A transcription
     # and a recording step out of the island while you dictate. Each activity is
     # placed exactly once.
-    activities=ActivitiesSpec(lead=(Activity.JOB,), trail=(Activity.RECORDING,)),
+    activities=ActivitiesSpec(
+        lead=(Activity.JOB,), trail=(Activity.RECORDING,)
+    ),
     words=Words(
         jobs=frozendict({TRANSCRIBING: "Transcribing", TYPING: "Typing"}),
         phases=every_literal(
@@ -245,10 +477,16 @@ ISLAND: Final = IslandSpec(
                 "idle": None,
                 "starting": Phased("Starting…", can_stop=True, attention=False),
                 "recording": Phased(ELAPSED, can_stop=True, attention=False),
-                "stopping": Phased("Stopping…", can_stop=False, attention=False),
+                "stopping": Phased(
+                    "Stopping…", can_stop=False, attention=False
+                ),
                 "finishing": Phased("Saving…", can_stop=False, attention=False),
-                "paused": Phased("Check recording", can_stop=False, attention=True),
-                "interrupted": Phased("Check recording", can_stop=False, attention=True),
+                "paused": Phased(
+                    "Check recording", can_stop=False, attention=True
+                ),
+                "interrupted": Phased(
+                    "Check recording", can_stop=False, attention=True
+                ),
                 "saved": None,
             },
         ),
@@ -283,5 +521,10 @@ SPRINGS: Final = Springs(
 TIMING: Final = Timing(pulse=1.2, lag=1 / 6, opaque_at=0.625, wave_sample=0.05)
 
 
-PAGER: Final = PagerSpec(placement.WEB_APPS, desktop="Desktop", current="current", empty="No placed apps")
+PAGER: Final = PagerSpec(
+    placement.WEB_APPS,
+    desktop="Desktop",
+    current="current",
+    empty="No placed apps",
+)
 """The pager's web apps and wording."""

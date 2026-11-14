@@ -5,12 +5,18 @@ from typing import Literal
 from winapi.shapes import Rect
 
 
-def half(work: Rect, side: Literal["left", "right"], outer: Rect, visible: Rect) -> Rect:
+def half(
+    work: Rect, side: Literal["left", "right"], outer: Rect, visible: Rect
+) -> Rect:
     """Where to put a window (its outer rectangle) so what's drawn of it fills one
     half of the work area. Windows positions windows by their outer rectangle, which
     has invisible borders around what's drawn; they're added back on."""
     middle = work.left + work.width // 2
-    target = Rect(work.left, work.top, middle, work.bottom) if side == "left" else Rect(middle, work.top, work.right, work.bottom)
+    target = (
+        Rect(work.left, work.top, middle, work.bottom)
+        if side == "left"
+        else Rect(middle, work.top, work.right, work.bottom)
+    )
     return framed(target, outer, visible)
 
 

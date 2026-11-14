@@ -61,7 +61,9 @@ class Zoom:
     """Fill the focused window's monitor until pressed again or focus leaves it."""
 
 
-type Navigation = AppKey | CycleApp | ShowWindow | SpatialFocus | JumpDesktop | Zoom
+type Navigation = (
+    AppKey | CycleApp | ShowWindow | SpatialFocus | JumpDesktop | Zoom
+)
 
 
 class Placing(Enum):
@@ -143,7 +145,9 @@ class ZoomOut:
 type Effect = Focus | Switch | Launch | ZoomIn | ZoomOut | None
 
 
-def launcher(target: protocol.Installed | protocol.PinnedWeb) -> protocol.Installed | PinnedApp:
+def launcher(
+    target: protocol.Installed | protocol.PinnedWeb,
+) -> protocol.Installed | PinnedApp:
     match target:
         case protocol.Installed():
             return target
@@ -174,7 +178,9 @@ def slot_launcher(app: App) -> PinnedApp | None:
             assert_never(app)
 
 
-def cycle(app: App, world: World, start: protocol.Installed | PinnedApp | None) -> Effect:
+def cycle(
+    app: App, world: World, start: protocol.Installed | PinnedApp | None
+) -> Effect:
     handles = world.windows.get(app, ())
     if not handles:
         return Launch(start) if start is not None else None
@@ -183,8 +189,15 @@ def cycle(app: App, world: World, start: protocol.Installed | PinnedApp | None) 
 
 def remembered(world: World, desktop: int) -> int | None:
     """The window to land on when arriving at a desktop: the one last in front there, else its first placed window."""
-    placed = tuple(handle for handle, target in world.placement.items() if target.desktop == desktop)
-    return next((handle for handle in world.recent if handle in placed), placed[0] if placed else None)
+    placed = tuple(
+        handle
+        for handle, target in world.placement.items()
+        if target.desktop == desktop
+    )
+    return next(
+        (handle for handle in world.recent if handle in placed),
+        placed[0] if placed else None,
+    )
 
 
 def arrive(world: World, desktop: int) -> Effect:
@@ -195,8 +208,14 @@ def arrive(world: World, desktop: int) -> Effect:
 
 def nearest(world: World, direction: Direction) -> int | None:
     """The placed window on the current desktop closest in `direction` from the window in front; None when there is none."""
-    here = tuple((handle, target.rect) for handle, target in world.placement.items() if target.desktop == world.current)
-    origin = next((rect for handle, rect in here if handle == world.foreground), None)
+    here = tuple(
+        (handle, target.rect)
+        for handle, target in world.placement.items()
+        if target.desktop == world.current
+    )
+    origin = next(
+        (rect for handle, rect in here if handle == world.foreground), None
+    )
     if origin is None:
         return None
 
@@ -204,7 +223,9 @@ def nearest(world: World, direction: Direction) -> int | None:
         """Prefer the window sharing the most edge with the origin, then the closest, then the best centred."""
         horizontal = direction in (Direction.LEFT, Direction.RIGHT)
         overlap = (
-            min(rect.bottom, origin.bottom) - max(rect.top, origin.top) if horizontal else min(rect.right, origin.right) - max(rect.left, origin.left)
+            min(rect.bottom, origin.bottom) - max(rect.top, origin.top)
+            if horizontal
+            else min(rect.right, origin.right) - max(rect.left, origin.left)
         )
         off = (
             abs((rect.top + rect.bottom) - (origin.top + origin.bottom))
@@ -224,7 +245,11 @@ def nearest(world: World, direction: Direction) -> int | None:
                 assert_never(direction)
         return (overlap <= 0, -max(overlap, 0), gap, off) if gap >= 0 else None
 
-    scored = tuple((ranked, handle) for handle, rect in here if handle != world.foreground and (ranked := score(rect)) is not None)
+    scored = tuple(
+        (ranked, handle)
+        for handle, rect in here
+        if handle != world.foreground and (ranked := score(rect)) is not None
+    )
     return min(scored)[1] if scored else None
 
 
@@ -245,7 +270,11 @@ def effect(navigation: Navigation, world: World) -> Effect:
         case Zoom():
             if world.zoomed is not None and world.zoomed == world.foreground:
                 return ZoomOut(world.zoomed)
-            return ZoomIn(world.foreground) if world.foreground in world.placement else None
+            return (
+                ZoomIn(world.foreground)
+                if world.foreground in world.placement
+                else None
+            )
         case _:
             assert_never(navigation)
 
@@ -253,7 +282,11 @@ def effect(navigation: Navigation, world: World) -> Effect:
 def destination(chosen: Effect, world: World) -> int:
     """The desktop `chosen` leads to: a focused window's own, a switch's, else the current one."""
     match chosen:
-        case Focus(window=window) | ZoomIn(window=window) | ZoomOut(window=window):
+        case (
+            Focus(window=window)
+            | ZoomIn(window=window)
+            | ZoomOut(window=window)
+        ):
             return world.located.get(window, world.current)
         case Switch(desktop=desktop):
             return desktop

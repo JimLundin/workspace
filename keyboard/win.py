@@ -19,13 +19,37 @@ from diagnostics import Detail, FailureInfo, failure_info
 from keyboard import hook_watch
 from keyboard.bindings import Bindings
 from keyboard.chords import Chords
-from keyboard.engine import Engine, EngineState, Indicator, UnreleasedError, Verdict, release_all, toggle
-from keyboard.firmware import CapturedKey, ConsumedKey, FirmwareKeyboard, HeldShortcut, connected
+from keyboard.engine import (
+    Engine,
+    EngineState,
+    Indicator,
+    UnreleasedError,
+    Verdict,
+    release_all,
+    toggle,
+)
+from keyboard.firmware import (
+    CapturedKey,
+    ConsumedKey,
+    FirmwareKeyboard,
+    HeldShortcut,
+    connected,
+)
 from keyboard.hook_watch import ANSWERED
 from keyboard.keys import Key, Mod
 from keyboard.layout import Layout, UsbIdentity
 from keyboard.physical import Scancode
-from protocol import LayoutState, Message, Origin, Places, Programs, Request, Window, encode, encode_indicator
+from protocol import (
+    LayoutState,
+    Message,
+    Origin,
+    Places,
+    Programs,
+    Request,
+    Window,
+    encode,
+    encode_indicator,
+)
 from winapi import inputs, keyboard_devices, keyboard_language, system, windows
 
 LOCK_NAME: Final = "Local\\keyboard"
@@ -42,7 +66,9 @@ class KeyboardSystem(Protocol):
     def read_key_event(self, lparam: int) -> inputs.KeyEvent: ...
     def call_next_hook(self, code: int, wparam: int, lparam: int) -> int: ...
     def find_window(self, window: Window) -> int | None: ...
-    def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool: ...
+    def post_message(
+        self, hwnd: int, message: int, wparam: int, lparam: int
+    ) -> bool: ...
     def set_timer(self, ms: int) -> int: ...
     def kill_timer(self, timer: int) -> None: ...
     def record_recovery(self, details: Mapping[str, Detail]) -> None: ...
@@ -57,7 +83,9 @@ class NativeKeyboardSystem:
     """The keyboard's own log: its input recoveries."""
 
     def send_key(self, key: Key | Mod, *, down: bool) -> None:
-        inputs.send_key(key.vk, down=down, extended=key.extended, extra=Origin.LAYOUT)
+        inputs.send_key(
+            key.vk, down=down, extended=key.extended, extra=Origin.LAYOUT
+        )
 
     keyboard_devices = staticmethod(keyboard_devices.names)
     foreground = staticmethod(windows.foreground)
@@ -68,14 +96,18 @@ class NativeKeyboardSystem:
     def find_window(self, window: Window) -> int | None:
         return windows.find(window.title)
 
-    def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool:
+    def post_message(
+        self, hwnd: int, message: int, wparam: int, lparam: int
+    ) -> bool:
         return system.post_message(hwnd, message, wparam, lparam)
 
     set_timer = staticmethod(system.set_timer)
     kill_timer = staticmethod(system.kill_timer)
 
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
-        diagnostics.append(self.log, diagnostics.evidence("input_recovery", details))
+        diagnostics.append(
+            self.log, diagnostics.evidence("input_recovery", details)
+        )
 
     post_quit = staticmethod(system.post_quit)
 
@@ -106,7 +138,9 @@ class WinHost:
     tapping_term: int
     """Milliseconds before an undecided tap-hold key is held."""
     peers: Peers
-    _state: Cell[_Hosted] = field(default_factory=lambda: Cell(_Hosted()), init=False, repr=False)
+    _state: Cell[_Hosted] = field(
+        default_factory=lambda: Cell(_Hosted()), init=False, repr=False
+    )
 
     @property
     def found(self) -> int | None:
@@ -122,14 +156,20 @@ class WinHost:
 
     def own(self, key: Key | Mod) -> None:
         """Treat `key` as Workspace output whose key-up Windows has not yet accepted."""
-        self._state.set(replace(self._state.get(), owned=self._state.get().owned | {key}))
+        self._state.set(
+            replace(self._state.get(), owned=self._state.get().owned | {key})
+        )
 
     def send(self, key: Key | Mod, *, down: bool) -> None:
         if down:
             self.own(key)
         self.platform.send_key(key, down=down)
         if not down:
-            self._state.set(replace(self._state.get(), owned=self._state.get().owned - {key}))
+            self._state.set(
+                replace(
+                    self._state.get(), owned=self._state.get().owned - {key}
+                )
+            )
 
     def release_owned(self) -> None:
         """Retry only our outputs, including a chord interrupted before engine ownership."""
@@ -148,14 +188,22 @@ class WinHost:
         self.tell(Message.REQUEST, encode(request), int(down))
 
     def indicate(self, indicator: Indicator) -> None:
-        self.tell(Message.INDICATOR, encode_indicator(indicator.layer.code, caps_word=indicator.caps_word), 0)
+        self.tell(
+            Message.INDICATOR,
+            encode_indicator(
+                indicator.layer.code, caps_word=indicator.caps_word
+            ),
+            0,
+        )
         if indicator.chord != self._state.get().chord:
             self._state.set(replace(self._state.get(), chord=indicator.chord))
             self.tell(Message.CHORD, int(indicator.chord), 0)
 
     def tell(self, message: int, wparam: int, lparam: int) -> bool:
         """Posts to the desktop's window; nothing happens if it isn't running."""
-        for _ in range(2):  # a cached window may be gone (the desktop restarted): look again
+        for _ in range(
+            2
+        ):  # a cached window may be gone (the desktop restarted): look again
             handle = self.found
             if handle is None:
                 handle = self.platform.find_window(self.peers.desktop)
@@ -230,10 +278,18 @@ class Routing:
 
     @classmethod
     def of(cls, layout: Layout, bindings: Bindings) -> Routing:
-        return cls(Chords.of(bindings), layout.apps_key, layout.native_keys, layout.escape, layout.firmware)
+        return cls(
+            Chords.of(bindings),
+            layout.apps_key,
+            layout.native_keys,
+            layout.escape,
+            layout.firmware,
+        )
 
 
-def route(key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: bool) -> Route:
+def route(
+    key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: bool
+) -> Route:
     """The hook's policy, in the order it applies: each rule only sees keys the ones above let through."""
     if state.busy or key.extra == Origin.LAYOUT:
         return Route.OWN
@@ -244,7 +300,12 @@ def route(key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: boo
             return Route.APPS_THUMB
         if any(held.identity == key_identity for held in state.shortcuts):
             return Route.SHORTCUT_HELD
-        if state.firmware is not None and down and key_identity not in state.owed and routing.chords.shortcut(key.vk, apps_held=state.apps_held):
+        if (
+            state.firmware is not None
+            and down
+            and key_identity not in state.owed
+            and routing.chords.shortcut(key.vk, apps_held=state.apps_held)
+        ):
             return Route.SHORTCUT
     if state.firmware is not None:
         return Route.FIRMWARE
@@ -252,21 +313,27 @@ def route(key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: boo
         return Route.OWED_UP
     if key.extra == Origin.DESKTOP:
         return Route.OWN
-    if (state.switcher and key.vk in SWITCHER_KEYS) or key.vk in routing.native_keys:
+    if (
+        state.switcher and key.vk in SWITCHER_KEYS
+    ) or key.vk in routing.native_keys:
         return Route.NATIVE
     if key.extended:
         return Route.EXTENDED
     return Route.LAYOUT
 
 
-def owes(key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: bool) -> bool:
+def owes(
+    key: inputs.KeyEvent, state: HookState, routing: Routing, *, down: bool
+) -> bool:
     """Whether Windows must later get this key's up natively: a physical down the layout won't own.
 
     That is every physical down while the layout is off (but the escape key, which turns
     it on), and the window switcher's own keys."""
     if not down or not physical(key) or key.extra == Origin.DESKTOP:
         return False
-    if not state.engine.enabled and (key.scancode != routing.escape or key.extended):
+    if not state.engine.enabled and (
+        key.scancode != routing.escape or key.extended
+    ):
         return True
     return state.switcher and key.vk in SWITCHER_KEYS
 
@@ -344,7 +411,9 @@ class Keyboard:
     _state: Cell[HookState]
 
     @classmethod
-    def open(cls, layout: Layout, peers: Peers, platform: KeyboardSystem) -> Keyboard:
+    def open(
+        cls, layout: Layout, peers: Peers, platform: KeyboardSystem
+    ) -> Keyboard:
         """The keyboard for `layout`, or `LayoutError` if the layout is inconsistent."""
         bindings = Bindings.of(layout)
         return cls(
@@ -374,7 +443,9 @@ class Keyboard:
         """Keys arriving meanwhile (our own output) pass untouched."""
         return Guard(self._state)
 
-    def step_keys(self, step: Callable[[EngineState], tuple[EngineState, Verdict]]) -> Verdict:
+    def step_keys(
+        self, step: Callable[[EngineState], tuple[EngineState, Verdict]]
+    ) -> Verdict:
         """Run one engine step and keep the state it returns, including after a refused cleanup."""
         try:
             keys, verdict = step(self.engine_state)
@@ -385,29 +456,46 @@ class Keyboard:
         return verdict
 
     def release_keys(self) -> None:
-        self.step_keys(lambda keys: (release_all(keys, self.host), Verdict.PASS))
+        self.step_keys(
+            lambda keys: (release_all(keys, self.host), Verdict.PASS)
+        )
 
     def toggle_keys(self) -> None:
         self.step_keys(lambda keys: (toggle(keys, self.host), Verdict.PASS))
 
     def timeout(self, timer: int) -> None:
         """A tapping-term timer fired."""
-        self.step_keys(lambda keys: (self.engine.timeout(keys, self.host, timer), Verdict.PASS))
+        self.step_keys(
+            lambda keys: (
+                self.engine.timeout(keys, self.host, timer),
+                Verdict.PASS,
+            )
+        )
 
     def raw_key(self, at: int) -> None:
         """Raw input saw a key at `at`: the hook watchdog's evidence that keys still arrive."""
-        self._state.update(lambda state: replace(state, watch=hook_watch.keyboard_input(state.watch, at)))
+        self._state.update(
+            lambda state: replace(
+                state, watch=hook_watch.keyboard_input(state.watch, at)
+            )
+        )
 
     def on_message(self, message: int) -> None:
         """The desktop's query and the tray's toggle; toggling uses the same guard as physical keys."""
         state = self._state.get()
         if message == Message.QUERY_LAYOUT_STATE:
-            self.host.layout_state(LayoutState.ON if state.engine.enabled else LayoutState.OFF)
+            self.host.layout_state(
+                LayoutState.ON if state.engine.enabled else LayoutState.OFF
+            )
             self.host.indicate(state.engine.shown)
             self.host.tell(Message.KEY_STATE, 0, 0)
             for scancode in sorted(state.pressed):
                 self.host.tell(Message.KEY_STATE, scancode, 1)
-            self.host.tell(Message.CHORD, int(state.chord_held or state.engine.shown.chord), 0)
+            self.host.tell(
+                Message.CHORD,
+                int(state.chord_held or state.engine.shown.chord),
+                0,
+            )
         if message != Message.TOGGLE_LAYOUT or state.firmware is not None:
             return
         with self.guarded():
@@ -422,12 +510,18 @@ class Keyboard:
     def update_devices(self) -> None:
         """Observe hotplug outside the hook, release outputs, and restore prior intent."""
         previous = self._state.get().firmware
-        attached = connected(self.platform.keyboard_devices(), self.routing.firmware)
+        attached = connected(
+            self.platform.keyboard_devices(), self.routing.firmware
+        )
         if attached == (previous is not None):
             return
         if attached:
             enabled = self.engine_state.enabled
-            self._state.update(lambda state: replace(state, firmware=FirmwareKeyboard(resume_layout=enabled)))
+            self._state.update(
+                lambda state: replace(
+                    state, firmware=FirmwareKeyboard(resume_layout=enabled)
+                )
+            )
             with self.guarded():
                 try:
                     if enabled:
@@ -436,7 +530,9 @@ class Keyboard:
                 except Exception as error:
                     self.input_failed(error, phase="firmware_keyboard")
             return
-        self._state.update(lambda state: replace(state, firmware=None, apps_held=False))
+        self._state.update(
+            lambda state: replace(state, firmware=None, apps_held=False)
+        )
         try:
             self.observe_chord()
             self.release_shortcuts()
@@ -449,7 +545,12 @@ class Keyboard:
     def release_shortcuts(self) -> None:
         """End capture on unplug, failure or shutdown, still swallowing the keys' ups."""
         held = self._state.get().shortcuts
-        self._state.update(lambda state: replace(state, shortcuts=tuple(ConsumedKey(key.identity) for key in held)))
+        self._state.update(
+            lambda state: replace(
+                state,
+                shortcuts=tuple(ConsumedKey(key.identity) for key in held),
+            )
+        )
         failures = 0
         for key in held:
             match key:
@@ -463,20 +564,37 @@ class Keyboard:
                 case _:
                     assert_never(key)
         if failures:
-            raise OSError(f"Failed to finish {failures} external keyboard shortcut requests.")
+            raise OSError(
+                f"Failed to finish {failures} external keyboard shortcut requests."
+            )
 
     def prepare_enable(self) -> None:
         """Do not resume remapping while a rejected Workspace key-up is outstanding."""
         self.host.release_owned()
         if self.host.owned:
-            raise OSError("Windows still refuses Workspace key releases. Switch away from the elevated application before enabling the layout.")
+            raise OSError(
+                "Windows still refuses Workspace key releases. Switch away from the elevated application before enabling the layout."
+            )
 
     def input_failed(self, error: Exception, *, phase: str = "key") -> None:
         """Fail open, without logging or retaining traceback objects inside the hook."""
         state = self._state.get()
-        earlier = state.recovery.cleanup_failures if state.recovery is not None else 0
-        firmware = FirmwareKeyboard(resume_layout=False) if state.firmware is not None else None
-        self._state.update(lambda state: replace(state, engine=state.engine.failed_open(), firmware=firmware, pressed=frozenset()))
+        earlier = (
+            state.recovery.cleanup_failures if state.recovery is not None else 0
+        )
+        firmware = (
+            FirmwareKeyboard(resume_layout=False)
+            if state.firmware is not None
+            else None
+        )
+        self._state.update(
+            lambda state: replace(
+                state,
+                engine=state.engine.failed_open(),
+                firmware=firmware,
+                pressed=frozenset(),
+            )
+        )
         with self.guarded():
             with contextlib.suppress(Exception):
                 self.release_shortcuts()
@@ -487,8 +605,19 @@ class Keyboard:
                 failed = 1
             with contextlib.suppress(Exception):
                 self.host.release_owned()
-            recovery = Recovery(failure_info(error), phase, ticks=5, cleanup_failures=earlier + failed)
-            self._state.update(lambda state: replace(state, engine=replace(state.engine, shown=Indicator()), recovery=recovery))
+            recovery = Recovery(
+                failure_info(error),
+                phase,
+                ticks=5,
+                cleanup_failures=earlier + failed,
+            )
+            self._state.update(
+                lambda state: replace(
+                    state,
+                    engine=replace(state.engine, shown=Indicator()),
+                    recovery=recovery,
+                )
+            )
             with contextlib.suppress(Exception):
                 self.host.tell(Message.KEY_STATE, 0, 0)
                 self.host.layout_state(LayoutState.OFF)
@@ -506,7 +635,11 @@ class Keyboard:
                 self.host.layout_state(LayoutState.OFF)
         ticks = recovery.ticks - 1
         if self.host.owned and ticks:
-            self._state.update(lambda state: replace(state, recovery=replace(recovery, ticks=ticks)))
+            self._state.update(
+                lambda state: replace(
+                    state, recovery=replace(recovery, ticks=ticks)
+                )
+            )
             return
         self._state.update(lambda state: replace(state, recovery=None))
         with contextlib.suppress(Exception):
@@ -524,11 +657,20 @@ class Keyboard:
     def show_key(self, scancode: Scancode, *, down: bool) -> None:
         """Send each physical transition once; repeats and unpictured keys add nothing."""
         pressed = self._state.get().pressed
-        if scancode != self.engine.escape and not self.engine.bindings.pictured(scancode):
+        if scancode != self.engine.escape and not self.engine.bindings.pictured(
+            scancode
+        ):
             return
         if (scancode in pressed) == down:
             return
-        self._state.update(lambda state: replace(state, pressed=state.pressed | {scancode} if down else state.pressed - {scancode}))
+        self._state.update(
+            lambda state: replace(
+                state,
+                pressed=state.pressed | {scancode}
+                if down
+                else state.pressed - {scancode},
+            )
+        )
         self.host.tell(Message.KEY_STATE, scancode, int(down))
 
     def clear_pressed(self) -> None:
@@ -540,7 +682,9 @@ class Keyboard:
         if code == 0 and (down := inputs.transition(wparam)) is not None:
             try:
                 key = self.platform.read_key_event(lparam)
-                self._state.update(lambda state: replace(state, hook_tick=key.time))
+                self._state.update(
+                    lambda state: replace(state, hook_tick=key.time)
+                )
                 if self.swallow(key, down=down):
                     return 1
             except Exception as error:
@@ -583,14 +727,31 @@ class Keyboard:
             except Exception as error:
                 self.input_failed(error, phase="hook_reinstall")
         self._state.update(
-            lambda state: replace(state, shortcuts=(), owed=frozenset(), apps_held=False, engine=replace(state.engine, escape_down_at=None))
+            lambda state: replace(
+                state,
+                shortcuts=(),
+                owed=frozenset(),
+                apps_held=False,
+                engine=replace(state.engine, escape_down_at=None),
+            )
         )
         with contextlib.suppress(Exception):
             self.observe_chord()
             self.clear_pressed()
-        silent = {} if outage.last_hook is None else {"hook_silent_ms": hook_watch.offset(now, outage.last_hook)}
+        silent = (
+            {}
+            if outage.last_hook is None
+            else {"hook_silent_ms": hook_watch.offset(now, outage.last_hook)}
+        )
         with contextlib.suppress(OSError):
-            self.platform.record_recovery({"phase": "hook_reinstall", "ok": True, "outage_ms": hook_watch.offset(now, outage.since), **silent})
+            self.platform.record_recovery(
+                {
+                    "phase": "hook_reinstall",
+                    "ok": True,
+                    "outage_ms": hook_watch.offset(now, outage.since),
+                    **silent,
+                }
+            )
 
     def observe_chord(self) -> None:
         """Tell the desktop when the Charybdis starts or stops holding its Apps thumb."""
@@ -607,16 +768,26 @@ class Keyboard:
         if window == state.window:
             return state
         switcher = self.platform.title(window) == self.host.peers.switcher
-        return self._state.update(lambda state: replace(state, window=window, switcher=switcher))
+        return self._state.update(
+            lambda state: replace(state, window=window, switcher=switcher)
+        )
 
     def swallow(self, key: inputs.KeyEvent, *, down: bool) -> bool:
         """True if the original key should be blocked."""
         state = self._state.get()
-        if state.firmware is None and not state.busy and key.extra != Origin.LAYOUT:
+        if (
+            state.firmware is None
+            and not state.busy
+            and key.extra != Origin.LAYOUT
+        ):
             state = self.observe_window()
         kind = route(key, state, self.routing, down=down)
-        if kind in (Route.NATIVE, Route.EXTENDED, Route.LAYOUT) and owes(key, state, self.routing, down=down):
-            self._state.update(lambda state: replace(state, owed=state.owed | {identity(key)}))
+        if kind in (Route.NATIVE, Route.EXTENDED, Route.LAYOUT) and owes(
+            key, state, self.routing, down=down
+        ):
+            self._state.update(
+                lambda state: replace(state, owed=state.owed | {identity(key)})
+            )
         match kind:
             case Route.OWN | Route.NATIVE:
                 return False
@@ -629,17 +800,38 @@ class Keyboard:
                     self.finish_shortcut(identity(key))
                 return True
             case Route.SHORTCUT:
-                if request := self.routing.chords.shortcut(key.vk, apps_held=state.apps_held):
-                    self._state.update(lambda state: replace(state, shortcuts=(*state.shortcuts, HeldShortcut(identity(key), request))))
+                if request := self.routing.chords.shortcut(
+                    key.vk, apps_held=state.apps_held
+                ):
+                    self._state.update(
+                        lambda state: replace(
+                            state,
+                            shortcuts=(
+                                *state.shortcuts,
+                                HeldShortcut(identity(key), request),
+                            ),
+                        )
+                    )
                     self.host.request(request, down=True)
                 return True
             case Route.FIRMWARE:
                 # The Charybdis owns ordinary keys: remember its native downs so their ups pass after unplugging.
                 if physical(key) and key.extra != Origin.DESKTOP:
-                    self._state.update(lambda state: replace(state, owed=state.owed | {identity(key)} if down else state.owed - {identity(key)}))
+                    self._state.update(
+                        lambda state: replace(
+                            state,
+                            owed=state.owed | {identity(key)}
+                            if down
+                            else state.owed - {identity(key)},
+                        )
+                    )
                 return False
             case Route.OWED_UP:
-                self._state.update(lambda state: replace(state, owed=state.owed - {identity(key)}))
+                self._state.update(
+                    lambda state: replace(
+                        state, owed=state.owed - {identity(key)}
+                    )
+                )
                 return False
             case Route.EXTENDED:
                 return state.engine.enabled
@@ -659,8 +851,21 @@ class Keyboard:
 
     def finish_shortcut(self, held_identity: int) -> None:
         """A captured shortcut key came up: end its request, if it still has one."""
-        held = next(item for item in self._state.get().shortcuts if item.identity == held_identity)
-        self._state.update(lambda state: replace(state, shortcuts=tuple(item for item in state.shortcuts if item.identity != held_identity)))
+        held = next(
+            item
+            for item in self._state.get().shortcuts
+            if item.identity == held_identity
+        )
+        self._state.update(
+            lambda state: replace(
+                state,
+                shortcuts=tuple(
+                    item
+                    for item in state.shortcuts
+                    if item.identity != held_identity
+                ),
+            )
+        )
         match held:
             case HeldShortcut(request=request):
                 self.host.request(request, down=False)
@@ -677,7 +882,11 @@ class Keyboard:
             self.prepare_enable()
         if was_enabled and physical(key):
             self.show_key(scancode, down=down)
-        verdict = self.step_keys(lambda keys: self.engine.on_key(keys, self.host, scancode, down=down, now=key.time))
+        verdict = self.step_keys(
+            lambda keys: self.engine.on_key(
+                keys, self.host, scancode, down=down, now=key.time
+            )
+        )
         if self.engine_state.enabled != was_enabled or verdict is Verdict.QUIT:
             self.clear_pressed()
         return verdict
@@ -688,19 +897,31 @@ def run(layout: Layout, programs: Programs, places: Places) -> Exit:
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
         return Exit.ALREADY_RUNNING
-    window = windows.create_hidden(programs.layout.window.title)  # receives control requests from the assistant and keeper
-    with contextlib.suppress(OSError):  # without it the hook still works, only more slowly under load
+    window = windows.create_hidden(
+        programs.layout.window.title
+    )  # receives control requests from the assistant and keeper
+    with contextlib.suppress(
+        OSError
+    ):  # without it the hook still works, only more slowly under load
         system.keep_responsive()
     try:
         peers = Peers(programs.desktop.window, programs.switcher)
-        keyboard = Keyboard.open(layout, peers, NativeKeyboardSystem(places.directory / "keyboard.log"))
+        keyboard = Keyboard.open(
+            layout,
+            peers,
+            NativeKeyboardSystem(places.directory / "keyboard.log"),
+        )
         keyboard.update_devices()
         hook = inputs.set_keyboard_hook(keyboard.hook_proc)
         if hook is None:
             return Exit.HOOK_REFUSED
-        with contextlib.suppress(OSError):  # without raw input the hook just goes unwatched
+        with contextlib.suppress(
+            OSError
+        ):  # without raw input the hook just goes unwatched
             keyboard_devices.watch_input(window)
-        languages = open_languages(firmware_connected=keyboard.state.firmware is not None)
+        languages = open_languages(
+            firmware_connected=keyboard.state.firmware is not None
+        )
         return serve(keyboard, hook, languages, programs.layout.quit_message)
     finally:
         keyboard_devices.stop_watching_input()
@@ -708,11 +929,18 @@ def run(layout: Layout, programs: Programs, places: Places) -> Exit:
         system.release_lock(lock)
 
 
-def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.KeyboardLanguages | None, quit_message: Message) -> Exit:
+def serve(
+    keyboard: Keyboard,
+    hook: inputs.Hook,
+    languages: keyboard_language.KeyboardLanguages | None,
+    quit_message: Message,
+) -> Exit:
     """Run the message loop, then remove whichever hook is installed by then."""
     outcome = Exit.QUIT
     language_timer = system.set_timer(200)
-    layout_state: LayoutState = LayoutState.ON if keyboard.engine_state.enabled else LayoutState.OFF
+    layout_state: LayoutState = (
+        LayoutState.ON if keyboard.engine_state.enabled else LayoutState.OFF
+    )
     keyboard.host.layout_state(layout_state)
     # Nothing here creates reference cycles, so the cycle collector has nothing to
     # do; turning it off means it can never pause the hook mid-keypress.
@@ -728,7 +956,9 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
                 if message.wparam == language_timer:
                     maintain_keyboard(keyboard, languages)
                     if outage := keyboard.watch_hook(system.tick_count()):
-                        if not (replacement := replace_hook(keyboard, hook, outage)):
+                        if not (
+                            replacement := replace_hook(keyboard, hook, outage)
+                        ):
                             outcome = Exit.HOOK_REFUSED
                             break
                         hook = replacement
@@ -752,7 +982,9 @@ def serve(keyboard: Keyboard, hook: inputs.Hook, languages: keyboard_language.Ke
     return outcome
 
 
-def replace_hook(keyboard: Keyboard, dead: inputs.Hook, outage: hook_watch.Reinstall) -> inputs.Hook | None:
+def replace_hook(
+    keyboard: Keyboard, dead: inputs.Hook, outage: hook_watch.Reinstall
+) -> inputs.Hook | None:
     """Install the replacement before removing the old hook, so no key goes unhooked."""
     replacement = inputs.set_keyboard_hook(keyboard.hook_proc)
     if replacement is not None:
@@ -761,7 +993,9 @@ def replace_hook(keyboard: Keyboard, dead: inputs.Hook, outage: hook_watch.Reins
     return replacement
 
 
-def maintain_keyboard(keyboard: Keyboard, languages: keyboard_language.KeyboardLanguages | None) -> None:
+def maintain_keyboard(
+    keyboard: Keyboard, languages: keyboard_language.KeyboardLanguages | None
+) -> None:
     """Refresh device policy before applying the foreground language, outside hooks."""
     keyboard.maintenance()
     with contextlib.suppress(OSError):
@@ -769,7 +1003,10 @@ def maintain_keyboard(keyboard: Keyboard, languages: keyboard_language.KeyboardL
     if languages is not None:
         # Elevated windows may refuse this request. Keep the hook independent.
         with contextlib.suppress(OSError):
-            languages.enforce(enabled=keyboard.engine_state.enabled, firmware_connected=keyboard.state.firmware is not None)
+            languages.enforce(
+                enabled=keyboard.engine_state.enabled,
+                firmware_connected=keyboard.state.firmware is not None,
+            )
 
 
 def show_error(message: str) -> None:
@@ -788,7 +1025,9 @@ def release_keyboard(keyboard: Keyboard) -> None:
     keyboard.host.layout_state(LayoutState.QUIT)
 
 
-def open_languages(*, firmware_connected: bool = False) -> keyboard_language.KeyboardLanguages | None:
+def open_languages(
+    *, firmware_connected: bool = False
+) -> keyboard_language.KeyboardLanguages | None:
     languages: keyboard_language.KeyboardLanguages | None = None
     try:
         languages = keyboard_language.KeyboardLanguages.load()

@@ -49,7 +49,11 @@ def nearby(heard: Iterable[Network]) -> tuple[Network, ...]:
     the connected network first, then by signal. Hidden networks, without a name, are left out."""
 
     def merged(ssid: str, sightings: tuple[Network, ...]) -> Network:
-        profiles = (each.profile for each in sorted(sightings, key=lambda each: not each.connected) if each.profile is not None)
+        profiles = (
+            each.profile
+            for each in sorted(sightings, key=lambda each: not each.connected)
+            if each.profile is not None
+        )
         return Network(
             ssid,
             max(each.signal for each in sightings),
@@ -58,9 +62,19 @@ def nearby(heard: Iterable[Network]) -> tuple[Network, ...]:
             profile=next(profiles, None),
         )
 
-    by_name = sorted((each for each in heard if each.ssid), key=lambda each: each.ssid)
-    networks = (merged(ssid, tuple(group)) for ssid, group in groupby(by_name, key=lambda each: each.ssid))
-    return tuple(sorted(networks, key=lambda each: (not each.connected, -each.signal, each.ssid)))
+    by_name = sorted(
+        (each for each in heard if each.ssid), key=lambda each: each.ssid
+    )
+    networks = (
+        merged(ssid, tuple(group))
+        for ssid, group in groupby(by_name, key=lambda each: each.ssid)
+    )
+    return tuple(
+        sorted(
+            networks,
+            key=lambda each: (not each.connected, -each.signal, each.ssid),
+        )
+    )
 
 
 class PowerUnavailable(Enum):
@@ -102,7 +116,9 @@ class Memory:
 
     def __post_init__(self) -> None:
         if not 0 <= self.used <= self.total or self.total <= 0:
-            raise ValueError("Memory in use must be between none and all of it.")
+            raise ValueError(
+                "Memory in use must be between none and all of it."
+            )
 
 
 def cpu_load(before: CpuTimes | None, after: CpuTimes | None) -> int | None:

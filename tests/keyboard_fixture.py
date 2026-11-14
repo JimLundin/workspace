@@ -11,7 +11,9 @@ from protocol import Message, Window
 from tests import layouts
 from winapi import inputs, system
 
-PEERS = Peers(Window("test desktop", "test desktop class"), "test window switcher")
+PEERS = Peers(
+    Window("test desktop", "test desktop class"), "test window switcher"
+)
 """The tests' own desktop window and window switcher title."""
 
 
@@ -65,7 +67,9 @@ class KeyboardFixture:
         return self.handle if window == PEERS.desktop else None
 
     # Keep the native delivery fields together in the concrete driver fixture.
-    def post_message(self, hwnd: int, message: int, wparam: int, lparam: int) -> bool:
+    def post_message(
+        self, hwnd: int, message: int, wparam: int, lparam: int
+    ) -> bool:
         if self.delivery_error is not None:
             raise self.delivery_error
         if self.handle is None or hwnd != self.handle:
@@ -86,13 +90,28 @@ class KeyboardFixture:
         pass
 
 
-APPS_THUMB, DICTATE_KEY, TOGGLE_KEY = Scancode(0x2D), Scancode(0x26), Scancode(0x2B)
+APPS_THUMB, DICTATE_KEY, TOGGLE_KEY = (
+    Scancode(0x2D),
+    Scancode(0x26),
+    Scancode(0x2B),
+)
 SPACEBAR, N_KEY, B_KEY = Scancode(0x39), Scancode(0x31), Scancode(0x30)
 
 
-def hook_key(keyboard: Keyboard, driver: KeyboardFixture, scancode: Scancode, *, down: bool, at: int) -> int:
+def hook_key(
+    keyboard: Keyboard,
+    driver: KeyboardFixture,
+    scancode: Scancode,
+    *,
+    down: bool,
+    at: int,
+) -> int:
     driver.key = inputs.KeyEvent(0, scancode, 0, at, 0)
-    return keyboard.hook_proc(0, system.WindowMessage.KEYDOWN if down else system.WindowMessage.KEYUP, 0)
+    return keyboard.hook_proc(
+        0,
+        system.WindowMessage.KEYDOWN if down else system.WindowMessage.KEYUP,
+        0,
+    )
 
 
 def hold_apps(keyboard: Keyboard, *, at: int) -> None:
@@ -102,7 +121,9 @@ def hold_apps(keyboard: Keyboard, *, at: int) -> None:
 
 
 @contextmanager
-def observed_keyboard(*, platform: KeyboardFixture | None = None) -> Generator[tuple[Keyboard, list[tuple[int, int, int]]]]:
+def observed_keyboard(
+    *, platform: KeyboardFixture | None = None
+) -> Generator[tuple[Keyboard, list[tuple[int, int, int]]]]:
     """Use the same driver seam for input observations and captured notifications."""
     driver = platform if platform is not None else KeyboardFixture()
     yield Keyboard.open(layouts.LAYOUT, PEERS, driver), driver.messages
@@ -121,7 +142,9 @@ def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
     return keyboard, driver
 
 
-APPS_KEY = inputs.KeyEvent(0xA5, 0x38, inputs.LLKHF_EXTENDED, 10, 0)  # Right Alt: the Charybdis's held Tab thumb
+APPS_KEY = inputs.KeyEvent(
+    0xA5, 0x38, inputs.LLKHF_EXTENDED, 10, 0
+)  # Right Alt: the Charybdis's held Tab thumb
 
 
 CTRL = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
@@ -137,4 +160,8 @@ DICTATE_LETTER = inputs.KeyEvent(0x48, 0x23, 0, 10, 0)  # H
 
 
 def requests_of(driver: KeyboardFixture) -> list[tuple[int, int]]:
-    return [(wparam, lparam) for message, wparam, lparam in driver.messages if message == Message.REQUEST]
+    return [
+        (wparam, lparam)
+        for message, wparam, lparam in driver.messages
+        if message == Message.REQUEST
+    ]

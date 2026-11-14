@@ -28,7 +28,13 @@ from desktop_ui import ambient
 from desktop_ui.ambient import Ambient, SystemStatus
 from desktop_ui.components import meaning
 from desktop_ui.island_menu import Panel
-from winapi.machine_status import Battery, Memory, PowerUnavailable, Speakers, Wifi
+from winapi.machine_status import (
+    Battery,
+    Memory,
+    PowerUnavailable,
+    Speakers,
+    Wifi,
+)
 
 
 class Key(Enum):
@@ -70,7 +76,9 @@ class Marker(Enum):
 class Text:
     text: str
     tone: meaning.Tone = meaning.Tone.INK
-    reserve: str = field(default="", kw_only=True)  # Representative widest reading; never painted.
+    reserve: str = field(
+        default="", kw_only=True
+    )  # Representative widest reading; never painted.
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +167,11 @@ def capture(recording: RecordingState, phases: Phases) -> Capture | None:
         return None
     seconds = max(0, int(recording.seconds))
     hours, minutes, rest = seconds // 3600, seconds // 60 % 60, seconds % 60
-    clock = f"{hours}:{minutes:02}:{rest:02}" if hours else f"{minutes:02}:{rest:02}"
+    clock = (
+        f"{hours}:{minutes:02}:{rest:02}"
+        if hours
+        else f"{minutes:02}:{rest:02}"
+    )
     title = clock if phased.title is ELAPSED else phased.title
     return Capture(title, can_stop=phased.can_stop, attention=phased.attention)
 
@@ -274,7 +286,9 @@ class IslandSpec:
     words: Words
 
 
-ACTIVITY_KEYS: Final = every_member(Activity, {Activity.JOB: Key.JOB, Activity.RECORDING: Key.RECORDING})
+ACTIVITY_KEYS: Final = every_member(
+    Activity, {Activity.JOB: Key.JOB, Activity.RECORDING: Key.RECORDING}
+)
 
 
 def order(spec: IslandSpec) -> tuple[Key, ...]:
@@ -293,7 +307,13 @@ def zone(key: Key, spec: IslandSpec) -> Zone:
         case Key.PANEL:
             return Zone.PANEL
         case Key.JOB | Key.RECORDING:
-            return Zone.LEAD if any(ACTIVITY_KEYS[each] is key for each in spec.activities.lead) else Zone.TRAIL
+            return (
+                Zone.LEAD
+                if any(
+                    ACTIVITY_KEYS[each] is key for each in spec.activities.lead
+                )
+                else Zone.TRAIL
+            )
         case _:
             assert_never(key)
 
@@ -318,7 +338,9 @@ def gigabytes(count: int, status: StatusSpec) -> str:
     return f"{count / GIBIBYTE:.1f} {status.gigabytes}"
 
 
-def power_symbol(ambient: Ambient, symbols: Symbols, tone: meaning.Tone) -> Part:
+def power_symbol(
+    ambient: Ambient, symbols: Symbols, tone: meaning.Tone
+) -> Part:
     """The battery filled to its charge, empty while unread, or a plug on a machine without one."""
     match ambient.power:
         case Battery(percent=percent, powered=powered):
@@ -334,7 +356,9 @@ def power_symbol(ambient: Ambient, symbols: Symbols, tone: meaning.Tone) -> Part
 def battery_tone(ambient: Ambient, status: StatusSpec) -> meaning.Tone:
     """Low while the battery runs down on its own power."""
     match ambient.power:
-        case Battery(percent=percent, powered=False) if percent <= status.low_battery:
+        case Battery(percent=percent, powered=False) if (
+            percent <= status.low_battery
+        ):
             return meaning.Tone.LOW
         case _:
             return meaning.Tone.INK
@@ -342,12 +366,18 @@ def battery_tone(ambient: Ambient, status: StatusSpec) -> meaning.Tone:
 
 def usage(percent: int | None, status: StatusSpec) -> Text:
     """The processor's share in use, reserving its widest form so a changing value never shifts the cluster."""
-    return Text(status.unread if percent is None else f"{percent}%", reserve=status.widest_percent)
+    return Text(
+        status.unread if percent is None else f"{percent}%",
+        reserve=status.widest_percent,
+    )
 
 
 def memory_used(memory: Memory | None, status: StatusSpec) -> Text:
     """Memory in use, reserving the widest amount, so a changing value never shifts the cluster."""
-    return Text(status.unread if memory is None else gigabytes(memory.used, status), reserve=status.widest_memory)
+    return Text(
+        status.unread if memory is None else gigabytes(memory.used, status),
+        reserve=status.widest_memory,
+    )
 
 
 def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
@@ -367,7 +397,14 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
             return (Text(ambient.clock, reserve=status.widest_clock),)
         case Reading.BATTERY:
             tone = battery_tone(ambient, status)
-            return (Text(battery_text(ambient, status), tone, reserve=status.widest_percent), power_symbol(ambient, symbols, tone))
+            return (
+                Text(
+                    battery_text(ambient, status),
+                    tone,
+                    reserve=status.widest_percent,
+                ),
+                power_symbol(ambient, symbols, tone),
+            )
         case Reading.CPU:
             return (usage(system.cpu, status), Glyph(symbols.cpu))
         case Reading.MEMORY:
@@ -378,7 +415,12 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
 
 def tip(each: Reading, observed: Observed, spec: IslandSpec) -> str:
     """What one reading says under the pointer, in words rather than symbols."""
-    ambient, system, words, status = observed.ambient, observed.system, spec.words, spec.status
+    ambient, system, words, status = (
+        observed.ambient,
+        observed.system,
+        spec.words,
+        spec.status,
+    )
     match each:
         case Reading.WORKSPACE:
             return words.open_controls
@@ -393,7 +435,9 @@ def tip(each: Reading, observed: Observed, spec: IslandSpec) -> str:
         case Reading.BATTERY:
             match ambient.power:
                 case Battery(percent=percent, powered=powered):
-                    return f"{words.battery} {percent}%" + (f". {words.charger}" if powered else "")
+                    return f"{words.battery} {percent}%" + (
+                        f". {words.charger}" if powered else ""
+                    )
                 case PowerUnavailable.NO_BATTERY:
                     return words.charger
                 case PowerUnavailable.UNKNOWN:
@@ -416,11 +460,21 @@ def tip(each: Reading, observed: Observed, spec: IslandSpec) -> str:
 
 def recording_slot(recorded: Capture, words: Words, *, hovered: bool) -> Slot:
     tone = meaning.Tone.LOW if recorded.attention else meaning.Tone.INK
-    stop = (Control(words.stop, words.stop_recording, Action.STOP_RECORDING),) if hovered and recorded.can_stop else ()
+    stop = (
+        (Control(words.stop, words.stop_recording, Action.STOP_RECORDING),)
+        if hovered and recorded.can_stop
+        else ()
+    )
     return (Marker.DOT, Text(recorded.title, tone), *stop)
 
 
-def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, expanded: bool = False) -> tuple[CapsuleView, ...]:
+def island(
+    observed: Observed,
+    spec: IslandSpec,
+    *,
+    hovered: Key | None = None,
+    expanded: bool = False,
+) -> tuple[CapsuleView, ...]:
     """The capsules to show, in left-to-right order, with their contents and press actions.
 
     The right-hand readings expand into the controls menu (`expanded`), where
@@ -431,40 +485,131 @@ def island(observed: Observed, spec: IslandSpec, *, hovered: Key | None = None, 
     detached = observed.dictating and not expanded
     lead: tuple[CapsuleView, ...] = ()
     if detached and job is not None:
-        lead += (CapsuleView(Key.JOB, zone(Key.JOB, spec), ((Marker.DOTS,),), words.jobs[job], Action.OPEN_MENU),)
+        lead += (
+            CapsuleView(
+                Key.JOB,
+                zone(Key.JOB, spec),
+                ((Marker.DOTS,),),
+                words.jobs[job],
+                Action.OPEN_MENU,
+            ),
+        )
     trail: tuple[CapsuleView, ...] = ()
     if detached and recorded is not None:
-        tint = meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
+        tint = (
+            meaning.Tint.ATTENTION if recorded.attention else meaning.Tint.NONE
+        )
         slot = recording_slot(recorded, words, hovered=hovered is Key.RECORDING)
         trail += (
-            CapsuleView(Key.RECORDING, zone(Key.RECORDING, spec), (slot,), f"{recorded.title} · {words.open_controls}", Action.OPEN_MENU, tint),
+            CapsuleView(
+                Key.RECORDING,
+                zone(Key.RECORDING, spec),
+                (slot,),
+                f"{recorded.title} · {words.open_controls}",
+                Action.OPEN_MENU,
+                tint,
+            ),
         )
     # The readings stay the top row while their capsule expands into the menu. Each
     # reading is its own slot; a reading with nothing to show (a keyboard typing
     # normally) takes none, and a group without any takes no space or rule.
-    shown = tuple((each, slot) for each in spec.status.readings if (slot := reading(each, observed, spec.status)))
+    shown = tuple(
+        (each, slot)
+        for each in spec.status.readings
+        if (slot := reading(each, observed, spec.status))
+    )
     readings = tuple(slot for _, slot in shown)
     panels = tuple(spec.status.opens[each] for each, _ in shown)
     tips = tuple(tip(each, observed, spec) for each, _ in shown)
-    label, action = (words.close_controls, Action.CLOSE_MENU) if expanded else (". ".join(tips), Action.OPEN_MENU)
-    persistent = (CapsuleView(Key.STATUS, Zone.RIGHT, readings, label, action, panels=panels, tips=tips),)
-    panel = (CapsuleView(Key.PANEL, Zone.PANEL, (), words.close_controls, Action.CLOSE_MENU),) if expanded else ()
+    label, action = (
+        (words.close_controls, Action.CLOSE_MENU)
+        if expanded
+        else (". ".join(tips), Action.OPEN_MENU)
+    )
+    persistent = (
+        CapsuleView(
+            Key.STATUS,
+            Zone.RIGHT,
+            readings,
+            label,
+            action,
+            panels=panels,
+            tips=tips,
+        ),
+    )
+    panel = (
+        (
+            CapsuleView(
+                Key.PANEL,
+                Zone.PANEL,
+                (),
+                words.close_controls,
+                Action.CLOSE_MENU,
+            ),
+        )
+        if expanded
+        else ()
+    )
     active = observed.dictating or job is not None or recorded is not None
-    middle = (centre(observed, recorded, words, hovered=hovered),) if active and not expanded else ()
+    middle = (
+        (centre(observed, recorded, words, hovered=hovered),)
+        if active and not expanded
+        else ()
+    )
     ranks = order(spec)
-    return tuple(sorted((*lead, *middle, *trail, *persistent, *panel), key=lambda view: ranks.index(view.key)))
+    return tuple(
+        sorted(
+            (*lead, *middle, *trail, *persistent, *panel),
+            key=lambda view: ranks.index(view.key),
+        )
+    )
 
 
-def centre(observed: Observed, recorded: Capture | None, words: Words, *, hovered: Key | None) -> CapsuleView:
+def centre(
+    observed: Observed,
+    recorded: Capture | None,
+    words: Words,
+    *,
+    hovered: Key | None,
+) -> CapsuleView:
     """Only live activity belongs here; persistent readings have fixed right anchors. `recorded` is the recording as captured."""
     revealed = hovered is Key.ISLAND
     job = observed.job
     if observed.dictating:
-        stop: Slot = (Control(words.stop, words.stop_dictation, Action.STOP_DICTATION),) if revealed else ()
-        slots: tuple[Slot, ...] = ((Glyph(words.microphone, meaning.Tone.MICROPHONE), Marker.WAVE, *stop),)
-        return CapsuleView(Key.ISLAND, Zone.ISLAND, slots, words.listening, Action.STOP_DICTATION)
+        stop: Slot = (
+            (Control(words.stop, words.stop_dictation, Action.STOP_DICTATION),)
+            if revealed
+            else ()
+        )
+        slots: tuple[Slot, ...] = (
+            (
+                Glyph(words.microphone, meaning.Tone.MICROPHONE),
+                Marker.WAVE,
+                *stop,
+            ),
+        )
+        return CapsuleView(
+            Key.ISLAND,
+            Zone.ISLAND,
+            slots,
+            words.listening,
+            Action.STOP_DICTATION,
+        )
     leading: tuple[Slot, ...] = ((Marker.DOTS,),) if job is not None else ()
-    trailing: tuple[Slot, ...] = (recording_slot(recorded, words, hovered=revealed),) if recorded is not None else ()
-    described = (words.jobs[job] if job is not None else "", recorded.title if recorded is not None else "")
+    trailing: tuple[Slot, ...] = (
+        (recording_slot(recorded, words, hovered=revealed),)
+        if recorded is not None
+        else ()
+    )
+    described = (
+        words.jobs[job] if job is not None else "",
+        recorded.title if recorded is not None else "",
+    )
     label = ". ".join(value for value in described if value)
-    return CapsuleView(Key.ISLAND, Zone.ISLAND, (*leading, *trailing), f"{label} · {words.open_controls}", Action.OPEN_MENU)
+    return CapsuleView(
+        Key.ISLAND,
+        Zone.ISLAND,
+        (*leading, *trailing),
+        f"{label} · {words.open_controls}",
+        Action.OPEN_MENU,
+    )

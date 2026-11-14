@@ -24,7 +24,14 @@ from typing import Final
 
 from protocol import Component, Entry, Places, Programs, interpreter
 from settings import programs
-from winapi._core import CloseHandle, FindWindowW, GetWindowThreadProcessId, OpenProcess, PostMessageW, WaitForSingleObject
+from winapi._core import (
+    CloseHandle,
+    FindWindowW,
+    GetWindowThreadProcessId,
+    OpenProcess,
+    PostMessageW,
+    WaitForSingleObject,
+)
 from winapi.processes import DETACHED
 
 ROOT: Final = Path(__file__).resolve().parent
@@ -62,10 +69,17 @@ def start(entry: Entry, state: Path, variable: str) -> None:
     if running(entry, state):
         return
     state.mkdir(parents=True, exist_ok=True)
-    environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"} | {variable: str(state)}
+    environment = {
+        key: value for key, value in os.environ.items() if key != "PYTHONPATH"
+    } | {variable: str(state)}
     with (state / f"{entry.name}.log").open("ab") as errors:
         process = subprocess.Popen(
-            [str(interpreter(ROOT)), "-m", entry.module], cwd=ROOT, env=environment, stdout=errors, stderr=errors, creationflags=DETACHED
+            [str(interpreter(ROOT)), "-m", entry.module],
+            cwd=ROOT,
+            env=environment,
+            stdout=errors,
+            stderr=errors,
+            creationflags=DETACHED,
         )
     (state / f"{entry.name}.pid").write_text(str(process.pid), encoding="ascii")
 
@@ -87,14 +101,27 @@ def stop(entry: Entry, state: Path) -> None:
 
 def terminate(pid: int) -> None:
     """End the process and everything it started (the environment's interpreter runs the program as a child)."""
-    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, check=False, creationflags=0x0800_0000)
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/T", "/F"],
+        capture_output=True,
+        check=False,
+        creationflags=0x0800_0000,
+    )
 
 
-def selected(names: Sequence[str], catalogue: frozendict[Component, Entry]) -> tuple[Entry, ...]:
+def selected(
+    names: Sequence[str], catalogue: frozendict[Component, Entry]
+) -> tuple[Entry, ...]:
     unknown = frozenset(names) - catalogue.keys()
     if unknown:
-        raise SystemExit(f"Unknown program: {', '.join(sorted(unknown))}. Choose from {', '.join(catalogue)}.")
-    chosen: frozenset[Component] = frozenset(name for name in catalogue if name in names) if names else frozenset(catalogue)
+        raise SystemExit(
+            f"Unknown program: {', '.join(sorted(unknown))}. Choose from {', '.join(catalogue)}."
+        )
+    chosen: frozenset[Component] = (
+        frozenset(name for name in catalogue if name in names)
+        if names
+        else frozenset(catalogue)
+    )
     return tuple(entry for name, entry in catalogue.items() if name in chosen)
 
 
@@ -103,7 +130,9 @@ def main(arguments: Sequence[str], workspace: Programs) -> None:
     entries = selected(names, workspace.catalogue)
     if command not in ("start", "stop", "restart"):
         raise SystemExit(__doc__)
-    state = Places.of(os.environ, workspace).directory / "state"  # where the programs publish their endpoints and logs
+    state = (
+        Places.of(os.environ, workspace).directory / "state"
+    )  # where the programs publish their endpoints and logs
     if command in ("stop", "restart"):
         for entry in reversed(entries):
             stop(entry, state)

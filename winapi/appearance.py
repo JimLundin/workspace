@@ -14,10 +14,25 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Protocol
 
-lazy from win32more.Windows.Win32.Graphics.Gdi import CLR_INVALID, COLOR_WINDOW, COLOR_WINDOWTEXT, GetDC, GetPixel, GetSysColor, ReleaseDC
+lazy from win32more.Windows.Win32.Graphics.Gdi import (
+    CLR_INVALID,
+    COLOR_WINDOW,
+    COLOR_WINDOWTEXT,
+    GetDC,
+    GetPixel,
+    GetSysColor,
+    ReleaseDC,
+)
 lazy from win32more.Windows.Win32.Media import timeBeginPeriod, timeEndPeriod
-lazy from win32more.Windows.Win32.UI.Accessibility import HCF_HIGHCONTRASTON, HIGHCONTRASTW
-lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import SPI_GETCLIENTAREAANIMATION, SPI_GETHIGHCONTRAST, SystemParametersInfoW
+lazy from win32more.Windows.Win32.UI.Accessibility import (
+    HCF_HIGHCONTRASTON,
+    HIGHCONTRASTW,
+)
+lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
+    SPI_GETCLIENTAREAANIMATION,
+    SPI_GETHIGHCONTRAST,
+    SystemParametersInfoW,
+)
 
 from cell import Cell
 from winapi.shapes import Rect
@@ -59,15 +74,23 @@ class FrostSampler:
     for desktop pixels. The owner discards observations after a card moves.
     """
 
-    sample: Callable[[tuple[Rect, ...]], tuple[Backdrop, ...]] = sample_backgrounds
-    _sampling: Cell[_Sampling] = field(default_factory=lambda: Cell(_Sampling()), init=False, repr=False)
+    sample: Callable[[tuple[Rect, ...]], tuple[Backdrop, ...]] = (
+        sample_backgrounds
+    )
+    _sampling: Cell[_Sampling] = field(
+        default_factory=lambda: Cell(_Sampling()), init=False, repr=False
+    )
 
     def submit(self, bounds: tuple[Rect, ...]) -> None:
         sampling = self._sampling.get()
         if not bounds or sampling.pending is not None:
             return
-        worker = sampling.worker or ThreadPoolExecutor(max_workers=1, thread_name_prefix="workspace-glass")
-        self._sampling.set(_Sampling(worker, worker.submit(self.sample, bounds)))
+        worker = sampling.worker or ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="workspace-glass"
+        )
+        self._sampling.set(
+            _Sampling(worker, worker.submit(self.sample, bounds))
+        )
 
     def read(self) -> tuple[Backdrop, ...]:
         sampling = self._sampling.get()
@@ -116,7 +139,9 @@ class TimerResolution:
     """
 
     period: TimerPeriod = field(default_factory=NativeTimerPeriod)
-    _active: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _active: threading.Event = field(
+        default_factory=threading.Event, init=False, repr=False
+    )
     """Set while a granted request is outstanding."""
 
     @property
@@ -134,17 +159,29 @@ class TimerResolution:
 
 def animations_enabled() -> bool:
     enabled = ctypes.c_int()
-    return bool(SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(enabled), 0) and enabled.value)
+    return bool(
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(enabled), 0
+        )
+        and enabled.value
+    )
 
 
 def preference() -> Preference:
     contrast = HIGHCONTRASTW(cbSize=ctypes.sizeof(HIGHCONTRASTW))
-    if not SystemParametersInfoW(SPI_GETHIGHCONTRAST, contrast.cbSize, ctypes.byref(contrast), 0):
+    if not SystemParametersInfoW(
+        SPI_GETHIGHCONTRAST, contrast.cbSize, ctypes.byref(contrast), 0
+    ):
         return Material.SOLID
     if contrast.dwFlags & HCF_HIGHCONTRASTON:
-        return Contrast(system_color(COLOR_WINDOW), system_color(COLOR_WINDOWTEXT))
+        return Contrast(
+            system_color(COLOR_WINDOW), system_color(COLOR_WINDOWTEXT)
+        )
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
             enabled, _kind = winreg.QueryValueEx(key, "EnableTransparency")
     except OSError:
         return Material.SOLID
@@ -154,7 +191,10 @@ def preference() -> Preference:
 def light_apps() -> bool:
     """Windows' app mode: large glass and content windows follow it."""
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
             light, _kind = winreg.QueryValueEx(key, "AppsUseLightTheme")
     except OSError:
         return False
@@ -177,9 +217,17 @@ def background_frost(bounds: Rect) -> Frost:
     if not dc:
         return Frost.SMOKED
     # Sample the sides: above/below can contain a neighboring conversation bubble.
-    points = tuple((x, bounds.top + bounds.height * third // 3) for x in (bounds.left - 12, bounds.right + 12) for third in (1, 2))
+    points = tuple(
+        (x, bounds.top + bounds.height * third // 3)
+        for x in (bounds.left - 12, bounds.right + 12)
+        for third in (1, 2)
+    )
     try:
-        colors = tuple(color for px, py in points if (color := GetPixel(dc, px, py)) != CLR_INVALID)
+        colors = tuple(
+            color
+            for px, py in points
+            if (color := GetPixel(dc, px, py)) != CLR_INVALID
+        )
     finally:
         ReleaseDC(None, dc)
     return frost_for(colors)
@@ -197,5 +245,13 @@ def frost_for(colors: tuple[int, ...]) -> Frost:
 
 def luminance(color: int) -> float:
     channels = tuple((color >> shift & 255) / 255 for shift in (0, 8, 16))
-    linear = tuple(value / 12.92 if value <= 0.04045 else math.pow((value + 0.055) / 1.055, 2.4) for value in channels)
-    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True))
+    linear = tuple(
+        value / 12.92
+        if value <= 0.04045
+        else math.pow((value + 0.055) / 1.055, 2.4)
+        for value in channels
+    )
+    return sum(
+        value * weight
+        for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True)
+    )

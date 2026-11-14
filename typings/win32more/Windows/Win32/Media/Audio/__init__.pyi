@@ -7,7 +7,11 @@ eRender: int
 MMDeviceEnumerator: Guid
 
 class IMMDevice(ComPtr):
-    def Activate(self, interface_id: Guid, context: int, parameters: None, result: ComPtr) -> int: ...
+    def Activate(
+        self, interface_id: Guid, context: int, parameters: None, result: ComPtr
+    ) -> int: ...
 
 class IMMDeviceEnumerator(ComPtr):
-    def GetDefaultAudioEndpoint(self, flow: int, role: int, result: IMMDevice) -> int: ...
+    def GetDefaultAudioEndpoint(
+        self, flow: int, role: int, result: IMMDevice
+    ) -> int: ...

@@ -20,7 +20,11 @@ def main() -> None:
     path = Places.of(os.environ, programs.PROGRAMS).gateway_endpoint
     previous = None if path is None else read(path)
     token = secrets.token_urlsafe(32) if previous is None else previous.token
-    gateway = Gateway.listen(upstream_from(os.environ), token, port=0 if previous is None else previous.port)
+    gateway = Gateway.listen(
+        upstream_from(os.environ),
+        token,
+        port=0 if previous is None else previous.port,
+    )
     if path is not None:
         publish(path, Endpoint(gateway.port, token))
     gateway.serve()

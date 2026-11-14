@@ -9,7 +9,16 @@ from contracts.capture import AudioSource
 from contracts.members import every_literal
 from winapi.pcm import RATE, Dropout, LateAudio, Problem, Skipped, Stall
 
-type Phase = Literal["idle", "starting", "recording", "stopping", "finishing", "paused", "saved", "interrupted"]
+type Phase = Literal[
+    "idle",
+    "starting",
+    "recording",
+    "stopping",
+    "finishing",
+    "paused",
+    "saved",
+    "interrupted",
+]
 type RecordingAction = Literal["start", "stop", "open", "folder", "retry"]
 type CompletionPhase = Literal["finishing", "interrupted", "saved"]
 
@@ -30,14 +39,22 @@ class RetryPolicy:
     finished_attempts: int = 3
 
     def __post_init__(self) -> None:
-        if not self.delays or any(not isfinite(delay) or delay < 0 for delay in self.delays) or self.finished_attempts < 1:
-            raise ValueError("Retries need finite, nonnegative delays and at least one attempt.")
+        if (
+            not self.delays
+            or any(not isfinite(delay) or delay < 0 for delay in self.delays)
+            or self.finished_attempts < 1
+        ):
+            raise ValueError(
+                "Retries need finite, nonnegative delays and at least one attempt."
+            )
 
     def failed(self, failures: int, *, finished: bool) -> Retry | PAUSED:
         failures += 1
         if finished and failures >= self.finished_attempts:
             return PAUSED
-        return Retry(failures, self.delays[min(failures - 1, len(self.delays) - 1)])
+        return Retry(
+            failures, self.delays[min(failures - 1, len(self.delays) - 1)]
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,14 +165,25 @@ def published(  # noqa: PLR0913 - one transition with its optional overrides
     if current.identity and current.identity != incoming.identity:
         return None
     if (
-        (saved.revision, saved.exported_revision) < (current.revision, current.exported_revision)
+        (saved.revision, saved.exported_revision)
+        < (current.revision, current.exported_revision)
         or saved.frames < round(current.seconds * RATE)
-        or saved.frames - saved.pending < round((current.seconds - current.pending_seconds) * RATE)
-        or (not saved.finished and current.phase in ("finishing", "paused", "saved", "interrupted"))
+        or saved.frames - saved.pending
+        < round((current.seconds - current.pending_seconds) * RATE)
+        or (
+            not saved.finished
+            and current.phase in ("finishing", "paused", "saved", "interrupted")
+        )
     ):
         return None
     if not saved.finished:
-        phase = "stopping" if stopping else "starting" if current.phase == "starting" else "recording"
+        phase = (
+            "stopping"
+            if stopping
+            else "starting"
+            if current.phase == "starting"
+            else "recording"
+        )
     elif paused is not None:
         phase, detail = "paused", paused
     elif phase is None:
@@ -195,21 +223,45 @@ def _gap(problem: Problem) -> _Gap | None:
         case Stall():
             return None
         case LateAudio(frames=frames):
-            return _Gap("late audio clipped (it arrived after its time was saved)", frames)
+            return _Gap(
+                "late audio clipped (it arrived after its time was saved)",
+                frames,
+            )
         case Skipped(frames=frames):
-            return _Gap("silence inserted (capture fell further behind than the mixing ring)", frames)
+            return _Gap(
+                "silence inserted (capture fell further behind than the mixing ring)",
+                frames,
+            )
         case Dropout(frames=frames):
-            return _Gap("microphone audio lost before it was read (its engine buffer overflowed)", frames)
+            return _Gap(
+                "microphone audio lost before it was read (its engine buffer overflowed)",
+                frames,
+            )
         case _:
             assert_never(problem)
 
 
 def capture_report(problems: Sequence[Problem]) -> CaptureReport:
-    stalls = tuple(problem.seconds for problem in problems if isinstance(problem, Stall))
+    stalls = tuple(
+        problem.seconds for problem in problems if isinstance(problem, Stall)
+    )
     found = tuple(gap for problem in problems if (gap := _gap(problem)))
-    gaps = {label: tuple(gap.frames for gap in found if gap.label == label) for label in dict.fromkeys(gap.label for gap in found)}
-    stalled = (f"capture loop stalled {len(stalls)}x, longest {max(stalls):.1f} s",) if stalls else ()
-    parts = (*stalled, *(f"{label} {len(frames)}x, {sum(frames) * 1000 // RATE} ms" for label, frames in gaps.items()))
+    gaps = {
+        label: tuple(gap.frames for gap in found if gap.label == label)
+        for label in dict.fromkeys(gap.label for gap in found)
+    }
+    stalled = (
+        (f"capture loop stalled {len(stalls)}x, longest {max(stalls):.1f} s",)
+        if stalls
+        else ()
+    )
+    parts = (
+        *stalled,
+        *(
+            f"{label} {len(frames)}x, {sum(frames) * 1000 // RATE} ms"
+            for label, frames in gaps.items()
+        ),
+    )
     return CaptureReport(
         sum(map(len, gaps.values())),
         sum(map(sum, gaps.values())),
@@ -223,4 +275,7 @@ def duration(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 
-SOURCE_NAMES: Final[frozendict[AudioSource, str]] = every_literal(AudioSource, {"both": "Microphone + computer audio", "microphone": "Microphone"})
+SOURCE_NAMES: Final[frozendict[AudioSource, str]] = every_literal(
+    AudioSource,
+    {"both": "Microphone + computer audio", "microphone": "Microphone"},
+)

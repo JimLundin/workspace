@@ -54,7 +54,9 @@ def test_a_restart_while_dimmed_puts_back_the_persons_level() -> None:
     assert panel.current == 70 and memory.value is None
 
 
-def test_darkening_turns_the_panel_down_to_zero_and_restoring_puts_back_the_persons_level() -> None:
+def test_darkening_turns_the_panel_down_to_zero_and_restoring_puts_back_the_persons_level() -> (
+    None
+):
     # Defects: the panel is only dimmed part way, or restoring writes a fixed level instead of the person's.
     panel = Panel(current=70)
     dimmed = owner(panel).darken()
@@ -84,7 +86,9 @@ def test_a_panel_the_person_already_turned_to_zero_is_left_alone() -> None:
     assert panel.sets == []
 
 
-def test_a_restore_refused_with_the_lid_closed_is_tried_again_once_the_panel_is_back() -> None:
+def test_a_restore_refused_with_the_lid_closed_is_tried_again_once_the_panel_is_back() -> (
+    None
+):
     # Defect: the refused restore forgets the person's level, and the lid opens on a panel left at 0.
     panel = Panel(current=80)
     dimmed = owner(panel).darken()

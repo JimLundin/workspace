@@ -40,8 +40,14 @@ lazy from win32more.Windows.Win32.Graphics.Gdi import (
     SetStretchBltMode,
     StretchBlt,
 )
-lazy from win32more.Windows.Win32.UI.HiDpi import DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext
-lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import MONITORINFOF_PRIMARY, SetProcessDPIAware
+lazy from win32more.Windows.Win32.UI.HiDpi import (
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    SetProcessDpiAwarenessContext,
+)
+lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
+    MONITORINFOF_PRIMARY,
+    SetProcessDPIAware,
+)
 
 from winapi._core import DeleteObject
 from winapi.shapes import Rect
@@ -59,31 +65,54 @@ class Monitor:
 
 def top_down(width: int, height: int) -> BITMAPINFO:
     """A 32-bit device-independent bitmap's header, top row first."""
-    header = BITMAPINFOHEADER(biSize=ctypes.sizeof(BITMAPINFOHEADER), biWidth=width, biHeight=-height, biPlanes=1, biBitCount=32)
+    header = BITMAPINFOHEADER(
+        biSize=ctypes.sizeof(BITMAPINFOHEADER),
+        biWidth=width,
+        biHeight=-height,
+        biPlanes=1,
+        biBitCount=32,
+    )
     return BITMAPINFO(bmiHeader=header)
 
 
 def use_physical_pixels() -> None:
     """Makes every coordinate this process sees a real pixel, on every monitor.
     Call before creating any window."""
-    if not SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2):
+    if not SetProcessDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    ):
         SetProcessDPIAware()
 
 
 def built_in_devices() -> frozenset[str]:
     """The GDI device names of the active displays driven by a built-in panel connection."""
-    for _attempt in range(3):  # The configuration can change between sizing and querying.
+    for _attempt in range(
+        3
+    ):  # The configuration can change between sizing and querying.
         paths, modes = ctypes.c_uint32(), ctypes.c_uint32()
-        if GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, ctypes.byref(paths), ctypes.byref(modes)):
+        if GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS, ctypes.byref(paths), ctypes.byref(modes)
+        ):
             return frozenset()
         path_info = (DISPLAYCONFIG_PATH_INFO * paths.value)()
         mode_info = (DISPLAYCONFIG_MODE_INFO * modes.value)()
-        result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, ctypes.byref(paths), path_info, ctypes.byref(modes), mode_info, None)
+        result = QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS,
+            ctypes.byref(paths),
+            path_info,
+            ctypes.byref(modes),
+            mode_info,
+            None,
+        )
         if result == ERROR_INSUFFICIENT_BUFFER:
             continue
         if result:
             return frozenset()
-        return frozenset(name for path in path_info[: paths.value] if (name := _source_name(path)) is not None)
+        return frozenset(
+            name
+            for path in path_info[: paths.value]
+            if (name := _source_name(path)) is not None
+        )
     return frozenset()
 
 
@@ -101,7 +130,11 @@ def _source_name(path: DISPLAYCONFIG_PATH_INFO) -> str | None:
     name.header.adapterId = path.sourceInfo.adapterId
     name.header.id = path.sourceInfo.id
     # The header opens the request, so its address is the whole request's.
-    return str(name.viewGdiDeviceName) if DisplayConfigGetDeviceInfo(name.header) == 0 else None
+    return (
+        str(name.viewGdiDeviceName)
+        if DisplayConfigGetDeviceInfo(name.header) == 0
+        else None
+    )
 
 
 def _monitor(handle: int, built_in: frozenset[str]) -> Monitor:
@@ -109,10 +142,16 @@ def _monitor(handle: int, built_in: frozenset[str]) -> Monitor:
     info.monitorInfo.cbSize = ctypes.sizeof(MONITORINFOEXW)
     # The base fields open the extended structure, so their address is the whole structure's.
     GetMonitorInfoW(handle, info.monitorInfo)
-    primary, internal = bool(info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY), str(info.szDevice) in built_in
+    primary, internal = (
+        bool(info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY),
+        str(info.szDevice) in built_in,
+    )
     area, work = info.monitorInfo.rcMonitor, info.monitorInfo.rcWork
     return Monitor(
-        Rect(area.left, area.top, area.right, area.bottom), Rect(work.left, work.top, work.right, work.bottom), primary=primary, internal=internal
+        Rect(area.left, area.top, area.right, area.bottom),
+        Rect(work.left, work.top, work.right, work.bottom),
+        primary=primary,
+        internal=internal,
     )
 
 
@@ -131,7 +170,10 @@ def attached() -> tuple[tuple[int, Monitor], ...]:
 
 def monitors() -> list[Monitor]:
     """All monitors, left to right."""
-    return sorted((monitor for _handle, monitor in attached()), key=lambda monitor: (monitor.area.left, monitor.area.top))
+    return sorted(
+        (monitor for _handle, monitor in attached()),
+        key=lambda monitor: (monitor.area.left, monitor.area.top),
+    )
 
 
 def monitor_of(hwnd: int) -> Monitor:
@@ -147,12 +189,28 @@ def capture(area: Rect, width: int, height: int) -> bytes:
     screen = GetDC(None)
     memory = CreateCompatibleDC(screen)
     bits = ctypes.c_void_p()
-    bitmap = CreateDIBSection(memory, header, DIB_RGB_COLORS, ctypes.byref(bits), None, 0)
+    bitmap = CreateDIBSection(
+        memory, header, DIB_RGB_COLORS, ctypes.byref(bits), None, 0
+    )
     previous = SelectObject(memory, bitmap)
     try:
-        SetStretchBltMode(memory, HALFTONE)  # averages pixels when shrinking, so text stays legible
+        SetStretchBltMode(
+            memory, HALFTONE
+        )  # averages pixels when shrinking, so text stays legible
         SetBrushOrgEx(memory, 0, 0, None)
-        StretchBlt(memory, 0, 0, width, height, screen, area.left, area.top, area.width, area.height, SRCCOPY | CAPTUREBLT)
+        StretchBlt(
+            memory,
+            0,
+            0,
+            width,
+            height,
+            screen,
+            area.left,
+            area.top,
+            area.width,
+            area.height,
+            SRCCOPY | CAPTUREBLT,
+        )
         return ctypes.string_at(bits, width * height * 4)
     finally:
         SelectObject(memory, previous)

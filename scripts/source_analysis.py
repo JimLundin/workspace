@@ -58,13 +58,21 @@ class Cache:
         return cls(folder / digest.hexdigest())
 
     def key(self, namespace: str, source: Source, *, extra: bytes = b"") -> str:
-        digest = hashlib.sha256(namespace.encode() + b"\0" + source.name.encode() + b"\0" + source.text.encode())
+        digest = hashlib.sha256(
+            namespace.encode()
+            + b"\0"
+            + source.name.encode()
+            + b"\0"
+            + source.text.encode()
+        )
         digest.update(extra)
         return digest.hexdigest()
 
     def read[T](self, key: str, adapter: TypeAdapter[T]) -> T | None:
         try:
-            return adapter.validate_json((self.folder / (key + ".json")).read_bytes(), strict=True)
+            return adapter.validate_json(
+                (self.folder / (key + ".json")).read_bytes(), strict=True
+            )
         except OSError, ValidationError:
             return None
 
@@ -74,7 +82,9 @@ class Cache:
         temporary: Path | None = None
         try:
             self.folder.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(dir=self.folder, delete=False) as output:
+            with tempfile.NamedTemporaryFile(
+                dir=self.folder, delete=False
+            ) as output:
                 temporary = Path(output.name)
                 output.write(adapter.dump_json(value))
             os.replace(temporary, self.folder / (key + ".json"))
@@ -86,7 +96,13 @@ class Cache:
                     temporary.unlink(missing_ok=True)
 
 
-def memoized[T](cache: Cache | None, namespace: str, source: Source, adapter: TypeAdapter[T], compute: Callable[[Source], T]) -> T:
+def memoized[T](
+    cache: Cache | None,
+    namespace: str,
+    source: Source,
+    adapter: TypeAdapter[T],
+    compute: Callable[[Source], T],
+) -> T:
     """The observation compute makes of source, read from the cache when saved there and saved once computed."""
     if cache is None:
         return compute(source)
@@ -98,7 +114,9 @@ def memoized[T](cache: Cache | None, namespace: str, source: Source, adapter: Ty
     return result
 
 
-DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__", "builtins.__import__"})
+DYNAMIC_IMPORTS = frozenset(
+    {"importlib.import_module", "__import__", "builtins.__import__"}
+)
 """Calls that import a module named at run time."""
 
 
@@ -136,34 +154,60 @@ def targets(node: ast.AST) -> tuple[ast.expr, ...]:
 
 def parameters(arguments: ast.arguments) -> tuple[ast.arg, ...]:
     """Every parameter a signature declares, positional ones first, then the starred ones."""
-    return (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs, *(item for item in (arguments.vararg, arguments.kwarg) if item))
+    return (
+        *arguments.posonlyargs,
+        *arguments.args,
+        *arguments.kwonlyargs,
+        *(item for item in (arguments.vararg, arguments.kwarg) if item),
+    )
 
 
 def _bound_names(node: ast.AST) -> Iterator[tuple[str, str]]:
     match node:
         case ast.Import(names=names):
-            yield from ((alias.asname or alias.name.split(".")[0], alias.name if alias.asname else alias.name.split(".")[0]) for alias in names)
+            yield from (
+                (
+                    alias.asname or alias.name.split(".")[0],
+                    alias.name if alias.asname else alias.name.split(".")[0],
+                )
+                for alias in names
+            )
         case ast.ImportFrom(module=str() as module, level=0, names=names):
-            yield from ((alias.asname or alias.name, module + "." + alias.name) for alias in names)
+            yield from (
+                (alias.asname or alias.name, module + "." + alias.name)
+                for alias in names
+            )
         case _:
             pass
 
 
 def import_aliases(tree: ast.AST) -> frozendict[str, str]:
     """Local names bound by imports, mapped to the module or attribute they name."""
-    return frozendict(pair for node in ast.walk(tree) for pair in _bound_names(node))
+    return frozendict(
+        pair for node in ast.walk(tree) for pair in _bound_names(node)
+    )
 
 
-def _imported(node: ast.AST, package: Sequence[str], aliases: Mapping[str, str]) -> Iterator[str]:
+def _imported(
+    node: ast.AST, package: Sequence[str], aliases: Mapping[str, str]
+) -> Iterator[str]:
     match node:
         case ast.Import(names=names):
             yield from (alias.name for alias in names)
         case ast.ImportFrom(module=base, level=level, names=names):
-            prefix = ".".join(package[: len(package) - level + 1]) if level else ""
+            prefix = (
+                ".".join(package[: len(package) - level + 1]) if level else ""
+            )
             target = ".".join(value for value in (prefix, base) if value)
             yield target
-            yield from (".".join(value for value in (target, alias.name) if value) for alias in names if alias.name != "*")
-        case ast.Call(func=function, args=[ast.Constant(value=str(value)), *_]) if call_name(function, aliases) in DYNAMIC_IMPORTS:
+            yield from (
+                ".".join(value for value in (target, alias.name) if value)
+                for alias in names
+                if alias.name != "*"
+            )
+        case ast.Call(
+            func=function, args=[ast.Constant(value=str(value)), *_]
+        ) if call_name(function, aliases) in DYNAMIC_IMPORTS:
             yield value
         case _:
             pass
@@ -174,6 +218,15 @@ def imports(name: str, tree: ast.AST) -> frozenset[str]:
     aliases = import_aliases(tree)
     module = module_name(name).split(".")
     package = module if name.endswith("/__init__.py") else module[:-1]
-    found = (target for node in ast.walk(tree) for target in _imported(node, package, aliases))
+    found = (
+        target
+        for node in ast.walk(tree)
+        for target in _imported(node, package, aliases)
+    )
     # Importing a submodule executes its ancestor package initializers too.
-    return frozenset(".".join(parts[:index]) for target in found for parts in (target.split("."),) for index in range(1, len(parts) + 1))
+    return frozenset(
+        ".".join(parts[:index])
+        for target in found
+        for parts in (target.split("."),)
+        for index in range(1, len(parts) + 1)
+    )
