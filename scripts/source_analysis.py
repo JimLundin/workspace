@@ -33,21 +33,6 @@ def parse(source: Source) -> ast.Module:
 
 
 ANALYSIS = Path(tempfile.gettempdir()) / "workspace-analysis"
-ENGINE = (
-    "source_analysis.py",
-    "architecture.py",
-    "policy.py",
-    "constant_rules.py",
-    "declaration_rules.py",
-    "import_rules.py",
-    "modelling_rules.py",
-    "record_rules.py",
-    "scope_rules.py",
-    "testing_rules.py",
-    "usage_rules.py",
-    "quality.py",
-)
-"""The analysis engine's files: a change to any of them invalidates every cached observation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,13 +43,17 @@ class Cache:
 
     @classmethod
     def bound(cls, root: Path, *, folder: Path = ANALYSIS) -> Cache:
-        """The cache for root's sources under this interpreter, pydantic and analysis engine."""
+        """The cache for root's sources under this interpreter, pydantic and analysis engine.
+
+        Every script beside this one counts as the engine, so a new rule module
+        invalidates the cache without being listed; hashing a script that is not
+        part of the engine only costs a recomputation."""
         engine = Path(__file__).resolve().parent
         digest = hashlib.sha256(sys.version.encode())
         digest.update(importlib.metadata.version("pydantic").encode())
         digest.update(str(root.resolve()).encode())
-        for name in ENGINE:
-            digest.update((engine / name).read_bytes())
+        for script in sorted(engine.glob("*.py")):
+            digest.update(script.name.encode() + b"\0" + script.read_bytes())
         digest.update((root / "pyproject.toml").read_bytes())
         return cls(folder / digest.hexdigest())
 
