@@ -140,15 +140,24 @@ def on_bar(state: MarkerState) -> bool:
     return state.where is UNFOUND
 
 
+_PANE = 3
+"""A focused field taller than this many markers is a page or editor pane, marked like a window."""
+
+
 def _clamped(x: int, y: int, size: Size, work: Rect) -> Rect:
     left = max(work.left, min(x, work.right - size.width))
     top = max(work.top, min(y, work.bottom - size.height))
     return Rect(left, top, left + size.width, top + size.height)
 
 
+def _bottom_left(rect: Rect, size: Size, work: Rect, gap: int) -> Rect:
+    return _clamped(rect.left + gap, rect.bottom - gap - size.height, size, work)
+
+
 def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
-    """The marker's rect on screen: above the caret or outside the field's corner when there's room, else just inside;
-    bottom-left inside a window, clear of the key hints in its top-left; always within `work`."""
+    """The marker's rect on screen: above the caret or outside a field's corner when there's room, else just inside;
+    bottom-left inside a window or a pane-sized field;
+    always within `work`."""
     match anchor:
         case Caret(rect):
             above = rect.top - gap - size.height
@@ -158,17 +167,14 @@ def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
                 size,
                 work,
             )
+        case Window(rect):
+            return _bottom_left(rect, size, work, gap)
+        case Field(rect) if rect.height > _PANE * size.height:
+            return _bottom_left(rect, size, work, gap)
         case Field(rect):
             above = rect.top - gap - size.height
             return (
                 _clamped(rect.left, above, size, work)
                 if above >= work.top
                 else _clamped(rect.left + gap, rect.top + gap, size, work)
-            )
-        case Window(rect):
-            return _clamped(
-                rect.left + gap,
-                rect.bottom - gap - size.height,
-                size,
-                work,
             )

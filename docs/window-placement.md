@@ -74,7 +74,7 @@ While either keyboard holds its Apps key (the Tab thumb: the laptop's V,
 or the Charybdis's), Workspace draws the letters on
 the desktop itself, so the chords can be learned without the mouse:
 
-- **A keycap badge** sits inside the top-left corner of each placed window on the
+- **A keycap badge** sits inside the top-right corner of each placed window on the
   current desktop, on every monitor. It shows the app's chord letter. When an
   app has several windows, the window the next press reaches takes the accent.
 - **Focus letters** appear on the windows next to the focused one, with their

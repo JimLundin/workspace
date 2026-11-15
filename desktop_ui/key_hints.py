@@ -55,7 +55,7 @@ type Keycap = AppCap | DirectionCap | ActionCap
 class Badge:
     window: int
     rect: Rect
-    """The window's placed rectangle, in physical pixels; the badge sits inside its top-left corner."""
+    """The window's placed rectangle, in physical pixels; the badge sits inside its top-right corner."""
     keycaps: tuple[Keycap, ...]
 
 

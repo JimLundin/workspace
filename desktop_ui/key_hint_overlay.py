@@ -53,7 +53,7 @@ class BadgeSpec:
     pad: float
     """A keycap's text inset, when its text widens the circle into a pill."""
     corner: int
-    """Each badge's inset from its window's top-left corner."""
+    """Each badge's inset from its window's top-right corner."""
     font: Font
     arrows: frozendict[Direction, str]
     """The symbol before a focus chord's letter."""
@@ -298,9 +298,12 @@ class KeyHintOverlay:
         look = style(preference, self.spec)
         for window, badge in zip(grown, badges, strict=False):
             window.draw(badge.keycaps, look)
+            # The window's right edge is exclusive and can belong to the next monitor, so map its last pixel.
             window.move(
-                logical(badge.rect.left, badge.rect.top)
-                + QtCore.QPoint(self.spec.corner, self.spec.corner)
+                logical(badge.rect.right - 1, badge.rect.top)
+                + QtCore.QPoint(
+                    1 - self.spec.corner - window.width(), self.spec.corner
+                )
             )
             self.surface.present(window)
         for window in grown[len(badges) :]:

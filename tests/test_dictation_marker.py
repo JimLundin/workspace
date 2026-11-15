@@ -115,7 +115,7 @@ def test_the_marker_stays_on_its_monitor() -> None:
     left_monitor = Rect(-1280, -200, 0, 824)
     edge = Caret(Rect(-5, 400, -3, 420))
     assert placed(edge, SIZE, left_monitor, 6) == Rect(-120, 362, 0, 394)
-    corner = Field(Rect(-1280, -200, -600, 300))
+    corner = Field(Rect(-1280, -200, -600, -150))
     assert placed(corner, SIZE, left_monitor, 6) == Rect(
         -1274, -194, -1154, -162
     )
@@ -131,3 +131,9 @@ def test_a_field_is_marked_outside_its_corner_and_a_window_at_its_bottom_left() 
     assert placed(Window(Rect(100, 100, 1100, 900)), SIZE, WORK, 6) == Rect(
         106, 862, 226, 894
     )
+
+
+def test_a_pane_sized_field_is_marked_at_its_bottom_left() -> None:
+    # Defect: a browser page or editor pane reported as the focused field puts the marker over the key hints.
+    pane = Field(Rect(100, 100, 1100, 900))
+    assert placed(pane, SIZE, WORK, 6) == Rect(106, 862, 226, 894)
