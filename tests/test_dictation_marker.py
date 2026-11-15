@@ -121,11 +121,13 @@ def test_the_marker_stays_on_its_monitor() -> None:
     )
 
 
-def test_a_field_is_marked_outside_its_corner_and_a_window_at_its_top() -> None:
-    # Defect: the marker hides the field's text when there's room above it, or sits off-centre on a window.
+def test_a_field_is_marked_outside_its_corner_and_a_window_at_its_bottom_left() -> (
+    None
+):
+    # Defect: the marker hides the field's text when there's room above it, or covers a window's key hints.
     assert placed(Field(Rect(100, 200, 700, 260)), SIZE, WORK, 6) == Rect(
         100, 162, 220, 194
     )
     assert placed(Window(Rect(100, 100, 1100, 900)), SIZE, WORK, 6) == Rect(
-        540, 106, 660, 138
+        106, 862, 226, 894
     )

@@ -148,7 +148,7 @@ def _clamped(x: int, y: int, size: Size, work: Rect) -> Rect:
 
 def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
     """The marker's rect on screen: above the caret or outside the field's corner when there's room, else just inside;
-    top-centre inside a window; always within `work`."""
+    bottom-left inside a window, clear of the key hints in its top-left; always within `work`."""
     match anchor:
         case Caret(rect):
             above = rect.top - gap - size.height
@@ -167,8 +167,8 @@ def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
             )
         case Window(rect):
             return _clamped(
-                rect.left + (rect.width - size.width) // 2,
-                rect.top + gap,
+                rect.left + gap,
+                rect.bottom - gap - size.height,
                 size,
                 work,
             )
