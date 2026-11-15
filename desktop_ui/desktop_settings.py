@@ -47,7 +47,7 @@ class DesktopSettings:
     keymap: KeymapSpec
     indicator: IndicatorSpec
     marker: MarkerSpec
-    """The dictation marker beside the caret."""
+    """The dictation marker on the caret."""
     switcher: SwitcherSpec
     tray: TraySpec
     placement: PlacementSpec

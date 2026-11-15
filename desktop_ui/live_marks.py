@@ -1,6 +1,6 @@
 """The live marks an activity draws: the microphone's trace and a quick job's pulsing dots.
 
-The bar draws them in its capsules and the dictation marker beside the caret,
+The bar draws them in its capsules and the dictation marker on the caret,
 each at the sizes its capsule declares.
 """
 

@@ -45,7 +45,7 @@ desktops.
 ## What the bar shows
 
 1. **The island is your point of attention.** Dictation shows where you
-   dictate: the dictation marker beside the caret (see
+   dictate: the dictation marker on the caret (see
    [GLOSSARY](../GLOSSARY.md)). Only when there is nothing to mark, as when
    you dictate from Workspace's own windows, does dictation take over the
    island as the live microphone trace. Pressing it stops dictation.

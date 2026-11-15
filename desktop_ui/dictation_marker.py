@@ -1,6 +1,6 @@
 """The dictation marker's decisions: which step it shows, where, and when the bar shows dictation instead.
 
-The marker appears beside the caret of the app you dictate into and stays
+The marker appears on the caret of the app you dictate into and stays
 where the capture started. It shows listening, then transcribing and typing,
 then a brief tick or cross. Each capture looks for its caret once
 (`FindAnchor`); the first answer for the current capture wins. When nothing
@@ -155,15 +155,15 @@ def _bottom_left(rect: Rect, size: Size, work: Rect, gap: int) -> Rect:
 
 
 def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
-    """The marker's rect on screen: above the caret or outside a field's corner when there's room, else just inside;
+    """The marker's rect on screen: centred on the caret's line from the caret on; outside a field's corner when
+    there's room, else just inside;
     bottom-left inside a window or a pane-sized field;
     always within `work`."""
     match anchor:
         case Caret(rect):
-            above = rect.top - gap - size.height
             return _clamped(
                 rect.left,
-                above if above >= work.top else rect.bottom + gap,
+                rect.top + (rect.height - size.height) // 2,
                 size,
                 work,
             )

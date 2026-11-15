@@ -67,7 +67,7 @@ MARKER: Final = MarkerSpec(
     ),
     scheme=Scheme.DARK,
 )
-"""The dictation marker beside the caret, in the bar's sizes and glass."""
+"""The dictation marker on the caret, in the bar's sizes and glass."""
 
 
 KEYMAP: Final = KeymapSpec(

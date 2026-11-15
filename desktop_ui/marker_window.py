@@ -1,4 +1,4 @@
-"""Paints the dictation marker beside the caret: the microphone's trace while listening, pulsing dots while
+"""Paints the dictation marker on the caret: the microphone's trace while listening, pulsing dots while
 transcribing and typing, then a tick or a cross.
 
 `desktop_ui.dictation_marker` decides what shows and where; this window only

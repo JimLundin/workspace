@@ -102,19 +102,18 @@ def test_the_bar_shows_dictation_only_when_nothing_was_found() -> None:
     assert marked(unfound) is None
 
 
-def test_the_marker_sits_above_the_caret_or_below_it_at_the_top() -> None:
-    # Defect: the marker covers the line being dictated into, or leaves the screen near its top.
-    gap = 6
-    assert placed(CARET, SIZE, WORK, gap) == Rect(400, 262, 520, 294)
-    top = Caret(Rect(400, 10, 402, 30))
-    assert placed(top, SIZE, WORK, gap) == Rect(400, 36, 520, 68)
+def test_the_marker_sits_on_the_caret_and_stays_on_screen_at_the_top() -> None:
+    # Defect: the marker drifts off the caret's line, or leaves the screen near its top.
+    assert placed(CARET, SIZE, WORK, 6) == Rect(400, 294, 520, 326)
+    top = Caret(Rect(400, 2, 402, 22))
+    assert placed(top, SIZE, WORK, 6) == Rect(400, 0, 520, 32)
 
 
 def test_the_marker_stays_on_its_monitor() -> None:
     # Defect: a caret at the right edge, or on a monitor left of and above the primary, puts the marker off screen.
     left_monitor = Rect(-1280, -200, 0, 824)
     edge = Caret(Rect(-5, 400, -3, 420))
-    assert placed(edge, SIZE, left_monitor, 6) == Rect(-120, 362, 0, 394)
+    assert placed(edge, SIZE, left_monitor, 6) == Rect(-120, 394, 0, 426)
     corner = Field(Rect(-1280, -200, -600, -150))
     assert placed(corner, SIZE, left_monitor, 6) == Rect(
         -1274, -194, -1154, -162

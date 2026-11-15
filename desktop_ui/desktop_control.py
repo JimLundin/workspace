@@ -409,7 +409,7 @@ class TrayShow:
 
 @dataclass(frozen=True, slots=True)
 class ShowMarker:
-    """The dictation marker shows `marker` beside the caret."""
+    """The dictation marker shows `marker` on the caret."""
 
     marker: MarkerState
 
