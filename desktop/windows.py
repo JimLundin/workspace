@@ -54,6 +54,7 @@ MARKER: Final = MarkerSpec(
     height=28,
     gap=6,
     flash=1.2,
+    glide=0.2,
     steps=every_member(
         Step,
         {

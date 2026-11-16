@@ -37,7 +37,7 @@ from desktop_ui.qt_ui import cancel, later
 from desktop_ui.vector_icons import paint_icon
 from winapi import appearance, screen, windows
 from winapi.caret import Anchor
-from winapi.shapes import Point
+from winapi.shapes import Point, Rect
 
 prepare()
 
@@ -53,6 +53,8 @@ class MarkerSpec:
     """Between the marker and what it marks."""
     flash: float
     """Seconds an outcome stays before the marker leaves."""
+    glide: float
+    """Seconds the marker takes to follow its caret to where the typed text ended."""
     steps: frozendict[Step, str | None]
     """The symbol before each step's live mark, if any."""
     outcomes: frozendict[Outcome, str]
@@ -226,6 +228,9 @@ class DictationMarker:
     """Samples the microphone while listening."""
     faded: Callable[[], None]
     drawn: Cell[_Drawn]
+    glide: QtCore.QVariantAnimation
+    route: Cell[tuple[Rect, Rect]]
+    """Where the marker glides from and to; it rests at the second."""
 
     @classmethod
     def build(
@@ -245,6 +250,12 @@ class DictationMarker:
         sampler.setTimerType(Qt.TimerType.PreciseTimer)
         sampler.setInterval(round(bar.timing.wave_sample * 1000))
         frames.timeout.connect(window.update)
+        glide = QtCore.QVariantAnimation(window)
+        glide.setDuration(round(spec.glide * 1000))
+        glide.setStartValue(0.0)
+        glide.setEndValue(1.0)
+        glide.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
+        nowhere = Rect(0, 0, 0, 0)
         marker = cls(
             spec,
             bar,
@@ -255,8 +266,11 @@ class DictationMarker:
             sampler,
             faded,
             drawn,
+            glide,
+            Cell((nowhere, nowhere)),
         )
         sampler.timeout.connect(marker.sample)
+        glide.valueChanged.connect(marker.glided)
         return marker
 
     def show(self, marked: tuple[Anchor, Shown] | None) -> None:
@@ -281,13 +295,34 @@ class DictationMarker:
         work = nearest_work_area(
             centre, tuple(monitor.work for monitor in screen.monitors())
         )
-        windows.move(
-            self.frame, placed(anchor, size, work, round(self.spec.gap * ratio))
-        )
+        self._place(placed(anchor, size, work, round(self.spec.gap * ratio)))
         self.window.update()
         if not self.window.isVisible():
             self.window.show()
             windows.show_quietly(self.frame, visible=True)
+
+    def _place(self, to: Rect) -> None:
+        """A shown marker glides to a new place, from wherever it has got to; a hidden one appears there."""
+        start, end = self.route.get()
+        gliding = self.glide.state() is QtCore.QAbstractAnimation.State.Running
+        if self.window.isVisible() and (to.left, to.top) != (end.left, end.top):
+            here = _between(start, end, self._progress()) if gliding else end
+            self.route.set((here, to))
+            self.glide.stop()
+            self.glide.start()
+        elif gliding:
+            self.route.set((start, to))
+        else:
+            self.glide.stop()
+            self.route.set((to, to))
+            windows.move(self.frame, to)
+
+    def _progress(self) -> float:
+        value = self.glide.currentValue()
+        return value if isinstance(value, float) else 1.0
+
+    def glided(self) -> None:
+        windows.move(self.frame, _between(*self.route.get(), self._progress()))
 
     def _become(self, shown: Shown, before: _Drawn) -> _Drawn:
         """Start what `shown` needs: the microphone's trace, the frames, an outcome's timer."""
@@ -332,6 +367,7 @@ class DictationMarker:
         )
 
     def _hide(self) -> None:
+        self.glide.stop()
         drawn = self.drawn.get()
         cancel(drawn.flash)
         self.drawn.set(_Drawn())
@@ -345,6 +381,13 @@ class DictationMarker:
         self.meter.close()
         self.window.close()
         self.window.deleteLater()
+
+
+def _between(start: Rect, end: Rect, progress: float) -> Rect:
+    """`progress` of the way from `start` to `end`, at `end`'s size."""
+    left = round(start.left + (end.left - start.left) * progress)
+    top = round(start.top + (end.top - start.top) * progress)
+    return Rect(left, top, left + end.width, top + end.height)
 
 
 def _run(timer: QtCore.QTimer, *, running: bool) -> None:

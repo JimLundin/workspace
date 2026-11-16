@@ -3,8 +3,9 @@
 The marker appears on the caret of the app you dictate into and stays
 where the capture started. It shows listening, then transcribing and typing,
 then a brief tick or cross. Each capture looks for its caret once
-(`FindAnchor`); the first answer for the current capture wins. When nothing
-can be found the bar shows dictation as before.
+(`FindAnchor`); the first answer for the current capture wins. Once its text
+is typed, a marker on a caret looks again (`FollowCaret`) and glides to where
+the text ended. When nothing can be found the bar shows dictation as before.
 """
 
 from dataclasses import dataclass, replace
@@ -61,6 +62,16 @@ class FindAnchor:
     capture: int
 
 
+@dataclass(frozen=True, slots=True)
+class FollowCaret:
+    """Look for where the caret went once `capture`'s text was typed, and report it as `followed`."""
+
+    capture: int
+
+
+type Look = FindAnchor | FollowCaret
+
+
 def listened(state: MarkerState, *, listening: bool) -> MarkerState:
     """A capture starting looks for its anchor afresh and drops any flash."""
     if listening and not state.listening:
@@ -74,9 +85,16 @@ def listened(state: MarkerState, *, listening: bool) -> MarkerState:
     return replace(state, listening=listening)
 
 
-def found(state: MarkerState, after: MarkerState) -> FindAnchor | None:
-    """The look for an anchor a new capture asks for."""
-    return FindAnchor(after.capture) if after.capture != state.capture else None
+def found(state: MarkerState, after: MarkerState) -> Look | None:
+    """The look a new capture asks for, or the one its typed text asks for when the marker is on a caret."""
+    if after.capture != state.capture:
+        return FindAnchor(after.capture)
+    typed = after.flash is Outcome.DONE and state.flash is not Outcome.DONE
+    return (
+        FollowCaret(after.capture)
+        if typed and isinstance(after.where, Caret)
+        else None
+    )
 
 
 def job_changed(state: MarkerState, job: Job | None) -> MarkerState:
@@ -109,6 +127,19 @@ def anchored(
     return (
         replace(state, where=where)
         if capture == state.capture and state.where is PROBING
+        else state
+    )
+
+
+def followed(
+    state: MarkerState, capture: int, caret: Caret | None
+) -> MarkerState:
+    """The caret after the current capture's typed text moves its tick there; anything else leaves it."""
+    return (
+        replace(state, where=caret)
+        if caret is not None
+        and capture == state.capture
+        and state.flash is Outcome.DONE
         else state
     )
 
@@ -151,7 +182,9 @@ def _clamped(x: int, y: int, size: Size, work: Rect) -> Rect:
 
 
 def _bottom_left(rect: Rect, size: Size, work: Rect, gap: int) -> Rect:
-    return _clamped(rect.left + gap, rect.bottom - gap - size.height, size, work)
+    return _clamped(
+        rect.left + gap, rect.bottom - gap - size.height, size, work
+    )
 
 
 def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:

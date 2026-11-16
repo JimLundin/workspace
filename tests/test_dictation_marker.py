@@ -1,16 +1,20 @@
 """The dictation marker's decisions, as values: what it shows, where, and when the bar shows dictation instead."""
 
+from dataclasses import replace
+
 from contracts.status import TRANSCRIBING, TYPING
 from desktop_ui.dictation_marker import (
     PROBING,
     UNFOUND,
     FindAnchor,
+    FollowCaret,
     MarkerState,
     Outcome,
     Step,
     anchored,
     faded,
     failed,
+    followed,
     found,
     job_changed,
     listened,
@@ -136,3 +140,19 @@ def test_a_pane_sized_field_is_marked_at_its_bottom_left() -> None:
     # Defect: a browser page or editor pane reported as the focused field puts the marker over the key hints.
     pane = Field(Rect(100, 100, 1100, 900))
     assert placed(pane, SIZE, WORK, 6) == Rect(106, 862, 226, 894)
+
+
+def test_the_tick_follows_the_caret_to_where_the_text_ended() -> None:
+    # Defect: the tick stays over the start of the typed text, a failure or a window-marked capture looks again,
+    # or a late answer for an earlier capture moves the next one.
+    typing = job_changed(listened(started(), listening=False), TYPING)
+    done = job_changed(typing, None)
+    assert found(typing, done) == FollowCaret(done.capture)
+    ended = Caret(Rect(520, 300, 522, 320))
+    assert marked(followed(done, done.capture, ended)) == (ended, Outcome.DONE)
+    assert followed(done, done.capture, None) == done
+    assert found(typing, job_changed(failed(typing), None)) is None
+    on_window = replace(typing, where=Window(Rect(0, 0, 800, 600)))
+    assert found(on_window, job_changed(on_window, None)) is None
+    after = started(done)
+    assert followed(after, done.capture, ended) == after

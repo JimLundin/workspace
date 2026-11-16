@@ -25,10 +25,12 @@ from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.dictation_marker import (
     UNFOUND,
     FindAnchor,
+    FollowCaret,
     MarkerState,
     anchored,
     faded,
     failed,
+    followed,
     found,
     job_changed,
     listened,
@@ -40,7 +42,7 @@ from desktop_ui.overlay import OverlayState
 from keyboard.actions import Layer
 from keyboard.physical import Scancode
 from protocol import App, LayoutState, Target, Tool, decode_indicator
-from winapi.caret import Anchor
+from winapi.caret import Anchor, Caret
 lazy from winapi.shell import MenuItem
 
 # ---- the tray menu ------------------------------------------------------------------
@@ -297,6 +299,14 @@ class Anchored:
 
 
 @dataclass(frozen=True, slots=True)
+class Followed:
+    """Where the caret went once a capture's text was typed, if it could be found."""
+
+    capture: int
+    caret: Caret | None
+
+
+@dataclass(frozen=True, slots=True)
 class MarkerFaded:
     """The marker's outcome has shown for long enough."""
 
@@ -322,6 +332,7 @@ type Fact = (
     | Problem
     | DictationFailed
     | Anchored
+    | Followed
     | MarkerFaded
 )
 
@@ -525,6 +536,7 @@ type Effect = (
     | ShowActivity
     | ShowMarker
     | FindAnchor
+    | FollowCaret
     | HandleKey
     | ToggleMeeting
     | UseLayout
@@ -687,7 +699,7 @@ def _reacted(
         case VoiceShown():
             yield from _marked(state.marker, after.marker)
             yield TrayShow(tray_state(after.shown))
-        case JobChanged() | Anchored() | MarkerFaded():
+        case JobChanged() | Anchored() | Followed() | MarkerFaded():
             yield from _marked(state.marker, after.marker)
         case Notified(title, text):
             yield TrayNotify(title, text, warning=False)
@@ -761,6 +773,8 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
             return replace(state, marker=failed(state.marker))
         case Anchored(capture, where):
             return replace(state, marker=anchored(state.marker, capture, where))
+        case Followed(capture, caret):
+            return replace(state, marker=followed(state.marker, capture, caret))
         case MarkerFaded():
             return replace(state, marker=faded(state.marker))
         case RecordingChanged(recording):
