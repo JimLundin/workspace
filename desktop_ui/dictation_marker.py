@@ -5,7 +5,8 @@ where the capture started. It shows listening, then transcribing and typing,
 then a brief tick or cross. Each capture looks for its caret once
 (`FindAnchor`); the first answer for the current capture wins. Once its text
 is typed, a marker on a caret looks again (`FollowCaret`) and glides to where
-the text ended. When nothing can be found the bar shows dictation as before.
+the text ended, looking once more each time the caret has moved, since a long
+text can still be arriving. When nothing can be found the bar shows dictation as before.
 """
 
 from dataclasses import dataclass, replace
@@ -86,13 +87,15 @@ def listened(state: MarkerState, *, listening: bool) -> MarkerState:
 
 
 def found(state: MarkerState, after: MarkerState) -> Look | None:
-    """The look a new capture asks for, or the one its typed text asks for when the marker is on a caret."""
+    """The look a new capture asks for, or the one its typed text asks for when the marker is on a caret,
+    again each time the caret has moved while the tick shows."""
     if after.capture != state.capture:
         return FindAnchor(after.capture)
     typed = after.flash is Outcome.DONE and state.flash is not Outcome.DONE
+    moved = after.flash is Outcome.DONE and after.where != state.where
     return (
         FollowCaret(after.capture)
-        if typed and isinstance(after.where, Caret)
+        if (typed or moved) and isinstance(after.where, Caret)
         else None
     )
 
@@ -188,14 +191,14 @@ def _bottom_left(rect: Rect, size: Size, work: Rect, gap: int) -> Rect:
 
 
 def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
-    """The marker's rect on screen: centred on the caret's line from the caret on; outside a field's corner when
+    """The marker's rect on screen: centred on the caret; outside a field's corner when
     there's room, else just inside;
     bottom-left inside a window or a pane-sized field;
     always within `work`."""
     match anchor:
         case Caret(rect):
             return _clamped(
-                rect.left,
+                rect.left + (rect.width - size.width) // 2,
                 rect.top + (rect.height - size.height) // 2,
                 size,
                 work,

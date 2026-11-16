@@ -109,7 +109,7 @@ CAPTURE_TIMER_MS: Final = 1000
 ANCHOR_WAIT_MS: Final = 300
 """How long the marker waits for an app to say where its caret is before marking its window."""
 TYPED_SETTLE_MS: Final = 150
-"""How long an app gets to take in typed text before the marker asks where its caret went."""
+"""How long an app gets to take in typed text before the marker asks where its caret went, and between asks."""
 
 
 def indicator_area() -> Rect:

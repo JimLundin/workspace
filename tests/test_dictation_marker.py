@@ -108,9 +108,9 @@ def test_the_bar_shows_dictation_only_when_nothing_was_found() -> None:
 
 def test_the_marker_sits_on_the_caret_and_stays_on_screen_at_the_top() -> None:
     # Defect: the marker drifts off the caret's line, or leaves the screen near its top.
-    assert placed(CARET, SIZE, WORK, 6) == Rect(400, 294, 520, 326)
+    assert placed(CARET, SIZE, WORK, 6) == Rect(341, 294, 461, 326)
     top = Caret(Rect(400, 2, 402, 22))
-    assert placed(top, SIZE, WORK, 6) == Rect(400, 0, 520, 32)
+    assert placed(top, SIZE, WORK, 6) == Rect(341, 0, 461, 32)
 
 
 def test_the_marker_stays_on_its_monitor() -> None:
@@ -143,13 +143,17 @@ def test_a_pane_sized_field_is_marked_at_its_bottom_left() -> None:
 
 
 def test_the_tick_follows_the_caret_to_where_the_text_ended() -> None:
-    # Defect: the tick stays over the start of the typed text, a failure or a window-marked capture looks again,
+    # Defect: the tick stays over the start of the typed text, stops short of a long text still arriving or keeps
+    # looking once the caret has settled, a failure or a window-marked capture looks again,
     # or a late answer for an earlier capture moves the next one.
     typing = job_changed(listened(started(), listening=False), TYPING)
     done = job_changed(typing, None)
     assert found(typing, done) == FollowCaret(done.capture)
     ended = Caret(Rect(520, 300, 522, 320))
-    assert marked(followed(done, done.capture, ended)) == (ended, Outcome.DONE)
+    moved = followed(done, done.capture, ended)
+    assert marked(moved) == (ended, Outcome.DONE)
+    assert found(done, moved) == FollowCaret(done.capture)
+    assert found(moved, followed(moved, done.capture, ended)) is None
     assert followed(done, done.capture, None) == done
     assert found(typing, job_changed(failed(typing), None)) is None
     on_window = replace(typing, where=Window(Rect(0, 0, 800, 600)))
