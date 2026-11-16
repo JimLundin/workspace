@@ -200,6 +200,11 @@ def rested(caret: Caret, size: Size, work: Rect, gap: int) -> Rect:
     )
 
 
+def leapt(before: Rect, after: Rect, far: int) -> bool:
+    """The marker jumped rather than followed: its corner moved more than `far` along either axis."""
+    return max(abs(after.left - before.left), abs(after.top - before.top)) > far
+
+
 def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
     """The marker's rect on screen: centred on the caret; outside a field's corner when
     there's room, else just inside;

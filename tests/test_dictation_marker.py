@@ -16,6 +16,7 @@ from desktop_ui.dictation_marker import (
     failed,
     found,
     job_changed,
+    leapt,
     listened,
     marked,
     on_bar,
@@ -197,3 +198,10 @@ def test_the_resting_marker_sits_left_of_the_caret_on_its_monitor() -> None:
     assert rested(CARET, SIZE, WORK, 6) == Rect(274, 294, 394, 326)
     start = Caret(Rect(2, 300, 4, 320))
     assert rested(start, SIZE, WORK, 6) == Rect(0, 294, 120, 326)
+
+
+def test_a_move_farther_than_far_on_either_axis_is_a_leap() -> None:
+    here = Rect(100, 100, 130, 130)
+    assert not leapt(here, Rect(150, 100, 180, 130), 50)
+    assert leapt(here, Rect(151, 100, 181, 130), 50)
+    assert leapt(here, Rect(100, 40, 130, 70), 50)

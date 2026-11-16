@@ -1,5 +1,6 @@
 """Paints the dictation marker on the caret: the microphone's trace while listening, pulsing dots while
-transcribing and typing, then a tick or a cross; between dictations, a small dimmed microphone beside it.
+transcribing and typing, then a tick or a cross; between dictations, a blue microphone beside it, which
+sends out a ring when it appears or jumps.
 
 `desktop_ui.dictation_marker` decides what shows and where; this window only
 draws it. It is a click-through tool window that never activates, so the app
@@ -27,12 +28,13 @@ from desktop_ui.components.appearance import (
 )
 from desktop_ui.components.meaning import Tint
 from desktop_ui.components.text import color
-from desktop_ui.components.widgets import device_size, tool_window
+from desktop_ui.components.widgets import tool_window
 from desktop_ui.dictation_marker import (
     RESTING,
     Mark,
     Outcome,
     Step,
+    leapt,
     placed,
     rested,
 )
@@ -45,7 +47,7 @@ from desktop_ui.qt_ui import cancel, later
 from desktop_ui.vector_icons import paint_icon
 from winapi import appearance, screen, windows
 from winapi.caret import Anchor, Caret
-from winapi.shapes import Point, Rect
+from winapi.shapes import Point, Rect, Size
 
 prepare()
 
@@ -69,6 +71,12 @@ class MarkerSpec:
     """The resting marker's size, as a share of its full size."""
     rest_opacity: float
     """How opaque the resting marker is, except in high contrast."""
+    pulse: float
+    """Seconds a ring spreads from the resting marker when it appears or jumps to a new place."""
+    halo: int
+    """How far the ring spreads beyond the capsule; the window keeps this much room on every side."""
+    leap: float
+    """A move farther than this many marker heights is a jump, and pulses."""
     steps: frozendict[Step, str | None]
     """The symbol before each step's live mark, if any."""
     outcomes: frozendict[Outcome, str]
@@ -99,6 +107,8 @@ class _Drawn:
     samples: tuple[float, ...] = ()
     wave_from: tuple[float, ...] = ()
     sampled_at: float = 0.0
+    pulsed_at: float | None = None
+    pulse_end: QtCore.QTimer | None = None
 
 
 class MarkerWindow(QtWidgets.QWidget):
@@ -119,7 +129,12 @@ class MarkerWindow(QtWidgets.QWidget):
     ) -> tuple[Part, ...]:
         ink = surface.lettering.ink
         if shown is RESTING:
-            return (Symbol(self.spec.resting, ink),)
+            return (
+                Symbol(
+                    self.spec.resting,
+                    ink if contrast else Shade(self.bar.palette.accent),
+                ),
+            )
         match shown:
             case Step.LISTENING:
                 lead = (
@@ -162,20 +177,29 @@ class MarkerWindow(QtWidgets.QWidget):
             return
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        halo = self.spec.halo
+        capsule_box = QtCore.QRectF(
+            halo, halo, self.width() - 2 * halo, self.height() - 2 * halo
+        )
+        now = time.monotonic()
+        if drawn.pulsed_at is not None:
+            self.paint_pulse(painter, capsule_box, now - drawn.pulsed_at)
         scale = self.scale(drawn.shown)
+        painter.translate(halo, halo)
         painter.scale(scale, scale)
         if drawn.shown is RESTING and not drawn.contrast:
             painter.setOpacity(self.spec.rest_opacity)
         paint_surface(
             painter,
-            QtCore.QRectF(0, 0, self.width() / scale, self.height() / scale),
+            QtCore.QRectF(
+                0, 0, capsule_box.width() / scale, capsule_box.height() / scale
+            ),
             drawn.surface,
             self.bar.glass,
         )
         sizes, timing = self.bar.sizes, self.bar.timing
         capsule, middle = sizes.capsule, self.spec.height / 2
         x = (self.spec.height - capsule.icon) / 2
-        now = time.monotonic()
         ink = drawn.surface.lettering.ink
         for part in self.parts(
             drawn.shown, drawn.surface, contrast=drawn.contrast
@@ -217,6 +241,21 @@ class MarkerWindow(QtWidgets.QWidget):
                     )
             x += _part_width(part, self.bar) + capsule.part_gap
         painter.end()
+
+    def paint_pulse(
+        self, painter: QtGui.QPainter, capsule: QtCore.QRectF, seconds: float
+    ) -> None:
+        """A ring easing out from the capsule's edge to the halo's, fading as it goes."""
+        progress = min(1.0, max(0.0, seconds / self.spec.pulse))
+        spread = self.spec.halo * (1 - (1 - progress) ** 3)
+        ring = capsule.adjusted(-spread, -spread, spread, spread)
+        shade = Shade(self.bar.palette.accent, 0.9 * (1 - progress))
+        painter.save()
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QtGui.QPen(color(shade), 2))
+        radius = ring.height() / 2
+        painter.drawRoundedRect(ring, radius, radius)
+        painter.restore()
 
 
 def _part_width(part: Part, bar: BarSpec) -> float:
@@ -306,13 +345,12 @@ class DictationMarker:
         if drawn.surface is None:
             return
         parts = self.window.parts(shown, drawn.surface, contrast=drawn.contrast)
-        scale = self.window.scale(shown)
-        self.window.resize(
-            round(self.window.content_width(parts) * scale),
-            round(self.spec.height * scale),
-        )
+        scale, halo = self.window.scale(shown), self.spec.halo
+        width = round(self.window.content_width(parts) * scale)
+        height = round(self.spec.height * scale)
+        self.window.resize(width + 2 * halo, height + 2 * halo)
         ratio = self.window.devicePixelRatioF()
-        size = device_size(self.window, ratio)
+        size = Size(round(width * ratio), round(height * ratio))
         centre = Point(
             (anchor.rect.left + anchor.rect.right) // 2,
             (anchor.rect.top + anchor.rect.bottom) // 2,
@@ -321,11 +359,22 @@ class DictationMarker:
             centre, tuple(monitor.work for monitor in screen.monitors())
         )
         gap = round(self.spec.gap * ratio)
-        self._place(
+        to = _padded(
             rested(anchor, size, work, gap)
             if shown is RESTING and isinstance(anchor, Caret)
-            else placed(anchor, size, work, gap)
+            else placed(anchor, size, work, gap),
+            round(halo * ratio),
         )
+        if shown is RESTING and (
+            not self.window.isVisible()
+            or leapt(
+                self.glide.get().to,
+                to,
+                round(self.spec.leap * self.spec.height * ratio),
+            )
+        ):
+            self._pulse()
+        self._place(to)
         self.window.update()
         if not self.window.isVisible():
             self.window.show()
@@ -342,6 +391,26 @@ class DictationMarker:
             return
         self.glide.set(_aimed(_advanced(self.glide.get(), now), to))
         _run(self.glider, running=not _rests(self.glide.get()))
+
+    def _pulse(self) -> None:
+        """A ring spreads from the marker once, so the eye finds where it has landed."""
+        cancel(self.drawn.get().pulse_end)
+        pulse_end = later(
+            self.window, round(self.spec.pulse * 1000), self._pulsed
+        )
+        self.drawn.update(
+            lambda drawn: replace(
+                drawn, pulsed_at=time.monotonic(), pulse_end=pulse_end
+            )
+        )
+        _run(self.frames, running=True)
+
+    def _pulsed(self) -> None:
+        drawn = self.drawn.update(
+            lambda drawn: replace(drawn, pulsed_at=None, pulse_end=None)
+        )
+        _run(self.frames, running=isinstance(drawn.shown, Step))
+        self.window.update()
 
     def glided(self) -> None:
         glide = self.glide.update(
@@ -377,7 +446,10 @@ class DictationMarker:
         self.drawn.set(drawn)
         self.meter.listen(enabled=listening)
         _run(self.sampler, running=listening)
-        _run(self.frames, running=isinstance(shown, Step))
+        _run(
+            self.frames,
+            running=isinstance(shown, Step) or drawn.pulsed_at is not None,
+        )
         return drawn
 
     def sample(self) -> None:
@@ -396,6 +468,7 @@ class DictationMarker:
         self.glider.stop()
         drawn = self.drawn.get()
         cancel(drawn.flash)
+        cancel(drawn.pulse_end)
         self.drawn.set(_Drawn())
         self.meter.listen(enabled=False)
         _run(self.sampler, running=False)
@@ -451,6 +524,12 @@ def _where(glide: _Glide) -> Rect:
     """Where the window is now, at the size it's headed for."""
     left, top = round(glide.left.value), round(glide.top.value)
     return Rect(left, top, left + glide.to.width, top + glide.to.height)
+
+
+def _padded(rect: Rect, by: int) -> Rect:
+    return Rect(
+        rect.left - by, rect.top - by, rect.right + by, rect.bottom + by
+    )
 
 
 def _run(timer: QtCore.QTimer, *, running: bool) -> None:

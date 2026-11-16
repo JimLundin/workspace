@@ -57,8 +57,11 @@ MARKER: Final = MarkerSpec(
     flash=1.2,
     glide=Spring(1.0, 0.3),  # Critically damped: it never overshoots the caret.
     resting="mic.fill",
-    rest=0.7,
-    rest_opacity=0.6,
+    rest=1.0,
+    rest_opacity=1.0,
+    pulse=0.6,
+    halo=10,
+    leap=4,
     steps=every_member(
         Step,
         {
