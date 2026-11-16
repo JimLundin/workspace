@@ -23,6 +23,7 @@ from desktop_ui.keymap_views import (
 )
 from desktop_ui.layer_indicator import IndicatorSpec
 from desktop_ui.marker_window import MarkerSpec
+from desktop_ui.motion import Spring
 from desktop_ui.navigation import Direction
 from desktop_ui.tray import TraySpec
 from desktop_ui.window_switcher import SwitcherSpec
@@ -54,7 +55,7 @@ MARKER: Final = MarkerSpec(
     height=28,
     gap=6,
     flash=1.2,
-    glide=0.12,
+    glide=Spring(1.0, 0.3),  # Critically damped: it never overshoots the caret.
     resting="mic.fill",
     rest=0.7,
     rest_opacity=0.6,

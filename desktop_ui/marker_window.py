@@ -38,6 +38,7 @@ from desktop_ui.dictation_marker import (
 )
 from desktop_ui.key_hint_overlay import paint_surface
 from desktop_ui.live_marks import Beat, level, paint_dots, paint_wave
+from desktop_ui.motion import Motion, Spring, resting, settle, still, toward
 from desktop_ui.overlay import nearest_work_area
 from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import cancel, later
@@ -60,8 +61,8 @@ class MarkerSpec:
     """Between the marker and what it marks."""
     flash: float
     """Seconds an outcome stays before the marker leaves."""
-    glide: float
-    """Seconds the marker takes to follow its caret to a new place."""
+    glide: Spring
+    """How the marker follows its caret; a move while it glides keeps its speed, so typing reads as one sweep."""
     resting: str
     """The symbol the marker rests with beside the caret."""
     rest: float
@@ -253,9 +254,9 @@ class DictationMarker:
     """Samples the microphone while listening."""
     faded: Callable[[], None]
     drawn: Cell[_Drawn]
-    glide: QtCore.QVariantAnimation
-    route: Cell[tuple[Rect, Rect]]
-    """Where the marker glides from and to; it rests at the second."""
+    glider: QtCore.QTimer
+    """Moves the window while it glides."""
+    glide: Cell[_Glide]
 
     @classmethod
     def build(
@@ -275,12 +276,9 @@ class DictationMarker:
         sampler.setTimerType(Qt.TimerType.PreciseTimer)
         sampler.setInterval(round(bar.timing.wave_sample * 1000))
         frames.timeout.connect(window.update)
-        glide = QtCore.QVariantAnimation(window)
-        glide.setDuration(round(spec.glide * 1000))
-        glide.setStartValue(0.0)
-        glide.setEndValue(1.0)
-        glide.setEasingCurve(QtCore.QEasingCurve.Type.OutCubic)
-        nowhere = Rect(0, 0, 0, 0)
+        glider = QtCore.QTimer(window)
+        glider.setTimerType(Qt.TimerType.PreciseTimer)
+        glider.setInterval(FRAME_MS)
         marker = cls(
             spec,
             bar,
@@ -291,11 +289,11 @@ class DictationMarker:
             sampler,
             faded,
             drawn,
-            glide,
-            Cell((nowhere, nowhere)),
+            glider,
+            Cell(_still(Rect(0, 0, 0, 0), spec.glide, 0.0)),
         )
         sampler.timeout.connect(marker.sample)
-        glide.valueChanged.connect(marker.glided)
+        glider.timeout.connect(marker.glided)
         return marker
 
     def show(self, marked: tuple[Anchor, Mark] | None) -> None:
@@ -334,27 +332,23 @@ class DictationMarker:
             windows.show_quietly(self.frame, visible=True)
 
     def _place(self, to: Rect) -> None:
-        """A shown marker glides to a new place, from wherever it has got to; a hidden one appears there."""
-        start, end = self.route.get()
-        gliding = self.glide.state() is QtCore.QAbstractAnimation.State.Running
-        if self.window.isVisible() and (to.left, to.top) != (end.left, end.top):
-            here = _between(start, end, self._progress()) if gliding else end
-            self.route.set((here, to))
-            self.glide.stop()
-            self.glide.start()
-        elif gliding:
-            self.route.set((start, to))
-        else:
-            self.glide.stop()
-            self.route.set((to, to))
+        """A shown marker glides to a new place from wherever it has got to, at its current speed; a hidden one
+        appears there."""
+        now = time.monotonic()
+        if not self.window.isVisible():
+            self.glider.stop()
+            self.glide.set(_still(to, self.spec.glide, now))
             windows.move(self.frame, to)
-
-    def _progress(self) -> float:
-        value = self.glide.currentValue()
-        return value if isinstance(value, float) else 1.0
+            return
+        self.glide.set(_aimed(_advanced(self.glide.get(), now), to))
+        _run(self.glider, running=not _rests(self.glide.get()))
 
     def glided(self) -> None:
-        windows.move(self.frame, _between(*self.route.get(), self._progress()))
+        glide = self.glide.update(
+            lambda glide: _advanced(glide, time.monotonic())
+        )
+        windows.move(self.frame, _where(glide))
+        _run(self.glider, running=not _rests(glide))
 
     def _become(self, shown: Mark, before: _Drawn) -> _Drawn:
         """Start what `shown` needs: the microphone's trace, the frames, an outcome's timer."""
@@ -399,7 +393,7 @@ class DictationMarker:
         )
 
     def _hide(self) -> None:
-        self.glide.stop()
+        self.glider.stop()
         drawn = self.drawn.get()
         cancel(drawn.flash)
         self.drawn.set(_Drawn())
@@ -415,11 +409,48 @@ class DictationMarker:
         self.window.deleteLater()
 
 
-def _between(start: Rect, end: Rect, progress: float) -> Rect:
-    """`progress` of the way from `start` to `end`, at `end`'s size."""
-    left = round(start.left + (end.left - start.left) * progress)
-    top = round(start.top + (end.top - start.top) * progress)
-    return Rect(left, top, left + end.width, top + end.height)
+@dataclass(frozen=True, slots=True)
+class _Glide:
+    """The marker's corner in flight toward `to`, as of `at`."""
+
+    left: Motion
+    top: Motion
+    to: Rect
+    at: float
+
+
+def _still(to: Rect, spring: Spring, now: float) -> _Glide:
+    return _Glide(still(to.left, spring), still(to.top, spring), to, now)
+
+
+def _aimed(glide: _Glide, to: Rect) -> _Glide:
+    spring = glide.left.spring
+    return replace(
+        glide,
+        left=toward(glide.left, to.left, spring),
+        top=toward(glide.top, to.top, spring),
+        to=to,
+    )
+
+
+def _advanced(glide: _Glide, now: float) -> _Glide:
+    seconds = now - glide.at
+    return replace(
+        glide,
+        left=settle(glide.left, seconds),
+        top=settle(glide.top, seconds),
+        at=now,
+    )
+
+
+def _rests(glide: _Glide) -> bool:
+    return resting(glide.left) and resting(glide.top)
+
+
+def _where(glide: _Glide) -> Rect:
+    """Where the window is now, at the size it's headed for."""
+    left, top = round(glide.left.value), round(glide.top.value)
+    return Rect(left, top, left + glide.to.width, top + glide.to.height)
 
 
 def _run(timer: QtCore.QTimer, *, running: bool) -> None:
