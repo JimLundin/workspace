@@ -379,6 +379,11 @@ class Quit:
 
 
 @dataclass(frozen=True, slots=True)
+class ToggleLayout:
+    """Switch the layout on or off, as if its escape key was tapped."""
+
+
+@dataclass(frozen=True, slots=True)
 class ShowSwitcher:
     """The window list was read off the Qt thread: show the switcher over it."""
 
@@ -393,6 +398,7 @@ type Instruction = (
     | RestoreTray
     | Chord
     | Quit
+    | ToggleLayout
     | ShowSwitcher
 )
 
@@ -506,11 +512,6 @@ class Indicate:
 
 
 @dataclass(frozen=True, slots=True)
-class ToggleLayout:
-    pass
-
-
-@dataclass(frozen=True, slots=True)
 class Launch:
     """Run the launcher on its own: `restart` with program names, or `stop`."""
 
@@ -548,7 +549,6 @@ type Effect = (
     | LayoutShown
     | PressedKeys
     | Indicate
-    | ToggleLayout
     | Launch
     | ShowKeymap
     | OpenLogs
@@ -820,6 +820,7 @@ def transition(
             | RestoreTray()
             | Chord()
             | Quit()
+            | ToggleLayout()
             | ShowSwitcher()
         ):
             return state, iter((event,))

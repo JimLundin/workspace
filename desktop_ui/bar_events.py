@@ -177,6 +177,7 @@ def menu(model: BarModel, panel: Panel) -> Menu:
         entries(
             Controls(
                 recorded.title if recorded is not None else None,
+                layout=model.layout_enabled,
                 overlay=model.overlay_enabled,
                 placement_paused=seen.arrangement.paused,
                 dark_when_away=seen.dark_when_away is True,
@@ -396,6 +397,11 @@ class Keyboard:
 
 
 @dataclass(frozen=True, slots=True)
+class Layout:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class Overlay:
     pass
 
@@ -473,6 +479,7 @@ type Effect = (
     | Release
     | Record
     | Keyboard
+    | Layout
     | Overlay
     | AllControls
     | UseTool
@@ -514,6 +521,8 @@ def _ran(
             return model, (Record("stop"),)
         case Command.KEYMAP:
             return model, (Keyboard(),)
+        case Command.LAYOUT:
+            return model, (Layout(),)
         case Command.OVERLAY:
             return model, (Overlay(),)
         case Command.PLACEMENT:

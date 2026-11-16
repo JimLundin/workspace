@@ -6,6 +6,7 @@ capsules and parts relative to the sizes it is given, never the bar's real posit
 
 from itertools import pairwise
 
+from desktop_ui.components.typeface import Font
 from desktop_ui.island_layout import (
     Box,
     Content,
@@ -15,14 +16,16 @@ from desktop_ui.island_layout import (
     Plotted,
     Spot,
     arrange,
+    fitted,
     frame,
     hung_from,
     lit,
     plotted,
     reading_at,
     snap,
+    tiles,
 )
-from desktop_ui.island_menu import Menu, Panel
+from desktop_ui.island_menu import Cell, Command, Face, Menu, Panel, Toggle
 from desktop_ui.island_model import (
     Action,
     CapsuleView,
@@ -347,8 +350,8 @@ def test_a_panel_hangs_centred_under_its_reading_below_the_capsule_and_stays_on_
 def test_a_panel_hangs_from_the_reading_pressed_or_else_the_first_that_opens_it() -> (
     None
 ):
-    # Defects: the panel hangs from the wrong reading when two open it (processor and
-    # memory), or measures its reading from the capsule's left instead of the screen's right.
+    # Defects: the panel hangs from the wrong reading when two open it, or measures
+    # its reading from the capsule's left instead of the screen's right.
     content = arrange(
         ((Glyph("cpu"),), (Glyph("memory"),), (Text("10:22"),)), width_of, SIZES
     )
@@ -358,16 +361,38 @@ def test_a_panel_hangs_from_the_reading_pressed_or_else_the_first_that_opens_it(
         (),
         "",
         Action.OPEN_MENU,
-        panels=(Panel.PERFORMANCE, Panel.PERFORMANCE, Panel.CALENDAR),
+        panels=(Panel.PROCESSOR, Panel.PROCESSOR, Panel.CALENDAR),
     )
     cpu, memory, _ = content.spots
 
     def centre(spot: Spot) -> float:
         return 12 + content.width - (spot.x + spot.width / 2)
 
+    assert hung_from(status, content, Menu(Panel.PROCESSOR, ()), 12) == centre(
+        cpu
+    )
     assert hung_from(
-        status, content, Menu(Panel.PERFORMANCE, ()), 12
-    ) == centre(cpu)
-    assert hung_from(
-        status, content, Menu(Panel.PERFORMANCE, (), anchor=1), 12
+        status, content, Menu(Panel.PROCESSOR, (), anchor=1), 12
     ) == centre(memory)
+
+
+def test_a_panel_widens_past_its_least_only_where_a_tile_needs_the_room() -> (
+    None
+):
+    # Defects: a tile's text overflows a panel held at its least width, a tile that
+    # shares the grid's columns is fitted as if it had them all, or a panel whose
+    # tiles need little shrinks below its least.
+    def advance(text: str, _: Font) -> float:
+        return 10.0 * len(text)
+
+    def panel(label: str, span: int) -> Menu:
+        toggle = Toggle(label, "", "", Command.LAYOUT, on=True)
+        return Menu(Panel.KEYBOARD, (Cell(toggle, Face.TOGGLE, 0, span, 0, 1),))
+
+    cells = SIZES.cells
+    assert fitted(Menu(Panel.KEYBOARD, ()), advance, SIZES, 100) == 100
+    assert fitted(panel("ab", 8), advance, SIZES, 100) == 100
+    for span in (8, 4):
+        menu = panel("a" * 40, span)
+        (tile,) = tiles(menu, SIZES.menu, fitted(menu, advance, SIZES, 100))
+        assert tile.width >= cells.text_x + 400 + cells.text_right

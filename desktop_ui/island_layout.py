@@ -9,6 +9,7 @@ strip from the top of the screen down to its glass, so a pointer thrown against 
 edge still lands on it.
 """
 
+import math
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from functools import reduce
@@ -17,7 +18,21 @@ from operator import add
 from typing import assert_never
 
 from desktop_ui.components.typeface import Font
-from desktop_ui.island_menu import COLUMNS, Cell, Menu
+from desktop_ui.island_menu import (
+    COLUMNS,
+    Calendar,
+    Cell,
+    Face,
+    Fact,
+    Graph,
+    Item,
+    Live,
+    Menu,
+    Nearby,
+    Slider,
+    Toggle,
+    TrayIcon,
+)
 from desktop_ui.island_model import (
     CapsuleView,
     Charge,
@@ -96,7 +111,7 @@ class Capsule:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MenuGrid:
-    """The panels: a grid of tiles in a card below the readings; each panel declares its width."""
+    """The panels: a grid of tiles in a card below the readings, as wide as its tiles need."""
 
     radius: float
     pad: float
@@ -284,6 +299,90 @@ def card(menu: Menu, grid: MenuGrid, width: float) -> Content:
     # A tile's gutters cancel at the grid's last track.
     tracks = max((cell.track + cell.tracks for cell in menu.cells), default=0)
     return Content(width, (), grid.pad + tracks * grid.track + grid.pad)
+
+
+type Advance = Callable[[str, Font], float]
+"""How far a line of text in a font reaches."""
+
+
+def lines(
+    advance: Advance, title: tuple[str, Font], detail: str, sizes: Sizes
+) -> float:
+    return max(advance(*title), advance(detail, sizes.type.detail))
+
+
+def need(cell: Cell, advance: Advance, sizes: Sizes) -> float:
+    """The width `cell`'s tile takes to show its text whole; what draws to fill its tile needs none."""
+    cells, text, icon = sizes.cells, sizes.type, sizes.capsule.icon
+    match cell.entry:
+        case Live(label=label, detail=detail):
+            return (
+                cells.live_text_x
+                + lines(advance, (label, text.strong), detail, sizes)
+                + cells.live_text_right
+            )
+        case Toggle(label=label, detail=detail):
+            return (
+                cells.text_x
+                + lines(advance, (label, text.reading), detail, sizes)
+                + cells.text_right
+            )
+        case Fact(value=value, detail=detail):
+            return (
+                cells.text_x
+                + lines(advance, (value, text.strong), detail, sizes)
+                + cells.text_right
+            )
+        case Item() if cell.face is Face.TOOL:
+            return (
+                max(icon, advance(cell.caption, text.detail))
+                + 2 * cells.caption_side
+            )
+        case Item(label=label, key=key):
+            hint = advance(key, text.reading) + cells.trail if key else 0.0
+            return (
+                cells.label_x
+                + advance(label, text.reading)
+                + cells.label_right
+                + hint
+            )
+        case Slider(label=label):
+            return 2 * cells.lead + advance(label, text.strong)
+        case Graph(label=label, trace=trace):
+            return (
+                cells.lead
+                + advance(label, text.strong)
+                + cells.label_right
+                + advance(trace.reading, text.reading)
+                + cells.trail
+            )
+        case Nearby(network=network, detail=detail):
+            marks = network.secured + network.connected
+            return (
+                cells.label_x
+                + lines(advance, (network.ssid, text.strong), detail, sizes)
+                + marks * (icon + cells.signal_bar)
+                + cells.trail
+            )
+        case TrayIcon():
+            return cells.tray_image
+        case Calendar():
+            return 0.0
+        case _:
+            assert_never(cell.entry)
+
+
+def fitted(menu: Menu, advance: Advance, sizes: Sizes, least: float) -> float:
+    """The panel's width: `least`, widened until every tile, sharing columns by its span, fits its text."""
+    grid = sizes.menu
+    column = max(
+        (
+            (need(cell, advance, sizes) + grid.gutter) / cell.span
+            for cell in menu.cells
+        ),
+        default=0.0,
+    )
+    return max(least, math.ceil(column * COLUMNS + 2 * grid.pad))
 
 
 def extent(part: Part, measure: Callable[[Text], float], sizes: Sizes) -> float:

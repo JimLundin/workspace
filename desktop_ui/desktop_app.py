@@ -286,6 +286,7 @@ class DesktopApp:
                 BarActions(
                     record=lambda action: report(Record(action)),
                     keyboard=self.show_keymap,
+                    layout=lambda: report(ToggleLayout()),
                     overlay=lambda: report(OverlayToggled()),
                     menu=lambda: report(MenuRequested()),
                     problem=lambda message: report(Problem(message)),

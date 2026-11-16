@@ -149,12 +149,25 @@ SPEC = ControlsSpec(
                     ),
                 ),
             ),
-            Panel.PERFORMANCE: PanelSpec(
+            Panel.KEYBOARD: PanelSpec(
+                120,
+                (
+                    CellsRow(
+                        2, (CellSpec(EntryId.LAYOUT, Face.TOGGLE, 8, "Keys"),)
+                    ),
+                ),
+            ),
+            Panel.PROCESSOR: PanelSpec(
                 160,
                 (
                     CellsRow(
                         4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)
                     ),
+                ),
+            ),
+            Panel.MEMORY: PanelSpec(
+                160,
+                (
                     CellsRow(
                         4,
                         (

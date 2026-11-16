@@ -35,6 +35,7 @@ class Command(Enum):
     RECORD = auto()
     STOP_RECORDING = auto()
     KEYMAP = auto()
+    LAYOUT = auto()
     OVERLAY = auto()
     PLACEMENT = auto()
     DARK_WHEN_AWAY = auto()
@@ -242,6 +243,8 @@ class Controls:
     """What the menu reads: running activities' readings, each toggle's state and the speaker's."""
 
     recording: str | None
+    layout: bool = field(default=True, kw_only=True)
+    """The keyboard layout is on, rather than typing plainly."""
     overlay: bool = field(default=False, kw_only=True)
     placement_paused: bool = field(default=False, kw_only=True)
     dark_when_away: bool = field(default=False, kw_only=True)
@@ -267,10 +270,12 @@ class Panel(StrEnum):
     """A grid the status capsule expands into; each reading opens one."""
 
     WORKSPACE = auto()  # Workspace's own controls, its activities and the tray.
+    KEYBOARD = auto()
     SOUND = auto()
     NETWORK = auto()
     CALENDAR = auto()
-    PERFORMANCE = auto()
+    PROCESSOR = auto()
+    MEMORY = auto()
     POWER = auto()
 
 
@@ -278,6 +283,7 @@ class EntryId(StrEnum):
     """The entries a spec can place. What each does, and any wording that follows
     state, stays here; the spec gives its place, look, label and symbol."""
 
+    LAYOUT = auto()
     OVERLAY = auto()
     PLACEMENT = auto()
     DARK_WHEN_AWAY = auto()
@@ -384,9 +390,9 @@ class MenuWords:
 
 @dataclass(frozen=True, slots=True)
 class PanelSpec:
-    """A panel's width and its rows, top to bottom."""
+    """A panel's rows, top to bottom, and the narrowest it gets; its tiles' text can widen it."""
 
-    width: float
+    least: float
     rows: tuple[RowSpec, ...]
 
 
@@ -410,6 +416,13 @@ def entry(
     """The entry `spec` places, as it reads now; None while it doesn't apply."""
     words = menu.words
     match spec.entry:
+        case EntryId.LAYOUT:
+            return toggle(
+                spec,
+                words.on if controls.layout else words.off,
+                Command.LAYOUT,
+                on=controls.layout,
+            )
         case EntryId.OVERLAY:
             return toggle(
                 spec,
@@ -867,7 +880,8 @@ def restores_focus(choice: Choice) -> bool:
         case ToolChoice() | Volume() | Page() | Join():
             return True
         case (
-            Command.OVERLAY
+            Command.LAYOUT
+            | Command.OVERLAY
             | Command.PLACEMENT
             | Command.DARK_WHEN_AWAY
             | Command.MUTE

@@ -162,7 +162,7 @@ CONTROLS: Final = ControlsSpec(
         Panel,
         {
             Panel.WORKSPACE: PanelSpec(
-                320,
+                280,
                 (
                     ActivitiesRow(5),
                     CellsRow(
@@ -266,7 +266,7 @@ CONTROLS: Final = ControlsSpec(
                 ),
             ),
             Panel.NETWORK: PanelSpec(
-                300,
+                240,
                 (
                     NetworksRow(5, most=8),
                     CellsRow(
@@ -296,7 +296,7 @@ CONTROLS: Final = ControlsSpec(
                 ),
             ),
             Panel.POWER: PanelSpec(
-                280,
+                200,
                 (
                     CellsRow(
                         5,
@@ -324,8 +324,49 @@ CONTROLS: Final = ControlsSpec(
                     ),
                 ),
             ),
-            Panel.PERFORMANCE: PanelSpec(
-                300,
+            Panel.KEYBOARD: PanelSpec(
+                200,
+                (
+                    CellsRow(
+                        4,
+                        (
+                            CellSpec(
+                                EntryId.LAYOUT,
+                                Face.TOGGLE,
+                                8,
+                                "Keyboard layout",
+                                "keyboard",
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        4,
+                        (
+                            CellSpec(
+                                EntryId.OVERLAY,
+                                Face.TOGGLE,
+                                8,
+                                "Keyboard overlay",
+                                "layers",
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        3,
+                        (
+                            CellSpec(
+                                EntryId.KEYMAP,
+                                Face.LINK,
+                                8,
+                                "Keyboard map",
+                                "keyboard",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            Panel.PROCESSOR: PanelSpec(
+                240,
                 (
                     CellsRow(
                         11,
@@ -335,6 +376,11 @@ CONTROLS: Final = ControlsSpec(
                             ),
                         ),
                     ),
+                ),
+            ),
+            Panel.MEMORY: PanelSpec(
+                240,
+                (
                     CellsRow(
                         11,
                         (
@@ -346,7 +392,7 @@ CONTROLS: Final = ControlsSpec(
                 ),
             ),
             Panel.CALENDAR: PanelSpec(
-                300,
+                280,
                 (
                     CellsRow(
                         25,
@@ -359,7 +405,7 @@ CONTROLS: Final = ControlsSpec(
                 ),
             ),
             Panel.SOUND: PanelSpec(
-                280,
+                220,
                 (
                     CellsRow(6, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
                     CellsRow(
@@ -404,7 +450,8 @@ CONTROLS: Final = ControlsSpec(
 """The status capsule's panels, each top to bottom: Workspace's own controls
 (press its glyph, or an activity) and each reading's own (press the reading).
 
-A panel is a grid of 8 columns. Each row is a band `tracks` tall (a track is
+A panel is a grid of 8 columns, at least its first number wide and wider
+where its tiles' text needs the room. Each row is a band `tracks` tall (a track is
 `menu.track` in `SIZES`, gutter included):
 
 - `CellsRow`: entries placed left to right; `span` is their width in columns. An
@@ -445,11 +492,11 @@ ISLAND: Final = IslandSpec(
             Reading,
             {
                 Reading.WORKSPACE: Panel.WORKSPACE,
-                Reading.KEYBOARD: Panel.WORKSPACE,
+                Reading.KEYBOARD: Panel.KEYBOARD,
                 Reading.SPEAKER: Panel.SOUND,
                 Reading.WIFI: Panel.NETWORK,
-                Reading.CPU: Panel.PERFORMANCE,
-                Reading.MEMORY: Panel.PERFORMANCE,
+                Reading.CPU: Panel.PROCESSOR,
+                Reading.MEMORY: Panel.MEMORY,
                 Reading.BATTERY: Panel.POWER,
                 Reading.CLOCK: Panel.CALENDAR,
             },

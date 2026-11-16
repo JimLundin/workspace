@@ -45,6 +45,7 @@ lazy from desktop_ui.bar_events import (
     Framed,
     JoinNetwork,
     Keyboard,
+    Layout,
     Navigate,
     Opening,
     OpenSettings,
@@ -111,6 +112,7 @@ prepare()
 class BarActions:
     record: Callable[[RecordingAction], None]
     keyboard: Callable[[], None]
+    layout: Callable[[], None]
     overlay: Callable[[], None]
     menu: Callable[[], None]
     problem: Callable[[str], None]
@@ -255,6 +257,8 @@ class DesktopBar:
                 self.actions.record(recording)
             case Keyboard():
                 self.actions.keyboard()
+            case Layout():
+                self.actions.layout()
             case Overlay():
                 self.actions.overlay()
             case AllControls():
@@ -306,11 +310,7 @@ class DesktopBar:
         self, view: CapsuleView, opened: Menu | None, spec: BarSpec
     ) -> Content:
         if opened is not None and view.key is Key.PANEL:
-            return card(
-                opened,
-                spec.sizes.menu,
-                spec.controls.panels[opened.panel].width,
-            )
+            return card(opened, spec.sizes.menu, self.window.fit(opened))
         return self.window.measure(view)
 
     def _shown(

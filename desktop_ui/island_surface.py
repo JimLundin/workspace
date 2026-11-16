@@ -45,6 +45,7 @@ from desktop_ui.components.appearance import (
 )
 from desktop_ui.components.meaning import Tone
 from desktop_ui.components.text import color, hit, inter, outline, paint_capsule
+from desktop_ui.components.typeface import Font
 from desktop_ui.components.widgets import tool_window
 from desktop_ui.island_layout import (
     Box,
@@ -56,6 +57,7 @@ from desktop_ui.island_layout import (
     Spot,
     Tile,
     arrange,
+    fitted,
     lit,
     on_pixels,
     plotted,
@@ -132,6 +134,10 @@ class Presented:
     contrast: bool = field(kw_only=True)
     glass: bool = field(kw_only=True)
     shell_look: Look = field(kw_only=True)
+
+
+def advance(text: str, font: Font) -> float:
+    return math.ceil(QtGui.QFontMetricsF(inter(font)).horizontalAdvance(text))
 
 
 def radius(height: float, sizes: Sizes) -> float:
@@ -1115,11 +1121,7 @@ class Capsule(KeyboardFocus):
     def show_menu(self, menu: Menu | None) -> None:
         """The expanded capsule's cells, pooled for as long as the menu shows the same grid."""
         laid = (
-            tiles(
-                menu,
-                self.window_.sizes.menu,
-                self.window_.spec.controls.panels[menu.panel].width,
-            )
+            tiles(menu, self.window_.sizes.menu, self.window_.fit(menu))
             if menu is not None
             else ()
         )
@@ -1614,14 +1616,19 @@ class BarWindow(QtWidgets.QWidget):
         return tuple(found for cell in panel.cells for found in slot(cell))
 
     def measure(self, view: CapsuleView) -> Content:
-        def width(text: Text) -> float:
-            return math.ceil(
-                QtGui.QFontMetricsF(
-                    inter(self.sizes.type.reading)
-                ).horizontalAdvance(text.text)
-            )
+        font = self.sizes.type.reading
+        return arrange(
+            view.slots, lambda text: advance(text.text, font), self.sizes
+        )
 
-        return arrange(view.slots, width, self.sizes)
+    def fit(self, menu: Menu) -> float:
+        """The open panel's width for what its tiles show now."""
+        return fitted(
+            menu,
+            advance,
+            self.sizes,
+            self.spec.controls.panels[menu.panel].least,
+        )
 
     def capsule(self, drawn: Drawn, *, contrast: bool) -> Capsule:
         """The pooled capsule for `drawn`'s key, showing it."""
