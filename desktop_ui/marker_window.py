@@ -1,5 +1,5 @@
 """Paints the dictation marker on the caret: the microphone's trace while listening, pulsing dots while
-transcribing and typing, then a tick or a cross.
+transcribing and typing, then a tick or a cross; between dictations, a small dimmed microphone beside it.
 
 `desktop_ui.dictation_marker` decides what shows and where; this window only
 draws it. It is a click-through tool window that never activates, so the app
@@ -28,7 +28,14 @@ from desktop_ui.components.appearance import (
 from desktop_ui.components.meaning import Tint
 from desktop_ui.components.text import color
 from desktop_ui.components.widgets import device_size, tool_window
-from desktop_ui.dictation_marker import Outcome, Shown, Step, placed
+from desktop_ui.dictation_marker import (
+    RESTING,
+    Mark,
+    Outcome,
+    Step,
+    placed,
+    rested,
+)
 from desktop_ui.key_hint_overlay import paint_surface
 from desktop_ui.live_marks import Beat, level, paint_dots, paint_wave
 from desktop_ui.overlay import nearest_work_area
@@ -36,7 +43,7 @@ from desktop_ui.qt_runtime import prepare
 from desktop_ui.qt_ui import cancel, later
 from desktop_ui.vector_icons import paint_icon
 from winapi import appearance, screen, windows
-from winapi.caret import Anchor
+from winapi.caret import Anchor, Caret
 from winapi.shapes import Point, Rect
 
 prepare()
@@ -54,7 +61,13 @@ class MarkerSpec:
     flash: float
     """Seconds an outcome stays before the marker leaves."""
     glide: float
-    """Seconds the marker takes to follow its caret to where the typed text ended."""
+    """Seconds the marker takes to follow its caret to a new place."""
+    resting: str
+    """The symbol the marker rests with beside the caret."""
+    rest: float
+    """The resting marker's size, as a share of its full size."""
+    rest_opacity: float
+    """How opaque the resting marker is, except in high contrast."""
     steps: frozendict[Step, str | None]
     """The symbol before each step's live mark, if any."""
     outcomes: frozendict[Outcome, str]
@@ -77,7 +90,7 @@ type Part = Symbol | WAVE | DOTS
 
 @dataclass(frozen=True, slots=True)
 class _Drawn:
-    shown: Shown | None = None
+    shown: Mark | None = None
     surface: Look | None = None
     contrast: bool = False
     flash: QtCore.QTimer | None = None
@@ -101,9 +114,11 @@ class MarkerWindow(QtWidgets.QWidget):
         self.spec, self.bar, self.drawn = spec, bar, drawn
 
     def parts(
-        self, shown: Shown, surface: Look, *, contrast: bool
+        self, shown: Mark, surface: Look, *, contrast: bool
     ) -> tuple[Part, ...]:
         ink = surface.lettering.ink
+        if shown is RESTING:
+            return (Symbol(self.spec.resting, ink),)
         match shown:
             case Step.LISTENING:
                 lead = (
@@ -136,6 +151,9 @@ class MarkerWindow(QtWidgets.QWidget):
             + (self.spec.height - capsule.icon)
         )
 
+    def scale(self, shown: Mark) -> float:
+        return self.spec.rest if shown is RESTING else 1.0
+
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         drawn = self.drawn.get()
@@ -143,8 +161,15 @@ class MarkerWindow(QtWidgets.QWidget):
             return
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        scale = self.scale(drawn.shown)
+        painter.scale(scale, scale)
+        if drawn.shown is RESTING and not drawn.contrast:
+            painter.setOpacity(self.spec.rest_opacity)
         paint_surface(
-            painter, QtCore.QRectF(self.rect()), drawn.surface, self.bar.glass
+            painter,
+            QtCore.QRectF(0, 0, self.width() / scale, self.height() / scale),
+            drawn.surface,
+            self.bar.glass,
         )
         sizes, timing = self.bar.sizes, self.bar.timing
         capsule, middle = sizes.capsule, self.spec.height / 2
@@ -273,7 +298,7 @@ class DictationMarker:
         glide.valueChanged.connect(marker.glided)
         return marker
 
-    def show(self, marked: tuple[Anchor, Shown] | None) -> None:
+    def show(self, marked: tuple[Anchor, Mark] | None) -> None:
         if marked is None:
             self._hide()
             return
@@ -283,8 +308,10 @@ class DictationMarker:
         if drawn.surface is None:
             return
         parts = self.window.parts(shown, drawn.surface, contrast=drawn.contrast)
+        scale = self.window.scale(shown)
         self.window.resize(
-            round(self.window.content_width(parts)), round(self.spec.height)
+            round(self.window.content_width(parts) * scale),
+            round(self.spec.height * scale),
         )
         ratio = self.window.devicePixelRatioF()
         size = device_size(self.window, ratio)
@@ -295,7 +322,12 @@ class DictationMarker:
         work = nearest_work_area(
             centre, tuple(monitor.work for monitor in screen.monitors())
         )
-        self._place(placed(anchor, size, work, round(self.spec.gap * ratio)))
+        gap = round(self.spec.gap * ratio)
+        self._place(
+            rested(anchor, size, work, gap)
+            if shown is RESTING and isinstance(anchor, Caret)
+            else placed(anchor, size, work, gap)
+        )
         self.window.update()
         if not self.window.isVisible():
             self.window.show()
@@ -324,7 +356,7 @@ class DictationMarker:
     def glided(self) -> None:
         windows.move(self.frame, _between(*self.route.get(), self._progress()))
 
-    def _become(self, shown: Shown, before: _Drawn) -> _Drawn:
+    def _become(self, shown: Mark, before: _Drawn) -> _Drawn:
         """Start what `shown` needs: the microphone's trace, the frames, an outcome's timer."""
         preference = appearance.preference()
         surface = look(
@@ -351,7 +383,7 @@ class DictationMarker:
         self.drawn.set(drawn)
         self.meter.listen(enabled=listening)
         _run(self.sampler, running=listening)
-        _run(self.frames, running=not isinstance(shown, Outcome))
+        _run(self.frames, running=isinstance(shown, Step))
         return drawn
 
     def sample(self) -> None:

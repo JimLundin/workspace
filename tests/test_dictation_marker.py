@@ -5,22 +5,24 @@ from dataclasses import replace
 from contracts.status import TRANSCRIBING, TYPING
 from desktop_ui.dictation_marker import (
     PROBING,
+    RESTING,
     UNFOUND,
     FindAnchor,
-    FollowCaret,
     MarkerState,
     Outcome,
     Step,
     anchored,
     faded,
     failed,
-    followed,
     found,
     job_changed,
     listened,
     marked,
     on_bar,
     placed,
+    rested,
+    tracked,
+    tracking,
 )
 from winapi.caret import Caret, Field, Window
 from winapi.shapes import Rect, Size
@@ -142,21 +144,56 @@ def test_a_pane_sized_field_is_marked_at_its_bottom_left() -> None:
     assert placed(pane, SIZE, WORK, 6) == Rect(106, 862, 226, 894)
 
 
+def test_the_marker_rests_beside_the_followed_caret_between_dictations() -> (
+    None
+):
+    # Defect: the resting marker hides when a caret is found, stays after it's lost, or moves during a capture.
+    resting = tracked(IDLE, IDLE.capture, CARET)
+    assert marked(resting) == (CARET, RESTING)
+    assert marked(tracked(resting, IDLE.capture, None)) is None
+    assert tracking(resting)
+    listening = listened(resting, listening=True)
+    assert not tracking(listening)
+    assert not tracking(
+        job_changed(listened(listening, listening=False), TRANSCRIBING)
+    )
+
+
+def test_a_capture_starts_on_the_resting_caret_without_looking() -> None:
+    # Defect: a capture with a known caret waits for a lookup, or flickers onto the bar while it runs.
+    resting = tracked(IDLE, IDLE.capture, CARET)
+    after = listened(resting, listening=True)
+    assert found(resting, after) is None
+    assert marked(after) == (CARET, Step.LISTENING)
+    assert not on_bar(after)
+
+
 def test_the_tick_follows_the_caret_to_where_the_text_ended() -> None:
-    # Defect: the tick stays over the start of the typed text, stops short of a long text still arriving or keeps
-    # looking once the caret has settled, a failure or a window-marked capture looks again,
-    # or a late answer for an earlier capture moves the next one.
+    # Defect: the tick stays over the start of the typed text, a failure or a window-marked capture moves,
+    # or a late answer asked before a capture moves it.
     typing = job_changed(listened(started(), listening=False), TYPING)
     done = job_changed(typing, None)
-    assert found(typing, done) == FollowCaret(done.capture)
     ended = Caret(Rect(520, 300, 522, 320))
-    moved = followed(done, done.capture, ended)
-    assert marked(moved) == (ended, Outcome.DONE)
-    assert found(done, moved) == FollowCaret(done.capture)
-    assert found(moved, followed(moved, done.capture, ended)) is None
-    assert followed(done, done.capture, None) == done
-    assert found(typing, job_changed(failed(typing), None)) is None
-    on_window = replace(typing, where=Window(Rect(0, 0, 800, 600)))
-    assert found(on_window, job_changed(on_window, None)) is None
-    after = started(done)
-    assert followed(after, done.capture, ended) == after
+    assert marked(tracked(done, done.capture, ended)) == (ended, Outcome.DONE)
+    assert marked(tracked(done, done.capture, None)) == (CARET, Outcome.DONE)
+    failure = job_changed(failed(typing), None)
+    assert marked(tracked(failure, failure.capture, ended)) == (
+        CARET,
+        Outcome.FAILED,
+    )
+    window = Window(Rect(0, 0, 800, 600))
+    on_window = job_changed(replace(typing, where=window), None)
+    assert marked(tracked(on_window, on_window.capture, ended)) == (
+        window,
+        Outcome.DONE,
+    )
+    assert tracked(started(done), done.capture, ended) == started(done)
+    rests = faded(tracked(done, done.capture, ended))
+    assert marked(rests) == (ended, RESTING)
+
+
+def test_the_resting_marker_sits_left_of_the_caret_on_its_monitor() -> None:
+    # Defect: the resting marker covers the caret, or leaves the screen at a line's start.
+    assert rested(CARET, SIZE, WORK, 6) == Rect(274, 294, 394, 326)
+    start = Caret(Rect(2, 300, 4, 320))
+    assert rested(start, SIZE, WORK, 6) == Rect(0, 294, 120, 326)

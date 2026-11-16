@@ -39,7 +39,6 @@ from desktop_ui.desktop_control import (
     ExpireCapture,
     FeatureRequest,
     Flash,
-    Followed,
     HandleKey,
     Indicate,
     Indicated,
@@ -70,6 +69,7 @@ from desktop_ui.desktop_control import (
     SwitchWindows,
     ToggleLayout,
     ToggleMeeting,
+    Tracked,
     TrayNotify,
     TrayShow,
     UseLayout,
@@ -79,7 +79,7 @@ from desktop_ui.desktop_control import (
     transition,
 )
 from desktop_ui.desktop_settings import DesktopSettings, Launcher
-from desktop_ui.dictation_marker import UNFOUND, FindAnchor, FollowCaret, marked
+from desktop_ui.dictation_marker import UNFOUND, FindAnchor, marked, tracking
 from desktop_ui.navigation import ShowWindow
 from desktop_ui.overlay import OverlayState, load_enabled, save_enabled
 from desktop_ui.qt_runtime import prepare
@@ -108,8 +108,10 @@ CAPTURE_TIMER_MS: Final = 1000
 """How often the control window checks a voice capture against its time limit."""
 ANCHOR_WAIT_MS: Final = 300
 """How long the marker waits for an app to say where its caret is before marking its window."""
-TYPED_SETTLE_MS: Final = 150
-"""How long an app gets to take in typed text before the marker asks where its caret went, and between asks."""
+TRACK_MS: Final = 150
+"""How often the marker asks where the caret of the app in front is."""
+TRACK_STALL_S: Final = 2.0
+"""How long one ask may go unanswered, by a hung app, before the marker asks again."""
 
 
 def indicator_area() -> Rect:
@@ -245,6 +247,8 @@ class DesktopApp:
     """The desktop's own log: its problems and crashes, and why a view could not open or fell back."""
     views: Cell[_Views] = field(default_factory=lambda: Cell(_Views()))
     """Replaced only on the Qt thread."""
+    asking: Cell[float | None] = field(default_factory=lambda: Cell(None))
+    """When the unanswered ask for the caret began; its thread clears it once answered."""
 
     @classmethod
     def compose(
@@ -305,6 +309,10 @@ class DesktopApp:
                 )
             )
         system.set_window_timer(self.inbox.window.handle, CAPTURE_TIMER_MS)
+        tracker = QtCore.QTimer(self.root)
+        tracker.setInterval(TRACK_MS)
+        tracker.timeout.connect(self._track)
+        tracker.start()
         self.voice.start()
         if (
             layout := windows.find(self.settings.programs.layout.window.title)
@@ -351,8 +359,6 @@ class DesktopApp:
                 self._marker().show(marked(marker))
             case FindAnchor(capture):
                 return self._find_anchor(capture)
-            case FollowCaret(capture):
-                self._follow_caret(capture)
             case SwitchWindows():
                 self._list_windows()
             case ShowSwitcher(choices):
@@ -553,24 +559,36 @@ class DesktopApp:
         QtCore.QTimer.singleShot(ANCHOR_WAIT_MS, lambda: report(fallback))
         return None
 
-    def _follow_caret(self, capture: int) -> None:
-        """Where the caret went once the app has taken in the typed text, asked off the Qt thread."""
-        window = windows.foreground()
+    def _track(self) -> None:
+        """Ask where the caret of the app in front is, one ask at a time: the system caret at once, else what the
+        app reports off the Qt thread. Our own windows have no caret to rest beside."""
+        marker = self.state.get().marker
+        asked = self.asking.get()
+        if not tracking(marker) or (
+            asked is not None and time.monotonic() - asked < TRACK_STALL_S
+        ):
+            return
+        capture, window = marker.capture, windows.foreground()
+        if not window or windows.process_id(window) == os.getpid():
+            self.handle(Tracked(capture, None))
+            return
+        if found := caret.thread_caret(window):
+            self.handle(Tracked(capture, found))
+            return
+        self.asking.set(time.monotonic())
         report = self.inbox.report
 
-        def reported() -> caret.Caret | None:
+        def ask() -> None:
             with caret.com_thread() as ready:
                 anchor = caret.accessible_anchor(window) if ready else None
-            return anchor if isinstance(anchor, caret.Caret) else None
+            report(
+                Tracked(
+                    capture, anchor if isinstance(anchor, caret.Caret) else None
+                )
+            )
+            self.asking.set(None)
 
-        def ask() -> None:
-            report(Followed(capture, caret.thread_caret(window) or reported()))
-
-        def start() -> None:
-            threading.Thread(target=ask, name="caret", daemon=True).start()
-
-        if window and windows.process_id(window) != os.getpid():
-            QtCore.QTimer.singleShot(TYPED_SETTLE_MS, start)
+        threading.Thread(target=ask, name="caret", daemon=True).start()
 
     def _list_windows(self) -> None:
         """Read the window list off the Qt thread; the switcher shows it when it arrives."""

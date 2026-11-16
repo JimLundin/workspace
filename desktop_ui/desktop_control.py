@@ -25,16 +25,16 @@ from desktop_ui.bar_events import DictationShown, JobShown, RecordingShown
 from desktop_ui.dictation_marker import (
     UNFOUND,
     FindAnchor,
-    FollowCaret,
     MarkerState,
     anchored,
     faded,
     failed,
-    followed,
     found,
     job_changed,
     listened,
+    marked,
     on_bar,
+    tracked,
 )
 from desktop_ui.keymap import indicator_text
 from desktop_ui.navigation import AppKey, Order, keyed
@@ -299,8 +299,8 @@ class Anchored:
 
 
 @dataclass(frozen=True, slots=True)
-class Followed:
-    """Where the caret went once a capture's text was typed, if it could be found."""
+class Tracked:
+    """Where the caret of the app in front is, asked during `capture`; None when it has none to report."""
 
     capture: int
     caret: Caret | None
@@ -332,7 +332,7 @@ type Fact = (
     | Problem
     | DictationFailed
     | Anchored
-    | Followed
+    | Tracked
     | MarkerFaded
 )
 
@@ -536,7 +536,6 @@ type Effect = (
     | ShowActivity
     | ShowMarker
     | FindAnchor
-    | FollowCaret
     | HandleKey
     | ToggleMeeting
     | UseLayout
@@ -699,8 +698,11 @@ def _reacted(
         case VoiceShown():
             yield from _marked(state.marker, after.marker)
             yield TrayShow(tray_state(after.shown))
-        case JobChanged() | Anchored() | Followed() | MarkerFaded():
+        case JobChanged() | Anchored() | MarkerFaded():
             yield from _marked(state.marker, after.marker)
+        case Tracked():
+            if marked(state.marker) != marked(after.marker):
+                yield ShowMarker(after.marker)
         case Notified(title, text):
             yield TrayNotify(title, text, warning=False)
         case RecordingChanged(recording):
@@ -773,8 +775,8 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
             return replace(state, marker=failed(state.marker))
         case Anchored(capture, where):
             return replace(state, marker=anchored(state.marker, capture, where))
-        case Followed(capture, caret):
-            return replace(state, marker=followed(state.marker, capture, caret))
+        case Tracked(capture, caret):
+            return replace(state, marker=tracked(state.marker, capture, caret))
         case MarkerFaded():
             return replace(state, marker=faded(state.marker))
         case RecordingChanged(recording):

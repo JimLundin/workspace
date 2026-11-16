@@ -1,12 +1,12 @@
 """The dictation marker's decisions: which step it shows, where, and when the bar shows dictation instead.
 
-The marker appears on the caret of the app you dictate into and stays
-where the capture started. It shows listening, then transcribing and typing,
-then a brief tick or cross. Each capture looks for its caret once
-(`FindAnchor`); the first answer for the current capture wins. Once its text
-is typed, a marker on a caret looks again (`FollowCaret`) and glides to where
-the text ended, looking once more each time the caret has moved, since a long
-text can still be arriving. When nothing can be found the bar shows dictation as before.
+Between dictations the marker rests beside the caret of the app in front,
+which it keeps following (`tracked`). A capture starts on that caret, or looks
+for one once (`FindAnchor`) when none was resting, and stays where it started;
+the first answer for the current capture wins. It shows listening, then
+transcribing and typing, then a brief tick or cross; the tick follows the caret
+to where the typed text ends. When nothing can be found the bar shows
+dictation as before.
 """
 
 from dataclasses import dataclass, replace
@@ -20,6 +20,8 @@ PROBING = sentinel("PROBING")
 """The capture's anchor is being looked for; neither the marker nor the bar shows it yet."""
 UNFOUND = sentinel("UNFOUND")
 """Nothing to anchor to: the bar shows dictation."""
+RESTING = sentinel("RESTING")
+"""No dictation is showing: the marker rests beside the caret."""
 
 type Where = Anchor | PROBING | UNFOUND
 
@@ -38,6 +40,7 @@ class Step(Enum):
 
 
 type Shown = Step | Outcome
+type Mark = Shown | RESTING
 
 _STEPS: frozendict[Job, Step] = frozendict(
     {TRANSCRIBING: Step.TRANSCRIBING, TYPING: Step.TYPING}
@@ -54,6 +57,8 @@ class MarkerState:
     capture: int = 0
     """Counts captures, so an anchor found for an earlier one is dropped."""
     where: Where = UNFOUND
+    resting: Caret | None = None
+    """The caret of the app in front, as last followed."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,39 +68,24 @@ class FindAnchor:
     capture: int
 
 
-@dataclass(frozen=True, slots=True)
-class FollowCaret:
-    """Look for where the caret went once `capture`'s text was typed, and report it as `followed`."""
-
-    capture: int
-
-
-type Look = FindAnchor | FollowCaret
-
-
 def listened(state: MarkerState, *, listening: bool) -> MarkerState:
-    """A capture starting looks for its anchor afresh and drops any flash."""
+    """A capture starting drops any flash and starts on the resting caret, else looks for its anchor afresh."""
     if listening and not state.listening:
         return replace(
             state,
             listening=True,
             flash=None,
             capture=state.capture + 1,
-            where=PROBING,
+            where=state.resting if state.resting is not None else PROBING,
         )
     return replace(state, listening=listening)
 
 
-def found(state: MarkerState, after: MarkerState) -> Look | None:
-    """The look a new capture asks for, or the one its typed text asks for when the marker is on a caret,
-    again each time the caret has moved while the tick shows."""
-    if after.capture != state.capture:
-        return FindAnchor(after.capture)
-    typed = after.flash is Outcome.DONE and state.flash is not Outcome.DONE
-    moved = after.flash is Outcome.DONE and after.where != state.where
+def found(state: MarkerState, after: MarkerState) -> FindAnchor | None:
+    """The look for an anchor a new capture asks for when no caret was resting."""
     return (
-        FollowCaret(after.capture)
-        if (typed or moved) and isinstance(after.where, Caret)
+        FindAnchor(after.capture)
+        if after.capture != state.capture and after.where is PROBING
         else None
     )
 
@@ -134,16 +124,24 @@ def anchored(
     )
 
 
-def followed(
+def tracking(state: MarkerState) -> bool:
+    """The caret is followed except while a capture is listening, transcribing or typing, which stays put."""
+    return not state.listening and state.job is None
+
+
+def tracked(
     state: MarkerState, capture: int, caret: Caret | None
 ) -> MarkerState:
-    """The caret after the current capture's typed text moves its tick there; anything else leaves it."""
-    return (
-        replace(state, where=caret)
-        if caret is not None
-        and capture == state.capture
+    """Where the caret of the app in front is, asked during `capture`; a tick on a caret follows it too."""
+    if capture != state.capture:
+        return state
+    follows = (
+        caret is not None
         and state.flash is Outcome.DONE
-        else state
+        and isinstance(state.where, Caret)
+    )
+    return replace(
+        state, resting=caret, where=caret if follows else state.where
     )
 
 
@@ -158,13 +156,14 @@ def shown(state: MarkerState) -> Shown | None:
     return _STEPS[state.job] if state.job is not None else state.flash
 
 
-def marked(state: MarkerState) -> tuple[Anchor, Shown] | None:
-    """Where the marker shows and what, or None while it's hidden."""
+def marked(state: MarkerState) -> tuple[Anchor, Mark] | None:
+    """Where the marker shows and what, resting beside the caret between dictations, or None while it's hidden."""
+    step = shown(state)
     match state.where:
-        case Caret() | Field() | Window() as anchor if (
-            step := shown(state)
-        ) is not None:
+        case Caret() | Field() | Window() as anchor if step is not None:
             return anchor, step
+        case _ if step is None and state.resting is not None:
+            return state.resting, RESTING
         case _:
             return None
 
@@ -187,6 +186,17 @@ def _clamped(x: int, y: int, size: Size, work: Rect) -> Rect:
 def _bottom_left(rect: Rect, size: Size, work: Rect, gap: int) -> Rect:
     return _clamped(
         rect.left + gap, rect.bottom - gap - size.height, size, work
+    )
+
+
+def rested(caret: Caret, size: Size, work: Rect, gap: int) -> Rect:
+    """The resting marker's rect: just left of the caret, centred on its line; always within `work`."""
+    rect = caret.rect
+    return _clamped(
+        rect.left - gap - size.width,
+        rect.top + (rect.height - size.height) // 2,
+        size,
+        work,
     )
 
 

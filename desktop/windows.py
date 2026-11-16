@@ -55,6 +55,9 @@ MARKER: Final = MarkerSpec(
     gap=6,
     flash=1.2,
     glide=0.2,
+    resting="mic.fill",
+    rest=0.7,
+    rest_opacity=0.6,
     steps=every_member(
         Step,
         {

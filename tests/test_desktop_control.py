@@ -33,6 +33,7 @@ from desktop_ui.desktop_control import (
     ShowMarker,
     SwitchWindows,
     ToggleMeeting,
+    Tracked,
     TrayNotify,
     TrayShow,
     UseLayout,
@@ -101,6 +102,14 @@ def test_dictation_shows_on_the_bar_only_when_the_marker_has_nowhere_to_go() -> 
         listening,
     )
     assert ShowActivity(DictationShown(active=False)) in effects
+
+
+def test_following_the_caret_redraws_the_marker_only_when_it_moves() -> None:
+    # Defect: each answer about the unmoved caret, several a second, redraws the marker or the bar.
+    at = Caret(Rect(10, 10, 12, 30))
+    resting, effects = folded((Tracked(0, at),))
+    assert effects == (ShowMarker(resting.marker),)
+    assert folded((Tracked(0, at),), resting)[1] == ()
 
 
 def test_recording_warnings_only_announce_interruptions_and_failed_captures() -> (
