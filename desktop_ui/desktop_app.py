@@ -108,7 +108,7 @@ CAPTURE_TIMER_MS: Final = 1000
 """How often the control window checks a voice capture against its time limit."""
 ANCHOR_WAIT_MS: Final = 300
 """How long the marker waits for an app to say where its caret is before marking its window."""
-TRACK_MS: Final = 150
+TRACK_MS: Final = 75
 """How often the marker asks where the caret of the app in front is."""
 TRACK_STALL_S: Final = 2.0
 """How long one ask may go unanswered, by a hung app, before the marker asks again."""
