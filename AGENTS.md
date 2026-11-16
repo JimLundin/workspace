@@ -228,9 +228,9 @@ runtime effect (comments, docstrings, docs) need only commit and push.
   stash or an unpushed branch.
 - Workspace runs straight from this checkout's `.venv`: `StartWorkspace.cmd`
   (also the login shortcut) syncs the environment from `uv.lock` and runs
-  `launch.py`, which starts the gateway, layout and desktop. After a
-  checked change, `Dev.cmd deploy` restarts them (`launch.py restart [NAME]`
-  restarts one); the user has authorized this without asking. Nothing
+  `launch.py`, which starts the gateway, layout and desktop. After every
+  checked change, run `Dev.cmd deploy` to restart them before finishing
+  (`launch.py restart [NAME]` restarts one), without asking. Nothing
   supervises the programs or undoes a change: revert the commit and restart.
   After editing `pyproject.toml`, run `uv lock` and `Dev.cmd setup`. Never use
   pip; uv manages every environment.
