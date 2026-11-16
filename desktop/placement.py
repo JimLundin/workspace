@@ -20,7 +20,7 @@ from desktop_ui.window_layout import (
 )
 from winapi.shapes import Size
 
-COMPANION: Final = Path(__file__).resolve().parents[2] / "elwing"
+COMPANION: Final = Path(__file__).resolve().parents[2] / "companion"
 """Companion's checkout, beside Workspace's."""
 
 
