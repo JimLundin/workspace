@@ -135,14 +135,14 @@ def tracked(
     """Where the caret of the app in front is, asked during `capture`; a tick on a caret follows it too."""
     if capture != state.capture:
         return state
-    follows = (
-        caret is not None
+    where = (
+        caret
+        if caret is not None
         and state.flash is Outcome.DONE
         and isinstance(state.where, Caret)
+        else state.where
     )
-    return replace(
-        state, resting=caret, where=caret if follows else state.where
-    )
+    return replace(state, resting=caret, where=where)
 
 
 def faded(state: MarkerState) -> MarkerState:
