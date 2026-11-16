@@ -14,7 +14,7 @@ island bar](docs/toolbar-design.md#the-panels).
 
 **Dictation marker**: the small capsule on the caret of the app you dictate
 into, which shows listening, transcribing, typing and the outcome. Between
-dictations it rests, small and dimmed, beside the caret of the app in front. A
+dictations it rests just ahead of the caret of the app in front. A
 capture stays where it started, and its tick follows the caret to where the
 typed text ends; the bar shows dictation only when there is nothing to mark (`desktop_ui/dictation_marker.py`, `winapi/caret.py`).
 

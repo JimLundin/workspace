@@ -6,12 +6,12 @@ lines are code lines. Product code averages 4.2 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 99,460 | 23,882 |
+| **product** | 99,478 | 23,885 |
 | **support** | 63,103 | 13,938 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 54,808 | 12,498 |
+| desktop_ui | 54,826 | 12,501 |
 | tests | 46,217 | 9,851 |
 | winapi | 21,186 | 5,567 |
 | scripts | 12,814 | 2,985 |

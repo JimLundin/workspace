@@ -193,11 +193,11 @@ def test_the_tick_follows_the_caret_to_where_the_text_ended() -> None:
     assert marked(rests) == (ended, RESTING)
 
 
-def test_the_resting_marker_sits_left_of_the_caret_on_its_monitor() -> None:
-    # Defect: the resting marker covers the caret, or leaves the screen at a line's start.
-    assert rested(CARET, SIZE, WORK, 6) == Rect(274, 294, 394, 326)
-    start = Caret(Rect(2, 300, 4, 320))
-    assert rested(start, SIZE, WORK, 6) == Rect(0, 294, 120, 326)
+def test_the_resting_marker_sits_ahead_of_the_caret_on_its_monitor() -> None:
+    # Defect: the resting marker covers the caret, trails behind it, or leaves the screen at a line's end.
+    assert rested(CARET, SIZE, WORK, 6) == Rect(408, 294, 528, 326)
+    end = Caret(Rect(1900, 300, 1902, 320))
+    assert rested(end, SIZE, WORK, 6) == Rect(1774, 294, 1894, 326)
 
 
 def test_a_move_farther_than_far_on_either_axis_is_a_leap() -> None:

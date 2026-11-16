@@ -190,10 +190,14 @@ def _bottom_left(rect: Rect, size: Size, work: Rect, gap: int) -> Rect:
 
 
 def rested(caret: Caret, size: Size, work: Rect, gap: int) -> Rect:
-    """The resting marker's rect: just left of the caret, centred on its line; always within `work`."""
+    """The resting marker's rect: just ahead of the caret, or just behind it when the screen ends first; centred on
+    its line; always within `work`."""
     rect = caret.rect
+    ahead = rect.right + gap
     return _clamped(
-        rect.left - gap - size.width,
+        ahead
+        if ahead + size.width <= work.right
+        else rect.left - gap - size.width,
         rect.top + (rect.height - size.height) // 2,
         size,
         work,
