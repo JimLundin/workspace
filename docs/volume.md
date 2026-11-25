@@ -6,7 +6,7 @@ lines are code lines. Product code averages 4.2 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 100,954 | 24,117 |
+| **product** | 100,943 | 24,116 |
 | **support** | 64,418 | 14,155 |
 
 | area | nodes | lines |
@@ -21,7 +21,7 @@ lines are code lines. Product code averages 4.2 nodes a line.
 | desktop | 2,555 | 1,126 |
 | (top level) | 1,517 | 328 |
 | contracts | 1,513 | 361 |
-| settings | 1,022 | 168 |
+| settings | 1,011 | 167 |
 | gateway | 977 | 242 |
 
 The 25 largest files:

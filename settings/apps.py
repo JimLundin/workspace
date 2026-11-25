@@ -8,6 +8,5 @@ APPS: Final[tuple[App, ...]] = (
     App("outlook", PinnedWeb("outlook")),
     App("teams", PinnedWeb("teams")),
     App("files", Installed("explorer.exe", "explorer.exe")),
-    App("code", Installed("code.exe", "code")),
     App("notepad", Installed("notepad.exe", "notepad.exe")),
 )

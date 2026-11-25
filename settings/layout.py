@@ -72,7 +72,7 @@ NATIVE_KEYS: Final = frozenset((
 media keys, arrows, and the physical Shift, Ctrl and Windows keys."""
 
 
-_Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = (Slot(index) for index in range(10))
+_Q, _W, _F, _P, _B, _R = (Slot(index) for index in range(6))
 
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
@@ -119,7 +119,7 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
     Layer.APPS: Board(
         top=      Row((_Q,              _W,                    _F,                    _P,                    _B),
                       (Tool.PLACEMENT_PAUSE, Tool.DESKTOP_1,   Tool.DESKTOP_2,        Tool.DESKTOP_3,        Tool.DESKTOP_4)),
-        home=     Row((_A,              _R,                    _S,                    _T,                    _G),
+        home=     Row((BLANK,           _R,                    BLANK,                 BLANK,                 BLANK),
                       (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,       Tool.FOCUS_UP,         Tool.FOCUS_RIGHT)),
         bottom=   Row((BLANK,           BLANK,                 Tool.WINDOW_SWITCHER,  Tool.PLACE_NOW,        BLANK),
                       (BLANK,           Tool.DICTATE,          BLANK,                 Tool.COPY_TRANSCRIPT,  Tool.DICTATE_TOGGLE)),
