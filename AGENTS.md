@@ -17,8 +17,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
 
 # Tests
 
-- A test must catch a plausible defect in Workspace code. Name that defect in a
-  comment before writing the test; if there is none, do not write it.
+- A test must catch a plausible defect in Workspace code, and its name says
+  which; if there is none, do not write it.
 - Do not test Python, the standard library or a dependency's documented behavior.
 - Do not test what is declared as data: tables, constants, enum values, layer
   boards, chord letters, colours, specs, placements per setup, labels and other
@@ -174,8 +174,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
 - Use absolute imports from the owning module, at module level. Use `lazy import`
   to defer loading. No re-exports or cosmetic aliases.
 - Boolean parameters are keyword-only. Functions take at most five inputs; Ruff
-  blocks more. Where a wider signature is genuinely needed, add
-  `# noqa: PLR0913 - <reason>` on the `def` line. Never suppress a whole file.
+  blocks more. Where a wider signature is genuinely needed, ignore PLR0913 for
+  its file in `pyproject.toml` and record the reason in `exceptions.toml`.
 - The desktop (`desktop_ui.voice`) composes dictation and meetings
   (`assistant`) and calls them on its Qt thread.
 - Before writing general-purpose code, check for a small focused dependency and
@@ -184,9 +184,8 @@ their tests. Legacy data and backwards compatibility are not requirements.
   type parameters and `type` aliases, and type-parameter defaults (PEP 696) for
   a generic usually specialized one way, instead of repeating the common
   arguments or adding a parallel alias.
-- mypy (strict, `[tool.mypy]`) is the only type checker. Our code declares no
-  `Any`; an `Any` a dependency declares is validated where it enters, not
-  covered with a stub. Add a stub under `typings/` only for a dependency that
+- Our code declares no `Any`; an `Any` a dependency declares is validated
+  where it enters, not covered with a stub. Add a stub under `typings/` only for a dependency that
   ships no types. Never test the type checker or the linters: they test our
   code. The
   [module map](docs/functional-design.md) lists the processes and which module

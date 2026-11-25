@@ -23,9 +23,9 @@ Ruff owns linting and formatting. `Dev.cmd lint --fix .` applies safe fixes and
 `Dev.cmd format .` formats the tree; CI checks both. Existing `fmt: off` regions
 keep keyboard grids and tables readable.
 
-`Dev.cmd typecheck` runs mypy (strict, configured in `[tool.mypy]`), the only
-type checker; with file arguments it checks just those. `typings/` holds stubs
-only for a dependency that ships no types (win32more).
+`Dev.cmd typecheck` runs mypy (strict, configured in `[tool.mypy]`); with file
+arguments it checks just those. `typings/` holds stubs only for a dependency
+that ships no types (win32more).
 
 ## Code volume
 
