@@ -1,5 +1,6 @@
 """The bar's controls: Qt owns pointer, press and focus; each control paints its own feedback in the bar's reading face."""
 
+from dataclasses import dataclass
 from typing import override
 
 lazy from PySide6 import QtCore, QtGui, QtWidgets
@@ -12,24 +13,31 @@ from desktop_ui.qt_runtime import prepare
 prepare()
 
 
-def paint_feedback(  # noqa: PLR0913 - one shape, its corner and the three states it shows, plus the ring's inset
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Feedback:
+    """The states a control's feedback shows, and how far inside its bounds the keyboard ring sits."""
+
+    pressed: bool
+    hovered: bool
+    ringed: bool = False
+    inset: float = 1.0
+
+
+def paint_feedback(
     painter: QtGui.QPainter,
     lettering: Lettering,
     bounds: QtCore.QRectF,
     corner: float,
-    *,
-    pressed: bool,
-    hovered: bool,
-    ringed: bool = False,
-    inset: float = 1.0,
+    feedback: Feedback,
 ) -> None:
-    """A press or hover fill over `bounds` and the keyboard ring `inset` inside it, rounded at `corner`."""
+    """A press or hover fill over `bounds` and the keyboard ring inside it, rounded at `corner`."""
+    pressed, hovered, inset = feedback.pressed, feedback.hovered, feedback.inset
     painter.save()
     if pressed or hovered:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color(lettering.press if pressed else lettering.hover))
         painter.drawRoundedRect(bounds, corner, corner)
-    if ringed:
+    if feedback.ringed:
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(QtGui.QPen(color(lettering.ink), 1.5))
         painter.drawRoundedRect(
@@ -78,7 +86,9 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
             lettering,
             bounds,
             bounds.height() / 2,
-            pressed=self.isDown(),
-            hovered=self.underMouse(),
-            ringed=self.focus_ringed,
+            Feedback(
+                pressed=self.isDown(),
+                hovered=self.underMouse(),
+                ringed=self.focus_ringed,
+            ),
         )

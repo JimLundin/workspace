@@ -14,7 +14,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from cell import Cell
-from desktop_ui.bar_control import KeyboardFocus, paint_feedback
+from desktop_ui.bar_control import Feedback, KeyboardFocus, paint_feedback
 from desktop_ui.components.appearance import Lettering, Look
 from desktop_ui.components.text import color, inter, outline, paint_capsule
 from desktop_ui.desktop_pager import PagerDesktop, PagerView
@@ -205,17 +205,16 @@ class ShellButton(KeyboardFocus):
                     lettering,
                     circle,
                     radius,
-                    pressed=self.isDown(),
-                    hovered=True,
+                    Feedback(pressed=self.isDown(), hovered=True),
                 )
                 paint_feedback(
                     painter,
                     lettering,
                     whole,
                     radius,
-                    pressed=False,
-                    hovered=False,
-                    ringed=self.focus_ringed,
+                    Feedback(
+                        pressed=False, hovered=False, ringed=self.focus_ringed
+                    ),
                 )
             case _:
                 paint_feedback(
@@ -223,9 +222,11 @@ class ShellButton(KeyboardFocus):
                     lettering,
                     whole,
                     self.height() / 2,
-                    pressed=self.isDown(),
-                    hovered=self.underMouse(),
-                    ringed=self.focus_ringed,
+                    Feedback(
+                        pressed=self.isDown(),
+                        hovered=self.underMouse(),
+                        ringed=self.focus_ringed,
+                    ),
                 )
 
     def snapped(self) -> QtCore.QPointF:

@@ -19,7 +19,7 @@ lazy from PySide6 import QtCore, QtGui, QtWidgets
 lazy from PySide6.QtCore import Qt
 
 from desktop_ui import island_menu
-from desktop_ui.bar_control import KeyboardFocus, paint_feedback
+from desktop_ui.bar_control import Feedback, KeyboardFocus, paint_feedback
 from desktop_ui.bar_events import (
     BarSpec,
     Deactivated,
@@ -475,8 +475,7 @@ class MenuCell(QtWidgets.QAbstractButton):
             lettering,
             bounds,
             corner,
-            pressed=chosen,
-            hovered=self.underMouse() and not still,
+            Feedback(pressed=chosen, hovered=self.underMouse() and not still),
         )
         match cell.entry:
             case Live() as activity:
@@ -1302,8 +1301,7 @@ class Capsule(KeyboardFocus):
                 lettering,
                 pill,
                 box.height / 2,
-                pressed=pressed,
-                hovered=True,
+                Feedback(pressed=pressed, hovered=True),
             )
             painter.restore()
 
@@ -1334,10 +1332,12 @@ class Capsule(KeyboardFocus):
             drawn.look.lettering,
             shape,
             corner,
-            pressed=self.isDown() and whole,
-            hovered=self.underMouse() and whole,
-            ringed=self.focus_ringed,
-            inset=sizes.capsule.ring_inset,
+            Feedback(
+                pressed=self.isDown() and whole,
+                hovered=self.underMouse() and whole,
+                ringed=self.focus_ringed,
+                inset=sizes.capsule.ring_inset,
+            ),
         )
         if drawn.view.panels:
             self.paint_lit(painter)
