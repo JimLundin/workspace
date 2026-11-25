@@ -11,31 +11,29 @@ from scripts.source_analysis import call_name, parameters, qualified
 
 REFLECTION = frozenset({"getattr", "hasattr", "setattr", "delattr"})
 REFLECTION_CALLS = REFLECTION | {"builtins." + name for name in REFLECTION}
-MUTABLE_TYPES = frozenset(
-    {
-        "list",
-        "dict",
-        "set",
-        "bytearray",
-        "collections.deque",
-        "typing.List",
-        "typing.Dict",
-        "typing.Set",
-        "typing.MutableMapping",
-        "typing.MutableSequence",
-        "typing.MutableSet",
-        "collections.abc.MutableMapping",
-        "collections.abc.MutableSequence",
-        "collections.abc.MutableSet",
-        "collections.defaultdict",
-        "collections.Counter",
-        "collections.OrderedDict",
-        "typing.DefaultDict",
-        "typing.Deque",
-        "typing.Counter",
-        "typing.OrderedDict",
-    }
-)
+MUTABLE_TYPES = frozenset({
+    "list",
+    "dict",
+    "set",
+    "bytearray",
+    "collections.deque",
+    "typing.List",
+    "typing.Dict",
+    "typing.Set",
+    "typing.MutableMapping",
+    "typing.MutableSequence",
+    "typing.MutableSet",
+    "collections.abc.MutableMapping",
+    "collections.abc.MutableSequence",
+    "collections.abc.MutableSet",
+    "collections.defaultdict",
+    "collections.Counter",
+    "collections.OrderedDict",
+    "typing.DefaultDict",
+    "typing.Deque",
+    "typing.Counter",
+    "typing.OrderedDict",
+})
 OVERRIDES: Final = frozenset({"typing.override", "typing_extensions.override"})
 """Decorators marking a method whose signature its base class dictates."""
 
@@ -144,9 +142,9 @@ def _decorator_call(
     """The function a decorator names, and the keywords it is called with, if it is called."""
     match decorator:
         case ast.Call(func=function, keywords=keywords):
-            return function, frozendict(
-                {keyword.arg: keyword.value for keyword in keywords}
-            )
+            return function, frozendict({
+                keyword.arg: keyword.value for keyword in keywords
+            })
         case _:
             return decorator, frozendict()
 

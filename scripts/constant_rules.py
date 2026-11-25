@@ -87,9 +87,9 @@ def shared_constants(
     }
     index = ConstantIndex(
         frozenset(trees),
-        frozendict(
-            {module: _constants(tree) for module, tree in trees.items()}
-        ),
+        frozendict({
+            module: _constants(tree) for module, tree in trees.items()
+        }),
         frozenset(
             module for module, tree in trees.items() if _declarations_only(tree)
         ),

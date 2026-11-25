@@ -41,13 +41,11 @@ WINDOWS_IMPORTS = (
     "win32more",
 )
 """Signs that an import failed only because this isn't Windows."""
-STANDARDS = frozendict(
-    {
-        "ruff check": (sys.executable, "-m", "ruff", "check", "--no-fix", "."),
-        "ruff format": (sys.executable, "-m", "ruff", "format", "--check", "."),
-        "mypy": (sys.executable, "-m", "mypy"),
-    }
-)
+STANDARDS = frozendict({
+    "ruff check": (sys.executable, "-m", "ruff", "check", "--no-fix", "."),
+    "ruff format": (sys.executable, "-m", "ruff", "format", "--check", "."),
+    "mypy": (sys.executable, "-m", "mypy"),
+})
 """The whole-tree standards --standards runs beside the tests; CI's standards job runs them too."""
 
 

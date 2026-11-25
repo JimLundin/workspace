@@ -8,7 +8,7 @@ from win32more._win32 import ByReference, Guid, OutputPointer
 
 WLAN_API_VERSION_2_0: int
 WLAN_AVAILABLE_NETWORK_CONNECTED: int
-dot11_BSS_type_infrastructure: int  # noqa: N816 - the SDK's name
+dot11_BSS_type_infrastructure: int
 wlan_connection_mode_profile: int
 
 class WLAN_INTERFACE_INFO(ctypes.Structure):

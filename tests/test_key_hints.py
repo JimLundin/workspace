@@ -12,15 +12,13 @@ from winapi.shapes import Rect
 
 # Two terminals stacked on the left, Edge and Code stacked on the right, a third
 # terminal on desktop 2 and a minimized Code window, which placement leaves out.
-PLACEMENT = frozendict(
-    {
-        1: Target(0, Rect(0, 0, 960, 600)),
-        5: Target(0, Rect(0, 600, 960, 1200)),
-        2: Target(0, Rect(960, 0, 1920, 800)),
-        3: Target(0, Rect(960, 800, 1920, 1200)),
-        4: Target(1, Rect(0, 0, 1920, 1200)),
-    }
-)
+PLACEMENT = frozendict({
+    1: Target(0, Rect(0, 0, 960, 600)),
+    5: Target(0, Rect(0, 600, 960, 1200)),
+    2: Target(0, Rect(960, 0, 1920, 800)),
+    3: Target(0, Rect(960, 800, 1920, 1200)),
+    4: Target(1, Rect(0, 0, 1920, 1200)),
+})
 LETTERS = KeyboardView.of(layouts.LAYOUT, layouts.APPS).letters
 """Each target's chord letter on the tests' own layout, with its apps in the slots."""
 

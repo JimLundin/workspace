@@ -145,9 +145,12 @@ def layering(
         yield from (finding for finding in crossings if finding is not None)
 
 
-CONTRACT_IMPORTS: Final = frozenset(
-    {"protocol", "winapi", "winapi.shapes", "winapi.pcm"}
-)
+CONTRACT_IMPORTS: Final = frozenset({
+    "protocol",
+    "winapi",
+    "winapi.shapes",
+    "winapi.pcm",
+})
 """Beyond the standard library, pydantic, `cell` and each other, all a contract may import:
 the wire protocol and the plain-Python winapi value modules."""
 

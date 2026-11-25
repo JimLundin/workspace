@@ -70,17 +70,54 @@ exclude = ['^\.', '/\.', '^typings/', 'node_modules', '__pycache__']
 [tool.ruff]
 target-version = "py315"
 line-length = 80
+preview = true
 extend-include = ["*.pyw"]
-# Agent worktrees under .claude are separate checkouts with their own checks.
-extend-exclude = [".claude"]
 
 [tool.ruff.format]
 line-ending = "lf"
 skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF", "PL", "C4", "RET", "TID252", "FBT001", "FBT002"]
-ignore = ["E501", "PLR2004", "PLR0911", "PLR0912"]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
+    "PL",
+    "C4",
+    "RET",
+    "relative-imports",
+    "boolean-type-hint-positional-argument",
+    "boolean-default-value-positional-argument",
+]
+ignore = [
+    "magic-value-comparison",
+    "too-many-return-statements",
+    "too-many-branches",
+    "no-self-use",
+    "literal-membership",
+    "import-private-name",
+    "too-many-statements-in-try-clause",
+    "float-equality-comparison",
+    "implicit-class-var-in-dataclass",
+    "compare-to-empty-string",
+    "too-many-locals",
+    "too-many-public-methods",
+    "ambiguous-unicode-character-docstring",
+    "too-many-boolean-expressions",
+    "too-many-nested-blocks",
+    "D",  # no required docstrings
+    "DOC",  # no required docstring sections
+    "line-too-long",  # line length is the formatter's job
+    "doc-line-too-long",  # doc line length is the formatter's job
+    "missing-trailing-comma",  # conflicts with the formatter
+    "missing-copyright-notice",  # no copyright headers
+]
 
 # Required Qt virtual methods and Win32 boundary signatures retain native names.
 [tool.ruff.lint.pep8-naming]
@@ -256,22 +293,37 @@ extend-ignore-names = [
 max-args = 5
 max-positional-args = 5
 
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
+
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
-# The layout tables are kept as a wide grid that reads across the keyboard.
-"settings/layout.py" = ["E501"]
-"tests/layouts.py" = ["E501"]
+"**/tests/**" = [
+    "assert",
+    "implicit-namespace-package",
+    "magic-value-comparison",
+]
+"**/test_*.py" = ["assert", "magic-value-comparison"]
 # Win32 functions keep their Windows names, one prototype per line.
-"winapi/*.py" = ["E501", "N816", "PLR0917"]
+"winapi/*.py" = [
+    "mixed-case-variable-in-global-scope",
+    "too-many-positional-arguments",
+]
 # The keys named for the letters I and O keep those names.
-"keyboard/keys.py" = ["E741"]
-"keyboard/physical.py" = ["E741"]
+"keyboard/keys.py" = ["ambiguous-variable-name"]
+"keyboard/physical.py" = ["ambiguous-variable-name"]
 # Meetings.open injects collaborators that tests replace one at a time.
-"assistant/meetings.py" = ["PLR0913"]
+"assistant/meetings.py" = ["too-many-arguments"]
 # Dependency stubs preserve the pinned SDK's actual method and structure field names.
-"typings/win32more/**/*.pyi" = ["N801", "N802", "N803", "N815"]
+"typings/win32more/**/*.pyi" = [
+    "invalid-class-name",
+    "invalid-function-name",
+    "invalid-argument-name",
+    "mixed-case-variable-in-class-scope",
+    "mixed-case-variable-in-global-scope",
+]
 
 [tool.setuptools]
 py-modules = ["cell", "diagnostics", "launch", "protocol"]

@@ -26,9 +26,12 @@ def audio_cases(draw: strategies.DrawFn) -> AudioCase:
     )
     channels = draw(strategies.integers(1, 8))
     bits, floating = draw(
-        strategies.sampled_from(
-            ((16, False), (24, False), (32, False), (32, True))
-        )
+        strategies.sampled_from((
+            (16, False),
+            (24, False),
+            (32, False),
+            (32, True),
+        ))
     )
     format = PcmFormat(rate, channels, bits, floating=floating)
     frames = draw(strategies.integers(0, 64))

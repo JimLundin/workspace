@@ -24,9 +24,9 @@ def settings(url: str, vocabulary: str = "") -> Settings:
 
 def test_settings_need_the_endpoint_and_key() -> None:
     assert settings_from({}) == Missing(("OPENAI_BASE_URL", "OPENAI_API_KEY"))
-    assert settings_from(
-        {"OPENAI_BASE_URL": "https://ai.example/v1"}
-    ) == Missing(("OPENAI_API_KEY",))
+    assert settings_from({
+        "OPENAI_BASE_URL": "https://ai.example/v1"
+    }) == Missing(("OPENAI_API_KEY",))
 
 
 def test_settings_take_their_overrides() -> None:

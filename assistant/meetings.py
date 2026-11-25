@@ -633,12 +633,10 @@ class Meetings:
                     self._state.set(
                         replace(
                             self._state.get(),
-                            paused=frozendict(
-                                {
-                                    **self._state.get().paused,
-                                    store.folder: detail,
-                                }
-                            ),
+                            paused=frozendict({
+                                **self._state.get().paused,
+                                store.folder: detail,
+                            }),
                         )
                     )
                     if self.shown.identity == store.folder.name:
@@ -710,12 +708,10 @@ class Meetings:
                         self._state.set(
                             replace(
                                 self._state.get(),
-                                paused=frozendict(
-                                    {
-                                        **self._state.get().paused,
-                                        store.folder: detail,
-                                    }
-                                ),
+                                paused=frozendict({
+                                    **self._state.get().paused,
+                                    store.folder: detail,
+                                }),
                             )
                         )
                     self._publish(store, detail=detail, phase="paused")

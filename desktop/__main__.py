@@ -24,12 +24,10 @@ def main() -> None:
         sys.exit("Workspace only runs on Windows")
     root = Path(__file__).resolve().parent.parent
     keyboard = KeyboardView.of(layout.LAYOUT, apps.APPS)
-    hints = frozendict(
-        {
-            tool: shortcut_hint(keyboard.shortcut(tool), compact=True)
-            for tool in Tool
-        }
-    )
+    hints = frozendict({
+        tool: shortcut_hint(keyboard.shortcut(tool), compact=True)
+        for tool in Tool
+    })
     island = BarSpec(
         island=bar.ISLAND,
         controls=bar.CONTROLS,

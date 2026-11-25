@@ -121,12 +121,14 @@ _KEYEVENTF_EXTENDEDKEY, _KEYEVENTF_KEYUP, _KEYEVENTF_UNICODE = (
     0x0002,
     0x0004,
 )
-_KEY_DOWNS: Final = frozenset(
-    {WindowMessage.KEYDOWN.value, WindowMessage.SYSKEYDOWN.value}
-)
-_KEY_UPS: Final = frozenset(
-    {WindowMessage.KEYUP.value, WindowMessage.SYSKEYUP.value}
-)
+_KEY_DOWNS: Final = frozenset({
+    WindowMessage.KEYDOWN.value,
+    WindowMessage.SYSKEYDOWN.value,
+})
+_KEY_UPS: Final = frozenset({
+    WindowMessage.KEYUP.value,
+    WindowMessage.SYSKEYUP.value,
+})
 _WH_KEYBOARD_LL: Final = 13
 _INPUT_KEYBOARD: Final = 1
 _MAPVK_VK_TO_VSC: Final = 0

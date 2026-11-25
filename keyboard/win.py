@@ -643,16 +643,14 @@ class Keyboard:
             return
         self._state.update(lambda state: replace(state, recovery=None))
         with contextlib.suppress(Exception):
-            self.platform.record_recovery(
-                {
-                    **recovery.fault.details(),
-                    "phase": recovery.phase,
-                    "ok": False,
-                    "layout_disabled": True,
-                    "cleanup_failures": recovery.cleanup_failures,
-                    "pending_releases": len(self.host.owned),
-                }
-            )
+            self.platform.record_recovery({
+                **recovery.fault.details(),
+                "phase": recovery.phase,
+                "ok": False,
+                "layout_disabled": True,
+                "cleanup_failures": recovery.cleanup_failures,
+                "pending_releases": len(self.host.owned),
+            })
 
     def show_key(self, scancode: Scancode, *, down: bool) -> None:
         """Send each physical transition once; repeats and unpictured keys add nothing."""
@@ -744,14 +742,12 @@ class Keyboard:
             else {"hook_silent_ms": hook_watch.offset(now, outage.last_hook)}
         )
         with contextlib.suppress(OSError):
-            self.platform.record_recovery(
-                {
-                    "phase": "hook_reinstall",
-                    "ok": True,
-                    "outage_ms": hook_watch.offset(now, outage.since),
-                    **silent,
-                }
-            )
+            self.platform.record_recovery({
+                "phase": "hook_reinstall",
+                "ok": True,
+                "outage_ms": hook_watch.offset(now, outage.since),
+                **silent,
+            })
 
     def observe_chord(self) -> None:
         """Tell the desktop when the Charybdis starts or stops holding its Apps thumb."""

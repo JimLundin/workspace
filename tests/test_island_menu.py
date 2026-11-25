@@ -58,146 +58,109 @@ from winapi.machine_status import (
 TRAY_TRACKS = 3
 
 SPEC = ControlsSpec(
-    frozendict(
-        {
-            Panel.WORKSPACE: PanelSpec(
-                200,
-                (
-                    ActivitiesRow(3),
-                    CellsRow(
-                        2,
-                        (
-                            CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"),
-                            CellSpec(
-                                EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"
-                            ),
+    frozendict({
+        Panel.WORKSPACE: PanelSpec(
+            200,
+            (
+                ActivitiesRow(3),
+                CellsRow(
+                    2,
+                    (
+                        CellSpec(EntryId.OVERLAY, Face.TOGGLE, 4, "Keys"),
+                        CellSpec(EntryId.PLACEMENT, Face.TOGGLE, 4, "Placing"),
+                    ),
+                ),
+                CellsRow(
+                    2,
+                    (CellSpec(EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"),),
+                ),
+                CellsRow(
+                    2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)
+                ),
+                CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                CellsRow(
+                    2,
+                    (
+                        CellSpec(
+                            EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"
                         ),
+                        CellSpec(EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"),
+                        CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Key map"),
                     ),
-                    CellsRow(
-                        2,
-                        (
-                            CellSpec(
-                                EntryId.DARK_WHEN_AWAY, Face.TOGGLE, 8, "Dark"
-                            ),
-                        ),
-                    ),
-                    CellsRow(
-                        2, (CellSpec(EntryId.RECORD, Face.WIDE, 8, "Record"),)
-                    ),
-                    CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                    CellsRow(
-                        2,
-                        (
-                            CellSpec(
-                                EntryId.SWITCH_WINDOWS, Face.TOOL, 2, "Switch"
-                            ),
-                            CellSpec(
-                                EntryId.COPY_TRANSCRIPT, Face.TOOL, 2, "Copy"
-                            ),
-                            CellSpec(EntryId.KEYMAP, Face.TOOL, 2, "Key map"),
-                        ),
-                    ),
-                    TrayRow(TRAY_TRACKS),
-                    CellsRow(
-                        1,
-                        (
-                            CellSpec(
-                                EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"
-                            ),
-                        ),
-                    ),
-                    CellsRow(
-                        1,
-                        (
-                            CellSpec(
-                                EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"
-                            ),
+                ),
+                TrayRow(TRAY_TRACKS),
+                CellsRow(
+                    1,
+                    (CellSpec(EntryId.NOTIFICATIONS, Face.LINK, 8, "Notices"),),
+                ),
+                CellsRow(
+                    1,
+                    (
+                        CellSpec(
+                            EntryId.ALL_CONTROLS, Face.LINK, 8, "Everything"
                         ),
                     ),
                 ),
             ),
-            Panel.NETWORK: PanelSpec(
-                160,
-                (
-                    NetworksRow(3, most=2),
-                    CellsRow(
-                        2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)
-                    ),
-                    CellsRow(
-                        1,
-                        (
-                            CellSpec(
-                                EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"
-                            ),
-                        ),
-                    ),
+        ),
+        Panel.NETWORK: PanelSpec(
+            160,
+            (
+                NetworksRow(3, most=2),
+                CellsRow(
+                    2, (CellSpec(EntryId.LOCATION, Face.WIDE, 8, "Locate"),)
+                ),
+                CellsRow(
+                    1, (CellSpec(EntryId.WIFI_SETTINGS, Face.LINK, 8, "Radio"),)
                 ),
             ),
-            Panel.POWER: PanelSpec(
-                160,
-                (
-                    CellsRow(
-                        3, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Cell"),)
-                    ),
-                    CellsRow(
-                        1,
-                        (
-                            CellSpec(
-                                EntryId.POWER_SETTINGS, Face.LINK, 8, "Energy"
-                            ),
-                        ),
-                    ),
+        ),
+        Panel.POWER: PanelSpec(
+            160,
+            (
+                CellsRow(3, (CellSpec(EntryId.BATTERY, Face.FACT, 8, "Cell"),)),
+                CellsRow(
+                    1,
+                    (CellSpec(EntryId.POWER_SETTINGS, Face.LINK, 8, "Energy"),),
                 ),
             ),
-            Panel.KEYBOARD: PanelSpec(
-                120,
-                (
-                    CellsRow(
-                        2, (CellSpec(EntryId.LAYOUT, Face.TOGGLE, 8, "Keys"),)
-                    ),
+        ),
+        Panel.KEYBOARD: PanelSpec(
+            120,
+            (CellsRow(2, (CellSpec(EntryId.LAYOUT, Face.TOGGLE, 8, "Keys"),)),),
+        ),
+        Panel.PROCESSOR: PanelSpec(
+            160,
+            (
+                CellsRow(
+                    4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)
                 ),
             ),
-            Panel.PROCESSOR: PanelSpec(
-                160,
-                (
-                    CellsRow(
-                        4, (CellSpec(EntryId.CPU_GRAPH, Face.GRAPH, 8, "Busy"),)
-                    ),
+        ),
+        Panel.MEMORY: PanelSpec(
+            160,
+            (
+                CellsRow(
+                    4, (CellSpec(EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"),)
                 ),
             ),
-            Panel.MEMORY: PanelSpec(
-                160,
-                (
-                    CellsRow(
-                        4,
-                        (
-                            CellSpec(
-                                EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"
-                            ),
-                        ),
-                    ),
+        ),
+        Panel.CALENDAR: PanelSpec(
+            160,
+            (
+                CellsRow(
+                    10, (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),)
                 ),
             ),
-            Panel.CALENDAR: PanelSpec(
-                160,
-                (
-                    CellsRow(
-                        10,
-                        (CellSpec(EntryId.CALENDAR, Face.CALENDAR, 8, "Days"),),
-                    ),
-                ),
+        ),
+        Panel.SOUND: PanelSpec(
+            120,
+            (
+                CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
+                CellsRow(2, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Hush"),)),
             ),
-            Panel.SOUND: PanelSpec(
-                120,
-                (
-                    CellsRow(2, (CellSpec(EntryId.SOUND, Face.SLIDER, 8),)),
-                    CellsRow(
-                        2, (CellSpec(EntryId.MUTE, Face.TOGGLE, 8, "Hush"),)
-                    ),
-                ),
-            ),
-        }
-    ),
+        ),
+    }),
     MenuWords(
         on="Yes",
         off="No",

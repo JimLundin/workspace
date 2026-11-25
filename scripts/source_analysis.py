@@ -114,9 +114,11 @@ def memoized[T](
     return result
 
 
-DYNAMIC_IMPORTS = frozenset(
-    {"importlib.import_module", "__import__", "builtins.__import__"}
-)
+DYNAMIC_IMPORTS = frozenset({
+    "importlib.import_module",
+    "__import__",
+    "builtins.__import__",
+})
 """Calls that import a module named at run time."""
 
 

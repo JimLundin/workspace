@@ -93,15 +93,13 @@ def test_keys_answered_by_a_live_hook_never_probe_even_when_raw_input_comes_firs
         Timer(5_100),
     ]
     assert (
-        actions(
-            [
-                *observations,
-                Raw(9_000),
-                Timer(9_100),
-                HookEvent(9_000),
-                *timers(9_300, 20_000),
-            ]
-        )
+        actions([
+            *observations,
+            Raw(9_000),
+            Timer(9_100),
+            HookEvent(9_000),
+            *timers(9_300, 20_000),
+        ])
         == []
     )
 
@@ -166,9 +164,11 @@ def test_one_outage_reinstalls_once_and_the_new_hook_settles_the_watch() -> (
         for at in range(32_000, 60_000, 100)
         for event in (Raw(at), HookEvent(at))
     ]
-    taken = actions(
-        [*outage, *late_probe_input, *played(typing, timers(31_700, 60_000))]
-    )
+    taken = actions([
+        *outage,
+        *late_probe_input,
+        *played(typing, timers(31_700, 60_000)),
+    ])
     assert taken == [
         ("probe", 30_300),
         ("reinstall", 30_000),
@@ -180,11 +180,18 @@ def test_tick_wraparound_keeps_answered_input_answered() -> None:
     # Defect: Windows' 49.7-day tick wrap reads a fresh hook event as ancient.
     top = 0xFFFF_FFFF
     assert (
-        actions(
-            [HookEvent(top - 10), Raw(5), Timer(100), Timer(300), Timer(2_000)]
-        )
+        actions([
+            HookEvent(top - 10),
+            Raw(5),
+            Timer(100),
+            Timer(300),
+            Timer(2_000),
+        ])
         == []
     )
-    assert actions(
-        [HookEvent(top - 5_000), Raw(5), Timer(300), Timer(1_400)]
-    ) == [("probe", 300), ("reinstall", 5)]
+    assert actions([
+        HookEvent(top - 5_000),
+        Raw(5),
+        Timer(300),
+        Timer(1_400),
+    ]) == [("probe", 300), ("reinstall", 5)]

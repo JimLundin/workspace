@@ -50,47 +50,40 @@ FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
 PYTHON, NOTEPAD = Program("python.exe"), Program("notepad.exe")
 
 SETUPS = Setups(
-    externals=frozendict(
-        {
-            Setup.LAPTOP_ONLY: frozendict(),
-            Setup.HOME: frozendict({Size(3840, 2160): Role.MAIN}),
-            Setup.WORK: frozendict(
-                {Size(2560, 1440): Role.ABOVE, Size(1440, 2560): Role.SIDE}
-            ),
-        }
-    ),
-    layouts=frozendict(
-        {
-            # Two shell places side by side on desktop 0, the editor alone on desktop 1, others on desktop 2.
-            Setup.LAPTOP_ONLY: Layout(
-                frozendict(
-                    {
-                        SHELL: (
-                            Position(0, Role.LAPTOP, LEFT_HALF),
-                            Position(0, Role.LAPTOP, RIGHT_HALF),
-                        ),
-                        EDITOR: (Position(1, Role.LAPTOP, FULL),),
-                    }
+    externals=frozendict({
+        Setup.LAPTOP_ONLY: frozendict(),
+        Setup.HOME: frozendict({Size(3840, 2160): Role.MAIN}),
+        Setup.WORK: frozendict({
+            Size(2560, 1440): Role.ABOVE,
+            Size(1440, 2560): Role.SIDE,
+        }),
+    }),
+    layouts=frozendict({
+        # Two shell places side by side on desktop 0, the editor alone on desktop 1, others on desktop 2.
+        Setup.LAPTOP_ONLY: Layout(
+            frozendict({
+                SHELL: (
+                    Position(0, Role.LAPTOP, LEFT_HALF),
+                    Position(0, Role.LAPTOP, RIGHT_HALF),
                 ),
-                others=Position(2, Role.LAPTOP, FULL),
-            ),
-            Setup.HOME: Layout(
-                frozendict({SHELL: (Position(0, Role.MAIN, FULL),)}),
-                others=Position(0, Role.LAPTOP, FULL),
-            ),
-            Setup.WORK: Layout(
-                frozendict(
-                    {
-                        EDITOR: (Position(0, Role.SIDE, FULL),),
-                        SHELL: (Position(0, Role.ABOVE, LEFT_HALF),),
-                        BROWSER: (Position(0, Role.ABOVE, RIGHT_HALF),),
-                        CHAT: (Position(0, Role.LAPTOP, FULL),),
-                    }
-                ),
-                others=Position(1, Role.LAPTOP, FULL),
-            ),
-        }
-    ),
+                EDITOR: (Position(1, Role.LAPTOP, FULL),),
+            }),
+            others=Position(2, Role.LAPTOP, FULL),
+        ),
+        Setup.HOME: Layout(
+            frozendict({SHELL: (Position(0, Role.MAIN, FULL),)}),
+            others=Position(0, Role.LAPTOP, FULL),
+        ),
+        Setup.WORK: Layout(
+            frozendict({
+                EDITOR: (Position(0, Role.SIDE, FULL),),
+                SHELL: (Position(0, Role.ABOVE, LEFT_HALF),),
+                BROWSER: (Position(0, Role.ABOVE, RIGHT_HALF),),
+                CHAT: (Position(0, Role.LAPTOP, FULL),),
+            }),
+            others=Position(1, Role.LAPTOP, FULL),
+        ),
+    }),
     dark_when_away=frozendict({Setup.HOME: frozenset({Role.MAIN})}),
 )
 OTHERS = 2
@@ -226,19 +219,15 @@ def test_apps_given_the_same_place_share_it_equally_in_the_layouts_order() -> (
     # lone window of each gets anything but half, or the order follows the shelf.
     together = Screens(
         Setup.HOME,
-        frozendict(
-            {
-                Role.MAIN: Rect(0, 0, 3840, 2160),
-                Role.LAPTOP: Rect(0, 2160, 1920, 3360),
-            }
-        ),
+        frozendict({
+            Role.MAIN: Rect(0, 0, 3840, 2160),
+            Role.LAPTOP: Rect(0, 2160, 1920, 3360),
+        }),
         Layout(
-            frozendict(
-                {
-                    SHELL: (Position(0, Role.MAIN, FULL),),
-                    EDITOR: (Position(0, Role.MAIN, FULL),),
-                }
-            ),
+            frozendict({
+                SHELL: (Position(0, Role.MAIN, FULL),),
+                EDITOR: (Position(0, Role.MAIN, FULL),),
+            }),
             others=Position(0, Role.LAPTOP, FULL),
         ),
     )

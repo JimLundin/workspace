@@ -103,27 +103,23 @@ KEYMAP: Final = KeymapSpec(
             {
                 Scheme.DARK: Bindings(
                     0.16,
-                    frozendict(
-                        {
-                            Role.MOD: "#64d2ff",
-                            Role.LAYER: "#7ab0f2",
-                            Role.TOOL: "#ffb340",
-                            Role.APP: "#30d158",
-                            Role.SPECIAL: "#da8fff",
-                        }
-                    ),
+                    frozendict({
+                        Role.MOD: "#64d2ff",
+                        Role.LAYER: "#7ab0f2",
+                        Role.TOOL: "#ffb340",
+                        Role.APP: "#30d158",
+                        Role.SPECIAL: "#da8fff",
+                    }),
                 ),
                 Scheme.LIGHT: Bindings(
                     0.12,
-                    frozendict(
-                        {
-                            Role.MOD: "#0071a4",
-                            Role.LAYER: "#2f6fc4",
-                            Role.TOOL: "#b25000",
-                            Role.APP: "#248a3d",
-                            Role.SPECIAL: "#8944ab",
-                        }
-                    ),
+                    frozendict({
+                        Role.MOD: "#0071a4",
+                        Role.LAYER: "#2f6fc4",
+                        Role.TOOL: "#b25000",
+                        Role.APP: "#248a3d",
+                        Role.SPECIAL: "#8944ab",
+                    }),
                 ),
             },
         ),
@@ -222,13 +218,11 @@ SWITCHER: Final = SwitcherSpec(
 TRAY_ICON: Final = TraySpec(
     name="Workspace",
     size=32,
-    colours=frozendict(
-        {
-            State.READY: Rgb(46, 160, 120),
-            State.LAYOUT_OFF: Rgb(140, 140, 140),
-            State.LISTENING: Rgb(220, 50, 50),
-            State.RECORDING: Rgb(230, 64, 85),
-            State.WORKING: Rgb(235, 160, 30),
-        }
-    ),
+    colours=frozendict({
+        State.READY: Rgb(46, 160, 120),
+        State.LAYOUT_OFF: Rgb(140, 140, 140),
+        State.LISTENING: Rgb(220, 50, 50),
+        State.RECORDING: Rgb(230, 64, 85),
+        State.WORKING: Rgb(235, 160, 30),
+    }),
 )

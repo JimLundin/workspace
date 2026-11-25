@@ -86,12 +86,10 @@ class Programs:
     @property
     def catalogue(self) -> frozendict[Component, Entry]:
         """Every program by name, in startup order; shutdown reverses it."""
-        return frozendict(
-            {
-                entry.name: entry
-                for entry in (self.gateway, self.layout, self.desktop)
-            }
-        )
+        return frozendict({
+            entry.name: entry
+            for entry in (self.gateway, self.layout, self.desktop)
+        })
 
 
 def interpreter(root: Path) -> Path:

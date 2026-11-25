@@ -848,9 +848,9 @@ class MenuCell(QtWidgets.QAbstractButton):
             )
         )
         for run in plotted(graph.trace.shares, graph.trace.capacity, box):
-            line = QtGui.QPolygonF(
-                [QtCore.QPointF(point.x, point.y) for point in run]
-            )
+            line = QtGui.QPolygonF([
+                QtCore.QPointF(point.x, point.y) for point in run
+            ])
             bottom = box.y + box.height
             area = QtGui.QPolygonF(line)
             area.append(QtCore.QPointF(line.last().x(), bottom))
@@ -1393,9 +1393,10 @@ class Capsule(KeyboardFocus):
             for c in (self.drawn.content, self.drawn.previous)
             if c is not None
         }
-        self.stills = frozendict(
-            {**{k: v for k, v in self.stills.items() if k in kept}, key: image}
-        )
+        self.stills = frozendict({
+            **{k: v for k, v in self.stills.items() if k in kept},
+            key: image,
+        })
         return image
 
     def paint_part(
@@ -1905,13 +1906,10 @@ def paint_charge(
         )
         bolt = QtGui.QPainterPath()
         bolt.addPolygon(
-            QtGui.QPolygonF(
-                [
-                    corner
-                    + QtCore.QPointF(point.x * width, point.y * gauge.bolt)
-                    for point in BOLT
-                ]
-            )
+            QtGui.QPolygonF([
+                corner + QtCore.QPointF(point.x * width, point.y * gauge.bolt)
+                for point in BOLT
+            ])
         )
         bolt.closeSubpath()
         painter.setCompositionMode(

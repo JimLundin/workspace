@@ -18,9 +18,13 @@ from scripts.source_analysis import (
 )
 
 FINDINGS = TypeAdapter[tuple[Finding, ...]](tuple[Finding, ...])
-FORBIDDEN_TEST_TOOLS = frozenset(
-    {"unittest.mock", "mock", "pytest_mock", "mockito", "pytest.MonkeyPatch"}
-)
+FORBIDDEN_TEST_TOOLS = frozenset({
+    "unittest.mock",
+    "mock",
+    "pytest_mock",
+    "mockito",
+    "pytest.MonkeyPatch",
+})
 FIXTURES = frozenset({"monkeypatch", "mocker"})
 """The pytest fixtures that patch."""
 

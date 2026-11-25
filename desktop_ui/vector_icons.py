@@ -46,26 +46,22 @@ class Badged:
     badge: str
 
 
-OWN: Final = frozendict(
-    {
-        "stop": _STOP,
-        "stop.fill": _STOP,
-        "cpu": _CPU,
-        "memory": _MEMORY,
-        "earlier": _EARLIER,
-        "later": _LATER,
-    }
-)
+OWN: Final = frozendict({
+    "stop": _STOP,
+    "stop.fill": _STOP,
+    "cpu": _CPU,
+    "memory": _MEMORY,
+    "earlier": _EARLIER,
+    "later": _LATER,
+})
 """Symbols drawn here rather than taken from Fluent."""
-BADGED: Final = frozendict(
-    {
-        # Unavailable is not muted or disconnected: a question badge retains the
-        # device identity without asserting a state Windows could not observe.
-        "speaker-unknown": Badged("speaker-on", _QUESTION),
-        "wifi-unknown": Badged("wifi", _QUESTION),
-        "wifi-absent": Badged("wifi", _ABSENT),
-    }
-)
+BADGED: Final = frozendict({
+    # Unavailable is not muted or disconnected: a question badge retains the
+    # device identity without asserting a state Windows could not observe.
+    "speaker-unknown": Badged("speaker-on", _QUESTION),
+    "wifi-unknown": Badged("wifi", _QUESTION),
+    "wifi-absent": Badged("wifi", _ABSENT),
+})
 BADGE_SCALE: Final = 0.7
 FALLBACK: Final = "doc"
 """What an unknown name draws."""

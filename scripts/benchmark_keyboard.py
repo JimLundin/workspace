@@ -251,15 +251,13 @@ def round_latencies(
         finally:
             gc.callbacks.remove(observe_gc)
         values = sorted(latencies)
-        yield frozendict(
-            {
-                "p50_us": percentile(values, 0.5),
-                "p95_us": percentile(values, 0.95),
-                "p99_us": percentile(values, 0.99),
-                "p999_us": percentile(values, 0.999),
-                "max_us": max(values) / 1000,
-            }
-        )
+        yield frozendict({
+            "p50_us": percentile(values, 0.5),
+            "p95_us": percentile(values, 0.95),
+            "p99_us": percentile(values, 0.99),
+            "p999_us": percentile(values, 0.999),
+            "max_us": max(values) / 1000,
+        })
 
 
 def play(

@@ -154,13 +154,11 @@ class Modifiers:
             return Modifiers(self.counts | {mod: count - 1})
         return (
             Modifiers(
-                frozendict(
-                    {
-                        held: each
-                        for held, each in self.counts.items()
-                        if held is not mod
-                    }
-                )
+                frozendict({
+                    held: each
+                    for held, each in self.counts.items()
+                    if held is not mod
+                })
             )
             if count
             else self

@@ -55,25 +55,21 @@ PALETTE = Palette(
 """The test's own colours that carry meaning."""
 
 GLASS = Glass(
-    tokens=frozendict(
-        {
-            Scheme.DARK: scheme_tokens(Scheme.DARK, "#f0f0f0", "#202020"),
-            Scheme.LIGHT: scheme_tokens(Scheme.LIGHT, "#101010", "#fafafa"),
-        }
-    ),
-    frosts=frozendict(
-        {
-            appearance.Frost.BRIGHT: FrostLook(
-                Scheme.LIGHT, Shade("#fafafa", 0.3), 0.1
-            ),
-            appearance.Frost.LIGHT: FrostLook(
-                Scheme.DARK, Shade("#202020", 0.3), 0.3
-            ),
-            appearance.Frost.SMOKED: FrostLook(
-                Scheme.DARK, Shade("#202020", 0.5), 0.3
-            ),
-        }
-    ),
+    tokens=frozendict({
+        Scheme.DARK: scheme_tokens(Scheme.DARK, "#f0f0f0", "#202020"),
+        Scheme.LIGHT: scheme_tokens(Scheme.LIGHT, "#101010", "#fafafa"),
+    }),
+    frosts=frozendict({
+        appearance.Frost.BRIGHT: FrostLook(
+            Scheme.LIGHT, Shade("#fafafa", 0.3), 0.1
+        ),
+        appearance.Frost.LIGHT: FrostLook(
+            Scheme.DARK, Shade("#202020", 0.3), 0.3
+        ),
+        appearance.Frost.SMOKED: FrostLook(
+            Scheme.DARK, Shade("#202020", 0.5), 0.3
+        ),
+    }),
     attention=Attention(
         hue="#e07000",
         veil=0.85,
@@ -234,9 +230,9 @@ def test_reduce_transparency_gives_a_scheme_owned_pane_its_solid_surface() -> (
         for scheme in Scheme
     )
     assert all(isinstance(each, SolidLook) for each in solids)
-    assert len(
-        {each.fill for each in solids if isinstance(each, SolidLook)}
-    ) == len(Scheme)
+    assert len({
+        each.fill for each in solids if isinstance(each, SolidLook)
+    }) == len(Scheme)
     assert len({each.lettering.ink for each in solids}) == len(Scheme)
 
 

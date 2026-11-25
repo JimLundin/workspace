@@ -32,16 +32,14 @@ from winapi.tray_host import (
     update,
 )
 
-WEB_APPS: WebApps = frozendict(
-    {
-        PinnedApp.OUTLOOK: WebApp(
-            "Mail", "https://mail.example/", "Edge.mail.example_/", "mail"
-        ),
-        PinnedApp.TEAMS: WebApp(
-            "Chat", "https://chat.example/", "Edge.chat.example_/", "chat"
-        ),
-    }
-)
+WEB_APPS: WebApps = frozendict({
+    PinnedApp.OUTLOOK: WebApp(
+        "Mail", "https://mail.example/", "Edge.mail.example_/", "mail"
+    ),
+    PinnedApp.TEAMS: WebApp(
+        "Chat", "https://chat.example/", "Edge.chat.example_/", "chat"
+    ),
+})
 """The test's own web apps and their ids."""
 GRACE = 15.0
 
@@ -158,9 +156,10 @@ def test_a_pinned_launch_waits_for_its_window_before_launching_again() -> None:
     assert launch(
         pending, PinnedApp.OUTLOOK, 100.0 + GRACE, GRACE
     ) == frozendict({PinnedApp.OUTLOOK: 100.0 + 2 * GRACE})
-    assert launch(pending, PinnedApp.TEAMS, 101.0, GRACE) == frozendict(
-        {PinnedApp.OUTLOOK: 100.0 + GRACE, PinnedApp.TEAMS: 101.0 + GRACE}
-    )
+    assert launch(pending, PinnedApp.TEAMS, 101.0, GRACE) == frozendict({
+        PinnedApp.OUTLOOK: 100.0 + GRACE,
+        PinnedApp.TEAMS: 101.0 + GRACE,
+    })
     opened = Shelf(
         (
             Pinned(

@@ -85,16 +85,14 @@ def nodes(text: str) -> int:
     return sum(len(level) for level in _levels(tree, docstrings(tree)))
 
 
-_LAYOUT: Final = frozenset(
-    {
-        tokenize.COMMENT,
-        tokenize.NL,
-        tokenize.NEWLINE,
-        tokenize.INDENT,
-        tokenize.DEDENT,
-        tokenize.ENDMARKER,
-    }
-)
+_LAYOUT: Final = frozenset({
+    tokenize.COMMENT,
+    tokenize.NL,
+    tokenize.NEWLINE,
+    tokenize.INDENT,
+    tokenize.DEDENT,
+    tokenize.ENDMARKER,
+})
 
 
 def code_lines(text: str) -> int:
@@ -271,19 +269,17 @@ def totals(
 def report(measures: Sequence[Measure], top: int) -> str:
     areas, product, support = totals(measures)
     largest = sorted(measures, key=lambda m: m.nodes, reverse=True)[:top]
-    return "\n".join(
-        (
-            f"{'':<14}{'nodes':>9}{'lines':>9}",
-            *(f"{t.name:<14}{t.nodes:>9,}{t.lines:>9,}" for t in areas),
-            "",
-            *(
-                f"{t.name:<14}{t.nodes:>9,}{t.lines:>9,}"
-                for t in (product, support)
-            ),
-            "",
-            *(f"{m.nodes:>9,}{m.lines:>9,}  {m.path}" for m in largest),
-        )
-    )
+    return "\n".join((
+        f"{'':<14}{'nodes':>9}{'lines':>9}",
+        *(f"{t.name:<14}{t.nodes:>9,}{t.lines:>9,}" for t in areas),
+        "",
+        *(
+            f"{t.name:<14}{t.nodes:>9,}{t.lines:>9,}"
+            for t in (product, support)
+        ),
+        "",
+        *(f"{m.nodes:>9,}{m.lines:>9,}  {m.path}" for m in largest),
+    ))
 
 
 def markdown(measures: Sequence[Measure], top: int = REPORT_TOP) -> str:
@@ -291,33 +287,31 @@ def markdown(measures: Sequence[Measure], top: int = REPORT_TOP) -> str:
     areas, product, support = totals(measures)
     largest = sorted(measures, key=lambda m: (-m.nodes, m.path))[:top]
     ratio = product.nodes / product.lines if product.lines else 0.0
-    return "\n".join(
-        (
-            "# Code volume",
-            "",
-            "Written by `python -m scripts.volume --write docs/volume.md` on every commit (`.githooks/pre-commit`);",
-            "CI fails when it is stale. Nodes are syntax nodes (layout, comments and docstrings don't count);",
-            f"lines are code lines. Product code averages {ratio:.1f} nodes a line.",
-            "",
-            "| | nodes | lines |",
-            "|---|---:|---:|",
-            *(
-                f"| **{t.name}** | {t.nodes:,} | {t.lines:,} |"
-                for t in (product, support)
-            ),
-            "",
-            "| area | nodes | lines |",
-            "|---|---:|---:|",
-            *(f"| {t.name} | {t.nodes:,} | {t.lines:,} |" for t in areas),
-            "",
-            f"The {top} largest files:",
-            "",
-            "| file | nodes | lines |",
-            "|---|---:|---:|",
-            *(f"| `{m.path}` | {m.nodes:,} | {m.lines:,} |" for m in largest),
-            "",
-        )
-    )
+    return "\n".join((
+        "# Code volume",
+        "",
+        "Written by `python -m scripts.volume --write docs/volume.md` on every commit (`.githooks/pre-commit`);",
+        "CI fails when it is stale. Nodes are syntax nodes (layout, comments and docstrings don't count);",
+        f"lines are code lines. Product code averages {ratio:.1f} nodes a line.",
+        "",
+        "| | nodes | lines |",
+        "|---|---:|---:|",
+        *(
+            f"| **{t.name}** | {t.nodes:,} | {t.lines:,} |"
+            for t in (product, support)
+        ),
+        "",
+        "| area | nodes | lines |",
+        "|---|---:|---:|",
+        *(f"| {t.name} | {t.nodes:,} | {t.lines:,} |" for t in areas),
+        "",
+        f"The {top} largest files:",
+        "",
+        "| file | nodes | lines |",
+        "|---|---:|---:|",
+        *(f"| `{m.path}` | {m.nodes:,} | {m.lines:,} |" for m in largest),
+        "",
+    ))
 
 
 def main() -> None:

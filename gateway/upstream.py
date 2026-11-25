@@ -5,19 +5,17 @@ from dataclasses import dataclass
 
 REQUIRED = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
 
-HOP_BY_HOP = frozenset(
-    {
-        "connection",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailer",
-        "trailers",
-        "transfer-encoding",
-        "upgrade",
-    }
-)
+HOP_BY_HOP = frozenset({
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+})
 """Headers that describe one connection, not the request; never forwarded."""
 _REQUEST_DROPPED = HOP_BY_HOP | {"host", "authorization", "content-length"}
 _RESPONSE_DROPPED = HOP_BY_HOP | {"content-length", "date", "server"}

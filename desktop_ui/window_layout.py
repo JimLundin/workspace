@@ -303,16 +303,14 @@ def place(where: Screens, apps: Sequence[Group]) -> Placement:
         ):
             yield handle, Target(position.desktop, rect)
 
-    return frozendict(
-        (
-            *alone,
-            *(
-                pair
-                for position, handles in shared.items()
-                for pair in split_up(position, handles)
-            ),
-        )
-    )
+    return frozendict((
+        *alone,
+        *(
+            pair
+            for position, handles in shared.items()
+            for pair in split_up(position, handles)
+        ),
+    ))
 
 
 def _corner(rects: Iterable[Rect]) -> Point | None:
@@ -366,16 +364,12 @@ def reading_order(
         if where is not None
         else frozendict[App, Point]()
     )
-    corners = frozendict(
-        {
-            **placed,
-            **{
-                app: corner
-                for app, corner in declared.items()
-                if app not in placed
-            },
-        }
-    )
+    corners = frozendict({
+        **placed,
+        **{
+            app: corner for app, corner in declared.items() if app not in placed
+        },
+    })
     return tuple(
         sorted(corners, key=lambda app: (corners[app].x, corners[app].y))
     )

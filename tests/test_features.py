@@ -91,9 +91,10 @@ class Rig:
         self.assistant = Assistant(
             self.desktop,
             settings,
-            failed=lambda feature, details: self.failed.append(
-                (feature, details)
-            ),
+            failed=lambda feature, details: self.failed.append((
+                feature,
+                details,
+            )),
             submit=submit,
             missing=missing,
             clock=clock,

@@ -59,18 +59,16 @@ WIFI = frozendict(
 SYMBOLS = Symbols(
     workspace="home", keyboard="keys", charger="plug", cpu="chip", memory="ram"
 )
-PHASES: Phases = frozendict(
-    {
-        "idle": None,
-        "starting": Phased("Warming", can_stop=True, attention=False),
-        "recording": Phased(ELAPSED, can_stop=True, attention=False),
-        "stopping": Phased("Halting", can_stop=False, attention=False),
-        "finishing": Phased("Filing", can_stop=False, attention=False),
-        "paused": Phased("Look", can_stop=False, attention=True),
-        "interrupted": Phased("Look", can_stop=False, attention=True),
-        "saved": None,
-    }
-)
+PHASES: Phases = frozendict({
+    "idle": None,
+    "starting": Phased("Warming", can_stop=True, attention=False),
+    "recording": Phased(ELAPSED, can_stop=True, attention=False),
+    "stopping": Phased("Halting", can_stop=False, attention=False),
+    "finishing": Phased("Filing", can_stop=False, attention=False),
+    "paused": Phased("Look", can_stop=False, attention=True),
+    "interrupted": Phased("Look", can_stop=False, attention=True),
+    "saved": None,
+})
 WORDS = Words(
     jobs=frozendict({TRANSCRIBING: "Working"}),
     phases=PHASES,

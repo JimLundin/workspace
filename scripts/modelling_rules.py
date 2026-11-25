@@ -77,9 +77,10 @@ def _bound(
         for node in ast.walk(function)
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
     )
-    return frozenset(
-        (*(item.arg for item in parameters(function.args)), *stored)
-    )
+    return frozenset((
+        *(item.arg for item in parameters(function.args)),
+        *stored,
+    ))
 
 
 def _numeric(items: Iterable[ast.expr]) -> bool:

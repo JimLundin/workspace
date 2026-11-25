@@ -53,41 +53,31 @@ from winapi.screen import Monitor
 # at work, Teams and Outlook on the laptop, Terminal and Edge above it, Code on the side.
 SETUPS = Setups(
     externals=test_window_layout.SETUPS.externals,
-    layouts=frozendict(
-        {
-            Setup.LAPTOP_ONLY: Layout(
-                frozendict(), others=Position(0, Role.LAPTOP, FULL)
-            ),
-            Setup.HOME: Layout(
-                frozendict(
-                    {
-                        TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
-                        CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
-                        PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
-                        EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
-                        PinnedApp.OUTLOOK: (
-                            Position(2, Role.MAIN, RIGHT_HALF),
-                        ),
-                    }
-                ),
-                others=Position(2, Role.LAPTOP, FULL),
-            ),
-            Setup.WORK: Layout(
-                frozendict(
-                    {
-                        CODE: (Position(1, Role.SIDE, FULL),),
-                        TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
-                        EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
-                        PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                        PinnedApp.OUTLOOK: (
-                            Position(1, Role.LAPTOP, RIGHT_HALF),
-                        ),
-                    }
-                ),
-                others=Position(2, Role.LAPTOP, FULL),
-            ),
-        }
-    ),
+    layouts=frozendict({
+        Setup.LAPTOP_ONLY: Layout(
+            frozendict(), others=Position(0, Role.LAPTOP, FULL)
+        ),
+        Setup.HOME: Layout(
+            frozendict({
+                TERMINAL: (Position(1, Role.MAIN, LEFT_TWO_THIRDS),),
+                CODE: (Position(1, Role.MAIN, RIGHT_THIRD),),
+                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
+                EDGE: (Position(2, Role.MAIN, LEFT_HALF),),
+                PinnedApp.OUTLOOK: (Position(2, Role.MAIN, RIGHT_HALF),),
+            }),
+            others=Position(2, Role.LAPTOP, FULL),
+        ),
+        Setup.WORK: Layout(
+            frozendict({
+                CODE: (Position(1, Role.SIDE, FULL),),
+                TERMINAL: (Position(1, Role.ABOVE, LEFT_TWO_THIRDS),),
+                EDGE: (Position(1, Role.ABOVE, RIGHT_THIRD),),
+                PinnedApp.TEAMS: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, RIGHT_HALF),),
+            }),
+            others=Position(2, Role.LAPTOP, FULL),
+        ),
+    }),
     dark_when_away=frozendict(),
 )
 

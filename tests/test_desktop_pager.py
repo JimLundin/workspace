@@ -7,9 +7,11 @@ from tests.test_shell_items import WEB_APPS
 from tests.test_window_layout import CODE, TERMINAL
 
 SPEC = PagerSpec(WEB_APPS, desktop="Space", current="here", empty="Nothing")
-LETTERS: frozendict[Target, str] = frozendict(
-    {Tool.DESKTOP_1: "Q", Tool.DESKTOP_2: "W", Tool.DESKTOP_3: "E"}
-)
+LETTERS: frozendict[Target, str] = frozendict({
+    Tool.DESKTOP_1: "Q",
+    Tool.DESKTOP_2: "W",
+    Tool.DESKTOP_3: "E",
+})
 """The test's own pager: three desktops reachable by a chord letter."""
 
 

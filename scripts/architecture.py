@@ -138,18 +138,16 @@ def python_sources(
     if names is None:
         names = _walked(root)
     return tuple(
-        sorted(
-            {
-                name
-                for name in names
-                if name.endswith((".py", ".pyw"))
-                and not any(
-                    part.startswith((".", "__pycache__"))
-                    for part in Path(name).parts
-                )
-                and (root / name).is_file()
-            }
-        )
+        sorted({
+            name
+            for name in names
+            if name.endswith((".py", ".pyw"))
+            and not any(
+                part.startswith((".", "__pycache__"))
+                for part in Path(name).parts
+            )
+            and (root / name).is_file()
+        })
     )
 
 
@@ -293,36 +291,28 @@ def _findings(
     checkout: Checkout, configuration: Configuration, cache: Cache | None
 ) -> Iterator[Finding]:
     loaded = checkout.production()
-    observations = frozendict(
-        {
-            module_name(source.name): observation(source, cache)
-            for source in loaded
-        }
-    )
-    imported_by = frozendict(
-        {
-            module_name(source.name): dependencies(
-                source.name, source.text, cache=cache
-            )
-            for source in loaded
-        }
-    )
-    graph = frozendict(
-        {
-            module: imported & frozenset(observations)
-            for module, imported in imported_by.items()
-        }
-    )
+    observations = frozendict({
+        module_name(source.name): observation(source, cache)
+        for source in loaded
+    })
+    imported_by = frozendict({
+        module_name(source.name): dependencies(
+            source.name, source.text, cache=cache
+        )
+        for source in loaded
+    })
+    graph = frozendict({
+        module: imported & frozenset(observations)
+        for module, imported in imported_by.items()
+    })
     observed = tuple(observations.values())
     yield from _module_findings(observed, checkout, cache)
     yield from keyboard_isolation(
         graph,
-        frozendict(
-            {
-                module: item.dynamic_imports
-                for module, item in observations.items()
-            }
-        ),
+        frozendict({
+            module: item.dynamic_imports
+            for module, item in observations.items()
+        }),
     )
     yield from contract_isolation(imported_by)
     yield from _usage_findings(observed, checkout, cache)

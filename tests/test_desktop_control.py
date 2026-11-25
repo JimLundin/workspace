@@ -138,9 +138,10 @@ def test_recording_warnings_only_announce_interruptions_and_failed_captures() ->
         is None
     )
     paused = RecordingState(phase="paused")
-    state, effects = folded(
-        (RecordingChanged(recording), RecordingChanged(paused))
-    )
+    state, effects = folded((
+        RecordingChanged(recording),
+        RecordingChanged(paused),
+    ))
     assert state.shown.recording == paused
     assert (
         ShowActivity(RecordingShown(paused)) in effects
@@ -176,9 +177,10 @@ def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_
 ):
     # Defect: quitting the layout flashes "Layout off", a malformed message turns
     # it (or dictation's view of it) off, or dictation never hears the layout's state.
-    state, effects = folded(
-        (LayoutReported(LayoutState.ON.value), LayoutReported(99))
-    )
+    state, effects = folded((
+        LayoutReported(LayoutState.ON.value),
+        LayoutReported(99),
+    ))
     assert state.layout is LayoutState.ON and state.overlay.layout_on
     assert (
         sum(isinstance(effect, Flash) for effect in effects) == 2
@@ -198,29 +200,23 @@ def test_dictation_keys_pass_both_edges_and_the_desktops_own_keys_act_on_press()
 ):
     # Defect: a dictation release is dropped (so a hold never stops), a desktop key
     # release acts like a press, or a meeting or window key reaches dictation.
-    _, edges = folded(
-        (
-            Controlled(FeatureRequest(Tool.DICTATE, down=True)),
-            Controlled(FeatureRequest(Tool.DICTATE, down=False)),
-        )
-    )
+    _, edges = folded((
+        Controlled(FeatureRequest(Tool.DICTATE, down=True)),
+        Controlled(FeatureRequest(Tool.DICTATE, down=False)),
+    ))
     assert edges == (
         HandleKey(Tool.DICTATE, down=True),
         HandleKey(Tool.DICTATE, down=False),
     )
-    _, released = folded(
-        (
-            Controlled(FeatureRequest(Tool.ZOOM, down=False)),
-            Controlled(FeatureRequest(Tool.MEETING_TOGGLE, down=False)),
-        )
-    )
+    _, released = folded((
+        Controlled(FeatureRequest(Tool.ZOOM, down=False)),
+        Controlled(FeatureRequest(Tool.MEETING_TOGGLE, down=False)),
+    ))
     assert released == ()
-    _, pressed = folded(
-        (
-            Controlled(FeatureRequest(Tool.MEETING_TOGGLE, down=True)),
-            Controlled(FeatureRequest(Tool.WINDOW_SWITCHER, down=True)),
-        )
-    )
+    _, pressed = folded((
+        Controlled(FeatureRequest(Tool.MEETING_TOGGLE, down=True)),
+        Controlled(FeatureRequest(Tool.WINDOW_SWITCHER, down=True)),
+    ))
     assert pressed == (ToggleMeeting(), SwitchWindows())
 
 

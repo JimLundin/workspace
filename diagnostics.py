@@ -66,6 +66,7 @@ def append(log: Path, text: str) -> None:
 
 def evidence(event: str, details: Mapping[str, Detail]) -> str:
     """An event and its scalar details, as one line for a program's own log."""
-    return " ".join(
-        (f"{event}:", *(f"{name}={value}" for name, value in details.items()))
-    )
+    return " ".join((
+        f"{event}:",
+        *(f"{name}={value}" for name, value in details.items()),
+    ))

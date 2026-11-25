@@ -75,22 +75,20 @@ type Order = Navigation | Placing
 """What the application observer is asked to do."""
 
 
-KEYED: Final[frozendict[protocol.Tool, Order]] = frozendict(
-    {
-        protocol.Tool.FOCUS_LEFT: SpatialFocus(Direction.LEFT),
-        protocol.Tool.FOCUS_RIGHT: SpatialFocus(Direction.RIGHT),
-        protocol.Tool.FOCUS_UP: SpatialFocus(Direction.UP),
-        protocol.Tool.FOCUS_DOWN: SpatialFocus(Direction.DOWN),
-        protocol.Tool.DESKTOP_1: JumpDesktop(0),
-        protocol.Tool.DESKTOP_2: JumpDesktop(1),
-        protocol.Tool.DESKTOP_3: JumpDesktop(2),
-        protocol.Tool.DESKTOP_4: JumpDesktop(3),
-        protocol.Tool.DESKTOP_5: JumpDesktop(4),
-        protocol.Tool.ZOOM: Zoom(),
-        protocol.Tool.PLACEMENT_PAUSE: Placing.TOGGLE_PAUSE,
-        protocol.Tool.PLACE_NOW: Placing.NOW,
-    }
-)
+KEYED: Final[frozendict[protocol.Tool, Order]] = frozendict({
+    protocol.Tool.FOCUS_LEFT: SpatialFocus(Direction.LEFT),
+    protocol.Tool.FOCUS_RIGHT: SpatialFocus(Direction.RIGHT),
+    protocol.Tool.FOCUS_UP: SpatialFocus(Direction.UP),
+    protocol.Tool.FOCUS_DOWN: SpatialFocus(Direction.DOWN),
+    protocol.Tool.DESKTOP_1: JumpDesktop(0),
+    protocol.Tool.DESKTOP_2: JumpDesktop(1),
+    protocol.Tool.DESKTOP_3: JumpDesktop(2),
+    protocol.Tool.DESKTOP_4: JumpDesktop(3),
+    protocol.Tool.DESKTOP_5: JumpDesktop(4),
+    protocol.Tool.ZOOM: Zoom(),
+    protocol.Tool.PLACEMENT_PAUSE: Placing.TOGGLE_PAUSE,
+    protocol.Tool.PLACE_NOW: Placing.NOW,
+})
 """The order each navigation key gives; other tools give none."""
 
 

@@ -78,9 +78,9 @@ ROWS: Final = (
 )
 """The keyboard's letter block and Spacebar, row by row, as the key map draws it."""
 
-PHYSICAL_NAMES: Final = frozendict(
-    {key.scancode: key.legend for row in ROWS for key in row}
-)
+PHYSICAL_NAMES: Final = frozendict({
+    key.scancode: key.legend for row in ROWS for key in row
+})
 """Each drawn key's keycap name, by the scancode the layout reports it with."""
 
 
@@ -132,15 +132,13 @@ class Cap:
 CHORD_HOLD: Final = "Apps"
 """The Apps key, held for a request's letter: the Tab thumb, on the laptop or the Charybdis."""
 
-_CHORD_NAMES: Final = frozendict(
-    {
-        Chord.ctrl(Key.Z): "Undo",
-        Chord.ctrl(Key.Y): "Redo",
-        Chord.ctrl(Key.C): "Copy",
-        Chord.ctrl(Key.V): "Paste",
-        Chord.ctrl(Key.X): "Cut",
-    }
-)
+_CHORD_NAMES: Final = frozendict({
+    Chord.ctrl(Key.Z): "Undo",
+    Chord.ctrl(Key.Y): "Redo",
+    Chord.ctrl(Key.C): "Copy",
+    Chord.ctrl(Key.V): "Paste",
+    Chord.ctrl(Key.X): "Cut",
+})
 TOOL_NAMES: Final = every_member(
     Tool,
     {
@@ -224,9 +222,10 @@ class KeyboardView:
             ):
                 return c, Role.KEY
             case Chord(key, mods):
-                return "+".join(
-                    [*(m.legend for m in Mod if m in mods), key.legend]
-                ), Role.KEY
+                return "+".join([
+                    *(m.legend for m in Mod if m in mods),
+                    key.legend,
+                ]), Role.KEY
             case TapHold(tap):
                 return self.describe(tap)
             case Mod():

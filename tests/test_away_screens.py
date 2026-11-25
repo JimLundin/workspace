@@ -40,7 +40,7 @@ def test_only_screens_turned_off_are_turned_back_on() -> None:
         frozenset(), frozendict({FOUR_K: Power.OFF, SECOND: Unanswered(31)})
     )
     assert darkened == frozenset({FOUR_K})
-    assert dark_after(darkened, frozendict({FOUR_K: Detached()})) == frozenset(
-        {FOUR_K}
-    )
+    assert dark_after(darkened, frozendict({FOUR_K: Detached()})) == frozenset({
+        FOUR_K
+    })
     assert dark_after(darkened, frozendict({FOUR_K: Power.ON})) == frozenset()

@@ -42,9 +42,10 @@ class Step(Enum):
 type Shown = Step | Outcome
 type Mark = Shown | RESTING
 
-_STEPS: frozendict[Job, Step] = frozendict(
-    {TRANSCRIBING: Step.TRANSCRIBING, TYPING: Step.TYPING}
-)
+_STEPS: frozendict[Job, Step] = frozendict({
+    TRANSCRIBING: Step.TRANSCRIBING,
+    TYPING: Step.TYPING,
+})
 """The step each of dictation's jobs shows."""
 
 

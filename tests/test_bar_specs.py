@@ -147,20 +147,20 @@ def doubled(sizes: Sizes) -> Sizes:
     capsule = {name: value * 2 for name, value in asdict(sizes.capsule).items()}
     markers = {name: value * 2 for name, value in asdict(sizes.markers).items()}
     return Sizes(
-        bar=Bar(
-            **{name: value * 2 for name, value in asdict(sizes.bar).items()}
-        ),
+        bar=Bar(**{
+            name: value * 2 for name, value in asdict(sizes.bar).items()
+        }),
         capsule=Capsule(**{**capsule, "wave_bars": sizes.capsule.wave_bars}),
-        menu=MenuGrid(
-            **{name: value * 2 for name, value in asdict(sizes.menu).items()}
-        ),
+        menu=MenuGrid(**{
+            name: value * 2 for name, value in asdict(sizes.menu).items()
+        }),
         markers=Markers(**{**markers, "dot_count": sizes.markers.dot_count}),
-        gauge=Gauge(
-            **{name: value * 2 for name, value in asdict(sizes.gauge).items()}
-        ),
-        cells=Cells(
-            **{name: value * 2 for name, value in asdict(sizes.cells).items()}
-        ),
+        gauge=Gauge(**{
+            name: value * 2 for name, value in asdict(sizes.gauge).items()
+        }),
+        cells=Cells(**{
+            name: value * 2 for name, value in asdict(sizes.cells).items()
+        }),
         type=sizes.type,  # Text measures through the test's own widths.
     )
 

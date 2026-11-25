@@ -101,9 +101,9 @@ class Capture:
     started: float
 
 
-LISTENING_TOOLS: Final[frozendict[Tool, Tool]] = frozendict(
-    {Tool.DICTATE_TOGGLE: Tool.DICTATE}
-)
+LISTENING_TOOLS: Final[frozendict[Tool, Tool]] = frozendict({
+    Tool.DICTATE_TOGGLE: Tool.DICTATE
+})
 """A toggle listens as its hold tool; every other tool listens as itself."""
 
 
