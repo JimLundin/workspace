@@ -27,12 +27,6 @@ class Reply:
     """On an error, how soon the client may retry; None leaves the client's own backoff."""
 
 
-def sse(*events: str) -> Reply:
-    """A streamed reply: each event is a `data:` line, then `[DONE]`."""
-    lines = [f"data: {event}\n\n" for event in (*events, "[DONE]")]
-    return Reply("".join(lines).encode(), content_type="text/event-stream")
-
-
 @dataclass(slots=True)
 class FakeEndpoint:
     url: str

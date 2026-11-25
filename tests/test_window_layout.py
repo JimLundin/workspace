@@ -47,11 +47,7 @@ LEFT_TWO_THIRDS = Region(Fraction(0), Fraction(0), Fraction(2, 3), Fraction(1))
 RIGHT_THIRD = Region(Fraction(2, 3), Fraction(0), Fraction(1, 3), Fraction(1))
 FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
 """The tests' own programs and regions to write setups with."""
-PYTHON, NOTEPAD, PAINT = (
-    Program("python.exe"),
-    Program("notepad.exe"),
-    Program("mspaint.exe"),
-)
+PYTHON, NOTEPAD = Program("python.exe"), Program("notepad.exe")
 
 SETUPS = Setups(
     externals=frozendict(
