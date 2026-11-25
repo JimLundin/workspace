@@ -15,6 +15,8 @@ from desktop_ui.bar_events import (
     Render,
     SetMute,
     Survey,
+    Ticked,
+    Warn,
     menu,
     transition,
 )
@@ -32,7 +34,7 @@ from desktop_ui.island_menu import (
 from desktop_ui.island_model import Action
 from desktop_ui.month import Month
 from tests import test_bar_specs
-from winapi.machine_status import Speakers
+from winapi.machine_status import Memory, Speakers
 
 
 def model() -> BarModel:
@@ -183,3 +185,11 @@ def test_each_apps_use_is_read_at_the_panels_pace_only_while_theirs_is_open() ->
         ranking, _ = transition(model(), Opening(menu(model(), panel), 42))
         _, closing = transition(ranking, PanelPressed(panel))
         assert Survey(listing=False, ranking=False) in tuple(closing)
+
+
+def test_a_reading_that_strains_the_laptop_warns_through_the_tray() -> None:
+    # Defect: the strain is noticed but its warning never leaves the bar.
+    seen = model().seen
+    low = replace(seen, system=replace(seen.system, memory=Memory(950, 1_000)))
+    _, effects = transition(model(), Ticked(low, 0.0, 0.0))
+    assert any(isinstance(effect, Warn) for effect in effects)

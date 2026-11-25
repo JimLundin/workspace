@@ -53,7 +53,10 @@ def ranked(
 ) -> SystemStatus:
     """The apps' use as of `after`, their processor use measured since `before`."""
     return replace(
-        last, apps=tuple(apps(before, after)), processors=os.cpu_count() or 1
+        last,
+        apps=tuple(apps(before, after)),
+        ranked_at=after.taken,
+        processors=os.cpu_count() or 1,
     )
 
 

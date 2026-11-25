@@ -53,6 +53,7 @@ from desktop_ui.island_motion import (
 )
 from desktop_ui.month import Month
 from desktop_ui.navigation import Order, Placing
+from desktop_ui.strain import StrainSpec, Watch, watched
 from protocol import Tool
 from winapi import appearance
 from winapi.machine_status import Memory, PowerUnavailable, Speakers
@@ -93,6 +94,8 @@ class BarSpec:
     washes: Washes
     hints: frozendict[Tool, str]
     """Each tool's keys on the layout the desktop is handed, which the menu shows beside its tools."""
+    strain: StrainSpec
+    """When the bar warns that memory runs low or an app holds the processor."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +111,8 @@ class BarModel:
     overlay_enabled: bool = False
     job: Job | None = None
     recording: RecordingState = field(default_factory=RecordingState)
+    watch: Watch = field(default_factory=Watch)
+    """What the strain warnings have seen."""
     chord_held: bool = False
     """Either keyboard is holding its Apps key."""
     layout_enabled: bool = True
@@ -457,6 +462,14 @@ class ShowHints:
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class Warn:
+    """Tell the person, through the tray, that the laptop strains."""
+
+    title: str
+    text: str
+
+
 type Effect = (
     Render
     | Expand
@@ -476,6 +489,7 @@ type Effect = (
     | SetMute
     | ClickTray
     | ShowHints
+    | Warn
 )
 
 
@@ -716,12 +730,22 @@ def _folded(
             ), (Render(),)
         case Ticked(seen, next_power, next_material):
             rendered = (Render(),) if seen != model.seen else ()
+            watch, notices = watched(
+                model.watch,
+                seen.system,
+                model.spec.strain,
+                model.spec.island.status,
+            )
             return replace(
                 model,
                 seen=seen,
+                watch=watch,
                 next_power=next_power,
                 next_material=next_material,
-            ), rendered
+            ), (
+                *rendered,
+                *(Warn(notice.title, notice.text) for notice in notices),
+            )
         case Retargeted(views, motion, opened):
             return replace(model, views=views, motion=motion, opened=opened), ()
         case Framed(motion, last_frame):

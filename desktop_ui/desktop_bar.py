@@ -54,6 +54,7 @@ lazy from desktop_ui.bar_events import (
     Ticked,
     ToggleAway,
     UseTool,
+    Warn,
     menu,
     next_frame,
     transition,
@@ -108,6 +109,7 @@ class BarActions:
     menu: Callable[[], None]
     problem: Callable[[str], None]
     tool: Callable[[Tool], None]
+    warn: Callable[[str, str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,6 +269,8 @@ class DesktopBar:
                     )
             case ShowHints():
                 self._show_hints()
+            case Warn(title, text):
+                self.actions.warn(title, text)
             case _:
                 assert_never(effect)
 

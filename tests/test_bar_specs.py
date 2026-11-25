@@ -29,6 +29,7 @@ from desktop_ui.island_model import (
     Zone,
     order,
 )
+from desktop_ui.strain import StrainSpec
 from tests import (
     test_glass_look,
     test_island_menu,
@@ -134,6 +135,9 @@ SPEC = BarSpec(
         well=0.1, off=0.2, track=0.3, halo=0.4, resting=0.5, gauge=0.7
     ),
     hints=frozendict(),
+    strain=StrainSpec(
+        low_memory=100, recovered=200, busy_cores=0.5, busy_for=600
+    ),
 )
 """The test's own bar, for tests of the bar's decisions."""
 

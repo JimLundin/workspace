@@ -35,6 +35,8 @@ class SystemStatus:
     """The Wi-Fi networks in range, read only while their panel is open."""
     apps: tuple[AppUse, ...] = ()
     """What each app uses: read every two seconds while a panel shows it, every half minute otherwise."""
+    ranked_at: float | None = None
+    """When the apps were read, on the status worker's monotonic clock."""
     processors: int = 1
     """Logical processors: an app busy on all of them uses the whole machine."""
 

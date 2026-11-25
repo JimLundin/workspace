@@ -204,6 +204,8 @@ class JobChanged:
 class Notified:
     title: str
     text: str
+    warning: bool = field(default=False, kw_only=True)
+    """The tray shows it as a warning: something the person should act on."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -618,8 +620,8 @@ def _reacted(
         case Tracked():
             if marked(state.marker) != marked(after.marker):
                 yield ShowMarker(after.marker)
-        case Notified(title, text):
-            yield TrayNotify(title, text, warning=False)
+        case Notified(title, text, warning=warning):
+            yield TrayNotify(title, text, warning=warning)
         case RecordingChanged(recording):
             yield ShowActivity(RecordingShown(recording))
             yield TrayShow(tray_state(after.shown))

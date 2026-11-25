@@ -32,6 +32,7 @@ def main() -> None:
         palette=look.DESIGN.palette,
         washes=look.WASHES,
         hints=hints,
+        strain=bar.STRAIN,
     )
     run(
         DesktopSettings(

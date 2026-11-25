@@ -42,6 +42,7 @@ from desktop_ui.island_model import (
 )
 from desktop_ui.island_motion import Springs, Timing
 from desktop_ui.motion import Spring
+from desktop_ui.strain import StrainSpec
 from winapi.machine_status import Speakers, Wifi
 
 SPEAKERS: Final = every_member(
@@ -589,3 +590,11 @@ PAGER: Final = PagerSpec(
     empty="No placed apps",
 )
 """The pager's web apps and wording."""
+
+
+STRAIN: Final = StrainSpec(
+    low_memory=3 << 29,  # 1.5 GB available.
+    recovered=2 << 30,
+    busy_cores=0.5,
+    busy_for=10 * 60,
+)

@@ -40,6 +40,7 @@ from desktop_ui.desktop_control import (
     MenuChosen,
     MenuRequested,
     Navigate,
+    Notified,
     OpenLogs,
     OverlayEnabled,
     OverlayToggled,
@@ -263,6 +264,9 @@ class DesktopApp:
                     problem=lambda message: report(Problem(message)),
                     tool=lambda tool: report(
                         Controlled(FeatureRequest(tool, down=True))
+                    ),
+                    warn=lambda title, text: report(
+                        Notified(title, text, warning=True)
                     ),
                 ),
                 self.settings,
