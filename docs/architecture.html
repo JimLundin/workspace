@@ -271,7 +271,7 @@ const DETAIL = {
     body: `<p>Declarations only, in the shapes <code>protocol</code> and <code>keyboard.layout</code> declare. Imported by <code>launch.py</code>,
       every <code>__main__</code>, the keyboard benchmark and the desktop's data modules, never by a library or a test (<code>entry-data</code>).</p>
       <table><tr><th>module</th><th>declares</th><th>read by</th></tr>
-      <tr><td><code>apps.py</code></td><td><code>APPS</code>: the ten apps the chords reach, in chord-letter order</td><td>keyboard and desktop mains; <code>layout.py</code> places them on the Apps layer</td></tr>
+      <tr><td><code>apps.py</code></td><td><code>APPS</code>: the apps the chords reach, in chord-letter order</td><td>keyboard and desktop mains; <code>layout.py</code> places them on the Apps layer</td></tr>
       <tr><td><code>programs.py</code></td><td><code>PROGRAMS</code>: a <code>protocol.Programs</code> of the three entries, their windows and quit messages, the switcher's title, the state variable</td><td>launch and all three mains</td></tr>
       <tr><td><code>layout.py</code></td><td>the physical board, every layer's board, native keys, escape and Apps keys, firmware identity, timings, gathered as <code>LAYOUT</code>, a <code>keyboard.layout.Layout</code></td><td>keyboard main (runs it), desktop main (draws it), benchmark</td></tr></table>
       <h3>Files</h3>${files("settings/__init__.py", "settings/apps.py", "settings/programs.py", "settings/layout.py")}`,

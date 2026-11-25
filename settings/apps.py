@@ -10,7 +10,4 @@ APPS: Final[tuple[App, ...]] = (
     App("files", Installed("explorer.exe", "explorer.exe")),
     App("code", Installed("code.exe", "code")),
     App("notepad", Installed("notepad.exe", "notepad.exe")),
-    App("excel", Installed("excel.exe", "excel.exe")),
-    App("word", Installed("winword.exe", "winword.exe")),
-    App("PowerPoint", Installed("powerpnt.exe", "powerpnt.exe")),
 )

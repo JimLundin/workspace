@@ -62,7 +62,7 @@ cycled.
 
 | Hold **V** and press | Does |
 |---|---|
-| **2 3 4 5 6**, **Q W E R T** | The ten apps in `APPS` |
+| **2 3 4 5 6**, **Q W E R T** | The apps in `APPS`, in order |
 | **8 9 0 + ´** | Desktops 1 to 5 |
 | **I** | Zoom |
 | **O P Å ¨** | Focus ← ↓ ↑ → |
