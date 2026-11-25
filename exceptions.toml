@@ -12,3 +12,33 @@ reason = "the keycaps for the letters I and O are named I and O, like every othe
 path = "pyproject.toml"
 rule = "drift:tool.ruff.lint.per-file-ignores.assistant/meetings.py:PLR0913"
 reason = "Meetings.open takes its settings, capture factory and archive and four optional collaborators (observer, transcriber, retry policy, log) that tests replace one at a time"
+
+[[exception]]
+path = "desktop_ui/key_hint_overlay.py"
+rule = "unused"
+reason = "Qt calls the @override event handlers (paintEvent, sizeHint) from C++; no Python code calls them"
+
+[[exception]]
+path = "desktop_ui/marker_window.py"
+rule = "unused"
+reason = "Qt calls the @override event handlers (paintEvent, sizeHint) from C++; no Python code calls them"
+
+[[exception]]
+path = "desktop_ui/window_switcher.py"
+rule = "unused"
+reason = "Qt calls the @override event handlers (paintEvent, sizeHint) from C++; no Python code calls them"
+
+[[exception]]
+path = "winapi/shell.py"
+rule = "unused"
+reason = "Shell_NotifyIconW reads the NOTIFYICONDATAW fields the tray icon writes in place; Python never reads them back"
+
+[[exception]]
+path = "winapi/caret.py"
+rule = "unused"
+reason = "IAccessible.accLocation reads the child id from the VARIANT's lVal, which Python only writes"
+
+[[exception]]
+path = "winapi/panel_brightness.py"
+rule = "unused"
+reason = "WMI reads the lVal of the VARIANT arguments the brightness call writes; Python never reads them back"
