@@ -270,12 +270,12 @@ class PaneGroup:
     ) -> PaneGroup:
         group = compositor.CreateContainerVisual()
         geometry = compositor.CreateRoundedRectangleGeometry()
-        group.Clip = compositor.CreateGeometricClipWithGeometry(geometry)
+        group.put_Clip(compositor.CreateGeometricClipWithGeometry(geometry))
         backdrop = compositor.CreateSpriteVisual()
-        backdrop.Brush = compositor.CreateHostBackdropBrush()
+        backdrop.put_Brush(compositor.CreateHostBackdropBrush())
         tint_brush: CompositionColorBrush = compositor.CreateColorBrush()
         tint = compositor.CreateSpriteVisual()
-        tint.Brush = tint_brush
+        tint.put_Brush(tint_brush)
         rim_brush: CompositionLinearGradientBrush = (
             compositor.CreateLinearGradientBrush()
         )
@@ -283,31 +283,29 @@ class PaneGroup:
         direction = math.radians(lighting.rim_angle)
         dx, dy = math.sin(direction), -math.cos(direction)
         reach = 0.5 / max(abs(dx), abs(dy))
-        rim_brush.StartPoint, rim_brush.EndPoint = (
-            Vector2(0.5 - dx * reach, 0.5 - dy * reach),
-            Vector2(0.5 + dx * reach, 0.5 + dy * reach),
-        )
+        rim_brush.put_StartPoint(Vector2(0.5 - dx * reach, 0.5 - dy * reach))
+        rim_brush.put_EndPoint(Vector2(0.5 + dx * reach, 0.5 + dy * reach))
         stroke = compositor.CreateSpriteShapeWithGeometry(geometry)
-        stroke.StrokeBrush = rim_brush
-        stroke.StrokeThickness = lighting.rim_stroke
+        stroke.put_StrokeBrush(rim_brush)
+        stroke.put_StrokeThickness(lighting.rim_stroke)
         rim = compositor.CreateShapeVisual()
         rim.Shapes.Append(stroke)
         for child in (backdrop, tint, rim):
-            child.RelativeSizeAdjustment = Vector2(1, 1)
+            child.put_RelativeSizeAdjustment(Vector2(1, 1))
             group.Children.InsertAtTop(child)
         fill = compositor.CreateSpriteShapeWithGeometry(geometry)
-        fill.FillBrush = compositor.CreateColorBrushWithColor(
-            _color("#ffffff", 1)
+        fill.put_FillBrush(
+            compositor.CreateColorBrushWithColor(_color("#ffffff", 1))
         )
         mask = compositor.CreateShapeVisual()
         mask.Shapes.Append(fill)
         surface = compositor.CreateVisualSurface()
-        surface.SourceVisual = mask
+        surface.put_SourceVisual(mask)
         drop: DropShadow = compositor.CreateDropShadow()
         drop.Color = _color(lighting.shadow_color, 1)
-        drop.Mask = compositor.CreateSurfaceBrushWithSurface(surface)
+        drop.put_Mask(compositor.CreateSurfaceBrushWithSurface(surface))
         shadow = compositor.CreateSpriteVisual()
-        shadow.Shadow = drop
+        shadow.put_Shadow(drop)
         root.Children.InsertAtTop(shadow)
         root.Children.InsertAtTop(group)
         properties: CompositionPropertySet = compositor.CreatePropertySet()
@@ -380,7 +378,7 @@ class PaneGroup:
             self.writer.fade(max(0, min(1, pane.opacity)))
         if last is None or last.veil != pane.veil:
             self.tint.Color = _color(pane.veil.tint, pane.veil.opacity)
-            self.shadow.Opacity = pane.veil.shadow
+            self.shadow.put_Opacity(pane.veil.shadow)
             stops = self.rim.ColorStops
             stops.Clear()
             for stop in pane.veil.rim:
@@ -448,7 +446,7 @@ class GlassScene:
             compositor: Compositor = owner.compositor
             borderless(handle)
             root = compositor.CreateContainerVisual()
-            target.Root = root
+            target.put_Root(root)
         except BaseException:
             windows.destroy(handle)
             raise
@@ -475,7 +473,7 @@ class GlassScene:
 
     def cast(self, group: PaneGroup, scale: float) -> None:
         """The group's shadow at the scene's scale."""
-        group.shadow.BlurRadius = self.lighting.shadow_blur * scale
+        group.shadow.put_BlurRadius(self.lighting.shadow_blur * scale)
         group.shadow.Offset = Vector3(0, self.lighting.shadow_drop * scale, 0)
 
     def publish(self, panes: tuple[Pane, ...]) -> None:
@@ -533,6 +531,6 @@ class GlassScene:
         self._composed.update(
             lambda composed: replace(composed, closed=True, groups=frozendict())
         )
-        self.target.Root = None
+        self.target.put_Root(None)
         self.target.Close()
         windows.destroy(self.handle)

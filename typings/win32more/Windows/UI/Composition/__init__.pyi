@@ -30,8 +30,6 @@ class IVisual(ComPtr):
     Offset: Vector3
     Opacity: float
 
-class CompositionClip(ComPtr): ...
-
 class CompositionGeometricClip(ComPtr):
     Geometry: CompositionRoundedRectangleGeometry
 
@@ -48,16 +46,18 @@ class CompositionColorGradientStopCollection(ComPtr):
     def Clear(self) -> None: ...
 
 class CompositionLinearGradientBrush(ComPtr):
-    StartPoint: Vector2
-    EndPoint: Vector2
+    def put_StartPoint(self, value: Vector2) -> None: ...
+    def put_EndPoint(self, value: Vector2) -> None: ...
     @property
     def ColorStops(self) -> CompositionColorGradientStopCollection: ...
 
 class CompositionSpriteShape(ComPtr):
     Geometry: CompositionRoundedRectangleGeometry
-    FillBrush: CompositionColorBrush
-    StrokeBrush: CompositionLinearGradientBrush
-    StrokeThickness: float
+    def put_FillBrush(self, value: CompositionColorBrush) -> None: ...
+    def put_StrokeBrush(
+        self, value: CompositionLinearGradientBrush
+    ) -> None: ...
+    def put_StrokeThickness(self, value: float) -> None: ...
 
 class CompositionShapeCollection(ComPtr):
     def Append(self, shape: CompositionSpriteShape) -> None: ...
@@ -74,30 +74,28 @@ class ContainerVisual(ComPtr):
     def StartAnimation(
         self, property_name: str, animation: ExpressionAnimation
     ) -> None: ...
-    @property
-    def Clip(self) -> CompositionClip: ...
-    @Clip.setter
-    def Clip(self, value: CompositionGeometricClip) -> None: ...
+    def put_Clip(self, value: CompositionGeometricClip) -> None: ...
     @property
     def Children(self) -> VisualCollection: ...
 
 class SpriteVisual(ComPtr):
     Size: Vector2
     Offset: Vector3
-    RelativeSizeAdjustment: Vector2
-    Brush: (
-        CompositionColorBrush
+    def put_RelativeSizeAdjustment(self, value: Vector2) -> None: ...
+    def put_Brush(
+        self,
+        value: CompositionColorBrush
         | CompositionBackdropBrush
-        | CompositionSurfaceBrush
-    )
-    Shadow: DropShadow
+        | CompositionSurfaceBrush,
+    ) -> None: ...
+    def put_Shadow(self, value: DropShadow) -> None: ...
     def StartAnimation(
         self, property_name: str, animation: ExpressionAnimation
     ) -> None: ...
 
 class ShapeVisual(ComPtr):
     Size: Vector2
-    RelativeSizeAdjustment: Vector2
+    def put_RelativeSizeAdjustment(self, value: Vector2) -> None: ...
     def StartAnimation(
         self, property_name: str, animation: ExpressionAnimation
     ) -> None: ...
@@ -105,7 +103,7 @@ class ShapeVisual(ComPtr):
     def Shapes(self) -> CompositionShapeCollection: ...
 
 class CompositionVisualSurface(ComPtr):
-    SourceVisual: ShapeVisual
+    def put_SourceVisual(self, value: ShapeVisual) -> None: ...
     SourceSize: Vector2
     def StartAnimation(
         self, property_name: str, animation: ExpressionAnimation
@@ -113,10 +111,10 @@ class CompositionVisualSurface(ComPtr):
 
 class DropShadow(ComPtr):
     Color: Color
-    Opacity: float
-    Mask: CompositionSurfaceBrush
-    BlurRadius: float
     Offset: Vector3
+    def put_Opacity(self, value: float) -> None: ...
+    def put_Mask(self, value: CompositionSurfaceBrush) -> None: ...
+    def put_BlurRadius(self, value: float) -> None: ...
 
 class Compositor(ComPtr):
     def __init__(self) -> None: ...

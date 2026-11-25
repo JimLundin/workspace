@@ -2,5 +2,5 @@ from win32more._win32 import ComPtr
 from win32more.Windows.UI.Composition import ContainerVisual
 
 class DesktopWindowTarget(ComPtr):
-    Root: ContainerVisual | None
+    def put_Root(self, value: ContainerVisual | None) -> None: ...
     def Close(self) -> None: ...
