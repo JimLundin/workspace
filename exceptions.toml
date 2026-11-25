@@ -42,3 +42,33 @@ reason = "IAccessible.accLocation reads the child id from the VARIANT's lVal, wh
 path = "winapi/panel_brightness.py"
 rule = "unused"
 reason = "WMI reads the lVal of the VARIANT arguments the brightness call writes; Python never reads them back"
+
+[[exception]]
+path = "desktop_ui/components/widgets.py"
+rule = "unused"
+reason = "Qt calls the paintEvent and closeEvent overrides from C++ by name"
+
+[[exception]]
+path = "desktop_ui/island_surface.py"
+rule = "unused"
+reason = "Qt calls the paintEvent and closeEvent overrides from C++ by name"
+
+[[exception]]
+path = "desktop_ui/keymap_views.py"
+rule = "unused"
+reason = "Qt calls the paintEvent and closeEvent overrides from C++ by name"
+
+[[exception]]
+path = "desktop_ui/shell_surface.py"
+rule = "unused"
+reason = "Qt calls the paintEvent and closeEvent overrides from C++ by name"
+
+[[exception]]
+path = "gateway/proxy.py"
+rule = "unused"
+reason = "http.server calls do_GET, do_POST, do_DELETE and log_message by name, and reads close_connection and protocol_version from the handler"
+
+[[exception]]
+path = "tests/fake_endpoint.py"
+rule = "unused"
+reason = "http.server calls the fake endpoint's do_POST and log_message by name"
