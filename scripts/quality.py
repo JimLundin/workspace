@@ -2,7 +2,8 @@
 
 Ruff owns the Boolean-parameter and signature-size rules; this adapter adds the
 import ownership rules Ruff lacks. Every finding blocks. A wide signature that a
-real interface needs carries a targeted `# noqa: PLR0913` with its reason.
+real interface needs takes a per-file ignore in `pyproject.toml`, recorded
+with its reason in `exceptions.toml`.
 Checks and CI need Ruff, a development dependency.
 """
 

@@ -1,0 +1,14 @@
+[[exception]]
+path = "pyproject.toml"
+rule = "drift:tool.ruff.lint.per-file-ignores.keyboard/keys.py:E741"
+reason = "the virtual keys for the letters I and O are named I and O, like every other letter key"
+
+[[exception]]
+path = "pyproject.toml"
+rule = "drift:tool.ruff.lint.per-file-ignores.keyboard/physical.py:E741"
+reason = "the keycaps for the letters I and O are named I and O, like every other letter keycap"
+
+[[exception]]
+path = "pyproject.toml"
+rule = "drift:tool.ruff.lint.per-file-ignores.assistant/meetings.py:PLR0913"
+reason = "Meetings.open takes its settings, capture factory and archive and four optional collaborators (observer, transcriber, retry policy, log) that tests replace one at a time"

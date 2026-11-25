@@ -41,8 +41,8 @@ class Laptop(Enum):
     T = Keycap(0x14, "T")
     Y = Keycap(0x15, "Y")
     U = Keycap(0x16, "U")
-    I = Keycap(0x17, "I")  # noqa: E741 - the key is the letter
-    O = Keycap(0x18, "O")  # noqa: E741 - the key is the letter
+    I = Keycap(0x17, "I")
+    O = Keycap(0x18, "O")
     P = Keycap(0x19, "P")
     ARING = Keycap(0x1A, "Å")
     DIAERESIS = Keycap(0x1B, "¨")

@@ -265,6 +265,11 @@ ban-relative-imports = "all"
 "tests/layouts.py" = ["E501"]
 # Win32 functions keep their Windows names, one prototype per line.
 "winapi/*.py" = ["E501", "N816", "PLR0917"]
+# The keys named for the letters I and O keep those names.
+"keyboard/keys.py" = ["E741"]
+"keyboard/physical.py" = ["E741"]
+# Meetings.open injects collaborators that tests replace one at a time.
+"assistant/meetings.py" = ["PLR0913"]
 # Dependency stubs preserve the pinned SDK's actual method and structure field names.
 "typings/win32more/**/*.pyi" = ["N801", "N802", "N803", "N815"]
 
