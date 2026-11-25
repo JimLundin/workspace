@@ -299,7 +299,7 @@ class Meetings:
     )
 
     @classmethod
-    def open(  # noqa: PLR0913 - injected collaborators and callbacks
+    def open(
         cls,
         settings: Settings,
         factory: Callable[[AudioSource], Capture],
@@ -492,6 +492,8 @@ class Meetings:
             str(store.transcript),
             store.state(),
             store.preview(),
+            phase,
+            detail,
         )
         with self._lock:
             updated = published(
@@ -499,8 +501,6 @@ class Meetings:
                 incoming,
                 stopping=self._state.get().stop.is_set(),
                 paused=self._state.get().paused.get(store.folder),
-                phase=phase,
-                detail=detail,
             )
             if updated is None:
                 return

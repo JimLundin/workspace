@@ -136,6 +136,8 @@ class Publication:
     path: str
     saved: StoredState
     preview: str
+    phase: Phase | None = None
+    detail: str | None = None
 
 
 def completion_phase(saved: StoredState) -> CompletionPhase:
@@ -149,17 +151,15 @@ def completion_phase(saved: StoredState) -> CompletionPhase:
             return "saved"
 
 
-def published(  # noqa: PLR0913 - one transition with its optional overrides
+def published(
     current: RecordingState,
     incoming: Publication,
     *,
     stopping: bool,
     paused: str | None = None,
-    phase: Phase | None = None,
-    detail: str | None = None,
 ) -> RecordingState | None:
     """Reject stale observations before deriving the next immutable view snapshot."""
-    saved = incoming.saved
+    saved, phase, detail = incoming.saved, incoming.phase, incoming.detail
     if current.phase == "starting" and not current.identity:
         return None  # a new capture reserved the view before its journal exists
     if current.identity and current.identity != incoming.identity:
