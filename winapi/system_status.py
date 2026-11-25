@@ -195,10 +195,11 @@ def _heard(handle: ctypes.c_void_p, guid: Guid) -> Listing:
 def join(profile: str) -> bool:
     """Connect through the saved `profile` on the first adapter that accepts it; False when none does."""
     with _adapters() as (handle, guids):
-        parameters = WLAN_CONNECTION_PARAMETERS()
-        parameters.wlanConnectionMode = wlan_connection_mode_profile
-        parameters.strProfile = profile
-        parameters.dot11BssType = dot11_BSS_type_infrastructure
+        parameters = WLAN_CONNECTION_PARAMETERS(
+            wlanConnectionMode=wlan_connection_mode_profile,
+            strProfile=profile,
+            dot11BssType=dot11_BSS_type_infrastructure,
+        )
         return any(
             not WlanConnect(
                 handle, ctypes.byref(guid), ctypes.byref(parameters), None
