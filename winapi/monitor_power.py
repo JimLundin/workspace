@@ -1,4 +1,4 @@
-"""Monitor power over DDC/CI: reading and setting VCP feature D6 (power mode).
+"""Monitor power over DDC/CI: setting VCP feature D6 (power mode).
 
 Windows still drives a monitor that DDC/CI turns off, so the display
 configuration, the monitor count and the work areas don't change: only the
@@ -25,16 +25,6 @@ from winapi._core import dxva2, fn
 from winapi.screen import Monitor, attached
 
 # Windows reports a refused DDC/CI request through the thread's last error, which win32more's bindings don't keep.
-_GetVCPFeatureAndVCPFeatureReply = fn(
-    dxva2,
-    "GetVCPFeatureAndVCPFeatureReply",
-    wintypes.BOOL,
-    wintypes.HANDLE,
-    wintypes.BYTE,
-    ctypes.c_void_p,
-    ctypes.POINTER(wintypes.DWORD),
-    ctypes.POINTER(wintypes.DWORD),
-)
 _SetVCPFeature = fn(
     dxva2,
     "SetVCPFeature",
@@ -51,11 +41,8 @@ class Power(Enum):
     """MCCS power modes, by their D6 value."""
 
     ON = 1
-    STANDBY = 2
-    SUSPEND = 3
     OFF = 4
     """Display power management off: the panel is dark while the signal stays connected."""
-    OFF_BY_BUTTON = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,18 +53,10 @@ class Unanswered:
 
 
 @dataclass(frozen=True, slots=True)
-class Unrecognized:
-    """The monitor answered with a power mode outside MCCS's table."""
-
-    value: int
-
-
-@dataclass(frozen=True, slots=True)
 class Detached:
     """No open physical monitor for this monitor: it isn't attached, or Windows gave none."""
 
 
-type Reading = Power | Unanswered | Unrecognized | Detached
 type Applied = Power | Unanswered | Detached
 
 
@@ -137,26 +116,6 @@ class PhysicalMonitors:
     @property
     def monitors(self) -> frozenset[Monitor]:
         return frozenset(self._opened.get().handles)
-
-    def power(self, monitor: Monitor) -> Reading:
-        """The first physical monitor's power mode."""
-        handles = self._opened.get().handles.get(monitor, ())
-        if not handles:
-            return Detached()
-        current, maximum = wintypes.DWORD(), wintypes.DWORD()
-        if not _GetVCPFeatureAndVCPFeatureReply(
-            handles[0],
-            _POWER_MODE,
-            None,
-            ctypes.byref(current),
-            ctypes.byref(maximum),
-        ):
-            return Unanswered(ctypes.get_last_error())
-        match current.value:
-            case 1 | 2 | 3 | 4 | 5 as value:
-                return Power(value)
-            case value:
-                return Unrecognized(value)
 
     def set_power(self, monitor: Monitor, power: Power) -> Applied:
         """Every physical monitor behind `monitor` takes `power`; the first refusal is reported."""
