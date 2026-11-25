@@ -21,12 +21,14 @@ from desktop_ui.island_menu import (
     Menu,
     Page,
     Panel,
+    Ranked,
     Slider,
     ToolChoice,
     Trace,
     TrayChoice,
     Volume,
     entries,
+    ranking,
     restores_focus,
     traced,
 )
@@ -136,6 +138,27 @@ def memory_trace(model: BarModel) -> Trace:
             assert_never(system.memory)
 
 
+def rankings(model: BarModel) -> tuple[tuple[Ranked, ...], tuple[Ranked, ...]]:
+    """The apps keeping the processor busiest, as shares of every processor, then those holding the
+    most memory, as shares of all installed."""
+    system, status = model.seen.system, model.spec.island.status
+    processors = system.processors
+    busiest = ranking(
+        system.apps,
+        lambda app: app.cores,
+        processors,
+        lambda cores: f"{round(100 * cores / processors)}%",
+    )
+    installed = system.memory.total if system.memory is not None else 0
+    largest = ranking(
+        system.apps,
+        lambda app: app.memory,
+        installed,
+        lambda memory: gigabytes(round(memory), status),
+    )
+    return busiest, largest
+
+
 def menu(model: BarModel, panel: Panel) -> Menu:
     recorded = (
         capture(model.recording, model.spec.island.words.phases)
@@ -152,6 +175,7 @@ def menu(model: BarModel, panel: Panel) -> Menu:
         seen.system.volume,
         muted=seen.system.speakers is Speakers.MUTED,
     )
+    busiest, largest = rankings(model)
     built = Menu(
         panel,
         entries(
@@ -173,6 +197,8 @@ def menu(model: BarModel, panel: Panel) -> Menu:
                     usage(seen.system.cpu, model.spec.island.status).text,
                 ),
                 memory=memory_trace(model),
+                busiest=busiest,
+                largest=largest,
                 month=month,
             ),
             model.spec.controls,

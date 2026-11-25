@@ -110,6 +110,8 @@ BASE = Sizes(
         today=10,
         graph_head=24,
         graph_line=1,
+        rank_row=20,
+        rank_bar=3,
         signal_bar=2,
     ),
     type=BarType(

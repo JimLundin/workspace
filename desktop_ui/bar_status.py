@@ -11,6 +11,7 @@ every two seconds while the processor or memory panel is open, and every half
 minute otherwise; a read takes about 5 ms for 400 processes.
 """
 
+import os
 import queue
 import threading
 import time
@@ -51,7 +52,9 @@ def ranked(
     last: SystemStatus, before: ProcessSample | None, after: ProcessSample
 ) -> SystemStatus:
     """The apps' use as of `after`, their processor use measured since `before`."""
-    return replace(last, apps=tuple(apps(before, after)))
+    return replace(
+        last, apps=tuple(apps(before, after)), processors=os.cpu_count() or 1
+    )
 
 
 def due(last: ProcessSample | None, now: float, *, ranking: bool) -> bool:

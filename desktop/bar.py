@@ -143,6 +143,8 @@ SIZES: Final = Sizes(
         today=12,
         graph_head=30,
         graph_line=1.5,
+        rank_row=20,
+        rank_bar=3,
         signal_bar=2.5,
     ),
     type=BarType(
@@ -372,6 +374,17 @@ CONTROLS: Final = ControlsSpec(
                             ),
                         ),
                     ),
+                    CellsRow(
+                        14,
+                        (
+                            CellSpec(
+                                EntryId.BUSIEST_APPS,
+                                Face.RANKING,
+                                8,
+                                "Busiest apps",
+                            ),
+                        ),
+                    ),
                 ),
             ),
             Panel.MEMORY: PanelSpec(
@@ -382,6 +395,17 @@ CONTROLS: Final = ControlsSpec(
                         (
                             CellSpec(
                                 EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Memory"
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        14,
+                        (
+                            CellSpec(
+                                EntryId.LARGEST_APPS,
+                                Face.RANKING,
+                                8,
+                                "Largest apps",
                             ),
                         ),
                     ),

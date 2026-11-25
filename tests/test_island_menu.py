@@ -28,6 +28,8 @@ from desktop_ui.island_menu import (
     Outcome,
     Panel,
     PanelSpec,
+    Ranked,
+    Ranking,
     Slider,
     Toggle,
     ToolChoice,
@@ -38,11 +40,13 @@ from desktop_ui.island_menu import (
     entries,
     label,
     press,
+    ranking,
     restores_focus,
 )
 from protocol import Tool
 from winapi.machine_status import (
     LOCATION_OFF,
+    AppUse,
     Battery,
     Network,
     Power,
@@ -167,6 +171,14 @@ SPEC = ControlsSpec(
                         (
                             CellSpec(
                                 EntryId.MEMORY_GRAPH, Face.GRAPH, 8, "Held"
+                            ),
+                        ),
+                    ),
+                    CellsRow(
+                        6,
+                        (
+                            CellSpec(
+                                EntryId.LARGEST_APPS, Face.RANKING, 8, "Most"
                             ),
                         ),
                     ),
@@ -545,3 +557,44 @@ def test_the_battery_says_whether_it_charges_or_how_long_it_lasts() -> None:
     )
     assert said(PowerUnavailable.NO_BATTERY) == ("Wall", "")
     assert said(PowerUnavailable.UNKNOWN) is None
+
+
+def test_a_ranking_lists_the_apps_using_the_most_first_and_leaves_out_the_unread() -> (
+    None
+):
+    # Defects: the apps come in name or read order, so the one to blame sits below
+    # idle ones; every app is listed and the panel grows past the screen; an app not
+    # yet measured counts as using nothing and pushes a busy one out; or one using
+    # more than the whole draws a bar past its tile.
+    used = (
+        AppUse("idle", 1, 0.0),
+        AppUse("unread", 9, None),
+        *(AppUse(f"app{index}", 1, float(index)) for index in range(1, 7)),
+        AppUse("runaway", 1, 20.0),
+    )
+    ranked = ranking(used, lambda app: app.cores, 8, lambda cores: f"{cores:g}")
+    assert [row.name for row in ranked] == [
+        "runaway",
+        "app6",
+        "app5",
+        "app4",
+        "app3",
+    ]
+    assert ranked[0] == Ranked("runaway", "20", 1.0)
+    assert ranked[1].share == 6 / 8
+    assert ranking(used, lambda app: app.cores, 0, str) == ()
+
+
+def test_a_ranking_takes_no_place_until_its_apps_have_been_read() -> None:
+    # Defect: the memory panel opens with an empty ranking under its graph before the
+    # first read, or never shows the apps once they are read.
+    def ranked(controls: Controls) -> list[Ranking]:
+        return [
+            cell.entry
+            for cell in entries(controls, SPEC, Panel.MEMORY)
+            if isinstance(cell.entry, Ranking)
+        ]
+
+    assert ranked(Controls(None)) == []
+    rows = (Ranked("msedge", "5.4 GB", 0.34),)
+    assert ranked(Controls(None, largest=rows)) == [Ranking("Most", rows)]

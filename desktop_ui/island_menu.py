@@ -1,3 +1,18 @@
+"""The status capsule's panels: grids of tiles, and keyboard navigation as pure transitions.
+
+The status capsule expands into the panel of the reading pressed: the speaker's
+sound, or Workspace's own controls. In those, ongoing activities lead as cards
+with their Stop; toggles sit beside Workspace's views; then recording, sound, the
+desktop tools, the system tray's icons and links. Arrows move to the nearest cell in their direction, and
+Up and Down wrap. On the sound slider, Left and Right change the volume. Toggles
+and the slider apply in place and keep the menu open; a choice that opens a view
+or acts on a window closes it. A letter jumps to the next cell starting with it.
+Choosing a window tool or leaving with Escape returns the keyboard to the window
+that had it; opening a Workspace view keeps it there, and a tray icon hands it to
+its application.
+"""
+
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import Enum, StrEnum, auto
@@ -9,6 +24,7 @@ from desktop_ui.month import Month
 from protocol import Tool
 from winapi.machine_status import (
     LOCATION_OFF,
+    AppUse,
     Battery,
     Listing,
     Network,
@@ -140,6 +156,49 @@ class Graph:
 
 
 @dataclass(frozen=True, slots=True)
+class Ranked:
+    """An app in a ranking: its name, its reading, and its share of the whole machine."""
+
+    name: str
+    reading: str
+    share: float
+
+
+@dataclass(frozen=True, slots=True)
+class Ranking:
+    """The apps using the most of a reading, most first, under its name."""
+
+    label: str
+    rows: tuple[Ranked, ...]
+
+
+RANKED: Final = 5  # Apps a ranking lists: past these, the rest each use little.
+
+
+def ranking(
+    apps: Iterable[AppUse],
+    measure: Callable[[AppUse], float | None],
+    whole: float,
+    reading: Callable[[float], str],
+) -> tuple[Ranked, ...]:
+    """The apps using the most by `measure`, as shares of `whole`; none while it is unread."""
+    measured = sorted(
+        (
+            (amount, app.name)
+            for app in apps
+            if (amount := measure(app)) is not None
+        ),
+        reverse=True,
+    )[:RANKED]
+    if whole <= 0:
+        return ()
+    return tuple(
+        Ranked(name, reading(amount), min(1.0, amount / whole))
+        for amount, name in measured
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class Nearby:
     label: str
     network: Network
@@ -155,7 +214,16 @@ class Fact:
 
 
 type Entry = (
-    Item | Live | Toggle | Slider | TrayIcon | Calendar | Graph | Nearby | Fact
+    Item
+    | Live
+    | Toggle
+    | Slider
+    | TrayIcon
+    | Calendar
+    | Graph
+    | Ranking
+    | Nearby
+    | Fact
 )
 
 
@@ -164,13 +232,16 @@ class Face(StrEnum):
     TOGGLE = auto()
     WIDE = auto()
     SLIDER = auto()
-    TOOL = auto()
-    LINK = auto()
-    ICON = auto()
-    CALENDAR = auto()
-    GRAPH = auto()
-    NETWORK = auto()
-    FACT = auto()
+    TOOL = auto()  # A small square with its symbol above a caption.
+    LINK = auto()  # A quiet line of text.
+    ICON = auto()  # A tray application's own image, icon-sized.
+    CALENDAR = auto()  # A month under its name, with arrows to turn it.
+    GRAPH = auto()  # A reading's recent history under its name.
+    RANKING = (
+        auto()
+    )  # The apps using the most of a reading, each over its share.
+    NETWORK = auto()  # A network's signal, name and state, across the grid.
+    FACT = auto()  # A symbol beside a value over its meaning.
 
 
 COLUMNS: Final = 8
@@ -202,6 +273,10 @@ class Controls:
     power: Power = field(default=PowerUnavailable.UNKNOWN, kw_only=True)
     cpu: Trace = field(default=NO_TRACE, kw_only=True)
     memory: Trace = field(default=NO_TRACE, kw_only=True)
+    busiest: tuple[Ranked, ...] = field(default=(), kw_only=True)
+    """The apps keeping the processor busiest."""
+    largest: tuple[Ranked, ...] = field(default=(), kw_only=True)
+    """The apps holding the most memory."""
     month: Month | None = field(default=None, kw_only=True)
     """The month the calendar shows."""
     hints: frozendict[Tool, str] = field(default=frozendict(), kw_only=True)
@@ -230,7 +305,11 @@ class EntryId(StrEnum):
     CALENDAR = auto()
     CPU_GRAPH = auto()
     MEMORY_GRAPH = auto()
-    LOCATION = auto()
+    BUSIEST_APPS = auto()
+    LARGEST_APPS = auto()
+    LOCATION = (
+        auto()
+    )  # Only while Windows withholds the networks for want of location.
     WIFI_SETTINGS = auto()
     BATTERY = auto()
     POWER_SETTINGS = auto()
@@ -382,6 +461,18 @@ def entry(
             return Graph(spec.label, controls.cpu)
         case EntryId.MEMORY_GRAPH:
             return Graph(spec.label, controls.memory)
+        case EntryId.BUSIEST_APPS:
+            return (
+                Ranking(spec.label, rows)
+                if (rows := controls.busiest)
+                else None
+            )
+        case EntryId.LARGEST_APPS:
+            return (
+                Ranking(spec.label, rows)
+                if (rows := controls.largest)
+                else None
+            )
         case EntryId.CALENDAR:
             return (
                 Calendar(spec.label, controls.month or Month.of(today), today)
@@ -593,6 +684,7 @@ def label(entry: Entry) -> str:
             | TrayIcon(label=text)
             | Calendar(label=text)
             | Graph(label=text)
+            | Ranking(label=text)
             | Nearby(label=text)
             | Fact(label=text)
         ):
@@ -749,7 +841,7 @@ def choose(menu: Menu, entry: Entry | None) -> Outcome:
             return Applied(Join(profile))
         case Nearby():
             return Chosen(Command.WIFI_SETTINGS)
-        case Slider() | Graph() | Fact() | None:
+        case Slider() | Graph() | Ranking() | Fact() | None:
             return menu
         case _:
             assert_never(entry)

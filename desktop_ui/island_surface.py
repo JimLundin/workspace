@@ -64,6 +64,7 @@ from desktop_ui.island_menu import (
     Menu,
     MenuWords,
     Nearby,
+    Ranking,
     Slider,
     Toggle,
     TrayIcon,
@@ -273,6 +274,9 @@ class MenuCell(QtWidgets.QAbstractButton):
                 name = f"{label}: {month.first().strftime(self.capsule.window_.spec.controls.words.month)}"
             case Graph(label=label, trace=trace):
                 name = f"{label}: {trace.reading}"
+            case Ranking(label=label, rows=rows):
+                listed = ", ".join(f"{row.name} {row.reading}" for row in rows)
+                name = f"{label}: {listed}"
             case Nearby(label=label, detail=detail):
                 name = f"{label}: {detail}"
             case Fact(label=label, value=value, detail=detail):
@@ -337,8 +341,8 @@ class MenuCell(QtWidgets.QAbstractButton):
         match self.tile.cell.entry:
             case Live():
                 return self.stop_circle().contains(QtCore.QPointF(pos))
-            case Slider() | Calendar() | Graph() | Fact():
-                return False
+            case Slider() | Calendar() | Graph() | Ranking() | Fact():
+                return False  # The slider and the calendar take the pointer themselves rather than clicking.
             case Item() | Toggle() | TrayIcon() | Nearby():
                 return super().hitButton(pos)
             case _:
@@ -425,7 +429,13 @@ class MenuCell(QtWidgets.QAbstractButton):
                 )
             )
             painter.drawRoundedRect(bounds, corner, corner)
-        still = cell.face in (Face.CARD, Face.CALENDAR, Face.GRAPH, Face.FACT)
+        still = cell.face in (
+            Face.CARD,
+            Face.CALENDAR,
+            Face.GRAPH,
+            Face.RANKING,
+            Face.FACT,
+        )  # Nothing to press but a part of it.
         paint_feedback(
             painter,
             lettering,
@@ -492,19 +502,28 @@ class MenuCell(QtWidgets.QAbstractButton):
                 self.paint_month(painter, month)
             case Graph() as graph:
                 self.paint_graph(painter, graph)
+            case Ranking() as ranking:
+                self.paint_ranking(painter, ranking)
             case Nearby() as nearby:
                 self.paint_network(painter, nearby)
-            case Fact(icon=name, value=value, detail=detail):
-                self.paint_symbol(painter, name, on=False)
-                area = QtCore.QRectF(
-                    cells.text_x,
-                    0,
-                    bounds.width() - cells.text_x - cells.text_right,
-                    bounds.height(),
-                )
-                self.paint_lines(painter, area, value, detail, strong=True)
+            case Fact() as fact:
+                self.paint_fact(painter, fact, bounds)
             case _:
                 assert_never(cell.entry)
+
+    def paint_fact(
+        self, painter: QtGui.QPainter, fact: Fact, bounds: QtCore.QRectF
+    ) -> None:
+        """The fact's symbol beside its value over what it means."""
+        cells = self.sizes.cells
+        self.paint_symbol(painter, fact.icon, on=False)
+        area = QtCore.QRectF(
+            cells.text_x,
+            0,
+            bounds.width() - cells.text_x - cells.text_right,
+            bounds.height(),
+        )
+        self.paint_lines(painter, area, fact.value, fact.detail, strong=True)
 
     def paint_symbol(
         self, painter: QtGui.QPainter, name: str, *, on: bool
@@ -812,6 +831,63 @@ class MenuCell(QtWidgets.QAbstractButton):
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawPolyline(line)
+
+    def paint_ranking(self, painter: QtGui.QPainter, ranking: Ranking) -> None:
+        """The ranking's name over its apps: each app's name and reading, over a bar filled to its
+        share in the graphs' accent."""
+        lettering, cells, text = (
+            self.capsule.drawn.look.lettering,
+            self.sizes.cells,
+            self.sizes.type,
+        )
+        spec, window = self.capsule.window_.spec, self.capsule.window_
+        width = self.width() - cells.lead - cells.trail
+        painter.setFont(inter(text.strong))
+        painter.setPen(color(lettering.ink))
+        painter.drawText(
+            QtCore.QRectF(cells.lead, 0, width, cells.graph_head),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            ranking.label,
+        )
+        hue = self.capsule.signal(spec.palette.accent, lettering.ink).color
+        track = color(Shade(lettering.ink.color, window.washes.track))
+        filled = color(Shade(hue))
+        painter.setFont(inter(text.reading))
+        for place, row in enumerate(ranking.rows):
+            top = cells.graph_head + place * cells.rank_row
+            line = QtCore.QRectF(
+                cells.lead, top, width, cells.rank_row - cells.rank_bar
+            )
+            painter.setPen(color(lettering.ink))
+            painter.drawText(
+                line,
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                row.name,
+            )
+            painter.setPen(color(lettering.quiet))
+            painter.drawText(
+                line,
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                row.reading,
+            )
+            bar = QtCore.QRectF(
+                cells.lead, line.bottom(), width, cells.rank_bar
+            )
+            corner = cells.rank_bar / 2
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(track)
+            painter.drawRoundedRect(bar, corner, corner)
+            painter.setBrush(filled)
+            painter.drawRoundedRect(
+                QtCore.QRectF(
+                    bar.left(),
+                    bar.top(),
+                    max(bar.height(), width * row.share),
+                    bar.height(),
+                ),
+                corner,
+                corner,
+            )
 
     def paint_network(self, painter: QtGui.QPainter, nearby: Nearby) -> None:
         lettering, cells, icon = (
