@@ -1,5 +1,6 @@
 """What each bar frame draws and whether the frame loop keeps running."""
 
+import math
 from dataclasses import replace
 
 from contracts.status import TRANSCRIBING
@@ -29,7 +30,7 @@ def test_a_settled_idle_bar_stops_its_frame_loop() -> None:
     assert (
         not drawn.running
         and not drawn.indicators
-        and drawn.wave_progress == 1.0
+        and math.isclose(drawn.wave_progress, 1.0)
     )
     assert drawn.pulse == next_frame(model(), 10.3, animate=True).pulse
 
@@ -66,10 +67,12 @@ def test_dictation_moves_the_wave_between_samples_and_rests_behind_an_open_islan
         and soon.indicators
         and 0 < soon.wave_progress < later.wave_progress < 1
     )
-    assert next_frame(dictating, 20.0, animate=True).wave_progress == 1.0
+    assert math.isclose(
+        next_frame(dictating, 20.0, animate=True).wave_progress, 1.0
+    )
     behind = next_frame(
         replace(dictating, opened=menu(model(), Panel.WORKSPACE)),
         10.001,
         animate=True,
     )
-    assert behind.wave_progress == 1.0
+    assert math.isclose(behind.wave_progress, 1.0)

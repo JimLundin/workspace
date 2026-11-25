@@ -11,7 +11,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from pathlib import Path
-from typing import Final, Protocol, assert_never
+from typing import ClassVar, Final, Protocol, assert_never
 
 import diagnostics
 from cell import Cell
@@ -87,11 +87,19 @@ class NativeKeyboardSystem:
             key.vk, down=down, extended=key.extended, extra=Origin.LAYOUT
         )
 
-    keyboard_devices = staticmethod(keyboard_devices.names)
-    foreground = staticmethod(windows.foreground)
-    title = staticmethod(windows.title)
-    read_key_event = staticmethod(inputs.read_key_event)
-    call_next_hook = staticmethod(inputs.call_next_hook)
+    keyboard_devices: ClassVar[staticmethod[[], tuple[str, ...]]] = (
+        staticmethod(keyboard_devices.names)
+    )
+    foreground: ClassVar[staticmethod[[], int]] = staticmethod(
+        windows.foreground
+    )
+    title: ClassVar[staticmethod[[int], str]] = staticmethod(windows.title)
+    read_key_event: ClassVar[staticmethod[[int], inputs.KeyEvent]] = (
+        staticmethod(inputs.read_key_event)
+    )
+    call_next_hook: ClassVar[staticmethod[[int, int, int], int]] = staticmethod(
+        inputs.call_next_hook
+    )
 
     def find_window(self, window: Window) -> int | None:
         return windows.find(window.title)
@@ -101,15 +109,19 @@ class NativeKeyboardSystem:
     ) -> bool:
         return system.post_message(hwnd, message, wparam, lparam)
 
-    set_timer = staticmethod(system.set_timer)
-    kill_timer = staticmethod(system.kill_timer)
+    set_timer: ClassVar[staticmethod[[int], int]] = staticmethod(
+        system.set_timer
+    )
+    kill_timer: ClassVar[staticmethod[[int], None]] = staticmethod(
+        system.kill_timer
+    )
 
     def record_recovery(self, details: Mapping[str, Detail]) -> None:
         diagnostics.append(
             self.log, diagnostics.evidence("input_recovery", details)
         )
 
-    post_quit = staticmethod(system.post_quit)
+    post_quit: ClassVar[staticmethod[[], None]] = staticmethod(system.post_quit)
 
 
 @dataclass(frozen=True, slots=True)

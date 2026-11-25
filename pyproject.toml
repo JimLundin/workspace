@@ -103,12 +103,8 @@ ignore = [
     "literal-membership",
     "import-private-name",
     "too-many-statements-in-try-clause",
-    "float-equality-comparison",
-    "implicit-class-var-in-dataclass",
-    "compare-to-empty-string",
     "too-many-locals",
     "too-many-public-methods",
-    "ambiguous-unicode-character-docstring",
     "too-many-boolean-expressions",
     "too-many-nested-blocks",
     "D",  # no required docstrings

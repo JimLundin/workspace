@@ -16,7 +16,7 @@ def test_typed_text_collapses_whitespace_and_drops_control_characters() -> None:
 
 
 def test_typed_text_of_nothing_is_nothing() -> None:
-    assert typed_text(" \n ") == ""
+    assert not typed_text(" \n ")
 
 
 def test_utf16_units() -> None:

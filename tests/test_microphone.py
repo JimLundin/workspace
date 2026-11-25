@@ -1,6 +1,7 @@
 """Voice capture through a concrete Windows input-device fixture."""
 
 import ctypes
+import math
 import sys
 import threading
 import unittest
@@ -353,18 +354,18 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     ctypes.memmove(cast("int", device.header.lpData), pcm, len(pcm))
     assert device.header.dwBytesRecorded == 0
     device.position_bytes = len(pcm)
-    assert mic.level() == 0.5
+    assert (level := mic.level()) is not None and math.isclose(level, 0.5)
     assert mic.level() == 0  # No new data: don't invent continued activity.
     ctypes.memmove(cast("int", device.header.lpData), b"\x00\x20" * 320, 640)
     # Defect: after a default-device switch restarts the stream's position, the
     # meter reports silence until the new position passes the old one.
     device.position_bytes = 640
-    assert mic.level() == 0.25
+    assert (level := mic.level()) is not None and math.isclose(level, 0.25)
     ctypes.memmove(
         cast("int", device.header.lpData) + 640, b"\x00\x40" * 320, 640
     )
     device.position_bytes = 1280
-    assert mic.level() == 0.5, (
+    assert (level := mic.level()) is not None and math.isclose(level, 0.5), (
         "Only the PCM recorded since the previous read is measured."
     )
     # Defect: a driver reporting TIME_SAMPLES is read as bytes, so the meter lags at half the data.
@@ -372,7 +373,7 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
         cast("int", device.header.lpData) + 1280, b"\x00\x20" * 320, 640
     )
     device.position_kind, device.position_bytes = 2, 1920
-    assert mic.level() == 0.25
+    assert (level := mic.level()) is not None and math.isclose(level, 0.25)
     device.position_kind = 4
     device.failure = Failure.POSITION
     assert mic.level() is None

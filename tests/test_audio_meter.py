@@ -1,5 +1,6 @@
 """Capture-bound observations cannot block the UI or outlive their own capture."""
 
+import math
 import threading
 import time
 
@@ -40,7 +41,7 @@ def test_stopped_capture_cannot_publish_into_the_next_waveform() -> None:
         deadline = time.monotonic() + 1
         while meter.level() is None and time.monotonic() < deadline:
             time.sleep(0.005)
-        assert meter.level() == 0.2
+        assert (level := meter.level()) is not None and math.isclose(level, 0.2)
         meter.listen(enabled=False)
         assert meter.level() is None
     finally:
@@ -70,7 +71,7 @@ def test_blocked_observer_does_not_keep_old_audio_alive_or_read_after_close() ->
     try:
         meter.listen(enabled=True)
         assert first.wait(1) and blocked.wait(1)
-        assert meter.level() == 0.5
+        assert (level := meter.level()) is not None and math.isclose(level, 0.5)
         now[0] += 0.3
         assert meter.level() is None, (
             "A stalled driver must not show stale speech as current."

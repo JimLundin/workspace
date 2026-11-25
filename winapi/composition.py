@@ -210,7 +210,7 @@ class VisualWriter:
     """A visual's three per-frame property writes, straight through its COM slots.
 
     win32more's generic WinRT dispatch binds and converts arguments on every call:
-    measured 44 µs per write, against 2.2 µs through the slot. The writer holds only
+    measured 44 μs per write, against 2.2 μs through the slot. The writer holds only
     the interface pointer; its PaneGroup owns the visual's reference and lifetime.
     """
 

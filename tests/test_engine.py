@@ -313,7 +313,7 @@ def test_unbound_keys_cannot_type_or_trigger_physical_shortcuts() -> None:
         assert t.key(Scancode(code), down=True, now=0) == Verdict.SWALLOW
         assert t.key(Scancode(code), down=True, now=1) == Verdict.SWALLOW
         assert t.key(Scancode(code), down=False, now=2) == Verdict.SWALLOW
-    assert t.take() == ""
+    assert not t.take()
 
 
 def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> (
@@ -327,7 +327,7 @@ def test_function_row_passes_and_disabled_layout_restores_unbound_keys() -> (
     for code in (0x01, 0x0F, 0x1C, 0x0E, 0x2A, 0x36, 0x1D, 0x38, 0x4B, 0x5D):
         assert t.key(Scancode(code), down=True, now=2) == Verdict.PASS
         assert t.key(Scancode(code), down=False, now=3) == Verdict.PASS
-    assert t.take() == ""
+    assert not t.take()
 
 
 # ---- escape key ------------------------------------------------------------
@@ -487,7 +487,7 @@ def test_auto_repeat_is_not_buffered() -> None:
     t.d("e")  # s/CTL, undecided
     for _ in range(100):
         t.d("8")  # j held (other hand), auto-repeating
-    assert t.take() == "", "still undecided: repeats did not fill the buffer"
+    assert not t.take(), "still undecided: repeats did not fill the buffer"
     t.u("e")
     assert t.take() == "+s -s +j", "tap s, then j replayed once"
 
@@ -501,7 +501,7 @@ def test_released_key_can_be_pressed_again_while_a_tap_hold_is_pending() -> (
     t.at(STREAK_MS + 1).d("e")  # s/CTL, after the typing streak expires
     t.u("8")
     t.d("8")  # a new press, not auto-repeat of the still-unreleased output
-    assert t.take() == "", "both edges wait for the tap-hold decision"
+    assert not t.take(), "both edges wait for the tap-hold decision"
     t.u("e")
     assert t.take() == "+s -s -j +j", (
         "the buffered release must precede the new press"
@@ -700,7 +700,7 @@ def test_quick_tap_survives_timestamp_wraparound() -> None:
         "a quick second press repeats the letter immediately"
     )
     t.timeout_last()  # the old tap's timer cannot turn the repeated letter into Shift
-    assert t.take() == ""
+    assert not t.take()
     t.u("r")
     assert t.take() == "-t"
 
@@ -810,7 +810,7 @@ def test_switching_off_and_quitting_release_a_held_voice_request() -> None:
         assert verdict is (Verdict.QUIT if quitting else Verdict.SWALLOW)
         assert t.take() == "?dictate-" + ("" if quitting else " !OFF")
         t.release_all()
-        assert t.take() == ""
+        assert not t.take()
 
 
 # ---- requests -------------------------------------------------------------------------
