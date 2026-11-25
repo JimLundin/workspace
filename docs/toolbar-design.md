@@ -38,6 +38,14 @@ them every 2 s; CPU is the busy share of processor time since the previous
 reading. Disk, network and GPU are left out: on this laptop they are idle or
 bursty, so a number there is mostly noise.
 
+What each app uses comes from one read of the kernel's process table (about 5 ms
+for 400 processes), every 2 s while the processor or memory panel is open and
+every 30 s otherwise. Processes are grouped into apps by image name. From those
+readings the bar warns through the tray, once, when available memory drops
+under 1.5 GB, naming the largest apps, and again only after it recovers past
+2 GB. It also warns when an app has kept half a processor busy for ten minutes
+(`STRAIN` in `desktop/bar.py`, decided in `desktop_ui/strain.py`).
+
 The right capsule is anchored to the screen's right edge. The pager yields to
 activity: the island bounds where it ends, and it scrolls instead of dropping
 desktops.
@@ -74,7 +82,7 @@ closes it. The readings stay the panel's top row.
 | Workspace's glyph, the keyboard, or an activity | Workspace's controls: a card per running activity, toggles (keyboard overlay, window placement, dark when away), **Record a meeting**, a volume slider, small tools (switch windows, copy transcript, key map), the system tray icons, and links to Windows notification settings and the tray menu |
 | The speaker | Its volume slider and Mute |
 | Wi-Fi | The networks in range, the connected one first, each with its signal, name and state, and a link to Windows' Wi-Fi settings |
-| Processor or memory | A line graph of each over the last two minutes, under its latest reading |
+| Processor or memory | A line graph of each over the last two minutes, under its latest reading, over the five apps using the most: the processor's by their share of every logical processor, memory's by their private working set, each over a bar filled to its share of the machine |
 | The battery | Its charge over whether it charges or how long it lasts, and a link to Windows' power settings |
 | The clock | The month, today on the accent; its arrows, or Left and Right, turn the months, and its heading, or Enter, returns to today |
 
