@@ -17,7 +17,7 @@ its windows fill them in order and any beyond the last share that place.
 | Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 |
 | --- | --- | --- | --- | --- | --- |
 | Laptop only | None | Outlook, Teams | Terminal, Terminal | Edge | Others |
-| Home | 3840×2160 (MAIN) | MAIN: Terminal. Laptop: Edge | MAIN: Outlook, Teams. Laptop: others | | |
+| Home | 3840×2160 (MAIN) | MAIN: Terminal. Laptop: Edge | MAIN: Outlook. Laptop: Teams | Laptop: others | |
 | Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | ABOVE: Terminal. SIDE: a second Terminal. Laptop: Edge | ABOVE: Outlook, Teams. Laptop: others | | |
 
 `desktop/placement.py` declares these places. Every app a layout doesn't name

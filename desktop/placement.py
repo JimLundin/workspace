@@ -99,11 +99,11 @@ SETUPS: Final = Setups(
                     {
                         TERMINAL: (Position(0, Role.MAIN, FULL),),
                         EDGE: (Position(0, Role.LAPTOP, FULL),),
-                        PinnedApp.OUTLOOK: (Position(1, Role.MAIN, LEFT_HALF),),
-                        PinnedApp.TEAMS: (Position(1, Role.MAIN, RIGHT_HALF),),
+                        PinnedApp.OUTLOOK: (Position(1, Role.MAIN, FULL),),
+                        PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(1, Role.LAPTOP, FULL),
+                others=Position(2, Role.LAPTOP, FULL),
             ),
             Setup.WORK: Layout(
                 frozendict(
