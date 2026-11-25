@@ -370,17 +370,3 @@ module = "scripts.benchmark_keyboard"
 declaration = "round_latencies.observe_gc"
 expression = "Callable[[str, dict[str, int]], None]"
 reason = "The callback is appended to gc.callbacks, whose element type dictates its signature."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "winapi.inputs"
-declaration = "send_scancodes"
-expression = "send_scancodes"
-reason = "A native test tool: the end-to-end test presses physical keys through winapi's private SendInput binding."
-
-[[tool.workspace.architecture.exceptions]]
-rule = "unused-definition"
-module = "winapi.system"
-declaration = "run_message_loop"
-expression = "run_message_loop"
-reason = "A native test tool: the pointer target pumps its window's messages through winapi's private message bindings."

@@ -186,7 +186,7 @@ _DefSubclassProc = fn(
     wintypes.LPARAM,
 )
 
-SW_MAXIMIZE, SW_SHOWNOACTIVATE, SW_MINIMIZE, SW_RESTORE = 3, 4, 6, 9
+SW_MAXIMIZE, SW_SHOWNOACTIVATE, SW_RESTORE = 3, 4, 9
 _VK_LBUTTON: Final = 0x01
 _GUI_INMOVESIZE: Final = 0x0002
 _GWL_STYLE, _GWL_EXSTYLE = -16, -20
@@ -354,7 +354,7 @@ def exe(hwnd: int) -> str:
 
 
 def show(hwnd: int, command: int) -> None:
-    """SW_MAXIMIZE, SW_MINIMIZE or SW_RESTORE."""
+    """SW_MAXIMIZE or SW_SHOWNOACTIVATE."""
     ShowWindow(hwnd, command)
 
 

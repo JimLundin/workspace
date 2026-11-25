@@ -80,7 +80,7 @@ WindowProc = Callable[[int, int, int, int], "int | None"]
 class AppWindow:
     """A hidden top-level window with our own window procedure. Other processes can
     find it by its title. Its messages are handled while this thread runs a message
-    loop (`system.run_message_loop`)."""
+    loop."""
 
     handle: int
     _callback: object

@@ -16,6 +16,7 @@ from winapi._core import (
     user32,
 )
 from winapi.shapes import Point, require_input_count, utf16_units
+from winapi.system import WindowMessage
 
 
 class KBDLLHOOKSTRUCT(ctypes.Structure):
@@ -34,8 +35,6 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
 
 
 class KEYBDINPUT(ctypes.Structure):
-    wVk: int
-    wScan: int
     dwFlags: int
     time: int
     dwExtraInfo: int
@@ -51,7 +50,6 @@ class KEYBDINPUT(ctypes.Structure):
 class MOUSEINPUT(ctypes.Structure):
     dx: int
     dy: int
-    mouseData: int
     dwFlags: int
     time: int
     dwExtraInfo: int
@@ -66,8 +64,6 @@ class MOUSEINPUT(ctypes.Structure):
 
 
 class InputUnion(ctypes.Union):
-    ki: KEYBDINPUT
-    mi: MOUSEINPUT
     _fields_ = (("ki", KEYBDINPUT), ("mi", MOUSEINPUT))
 
 
@@ -120,16 +116,17 @@ _MapVirtualKeyW = fn(
 )
 
 LLKHF_EXTENDED, LLKHF_INJECTED = 0x01, 0x10
-(
-    _KEYEVENTF_EXTENDEDKEY,
-    _KEYEVENTF_KEYUP,
-    _KEYEVENTF_UNICODE,
-    _KEYEVENTF_SCANCODE,
-) = 0x0001, 0x0002, 0x0004, 0x0008
-_KEY_DOWNS: Final = frozenset({0x0100, 0x0104})
-"""WM_KEYDOWN and WM_SYSKEYDOWN."""
-_KEY_UPS: Final = frozenset({0x0101, 0x0105})
-"""WM_KEYUP and WM_SYSKEYUP."""
+_KEYEVENTF_EXTENDEDKEY, _KEYEVENTF_KEYUP, _KEYEVENTF_UNICODE = (
+    0x0001,
+    0x0002,
+    0x0004,
+)
+_KEY_DOWNS: Final = frozenset(
+    {WindowMessage.KEYDOWN.value, WindowMessage.SYSKEYDOWN.value}
+)
+_KEY_UPS: Final = frozenset(
+    {WindowMessage.KEYUP.value, WindowMessage.SYSKEYUP.value}
+)
 _WH_KEYBOARD_LL: Final = 13
 _INPUT_KEYBOARD: Final = 1
 _MAPVK_VK_TO_VSC: Final = 0
@@ -232,21 +229,6 @@ def send_key(vk: int, *, down: bool, extended: bool, extra: int) -> None:
         _KEYEVENTF_EXTENDEDKEY if extended else 0
     )
     _send([_key(vk, scancode_for(vk), flags, extra)])
-
-
-def send_scancodes(strokes: Sequence[tuple[int, bool]], extra: int) -> None:
-    """Physical keys by scancode, as a keyboard would send them (used by tests)."""
-    _send(
-        [
-            _key(
-                0,
-                code,
-                _KEYEVENTF_SCANCODE | (0 if down else _KEYEVENTF_KEYUP),
-                extra,
-            )
-            for code, down in strokes
-        ]
-    )
 
 
 def type_text(text: str, extra: int) -> None:

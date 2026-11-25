@@ -18,7 +18,6 @@ class WAVEFORMATEX(ctypes.Structure):
     wFormatTag: int
     nChannels: int
     nSamplesPerSec: int
-    nAvgBytesPerSec: int
     nBlockAlign: int
     wBitsPerSample: int
     cbSize: int
@@ -36,13 +35,8 @@ class WAVEFORMATEX(ctypes.Structure):
 
 class WAVEHDR(ctypes.Structure):
     lpData: int | None
-    dwBufferLength: int
     dwBytesRecorded: int
-    dwUser: int
     dwFlags: int
-    dwLoops: int
-    lpNext: int | None
-    reserved: int
     _fields_ = (
         ("lpData", ctypes.c_void_p),
         ("dwBufferLength", wintypes.DWORD),

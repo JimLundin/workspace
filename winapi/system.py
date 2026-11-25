@@ -50,12 +50,6 @@ _GetMessageW = fn(
     wintypes.UINT,
     wintypes.UINT,
 )
-_TranslateMessage = fn(
-    user32, "TranslateMessage", wintypes.BOOL, ctypes.POINTER(wintypes.MSG)
-)
-_DispatchMessageW = fn(
-    user32, "DispatchMessageW", ULONG_PTR, ctypes.POINTER(wintypes.MSG)
-)
 _PostQuitMessage = fn(user32, "PostQuitMessage", None, ctypes.c_int)
 _SetTimer = fn(
     user32,
@@ -149,14 +143,6 @@ def messages() -> Iterator[Message]:
             int(msg.lParam),
             int(msg.time),
         )
-
-
-def run_message_loop() -> None:
-    """Dispatches this thread's messages to their windows until a quit message."""
-    msg = wintypes.MSG()
-    while _GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-        _TranslateMessage(ctypes.byref(msg))
-        _DispatchMessageW(ctypes.byref(msg))
 
 
 def post_quit() -> None:
