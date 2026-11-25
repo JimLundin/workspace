@@ -1,5 +1,3 @@
-"""The AppUserModelID Windows groups a window under, read from its shell property store."""
-
 from collections.abc import Generator
 from contextlib import contextmanager
 
@@ -25,7 +23,6 @@ lazy from win32more.Windows.Win32.UI.Shell.PropertiesSystem import (
 
 @contextmanager
 def apartment() -> Generator[None]:
-    """Join the calling thread to the multithreaded COM apartment the property store needs."""
     joined = not FAILED(CoInitializeEx(None, COINIT_MULTITHREADED))
     try:
         yield
@@ -35,7 +32,6 @@ def apartment() -> Generator[None]:
 
 
 def app_id(hwnd: int) -> str | None:
-    """The window's explicit AppUserModelID; None when it has none or the window is gone."""
     store = IPropertyStore(own=True)
     if FAILED(SHGetPropertyStoreForWindow(hwnd, IPropertyStore._iid_, store)):
         return None

@@ -1,5 +1,3 @@
-"""Capture-bound observations cannot block the UI or outlive their own capture."""
-
 import threading
 import time
 

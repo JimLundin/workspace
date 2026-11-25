@@ -1,5 +1,3 @@
-"""Meeting capture over a fake WASAPI: clocks, mixing, dropouts and device cleanup."""
-
 import ctypes
 import threading
 import unittest
@@ -12,7 +10,6 @@ from winapi.pcm import RATE, Dropout, Problem, Stall
 
 
 def no_gap(problem: Problem) -> None:
-    # Defect: on-time synthetic packets are misreported as late or skipped audio.
     raise AssertionError(f"An on-time capture reported a problem: {problem}")
 
 
@@ -35,8 +32,6 @@ def set_u64(argument: object, value: int) -> None:
 
 
 class Wasapi:
-    """Own the synthetic native buffers, packet cursors and capture clock."""
-
     __slots__ = (
         "buffer",
         "calls",
@@ -111,22 +106,18 @@ class Wasapi:
     def invoke(
         self, handle: int, index: int, arguments: tuple[object, ...]
     ) -> int:
-        if index == 2:  # IUnknown.Release
+        if index == 2:
             return 0
-        if (
-            handle == 1 and index == 4
-        ):  # default endpoint: eRender=0, eCapture=1
+        if handle == 1 and index == 4:
             set_pointer(arguments[-1], 10 if arguments[1] == 1 else 11)
-        elif handle in (10, 11) and index == 3:  # device.Activate
+        elif handle in (10, 11) and index == 3:
             set_pointer(arguments[-1], handle + 10)
         elif handle in (20, 21):
-            if index == 8:  # client.GetMixFormat
+            if index == 8:
                 set_pointer(arguments[-1], ctypes.addressof(self.format))
-            elif index == 14:  # client.GetService
+            elif index == 14:
                 set_pointer(arguments[-1], handle + 10)
-            elif (
-                index == 3
-            ):  # client.Initialize, shared mode and a three-second engine buffer
+            elif index == 3:
                 assert arguments[1] == 0 and arguments[3] == 30_000_000
                 assert arguments[2] == (0 if handle == 20 else 0x0002_0000)
             else:
@@ -200,13 +191,9 @@ def test_continuous_loopback_and_microphone_share_a_clock_and_flush_on_stop() ->
     recording.MeetingAudio(api).record(stop, blocks.append, ready.set, no_gap)
     assert ready.is_set()
     assert b"".join(blocks) == array("h", [3000] * round(2.54 * RATE)).tobytes()
-    assert (
-        max(map(len, blocks)) < RATE * 2
-    )  # small callbacks even at final Stop
+    assert max(map(len, blocks)) < RATE * 2
     for handle in (20, 21):
-        assert (
-            api.calls.count((handle, 10)) == 1
-        )  # one Start, never at chunk boundaries
+        assert api.calls.count((handle, 10)) == 1
         assert api.calls.count((handle, 11)) == 1
     for handle in (1, 10, 11, 20, 21, 30, 31):
         assert api.calls.count((handle, 2)) == 1
@@ -260,16 +247,12 @@ def test_a_microphone_dropout_preserves_timing_and_other_speakers_until_stop() -
             + [normal] * round(1.34 * RATE),
         )
         assert api.calls.count((20, 10)) == api.calls.count((20, 11)) == 1
-        # Defect: audio the microphone lost before the drain is missing without a note.
         assert gaps == [Dropout(RATE, RATE // 5)]
 
 
 def test_a_stalled_drain_keeps_every_buffered_packet_without_reporting_a_gap() -> (
     None
 ):
-    # Defect: a capture loop that resumes after a multi-second stall (a busy
-    # GIL, a slow journal) finds packets beyond its mixing ring and ends the
-    # recording, though the engine buffered all of them.
     api = Wasapi()
     api.format = audio.WAVEFORMATEX(1, 1, RATE, RATE * 2, 2, 16, 0)
     api.packet_frames = 160
@@ -281,7 +264,6 @@ def test_a_stalled_drain_keeps_every_buffered_packet_without_reporting_a_gap() -
     )
     assert api.ticks == api.stop_at
     assert b"".join(blocks) == array("h", [3000] * round(7.54 * RATE)).tobytes()
-    # Defect: the stall that put the recording at risk leaves no measurement.
     match problems:
         case [Stall(seconds=seconds)]:
             assert 5 < seconds < 5.2, seconds
@@ -292,9 +274,6 @@ def test_a_stalled_drain_keeps_every_buffered_packet_without_reporting_a_gap() -
 def test_forward_device_positions_need_not_advance_by_stream_packet_frames() -> (
     None
 ):
-    # Defect: the real 48 kHz shared-mode stream supplies 480-frame packets
-    # while its device counter advances 441. Comparing with the preceding
-    # packet's calculated end misreports every second packet as a restart.
     api = Wasapi()
     api.microphone_positions = tuple(index * 441 for index in range(300))
     blocks: list[bytes] = []
@@ -307,7 +286,6 @@ def test_forward_device_positions_need_not_advance_by_stream_packet_frames() -> 
 
 
 def test_a_backward_device_position_still_stops_recording() -> None:
-    # Defect: relaxing the mixed-unit comparison hides a genuine clock reset.
     api = Wasapi()
     api.microphone_positions = (1000, 500)
     with unittest.TestCase().assertRaisesRegex(

@@ -1,9 +1,3 @@
-"""Continuous shared-mode microphone and speaker loopback through WASAPI.
-
-Only the recording thread owns COM interfaces. The engine keeps capturing while
-we drain small packets; no microphone stop/start occurs between transcript chunks.
-"""
-
 import contextlib
 import ctypes
 import threading
@@ -64,7 +58,6 @@ def _check(result: int, action: str) -> None:
         )
 
 
-# These are the scalar ABI argument types consumed by WASAPI's COM methods.
 type ArgumentType = (
     type[ctypes.c_int]
     | type[ctypes.c_uint]
@@ -79,8 +72,6 @@ class NativeCall(Protocol):
 
 
 class WasapiApi(Protocol):
-    """The recording thread's COM lifetime, clock and cancellable wait owner."""
-
     def initialize(self) -> int: ...
     def uninitialize(self) -> None: ...
     def create_enumerator(self, pointer: ctypes.c_void_p) -> int: ...
@@ -111,12 +102,9 @@ class NativeWasapi:
     def method(
         self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType
     ) -> NativeCall:
-        # The declared c_long restype supplies an integer HRESULT. Keep that
-        # native callable directly: packet draining creates no extra wrapper.
         return com_method("The audio interface", pointer, index, *arguments)
 
     def clock(self) -> float:
-        """Seconds on the QueryPerformanceCounter clock that WASAPI timestamps packets with."""
         return time.perf_counter()
 
     def wait(self, stop: threading.Event, timeout: float) -> bool:
@@ -132,9 +120,7 @@ def _release(pointer: ctypes.c_void_p, api: WasapiApi) -> None:
 def _format(pointer: ctypes.c_void_p) -> PcmFormat:
     format = ctypes.cast(pointer, ctypes.POINTER(WAVEFORMATEX)).contents
     tag = int(format.wFormatTag)
-    if (
-        tag == 0xFFFE
-    ):  # WAVEFORMATEXTENSIBLE: samples, channel mask, and subtype GUID
+    if tag == 0xFFFE:
         if format.cbSize < 22:
             raise OSError(
                 "The audio device returned an incomplete extended format."
@@ -200,8 +186,6 @@ class Stream:
         )
         label = "Computer audio" if loopback else "Microphone"
         try:
-            # Multimedia default matches normal app playback and the system's
-            # selected microphone. Both use shared mode, including alongside B/N.
             _check(
                 api.method(
                     enumerator, 4, ctypes.c_int, ctypes.c_int, ctypes.c_void_p
@@ -271,7 +255,6 @@ class Stream:
         )
 
     def reported(self) -> tuple[Gap, ...]:
-        """The dropouts since the last report."""
         gaps = self._captured.get().gaps
         self._captured.update(lambda captured: replace(captured, gaps=()))
         return gaps
@@ -332,15 +315,6 @@ class Stream:
                     raise OSError(
                         f"{self.label} restarted its audio clock. The captured part has been saved."
                     )
-                # Compare native positions with each other, never with stream
-                # frame counts. The real shared-mode microphone delivers 480
-                # frames at 48 kHz while its device counter advances 441; adding
-                # packet frames falsely reports a restart on the second packet.
-                # QPC timestamps independently place packets on the mix timeline.
-                # A discontinuity reports a gap before this valid packet, not a
-                # failed device. Keep the packet's clock position so the mixer
-                # leaves silence for missing samples and keeps the other source.
-                # Reset only the resampler's carried sample/phase across the gap.
                 converter = captured.converter
                 if (
                     captured.position is not None
@@ -372,9 +346,6 @@ class Stream:
                     ),
                     "Returning audio packet",
                 )
-            # The microphone streams continuously, silence included, so a flagged
-            # hole is audio lost before this drain (an overflowed engine buffer).
-            # Idle playback sends no packets at all; its holes are not losses.
             hole = (
                 None
                 if self.loopback
@@ -409,8 +380,6 @@ class Stream:
 
 @dataclass(frozen=True, slots=True)
 class MeetingAudio:
-    """Capture only between explicit Start and Stop; never opens a device at import."""
-
     api: WasapiApi = field(default_factory=NativeWasapi)
     computer_audio: bool = field(default=True, kw_only=True)
 
@@ -421,7 +390,6 @@ class MeetingAudio:
         ready: Callable[[], None],
         report: Callable[[Problem], None],
     ) -> None:
-        """Capture until `stop`; `consume` and `report` run on this real-time thread and must not block."""
         _check(self.api.initialize(), "Preparing Windows audio")
         enumerator = ctypes.c_void_p()
         streams: list[Stream] = []
@@ -504,8 +472,6 @@ class MeetingAudio:
             drain()
             consume(mixer.take(until))
         except OSError, ValueError:
-            # Retain samples already returned by the other device, including
-            # the latency cushion, before reporting a capture/storage failure.
             if latest > mixer.cursor:
                 consume(mixer.take(latest))
             raise

@@ -1,5 +1,3 @@
-"""Copy borrowed Windows icons into immutable pixels before their owners release them."""
-
 import ctypes
 from dataclasses import dataclass
 
@@ -39,7 +37,6 @@ class Pixels:
 
 
 def pixels(handle: int, size: int = 32) -> Pixels | None:
-    """The adapter owns and releases its temporary DC/bitmap; the HICON is borrowed."""
     if not handle:
         return None
     dc = CreateCompatibleDC(None)
@@ -59,8 +56,6 @@ def pixels(handle: int, size: int = 32) -> Pixels | None:
             if not DrawIconEx(dc, 0, 0, handle, size, size, 0, None, DI_NORMAL):
                 return None
             data = ctypes.string_at(bits, size * size * 4)
-            # Legacy mask icons have no alpha. Render over white as well to
-            # distinguish opaque black ink from a transparent black pixel.
             if not any(data[3::4]):
                 ctypes.memset(bits, 255, size * size * 4)
                 if not DrawIconEx(
@@ -95,7 +90,6 @@ def pixels(handle: int, size: int = 32) -> Pixels | None:
 
 
 def icon_size(handle: int) -> int | None:
-    """An icon handle holds one image: its width in pixels, or None when Windows can't say."""
     info = ICONINFO()
     if not handle or not GetIconInfo(handle, info):
         return None
@@ -108,22 +102,16 @@ def icon_size(handle: int) -> int | None:
             return None
         return bitmap.bmWidth if 1 <= bitmap.bmWidth <= 256 else None
     finally:
-        # GetIconInfo hands the caller copies of both bitmaps.
         for owned in (info.hbmColor, info.hbmMask):
             if owned:
                 DeleteObject(owned)
 
 
 def native_pixels(handle: int) -> Pixels | None:
-    """A copy at the icon's own size, so no stretching blurs or blocks its edges."""
     return pixels(handle, icon_size(handle) or 32)
 
 
 def window_pixels(hwnd: int) -> Pixels | None:
-    """The window's small icon at its own size, which Windows sizes for the screen's scale.
-
-    Bounded icon requests cannot wait indefinitely for an unresponsive application.
-    """
     for kind in (ICON_SMALL2, ICON_SMALL, ICON_BIG):
         result = ctypes.c_size_t()
         if (

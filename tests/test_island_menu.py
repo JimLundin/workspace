@@ -1,9 +1,3 @@
-"""The controls menu's grid and its keyboard navigation.
-
-The spec and grid here are the test's own, so each test checks how the menu
-flows and navigates whatever it is given, never the real menu's rows or labels.
-"""
-
 from dataclasses import replace
 from itertools import pairwise
 
@@ -255,7 +249,6 @@ def opened(outcome: Outcome) -> Menu:
 
 
 def test_a_running_recording_leads_as_a_card_and_replaces_its_start() -> None:
-    # Defects: a running recording still offers its start, or has no Stop in the menu.
     cells = entries(Controls("02:05"), SPEC, Panel.WORKSPACE)
     assert (
         cells[0].face is Face.CARD
@@ -273,7 +266,6 @@ def test_a_running_recording_leads_as_a_card_and_replaces_its_start() -> None:
 
 
 def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
-    # Defect: a track or column offset places one tile over another or past the menu's edge.
     grid = MenuGrid(radius=0, pad=5, drop=4, track=4, gutter=2)
     width = 200
     tray = tuple(f"App {index}" for index in range(11))
@@ -300,7 +292,6 @@ def test_every_grid_fits_the_menu_without_overlapping_cells() -> None:
 
 
 def test_toggles_show_their_state_and_apply_in_place() -> None:
-    # Defects: a toggle misreports its setting, or flipping it closes the menu like a launcher.
     def states(controls: Controls) -> dict[Command, bool]:
         return {
             cell.entry.choice: cell.entry.on
@@ -324,8 +315,6 @@ def test_toggles_show_their_state_and_apply_in_place() -> None:
 
 
 def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
-    # Defects: an arrow skips the cell beside or below the selection, Left or Right
-    # leaves the grid's edge, or Down from the last cell strands the selection.
     menu = Menu(Panel.WORKSPACE, entries(RESTING, SPEC, Panel.WORKSPACE))
     assert selected(press(menu, Key.DOWN)) == "Keys"
     assert selected(press(at(menu, "Keys"), Key.RIGHT)) == "Placing"
@@ -340,8 +329,6 @@ def test_arrows_move_to_the_neighbouring_cell_and_up_and_down_wrap() -> None:
 
 
 def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
-    # Defects: Left or Right moves off the slider instead of changing the volume,
-    # a step leaves the 0 to 1 range, or an unknown level invents one.
     def stepped(level: float | None, key: Key) -> Outcome:
         return press(
             at(
@@ -388,8 +375,6 @@ def test_the_sound_slider_steps_the_volume_within_its_range() -> None:
 def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -> (
     None
 ):
-    # Defects: Enter on a card doesn't stop its activity, Escape chooses something,
-    # or a repeated letter stays on its first match.
     menu = Menu(
         Panel.WORKSPACE,
         entries(Controls("02:05"), SPEC, Panel.WORKSPACE),
@@ -405,8 +390,6 @@ def test_enter_chooses_escape_dismisses_and_a_letter_jumps_to_the_next_match() -
 def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> (
     None
 ):
-    # Defects: a window tool acts on the menu instead of the user's window, or a Workspace
-    # view that just opened loses the keyboard to the previous window.
     assert restores_focus(ToolChoice(Tool.COPY_TRANSCRIPT)) and restores_focus(
         Command.PLACEMENT
     )
@@ -418,8 +401,6 @@ def test_window_tools_hand_the_keyboard_back_and_workspace_views_keep_it() -> (
 def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot() -> (
     None
 ):
-    # Defects: an icon lands on the wrong line or slot, the links overlap the tray,
-    # or Enter on an icon clicks another application's icon.
     count = 30
     menu = Menu(
         Panel.WORKSPACE,
@@ -480,8 +461,6 @@ def test_tray_icons_wrap_onto_new_lines_after_the_tools_and_click_their_own_slot
 def test_a_saved_network_joins_in_place_and_any_other_opens_windows_wifi_settings() -> (
     None
 ):
-    # Defects: choosing an unsaved network tries a join that can only fail, a saved one
-    # closes the panel before showing it connect, or the connected one rejoins.
     def network(
         ssid: str, *, connected: bool = False, profile: str | None = None
     ) -> Network:
@@ -520,8 +499,6 @@ def test_a_saved_network_joins_in_place_and_any_other_opens_windows_wifi_setting
 def test_location_is_offered_only_while_windows_withholds_the_networks() -> (
     None
 ):
-    # Defects: the location link shows beside a working list, or a withheld list leaves
-    # the panel with no way to fix it.
     def labels(controls: Controls) -> list[str]:
         return [
             label(cell.entry) for cell in entries(controls, SPEC, Panel.NETWORK)
@@ -544,8 +521,6 @@ def test_location_is_offered_only_while_windows_withholds_the_networks() -> (
 
 
 def test_the_battery_says_whether_it_charges_or_how_long_it_lasts() -> None:
-    # Defects: a battery on mains power reads as draining, an estimate under an hour reads
-    # as zero hours, a known estimate is dropped, or an unread battery invents a reading.
     def said(power: Power) -> tuple[str, str] | None:
         found = [
             cell.entry

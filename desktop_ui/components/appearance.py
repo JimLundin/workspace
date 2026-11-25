@@ -1,11 +1,3 @@
-"""Workspace's Liquid Glass tokens and the Qt stylesheets generated from them.
-
-Glass and content have no colour of their own: neutral surfaces and monochrome
-ink in a dark and a light scheme, after the kit at JimLundin/liquid-glass.
-Colour carries meaning only: the soft-blue accent for the primary action and
-selection, orange for attention, red for recording and errors.
-"""
-
 from dataclasses import dataclass
 from enum import Enum, auto
 from functools import lru_cache
@@ -20,8 +12,6 @@ from winapi.shapes import Lighting, Stop
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Palette:
-    """The colours that carry meaning; glass and content have none of their own."""
-
     accent: str
     """The primary action and selection."""
     attention: str
@@ -41,7 +31,6 @@ class Shade:
 
     @property
     def css(self) -> str:
-        """For Qt stylesheets, which take rgba() but not #AARRGGBB."""
         red, green, blue = (
             int(self.color[index : index + 2], 16) for index in (1, 3, 5)
         )
@@ -49,14 +38,11 @@ class Shade:
 
     @property
     def argb(self) -> str:
-        """For QColor."""
         return f"#{round(self.opacity * 255):02x}{self.color[1:]}"
 
 
 @dataclass(frozen=True, slots=True)
 class Rim:
-    """Rim light at the upper-leading curve, middle and trailing foot."""
-
     high: float
     low: float
     end: float
@@ -69,20 +55,18 @@ class Scheme(Enum):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Tokens:
-    """One scheme's neutral surfaces and ink, and what its glass paints beyond them."""
-
     scheme: Scheme
     ink: Shade
-    ink2: Shade  # secondary text, symbols beside text
-    ink3: Shade  # tertiary text, placeholders, shortcut hints
-    fill: Shade  # a quiet well inside a surface
+    ink2: Shade
+    ink3: Shade
+    fill: Shade
     hover: Shade
     press: Shade
     separator: Shade
-    solid: str  # a content card
+    solid: str
     solid_edge: Shade
-    window: str  # a content window's background
-    thumb: Shade  # overlay scroll bars
+    window: str
+    thumb: Shade
     canvas_bar_veil: Shade
     """The veil behind Qt-painted glass."""
     rim: Rim
@@ -91,26 +75,20 @@ class Tokens:
 
 
 def scheme() -> Scheme:
-    """Large glass and content windows follow Windows' app mode."""
     return Scheme.LIGHT if appearance.light_apps() else Scheme.DARK
 
 
 @dataclass(frozen=True, slots=True)
 class Padding:
-    """Inside a control: above and below, and beside."""
-
     vertical: int
     horizontal: int
 
     def css(self, ring: int = 0) -> str:
-        """The padding, less a focus ring's width on every side so the control keeps its size."""
         return f"padding: {self.vertical - ring}px {self.horizontal - ring}px;"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Kit:
-    """The shared controls' metrics: every stylesheet number Workspace's windows use."""
-
     ring: int
     """A focused control's accent ring."""
     tooltip_radius: int
@@ -145,7 +123,6 @@ class Kit:
 
 
 def tooltip_style(theme: Tokens, kit: Kit) -> str:
-    """Tooltips, the one rule the process shares: every other control takes its look from the window that owns it."""
     line, edge = theme.separator.css, kit.hairline
     return (
         f"QToolTip {{ background: {theme.solid}; color: {theme.ink.css}; border: {edge}px solid {line}; "
@@ -154,7 +131,6 @@ def tooltip_style(theme: Tokens, kit: Kit) -> str:
 
 
 def control_style(theme: Tokens, design: Design) -> str:
-    """Workspace's dialogs and controls: Inter, capsule buttons, quiet wells and overlay scroll bars."""
     ink, ink2, ink3 = theme.ink.css, theme.ink2.css, theme.ink3.css
     fill, hover, press, line = (
         theme.fill.css,
@@ -206,11 +182,8 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 """ + tooltip_style(theme, kit)
 
 
-# Every glass surface shares its ink and rim vocabulary.
 @dataclass(frozen=True, slots=True)
 class Lettering:
-    """Ink for a surface: primary and quiet text, and the control fills under the pointer."""
-
     ink: Shade
     quiet: Shade
     hover: Shade
@@ -219,8 +192,6 @@ class Lettering:
 
 @dataclass(frozen=True, slots=True)
 class GlassLook:
-    """A veil and rim for composition or Qt, with the same surface lettering."""
-
     veil: Shade
     rim: Rim
     lettering: Lettering
@@ -228,8 +199,6 @@ class GlassLook:
 
 @dataclass(frozen=True, slots=True)
 class SolidLook:
-    """No glass: Qt paints the whole surface."""
-
     fill: Shade
     edge: Shade
     lettering: Lettering
@@ -240,22 +209,16 @@ type Look = GlassLook | SolidLook
 
 @dataclass(frozen=True, slots=True)
 class Capsule:
-    """Small desktop glass follows the observed background."""
-
     frost: appearance.Frost
 
 
 @dataclass(frozen=True, slots=True)
 class Menu:
-    """Expanded desktop glass is thicker over the same observed background."""
-
     frost: appearance.Frost
 
 
 @dataclass(frozen=True, slots=True)
 class CanvasBar:
-    """Qt-painted glass is thicker over the canvas's content scheme."""
-
     scheme: Scheme
 
 
@@ -263,14 +226,11 @@ type Pane = Capsule | Menu | CanvasBar
 
 
 def lettering(theme: Tokens) -> Lettering:
-    """The surface's text and pointer fills come from its scheme's tokens."""
     return Lettering(theme.ink, theme.ink2, theme.hover, theme.press)
 
 
 @dataclass(frozen=True, slots=True)
 class FrostLook:
-    """How glass reads over a desktop of this frost: its scheme, the veil behind small text, and its shadow's strength."""
-
     scheme: Scheme
     """A glass capsule or menu's scheme follows the desktop behind it."""
     small_veil: Shade
@@ -279,8 +239,6 @@ class FrostLook:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Attention:
-    """A surface that needs you: the attention hue's veil, its own rim and white lettering."""
-
     hue: str
     veil: float
     """The veil's opacity over the desktop..."""
@@ -293,8 +251,6 @@ class Attention:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Glass:
-    """Workspace's whole material recipe: each scheme's tokens, how glass reads over each frost, and attention."""
-
     tokens: frozendict[Scheme, Tokens]
     frosts: frozendict[appearance.Frost, FrostLook]
     attention: Attention
@@ -316,7 +272,6 @@ class Glass:
 
 
 def rim_stops(rim: Rim, glass: Glass) -> tuple[Stop, ...]:
-    """Brightest where light catches the upper-leading curve, a softer return at the trailing foot."""
     light = glass.rim_light
     return (
         Stop(0, light, rim.high),
@@ -328,23 +283,17 @@ def rim_stops(rim: Rim, glass: Glass) -> tuple[Stop, ...]:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Design:
-    """Workspace's look as its windows read it: the colours that carry meaning, the
-    glass and each scheme's tokens, the controls' metrics and the type scale."""
-
     palette: Palette
     glass: Glass
     kit: Kit
     type: typeface.TypeScale
 
     def tokens(self) -> Tokens:
-        """The tokens for the scheme Windows' app mode asks for now, for the owners that build windows."""
         return self.glass.tokens[scheme()]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Washes:
-    """A surface's ink at lower opacities, for wells and quiet marks drawn in it."""
-
     well: float
     """A tile's well."""
     off: float
@@ -364,7 +313,6 @@ def _scheme(pane: Pane, material: appearance.Material, glass: Glass) -> Scheme:
         case Capsule(frost=frost) | Menu(frost=frost):
             match material:
                 case appearance.Material.SOLID:
-                    # The bar's solid fallback stays dark regardless of desktop frost.
                     return Scheme.DARK
                 case appearance.Material.GLASS:
                     pass
@@ -408,16 +356,12 @@ def _attention(pane: Pane, attention: Attention) -> GlassLook:
             assert_never(pane)
 
 
-@lru_cache(
-    maxsize=32
-)  # Every frame asks again for each capsule; the answers are a handful of values.
+@lru_cache(maxsize=32)
 def look(
     preference: appearance.Preference, pane: Pane, tint: Tint, glass: Glass
 ) -> Look:
-    """One material recipe; pane ownership selects the scheme and veil thickness."""
     match preference:
         case appearance.Contrast(background=background, foreground=foreground):
-            # System colours, swapped when the surface carries meaning.
             fill, ink = (
                 (foreground, background)
                 if tint is Tint.ATTENTION
@@ -466,7 +410,6 @@ def look(
 def reading(
     lettering: Lettering, tone: Tone, palette: Palette, *, contrast: bool
 ) -> Shade:
-    """A part's ink. High contrast keeps every reading in the system foreground."""
     if contrast:
         return lettering.ink
     match tone:

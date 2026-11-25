@@ -1,13 +1,3 @@
-"""The desktop: Workspace's bar, tray, key map, window placement, dictation and meetings.
-
-The keyboard sends every request and its indicator, key, chord and layout
-messages to the desktop's hidden control window. Dictation and meetings
-(`desktop_ui.voice`) are called here on the Qt thread; what their workers
-report arrives as events in the same inbox and is shown here. Qt owns the
-process's main thread, and every view is made and changed on it, as its
-effects are performed.
-"""
-
 import os
 import queue
 import subprocess
@@ -115,7 +105,6 @@ TRACK_STALL_S: Final = 2.0
 
 
 def indicator_area() -> Rect:
-    """Where the layer indicator goes: the bottom of the main monitor."""
     monitors = screen.monitors()
     return next((m.work for m in monitors if m.primary), monitors[0].work)
 
@@ -123,7 +112,6 @@ def indicator_area() -> Rect:
 def window_event(
     message: int, wparam: int, lparam: int, apps: tuple[App, ...]
 ) -> Event | None:
-    """What a message to the control window reports."""
     if message == shell.TASKBAR_CREATED:
         return RestoreTray()
     if message == WM_TRAY and lparam in (
@@ -139,24 +127,15 @@ def window_event(
         return LayoutReported(wparam)
     if message == Message.CHORD:
         return Chord(held=bool(wparam))
-    if (
-        message == system.WindowMessage.TIMER
-    ):  # the capture timer, the control window's only timer
+    if message == system.WindowMessage.TIMER:
         return ExpireCapture(time.monotonic())
-    if message == system.WindowMessage.CLOSE:  # Quit Workspace, or a test
+    if message == system.WindowMessage.CLOSE:
         return Quit()
     return None
 
 
 @dataclass(frozen=True, slots=True)
 class Inbox:
-    """The Qt thread's events: any thread reports one, and the control window's procedure folds them.
-
-    Qt's own loop dispatches the control window's messages, so the procedure is
-    where events reach the application. Events reported before `connect` wait
-    in the queue; connecting is the one late binding, at that boundary.
-    """
-
     window: shell.AppWindow
     pending: queue.SimpleQueue[Event]
     _handler: Cell[Callable[[Event], None] | None]
@@ -168,7 +147,6 @@ class Inbox:
         apps: tuple[App, ...],
         log: Callable[[str], None],
     ) -> Inbox:
-        """The control window, whose requests name `apps`; a handler's failure goes to `log`."""
         pending = queue.SimpleQueue[Event]()
         handler: Cell[Callable[[Event], None] | None] = Cell(None)
 
@@ -193,12 +171,10 @@ class Inbox:
         )
 
     def report(self, event: Event) -> None:
-        """Any thread: queue `event` for the Qt thread."""
         self.pending.put(event)
         system.post_message(self.window.handle, WM_EVENTS, 0, 0)
 
     def connect(self, handler: Callable[[Event], None]) -> None:
-        """Qt thread: fold queued and future events with `handler`."""
         self._handler.set(handler)
         system.post_message(self.window.handle, WM_EVENTS, 0, 0)
 
@@ -223,8 +199,6 @@ def _drain(
 
 @dataclass(frozen=True, slots=True)
 class _Views:
-    """The views built so far, on the Qt thread, each made on first use."""
-
     bar: DesktopBar | None = None
     switcher: WindowSwitcher | None = None
     indicator: Indicator | None = None
@@ -235,8 +209,6 @@ class _Views:
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class DesktopApp:
-    """The desktop's views, tray, dictation and meetings, and the Qt-thread fold of their events into effects."""
-
     root: QtWidgets.QApplication
     inbox: Inbox
     voice: Voice
@@ -279,7 +251,6 @@ class DesktopApp:
         return app
 
     def start(self) -> None:
-        """Qt thread: the bar, the capture timer and the workers, then the layout's state, then readiness."""
         report = self.inbox.report
         try:
             bar = DesktopBar.open(
@@ -321,10 +292,7 @@ class DesktopApp:
             system.post_message(layout, Message.QUERY_LAYOUT_STATE, 0, 0)
         self.handle(ShowIdle())
 
-    # ---- the fold ----------------------------------------------------------------------
-
     def handle(self, event: Event) -> None:
-        """Qt thread: fold `event`, perform its effects in order, and fold what they report."""
         state, effects = transition(self.state.get(), event)
         self.state.set(state)
         for effect in effects:
@@ -332,7 +300,6 @@ class DesktopApp:
                 self.handle(reported)
 
     def perform(self, effect: Effect) -> Event | None:
-        """Carry out `effect`; what it reports back (a menu choice, a refusal) is folded next."""
         match effect:
             case (
                 ShowVoice()
@@ -482,8 +449,6 @@ class DesktopApp:
             return Problem(str(error))
         return None
 
-    # ---- the views ---------------------------------------------------------------------
-
     def show_keymap(self) -> None:
         keymap = self.views.get().keymap
         if keymap is None or not shiboken6.isValid(keymap.window):
@@ -497,7 +462,6 @@ class DesktopApp:
             show_window(keymap.window, focus=True, target=keymap.canvas)
 
     def _show_overlay(self, overlay: OverlayState) -> None:
-        """A faded key map that follows the current layer without taking keyboard focus."""
         shown = self.views.get().overlay
         if shown is None:
             if not overlay.visible:
@@ -541,8 +505,6 @@ class DesktopApp:
         return marker
 
     def _find_anchor(self, capture: int) -> Event | None:
-        """Where `capture`'s text will go: the system caret at once, else what the app reports off the Qt thread,
-        else its window once the app has had `ANCHOR_WAIT_MS` to answer. Our own windows mark nothing."""
         window = windows.foreground()
         if not window or windows.process_id(window) == os.getpid():
             return Anchored(capture, UNFOUND)
@@ -561,8 +523,6 @@ class DesktopApp:
         return None
 
     def _track(self) -> None:
-        """Ask where the caret of the app in front is, one ask at a time: the system caret at once, else what the
-        app reports off the Qt thread. Our own windows have no caret to rest beside."""
         marker = self.state.get().marker
         asked = self.asking.get()
         if not tracking(marker) or (
@@ -592,7 +552,6 @@ class DesktopApp:
         threading.Thread(target=ask, name="caret", daemon=True).start()
 
     def _list_windows(self) -> None:
-        """Read the window list off the Qt thread; the switcher shows it when it arrives."""
 
         def collect() -> None:
             own = os.getpid()
@@ -637,8 +596,6 @@ class DesktopApp:
         near_pointer(current, current.width(), current.height())
         show_window(current, focus=True, target=current.search)
 
-    # ---- quitting ----------------------------------------------------------------------
-
     def close_bar(self) -> None:
         if bar := self.views.get().bar:
             try:
@@ -648,7 +605,6 @@ class DesktopApp:
             self.views.update(lambda views: replace(views, bar=None))
 
     def quit(self) -> None:
-        """Close the views and the tray, then end Qt's loop."""
         self.close_bar()
         if marker := self.views.get().marker:
             marker.close()
@@ -658,7 +614,6 @@ class DesktopApp:
 
 
 def launched(launcher: Launcher, command: str, *names: str) -> None:
-    """Run the launcher on its own, so it outlives this program when it restarts or stops the desktop."""
     subprocess.Popen(
         [*launcher.command, command, *names],
         cwd=launcher.root,
@@ -667,7 +622,6 @@ def launched(launcher: Launcher, command: str, *names: str) -> None:
 
 
 def _dispose(root: QtWidgets.QApplication) -> None:
-    """Delete every window and the application on the Qt thread, including binding-owned deletions."""
     for window in root.topLevelWidgets():
         window.hide()
         window.deleteLater()
@@ -679,13 +633,11 @@ def _dispose(root: QtWidgets.QApplication) -> None:
 
 
 def _preference(settings: DesktopSettings) -> Path:
-    """Where the overlay's on/off preference is kept."""
     return settings.places.directory / "overlay.json"
 
 
 def run(settings: DesktopSettings) -> None:
-    """Blocks until the desktop quits."""
-    screen.use_physical_pixels()  # before any window exists
+    screen.use_physical_pixels()
     lock = system.create_lock(LOCK_NAME)
     if lock is None:
         return

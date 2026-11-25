@@ -1,9 +1,3 @@
-"""A durable, bounded queue of audio and an atomically refreshed Markdown transcript.
-
-Text replaces its audio in one SQLite transaction. Freed audio pages are erased
-and reclaimed; completed meetings retain text and timing, not a full recording.
-"""
-
 import os
 import time
 import uuid
@@ -28,8 +22,6 @@ _END = TypeAdapter(float | None)
 
 
 def _replace_transcript(temporary: Path, transcript: Path) -> None:
-    # Ordinary Windows readers often omit FILE_SHARE_DELETE. Their short-lived
-    # handles must not turn an otherwise successful transcription into a failure.
     deadline = time.monotonic() + 2
     while True:
         try:
@@ -53,14 +45,11 @@ def _text(value: object) -> str:
     return value
 
 
-class BacklogFullError(OSError):
-    """The last block was saved, but capture must stop before storing another."""
+class BacklogFullError(OSError): ...
 
 
 @dataclass(frozen=True, slots=True)
 class MeetingStore:
-    # Location, storage bound, publication and connection lifetime are the
-    # cohesive journal policy. Readers and writers use the same interface.
     folder: Path
     max_pending_bytes: int = field(default=MAX_PENDING_BYTES, kw_only=True)
     publish: Callable[[Path, Path], None] = field(
@@ -73,7 +62,6 @@ class MeetingStore:
         return self.folder / "transcript.md"
 
     def reading(self) -> AbstractContextManager[journal.Connection]:
-        """One snapshot of this recording's journal; callers validate each column before use."""
         if not (self.folder / "session.sqlite3").is_file():
             raise FileNotFoundError(
                 "The native meeting journal is unavailable."
@@ -81,9 +69,6 @@ class MeetingStore:
         return journal.reading(self.folder / "session.sqlite3", self.connect)
 
     def writing(self) -> AbstractContextManager[journal.Connection]:
-        # A write-ahead log: transcription and catalog reads never hold up the
-        # capture's once-a-second append, and appends do not wait for the disk.
-        # Power loss can cost the last moments of audio, never the journal.
         return journal.writing(
             self.folder / "session.sqlite3",
             self.connect,
@@ -214,7 +199,6 @@ class MeetingStore:
             )
 
     def record_gaps(self, gaps: int, frames: int) -> None:
-        """Add recovered capture gaps to the recording's notes; they never finish it."""
         with self.writing() as connection:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS capture_gaps (id INTEGER PRIMARY KEY CHECK(id=1), gaps INTEGER NOT NULL, frames INTEGER NOT NULL)"
@@ -231,16 +215,13 @@ class MeetingStore:
     def finish_capture(
         self, problem: str = "", *, at: float | None = None
     ) -> None:
-        """Persist the observed capture end, independently of audio duration and export time."""
         self._finish(problem, time.time() if at is None else at)
 
     def interrupt_capture(self, problem: str) -> None:
-        """Recovery cannot reconstruct the time a dead capture actually stopped."""
         self._finish(problem, None)
 
     def _finish(self, problem: str, at: float | None) -> None:
         with self.writing() as connection:
-            # Repeated stop/recovery must never move the original end timestamp.
             changed = connection.execute(
                 "UPDATE meeting SET finished=1, problem=?, revision=revision+1 WHERE id=1 AND finished=0",
                 (problem,),
@@ -255,8 +236,6 @@ class MeetingStore:
 
     def batch(self) -> Batch | None:
         with self.reading() as connection:
-            # Capture may append its tail and finish between these queries.
-            # One read snapshot keeps the completion flag with the same audio.
             rows = connection.execute(
                 "SELECT start, frames, quiet, pcm FROM audio ORDER BY start LIMIT ?",
                 (MAX_CHUNK_SECONDS,),
@@ -299,8 +278,6 @@ class MeetingStore:
 
     def complete(self, batch: Batch, text: str) -> None:
         with self.writing() as connection:
-            # Retrying after a write/export failure must not duplicate a segment
-            # or decrement the pending count a second time.
             if (
                 connection.execute(
                     "SELECT start FROM segments WHERE start=?", (batch.start,)
@@ -338,7 +315,7 @@ class MeetingStore:
             state.revision == state.exported_revision
             and self.transcript.is_file()
         ):
-            return  # preserve corrections the user made to a completed transcript
+            return
         status = (
             "Recording"
             if not state.finished
@@ -346,8 +323,6 @@ class MeetingStore:
             if state.pending
             else "Saved"
         )
-        # The transcription worker owns export after creation, so one atomic
-        # replacement is sufficient; capture only writes to the SQLite journal.
         try:
             with (
                 temporary.open("w", encoding="utf-8", newline="\n") as output,
@@ -392,8 +367,6 @@ class MeetingStore:
 
 @dataclass(frozen=True, slots=True)
 class MeetingArchive:
-    """Create and reopen journals with the same storage and publication policy."""
-
     root: Path
     max_pending_bytes: int = field(default=MAX_PENDING_BYTES, kw_only=True)
     publish: Callable[[Path, Path], None] = field(

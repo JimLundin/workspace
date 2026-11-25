@@ -1,5 +1,3 @@
-"""Bounded failure evidence without exception objects, content or source lines, and the programs' own logs."""
-
 import contextlib
 import time
 from collections.abc import Iterator, Mapping
@@ -44,7 +42,6 @@ def _location(trace: TracebackType) -> str:
 
 
 def failure_info(error: Exception) -> FailureInfo:
-    """Copy only scalar evidence; a traceback would retain the keyboard's heap."""
     locations = tuple(
         _location(trace) for trace in tuple(_traces(error.__traceback__))[-8:]
     )
@@ -57,7 +54,6 @@ def failure_info(error: Exception) -> FailureInfo:
 
 
 def append(log: Path, text: str) -> None:
-    """One timestamped line in a program's own log, its record of problems and crashes (there's no console under pythonw)."""
     with contextlib.suppress(OSError):
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as file:
@@ -65,7 +61,6 @@ def append(log: Path, text: str) -> None:
 
 
 def evidence(event: str, details: Mapping[str, Detail]) -> str:
-    """An event and its scalar details, as one line for a program's own log."""
     return " ".join(
         (f"{event}:", *(f"{name}={value}" for name, value in details.items()))
     )

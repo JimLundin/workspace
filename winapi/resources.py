@@ -1,5 +1,3 @@
-"""Processor time and memory use, read without side effects."""
-
 import ctypes
 
 lazy from win32more.Windows.Win32.Foundation import FILETIME
@@ -17,7 +15,6 @@ def ticks(time: FILETIME) -> int:
 
 
 def cpu_times() -> CpuTimes | None:
-    """Cumulative idle, kernel and user time; compare two samples with `machine_status.cpu_load`."""
     idle, kernel, user = FILETIME(), FILETIME(), FILETIME()
     if not GetSystemTimes(idle, kernel, user):
         return None
@@ -25,9 +22,6 @@ def cpu_times() -> CpuTimes | None:
 
 
 def memory_use() -> Memory | None:
-    """Physical memory in use (installed less available) and installed, or None when it can't be read.
-
-    Windows rejects the call unless `dwLength` is the structure's size."""
     status = MEMORYSTATUSEX(dwLength=ctypes.sizeof(MEMORYSTATUSEX))
     if (
         not GlobalMemoryStatusEx(status)

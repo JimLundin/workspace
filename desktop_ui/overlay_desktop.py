@@ -1,9 +1,3 @@
-"""Desktop observations and effects consumed by the keyboard overlay.
-
-The overlay owns rendering and drag policy; this adapter owns native placement,
-and physical cursor observations; the overlay keeps its own position.
-"""
-
 import time
 from dataclasses import dataclass
 

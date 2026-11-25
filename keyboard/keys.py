@@ -1,18 +1,9 @@
-"""The keys and modifiers the layout sends to Windows. The vocabulary is Windows':
-each key carries its virtual key code, whether Windows sends it as extended,
-what it types on US English, and the name its keycap shows."""
-
 from dataclasses import dataclass, field
 from enum import Enum
 
 
 @dataclass(frozen=True, slots=True)
 class KeyCode:
-    """A key as Windows knows it: its virtual key code, what it types on the US English
-    layout (plain and with Shift; None for keys that don't type), whether Windows
-    sends it with the "extended" flag (an E0 prefix), and the name its keycap shows
-    where that isn't the capital of what it types."""
-
     vk: int
     plain: str | None = None
     shifted: str | None = None
@@ -21,8 +12,6 @@ class KeyCode:
 
 
 class VirtualKey(Enum):
-    """A key Windows is sent, by its `KeyCode`. Members live on the `Key` and `Mod` subclasses."""
-
     _value_: KeyCode
 
     @property
@@ -35,7 +24,6 @@ class VirtualKey(Enum):
 
     @property
     def legend(self) -> str:
-        """The key as its keycap, the hints and the README write it: its name, else the capital it types."""
         code = self.value
         return code.named or (
             code.plain.upper() if code.plain else self.name.title()
@@ -43,8 +31,6 @@ class VirtualKey(Enum):
 
 
 class Key(VirtualKey):
-    """A Windows virtual key the layout sends."""
-
     A = KeyCode(0x41, "a", "A")
     B = KeyCode(0x42, "b", "B")
     C = KeyCode(0x43, "c", "C")
@@ -112,14 +98,12 @@ class Key(VirtualKey):
     """Unassigned, so applications ignore it."""
 
     def typed(self, *, shifted: bool) -> str | None:
-        """What the key types, or None for keys that don't type (arrows, Enter...)."""
         return self.value.shifted if shifted else self.value.plain
 
     def is_letter(self) -> bool:
         return Key.A.vk <= self.vk <= Key.Z.vk
 
     def continues_word(self) -> bool:
-        """Keys that keep caps word going without being capitalised."""
         return Key.N0.vk <= self.vk <= Key.N9.vk or self in (
             Key.BACKSPACE,
             Key.DELETE,
@@ -127,8 +111,6 @@ class Key(VirtualKey):
 
 
 class Mod(VirtualKey):
-    """The left-hand modifier keys."""
-
     GUI = KeyCode(0x5B, extended=True, named="Win")
     ALT = KeyCode(0xA4, named="Alt")
     CTRL = KeyCode(0xA2, named="Ctrl")

@@ -1,7 +1,3 @@
-"""The tests' own keyboard layout: the shape Workspace's is written in, with its own
-values, so a change to the layout Workspace runs never breaks a test.
-"""
-
 from typing import Final
 
 from keyboard.actions import BLANK, Binding, Chord, Layer, TapHold
@@ -11,7 +7,6 @@ from keyboard.layout import Layout, Timings, UsbIdentity
 from keyboard.physical import Laptop
 from protocol import App, Installed, PinnedWeb, Slot, Tool
 
-# ---- Timings ---------------------------------------------------------------------
 
 TAPPING_TERM_MS: Final = 200
 """Hold a tap-hold key longer than this and it becomes its modifier or layer."""
@@ -24,12 +19,10 @@ is that key held down (so it repeats), not its modifier or layer."""
 QUIT_HOLD_MS: Final = 2000
 """Hold the escape key this long to quit."""
 
-# ---- The keys the layout owns ------------------------------------------------------
 
 ESCAPE: Final = Laptop.SECTION.scancode
 """The escape key: the key left of 1, § on a Nordic keyboard."""
 
-# The Charybdis Nano (3x5) Splinky: matched by its USB identity, independent of port.
 FIRMWARE_VENDOR: Final = 0xA8F8
 FIRMWARE_PRODUCT: Final = 0x1832
 APPS_KEY: Final = 0xA5
@@ -37,8 +30,6 @@ APPS_KEY: Final = 0xA5
 Its keymap uses no other Right Alt, and with the Charybdis connected Windows runs
 English (US), where Right Alt is a plain Alt rather than AltGr."""
 
-
-# ---- Shortcuts the layers send ----------------------------------------------------
 
 UNDO, REDO, COPY, PASTE, CUT = (
     Chord.ctrl(Key.Z),
@@ -48,14 +39,9 @@ UNDO, REDO, COPY, PASTE, CUT = (
     Chord.ctrl(Key.X),
 )
 
-# ---- The layout ----------------------------------------------------------------
-# Each row is written across the keyboard: the left hand's half, then the right
-# hand's on the line below. Kept in columns by hand, so the formatter is told to
-# leave this section alone.
 
 # fmt: off
 PHYSICAL: Final[Board[Laptop]] = Board(
-    # The ISO laptop keyboard (Miryoku KMonad mapping: rows moved up one, reverse angle on the left, wide spacing).
     top=      Row((Laptop.N2,    Laptop.N3,     Laptop.N4,       Laptop.N5,       Laptop.N6),
                   (Laptop.N8,    Laptop.N9,     Laptop.N0,       Laptop.PLUS,     Laptop.ACUTE)),
     home=     Row((Laptop.Q,     Laptop.W,      Laptop.E,        Laptop.R,        Laptop.T),
@@ -67,7 +53,6 @@ PHYSICAL: Final[Board[Laptop]] = Board(
 )
 
 UNUSED: Final = frozenset({
-    # Keys between and below the hands, and the Spacebar: blocked.
     Laptop.N1, Laptop.N7, Laptop.Y, Laptop.U, Laptop.G, Laptop.H, Laptop.J,
     Laptop.Z, Laptop.B, Laptop.N, Laptop.MINUS, Laptop.LESS, Laptop.SPACE,
 })
@@ -79,10 +64,10 @@ FUNCTION_KEYS: Final = frozenset({
 """The physical F1-F12 row remains native while the layout is enabled."""
 
 NATIVE_KEYS: Final = frozenset((
-    *range(0x70, 0x88),  # F1-F24
-    *range(0xAD, 0xB4),  # volume and media
-    *range(0x25, 0x29),  # arrows
-    0x10, 0x11, 0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C,  # Shift, Ctrl, Windows
+    *range(0x70, 0x88),
+    *range(0xAD, 0xB4),
+    *range(0x25, 0x29),
+    0x10, 0x11, 0xA0, 0xA1, 0xA2, 0xA3, 0x5B, 0x5C,
 ))  # fmt: skip
 """Virtual keys that stay native whichever physical key sends them: function and
 media keys, arrows, and the physical Shift, Ctrl and Windows keys."""
@@ -98,16 +83,12 @@ APPS: Final[tuple[App, ...]] = (
 )
 """The apps the tests' desktop puts in the slots, in chord-letter order."""
 
-# ---- The layers ------------------------------------------------------------------
 
-# Ten app slots, named by their chord letters; the tests' desktop fills them from APPS.
 _Q, _W, _F, _P, _B, _A, _R, _S, _T, _G = (Slot(index) for index in range(10))
 
 
 LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
-    # Every layer's board; `keyboard.bindings` rejects a missing layer or a hold of BASE.
     Layer.BASE: Board(
-        # What each key does while no layer is held: Colemak-DH with home row mods (Win Alt Ctrl Shift).
         top=      Row((Key.Q,                          Key.W,                              Key.F,                         Key.P,                          Key.B),
                       (Key.J,                          Key.L,                              Key.U,                         Key.Y,                          Key.QUOTE)),
         home=     Row((TapHold(Key.A, Mod.GUI),        TapHold(Key.R, Mod.ALT),            TapHold(Key.S, Mod.CTRL),      TapHold(Key.T, Mod.SHIFT),      Key.G),
@@ -118,7 +99,6 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
                       (TapHold(Key.ENTER, Layer.SYM),  TapHold(Key.BACKSPACE, Layer.NUM),  Key.DELETE)),
     ),
     Layer.NAV: Board(
-        # Hold the Space thumb.
         top=      Row((BLANK,          BLANK,          BLANK,          BLANK,        BLANK),
                       (REDO,           PASTE,          COPY,           CUT,          UNDO)),
         home=     Row((Mod.GUI,        Mod.ALT,        Mod.CTRL,       Mod.SHIFT,    BLANK),
@@ -129,31 +109,26 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
                       (Key.ENTER,      Key.BACKSPACE,  Key.DELETE)),
     ),
     Layer.NUM: Board(
-        # Hold the Backspace thumb.
-        top=      Row((Key.LBRACKET,   Key.N7,     Key.N8,      Key.N9,   Key.RBRACKET),   # [ 7 8 9 ]
+        top=      Row((Key.LBRACKET,   Key.N7,     Key.N8,      Key.N9,   Key.RBRACKET),
                       (BLANK,          BLANK,      BLANK,       BLANK,    BLANK)),
-        home=     Row((Key.SEMICOLON,  Key.N4,     Key.N5,      Key.N6,   Key.EQUAL),      # ; 4 5 6 =
+        home=     Row((Key.SEMICOLON,  Key.N4,     Key.N5,      Key.N6,   Key.EQUAL),
                       (BLANK,          Mod.SHIFT,  Mod.CTRL,    Mod.ALT,  Mod.GUI)),
-        bottom=   Row((Key.GRAVE,      Key.N1,     Key.N2,      Key.N3,   Key.BACKSLASH),  # ` 1 2 3 \
+        bottom=   Row((Key.GRAVE,      Key.N1,     Key.N2,      Key.N3,   Key.BACKSLASH),
                       (BLANK,          BLANK,      BLANK,       BLANK,    BLANK)),
-        thumbs=Thumbs((                            Key.PERIOD,  Key.N0,   Key.MINUS),      # . 0 -
+        thumbs=Thumbs((                            Key.PERIOD,  Key.N0,   Key.MINUS),
                       (BLANK,          BLANK,      BLANK)),
     ),
     Layer.SYM: Board(
-        # Hold the Enter thumb.
-        top=      Row((Chord.shifted(Key.LBRACKET),   Chord.shifted(Key.N7),  Chord.shifted(Key.N8),  Chord.shifted(Key.N9),  Chord.shifted(Key.RBRACKET)),   # { & * ( }
+        top=      Row((Chord.shifted(Key.LBRACKET),   Chord.shifted(Key.N7),  Chord.shifted(Key.N8),  Chord.shifted(Key.N9),  Chord.shifted(Key.RBRACKET)),
                       (BLANK,                         BLANK,                  BLANK,                  BLANK,                  BLANK)),
-        home=     Row((Chord.shifted(Key.SEMICOLON),  Chord.shifted(Key.N4),  Chord.shifted(Key.N5),  Chord.shifted(Key.N6),  Chord.shifted(Key.EQUAL)),      # : $ % ^ +
+        home=     Row((Chord.shifted(Key.SEMICOLON),  Chord.shifted(Key.N4),  Chord.shifted(Key.N5),  Chord.shifted(Key.N6),  Chord.shifted(Key.EQUAL)),
                       (BLANK,                         Mod.SHIFT,              Mod.CTRL,               Mod.ALT,                Mod.GUI)),
-        bottom=   Row((Chord.shifted(Key.GRAVE),      Chord.shifted(Key.N1),  Chord.shifted(Key.N2),  Chord.shifted(Key.N3),  Chord.shifted(Key.BACKSLASH)),  # ~ ! @ # |
+        bottom=   Row((Chord.shifted(Key.GRAVE),      Chord.shifted(Key.N1),  Chord.shifted(Key.N2),  Chord.shifted(Key.N3),  Chord.shifted(Key.BACKSLASH)),
                       (BLANK,                         BLANK,                  BLANK,                  BLANK,                  BLANK)),
-        thumbs=Thumbs((                                                       Chord.shifted(Key.N9),  Chord.shifted(Key.N0),  Chord.shifted(Key.MINUS)),      # ( ) _
+        thumbs=Thumbs((                                                       Chord.shifted(Key.N9),  Chord.shifted(Key.N0),  Chord.shifted(Key.MINUS)),
                       (BLANK,                         BLANK,                  BLANK)),
     ),
     Layer.APPS: Board(
-        # Hold the Esc thumb (left outer). The only Workspace layer: apps on the left; desktops, focus and voice on the right.
-        # The Charybdis reaches each request by holding Tab (Right Alt) and the base key at its place (`keyboard.firmware.CHORDS`).
-        # The Tab thumb stays empty: the Charybdis holds Tab for Apps, so it can't also be a chord.
         top=      Row((_Q,              _W,                    _F,                    _P,                    _B),
                       (Tool.DESKTOP_1,  Tool.DESKTOP_2,        Tool.DESKTOP_3,        Tool.DESKTOP_4,        Tool.DESKTOP_5)),
         home=     Row((_A,              _R,                    _S,                    _T,                    _G),
@@ -164,7 +139,6 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
                       (BLANK,           BLANK,                 BLANK)),
     ),
 })
-# fmt: on
 
 LAYOUT: Final = Layout(
     physical=PHYSICAL,

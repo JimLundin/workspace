@@ -1,10 +1,3 @@
-"""Measure the keyboard engine with synthetic input and GC enabled; never send keys.
-
-Run with the same interpreter before and after a keyboard change. Use --root to
-select a saved source tree. Native hook/SendInput latency and OS scheduling need
-separate desktop measurements; this measures Engine.on_key and tap-hold timers.
-"""
-
 import argparse
 import gc
 import hashlib
@@ -63,10 +56,7 @@ def main() -> None:
 
 
 def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
-    # Lazy dependencies first resolve after main selects the source tree.
 
-    # Plain typing, home-row rolls, modifiers, layers, repeat, voice, and timers.
-    # Zero is a timer callback; other values are physical keyboard scancodes.
     pattern = (
         (0x05, True),
         (0x05, False),
@@ -174,8 +164,6 @@ def percentile(values: Sequence[int], fraction: float) -> float:
 
 @dataclass(frozen=True, slots=True)
 class Host:
-    """No output log or OS calls whose allocations could obscure the engine."""
-
     def send(self, key: Key | Mod, *, down: object) -> None:
         pass
 
@@ -216,7 +204,6 @@ def measure_latencies(
             collections.append(info["generation"])
 
     gc.enable()
-    # Warm up adaptive bytecode and tables before collecting latency samples.
     play(rules, host, events[:1000])
     measurements = tuple(
         round_latencies(rules, host, events, rounds, observe_gc)
@@ -231,8 +218,6 @@ def round_latencies(
     rounds: int,
     observe_gc: Callable[[str, dict[str, int]], None],
 ) -> Iterator[frozendict[str, float]]:
-    """Each round's latency percentiles, measured on a fresh engine with observe_gc watching collections."""
-    # One preallocated buffer, written in place, so the timed loop never allocates a sample.
     latencies = array("Q", [0]) * len(events)
     for _ in range(rounds):
         state = EngineState()
@@ -265,7 +250,6 @@ def round_latencies(
 def play(
     rules: Engine, host: Host, events: Sequence[tuple[Scancode, bool, int]]
 ) -> EngineState:
-    """The engine's state after `events`, from a fresh start."""
     state = EngineState()
     for key, down, now in events:
         if key:

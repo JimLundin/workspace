@@ -1,9 +1,3 @@
-"""The layout reads every size from the sizes it is given.
-
-The sizes and specs here are the test's own: scaling every size scales every
-coordinate, whatever the bar's real sizes are.
-"""
-
 from dataclasses import asdict
 
 from desktop_ui.bar_events import BarSpec
@@ -143,7 +137,6 @@ SPEC = BarSpec(
 
 
 def doubled(sizes: Sizes) -> Sizes:
-    """Every size twice as large; the trace's bars and the job's dots are counts, not sizes."""
     capsule = {name: value * 2 for name, value in asdict(sizes.capsule).items()}
     markers = {name: value * 2 for name, value in asdict(sizes.markers).items()}
     return Sizes(
@@ -161,13 +154,11 @@ def doubled(sizes: Sizes) -> Sizes:
         cells=Cells(
             **{name: value * 2 for name, value in asdict(sizes.cells).items()}
         ),
-        type=sizes.type,  # Text measures through the test's own widths.
+        type=sizes.type,
     )
 
 
 def test_every_size_the_bar_lays_out_comes_from_the_sizes_it_is_given() -> None:
-    # Defect: a size is still a literal in the layout, so editing the sizes moves only
-    # part of the bar and its parts drift out of alignment.
     large = doubled(BASE)
 
     def width(text: Text) -> float:

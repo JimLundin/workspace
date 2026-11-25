@@ -1,5 +1,3 @@
-"""The learning overlay follows the layout and remembers the user's tray choice."""
-
 from dataclasses import replace
 from pathlib import Path
 
@@ -30,12 +28,11 @@ EPSILON = SPAN / 100
 def test_a_quick_tap_stays_visible_for_the_span_and_then_needs_no_timer() -> (
     None
 ):
-    # Defects: a tap vanishes before it can be seen, lingers, or keeps a timer running.
     assert SPAN > TAP > 0
     highlights = KeyHighlights()
     highlights = highlights.updated(frozenset({Q}), 1.0, SPAN)
     assert highlights.visible(1.0) == frozenset({Q})
-    assert highlights.delay(1.0) is None  # held keys need no timer
+    assert highlights.delay(1.0) is None
     highlights = highlights.updated(frozenset(), 1.0 + TAP, SPAN)
     assert highlights.visible(1.0 + SPAN - EPSILON) == frozenset({Q})
     delay = highlights.delay(1.0 + TAP)
@@ -86,7 +83,7 @@ def test_reset_clears_both_held_keys_and_tap_flashes_immediately() -> None:
     highlights = KeyHighlights()
     highlights = highlights.updated(frozenset({Q, M}), 1.0, SPAN)
     highlights = highlights.updated(frozenset({M}), 1.0 + TAP, SPAN)
-    highlights = KeyHighlights()  # The owner resets with a fresh value.
+    highlights = KeyHighlights()
     assert highlights.visible(1.0 + 2 * TAP) == frozenset()
     assert highlights.delay(1.0 + 2 * TAP) is None
 
@@ -101,8 +98,8 @@ def test_overlay_tracks_physical_keys_across_layers_and_while_hidden() -> None:
     overlay = overlay.key(M, down=False)
     overlay = replace(overlay, enabled=True)
     assert overlay.pressed == frozenset({Q})
-    overlay = overlay.key(Q, down=True)  # repeat
-    overlay = overlay.key(M, down=False)  # duplicate release
+    overlay = overlay.key(Q, down=True)
+    overlay = overlay.key(M, down=False)
     assert overlay.pressed == frozenset({Q})
 
 
@@ -116,14 +113,10 @@ def test_layout_resets_and_unknown_keys_cannot_leave_stale_highlights() -> None:
     assert overlay.pressed == frozenset()
     overlay = overlay.set_layout(on=True)
     overlay = overlay.key(M, down=True)
-    overlay = overlay.set_layout(
-        on=True
-    )  # a restarted layout announces ON again
+    overlay = overlay.set_layout(on=True)
     assert overlay.pressed == frozenset()
     overlay = overlay.key(Q, down=True)
-    overlay = overlay.key(
-        Scancode(0), down=False
-    )  # reset before replaying current holds
+    overlay = overlay.key(Scancode(0), down=False)
     assert overlay.pressed == frozenset()
 
 

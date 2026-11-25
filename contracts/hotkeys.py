@@ -1,5 +1,3 @@
-"""Every tool key's behavior, shared by dispatch and the visible key map."""
-
 from enum import Enum, auto
 from typing import Final
 

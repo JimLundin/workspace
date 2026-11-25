@@ -1,5 +1,3 @@
-"""The desktop's control decisions, as values: events in, state and effects out."""
-
 from collections.abc import Iterable
 from functools import reduce
 
@@ -69,7 +67,6 @@ def folded(
 
 
 def test_the_tray_shows_a_live_recording_before_the_voice_state() -> None:
-    # Defect: a live recording is hidden behind the voice state.
     listening, effects = folded((VoiceShown(State.LISTENING),))
     assert effects[-1] == TrayShow(State.LISTENING)
     _, recording = folded(
@@ -81,9 +78,6 @@ def test_the_tray_shows_a_live_recording_before_the_voice_state() -> None:
 def test_dictation_shows_on_the_bar_only_when_the_marker_has_nowhere_to_go() -> (
     None
 ):
-    # Defect: the bar and the marker both show a capture, a capture with nothing to mark shows nowhere,
-    # transcription keeps the bar's dictation lit, or a caret found at once is shown before the search starts
-    # and then hidden by it.
     listening, effects = folded((VoiceShown(State.LISTENING),))
     assert ShowActivity(DictationShown(active=False)) in effects
     assert effects.index(ShowMarker(listening.marker)) < effects.index(
@@ -105,7 +99,6 @@ def test_dictation_shows_on_the_bar_only_when_the_marker_has_nowhere_to_go() -> 
 
 
 def test_following_the_caret_redraws_the_marker_only_when_it_moves() -> None:
-    # Defect: each answer about the unmoved caret, several a second, redraws the marker or the bar.
     at = Caret(Rect(10, 10, 12, 30))
     resting, effects = folded((Tracked(0, at),))
     assert effects == (ShowMarker(resting.marker),)
@@ -115,8 +108,6 @@ def test_following_the_caret_redraws_the_marker_only_when_it_moves() -> None:
 def test_recording_warnings_only_announce_interruptions_and_failed_captures() -> (
     None
 ):
-    # Defect: an ordinary finish is announced as a warning, or a pause, an
-    # interruption or a capture that ended with a problem passes silently.
     recording = RecordingState(phase="recording")
     assert (
         recording_notice(recording, RecordingState(phase="finishing")) is None
@@ -156,7 +147,6 @@ def test_recording_warnings_only_announce_interruptions_and_failed_captures() ->
 
 
 def test_a_problem_is_logged_and_shown_once_as_a_warning() -> None:
-    # Defect: a problem from dictation or meetings is silent, shown twice, or never reaches the log.
     for fact in (
         Problem("The disk is full."),
         DictationFailed("The disk is full."),
@@ -174,8 +164,6 @@ def test_a_problem_is_logged_and_shown_once_as_a_warning() -> None:
 def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_over_noise() -> (
     None
 ):
-    # Defect: quitting the layout flashes "Layout off", a malformed message turns
-    # it (or dictation's view of it) off, or dictation never hears the layout's state.
     state, effects = folded(
         (LayoutReported(LayoutState.ON.value), LayoutReported(99))
     )
@@ -196,8 +184,6 @@ def test_the_layout_flashes_its_change_but_not_its_quit_and_keeps_a_known_state_
 def test_dictation_keys_pass_both_edges_and_the_desktops_own_keys_act_on_press() -> (
     None
 ):
-    # Defect: a dictation release is dropped (so a hold never stops), a desktop key
-    # release acts like a press, or a meeting or window key reaches dictation.
     _, edges = folded(
         (
             Controlled(FeatureRequest(Tool.DICTATE, down=True)),
@@ -225,7 +211,6 @@ def test_dictation_keys_pass_both_edges_and_the_desktops_own_keys_act_on_press()
 
 
 def test_the_tray_records_meetings_and_opens_their_folder() -> None:
-    # Defect: the tray's meeting items do nothing, or open the wrong thing.
     assert folded((MenuChosen(Menu.MEETING.value),))[1] == (ToggleMeeting(),)
     assert folded((MenuChosen(Menu.TRANSCRIPTS.value),))[1] == (
         Record("folder"),
@@ -233,7 +218,6 @@ def test_the_tray_records_meetings_and_opens_their_folder() -> None:
 
 
 def test_the_overlay_menu_choice_toggles_and_saves_the_overlay() -> None:
-    # Defect: the tray's overlay item changes the view without saving the setting, or saves the old value.
     for event in (MenuChosen(Menu.OVERLAY.value), OverlayToggled()):
         toggled, effects = folded((event,))
         assert (
@@ -244,7 +228,6 @@ def test_the_overlay_menu_choice_toggles_and_saves_the_overlay() -> None:
 
 
 def test_physical_key_messages_become_key_actions_with_a_reset_marker() -> None:
-    """Detect native key messages routed as tools or losing their reset marker."""
     actions = tuple(
         control_event(Message.KEY_STATE, key, down, APPS)
         for key, down in ((0x32, 1), (0x10, 1), (0x10, 0), (0, 0))
@@ -290,8 +273,6 @@ def test_stopped_layout_has_a_start_action_and_no_active_toggle_hotkey() -> (
 def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle() -> (
     None
 ):
-    # Defect: the transcripts entry is dropped or disabled during capture. It is the
-    # only way to browse saved meetings.
     for capturing in (False, True):
         state = MenuState(
             layout=LayoutState.ON, overlay_enabled=True, capturing=capturing
@@ -307,7 +288,6 @@ def test_tray_keeps_saved_meeting_transcripts_reachable_while_recording_or_idle(
 def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> (
     None
 ):
-    # Defect: the tray shows the overlay as on after the user turned it off, or the reverse.
     for enabled in (False, True):
         state = MenuState(
             layout=LayoutState.ON, overlay_enabled=enabled, capturing=False
@@ -321,7 +301,6 @@ def test_tray_overlay_item_is_checked_exactly_when_the_overlay_is_enabled() -> (
 def test_control_event_preserves_voice_release_and_rejects_unknown_requests() -> (
     None
 ):
-    """Detect dropping a capture's key-up or forwarding an invalid wire request."""
     assert control_event(
         Message.REQUEST, Tool.DICTATE.value, 0, APPS
     ) == FeatureRequest(Tool.DICTATE, down=False)

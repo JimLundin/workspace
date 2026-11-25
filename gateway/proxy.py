@@ -1,12 +1,3 @@
-"""The gateway's loopback HTTP server.
-
-Each `/v1/...` request is checked against this boot's token and sent on to the
-provider over one pooled connection. The reply is relayed chunk by chunk as it
-arrives, so streamed (SSE) replies stay live. The gateway never retries: a POST
-reaches the provider at most once, and clients keep their own retry policy. A
-client that goes away closes the provider's stream with it.
-"""
-
 import contextlib
 import threading
 from collections.abc import Callable
@@ -33,8 +24,6 @@ _ERROR = TypeAdapter(dict[str, dict[str, str]])
 
 
 def provider_client() -> httpx.Client:
-    """One pool for every request. Like the OpenAI SDK's own client, it follows the
-    system's proxy settings and redirects."""
     return httpx.Client(
         timeout=httpx.Timeout(TIMEOUT_S, connect=15.0), follow_redirects=True
     )
@@ -43,7 +32,6 @@ def provider_client() -> httpx.Client:
 def _bind(
     port: int, handler: type[BaseHTTPRequestHandler]
 ) -> ThreadingHTTPServer:
-    """Take back the previous port so clients built before a restart still reach us."""
     try:
         return ThreadingHTTPServer(("127.0.0.1", port), handler)
     except OSError:
@@ -54,8 +42,6 @@ def _bind(
 
 @dataclass(frozen=True, slots=True)
 class Gateway:
-    """Owns the listening socket, its request threads and the provider pool."""
-
     upstream: Upstream | Unconfigured
     token: str
     _client: httpx.Client
@@ -78,7 +64,6 @@ class Gateway:
         client: Callable[[], httpx.Client] = provider_client,
     ) -> Gateway:
         def relay(request: BaseHTTPRequestHandler) -> None:
-            # Requests arrive only once serving starts, after the gateway below exists.
             gateway.relay(request)
 
         gateway = cls(upstream, token, client(), _bind(port, _handler(relay)))
@@ -89,7 +74,6 @@ class Gateway:
         return self._server.server_address[1]
 
     def start(self) -> None:
-        """Serve on a background thread (tests); `serve` blocks instead."""
         self._serving.set()
         threading.Thread(
             target=self._serve_then_finish, name="gateway", daemon=True
@@ -112,8 +96,6 @@ class Gateway:
         self._client.close()
 
     def relay(self, request: BaseHTTPRequestHandler) -> None:
-        # Read the whole request before answering: replying over an unread upload
-        # resets the connection, and the client sees no reason at all.
         if "Transfer-Encoding" in request.headers:
             request.close_connection = True
             _error(request, 411, "The AI connection needs a Content-Length.")
@@ -181,13 +163,10 @@ class Gateway:
                         request.wfile.flush()
                 request.wfile.write(b"0\r\n\r\n")
             except OSError, httpx.HTTPError:
-                # The client left, or the provider broke off: end both sides without a
-                # terminating chunk, so the client sees the reply as incomplete.
                 request.close_connection = True
 
 
 def _error(request: BaseHTTPRequestHandler, status: int, message: str) -> None:
-    """An OpenAI-shaped error, so clients report the message as the provider's would be."""
     body = _ERROR.dump_json({"error": {"message": message}})
     request.send_response(status)
     request.send_header("Content-Type", "application/json")
@@ -213,7 +192,6 @@ def _handler(
             relay(self)
 
         @override
-        def log_message(self, format: str, *args: object) -> None:
-            """Requests are not logged: their paths and timing are the clients' to record."""
+        def log_message(self, format: str, *args: object) -> None: ...
 
     return Handler

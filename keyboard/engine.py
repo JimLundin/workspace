@@ -1,33 +1,3 @@
-"""Windows keyboard logic: decides what each physical key press or release turns
-into, in Windows terms (virtual keys, modifiers). It makes no Win32 calls itself;
-those go through a `Host`, so the logic can be tested without Windows. Each
-step takes the keyboard's `EngineState` and returns the next one; its caller
-keeps it. The layout's rules are an `Engine`, built from a `keyboard.layout.Layout`.
-
-Tap-hold rule (like KMonad's tap-hold-next-release): a tap-hold key becomes
-"hold" if another key is pressed AND released while it is down, or if it is
-held past the tapping term. Otherwise it is a tap.
-
-Chordal hold: for home row mods, if the first other key pressed is on the same
-hand, it is a tap, decided at once. You use a modifier with the other hand, so
-a same-hand key means a fast roll, not a shortcut. Holding past the tapping
-term still always makes it a modifier.
-
-Quick tap: tap a tap-hold key and press it again within `Timings.quick_tap`, and
-the second press is that key held down, so it repeats (Backspace, Space...).
-
-Typing streak: right after a typed character, a home row mod (except Shift) is
-a letter immediately. Shift is exempt so capitals after a space still work;
-layer thumbs are exempt so symbols and numbers inside words still work.
-
-Caps word: holding both Shift keys turns it on (or off). Letters then come out
-capitalised until something that isn't part of a word: a space, punctuation,
-Enter, an arrow... Digits, `_`, Backspace and Delete keep it going.
-
-Requests: every Workspace request is on the Apps layer. Hold-to-talk tools
-send their press and release; disabling the layout releases them.
-"""
-
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Final, Protocol, assert_never
@@ -42,24 +12,17 @@ from protocol import LayoutState, Request, Slot, Tool
 
 
 class Host(Protocol):
-    """What the engine needs from Windows."""
-
     def send(self, key: Key | Mod, *, down: bool) -> None: ...
     def start_timer(self) -> int: ...
     def stop_timer(self, timer: int) -> None: ...
-    def layout_state(self, state: LayoutState) -> None:
-        """The layout was switched on or off."""
+    def layout_state(self, state: LayoutState) -> None: ...
 
-    def request(self, request: Request, *, down: bool) -> None:
-        """A tool or app key went down or up: pass it on to the assistant."""
+    def request(self, request: Request, *, down: bool) -> None: ...
 
-    def indicate(self, indicator: Indicator) -> None:
-        """What the layer indicator should show now (it changed)."""
+    def indicate(self, indicator: Indicator) -> None: ...
 
 
 class Verdict(Enum):
-    """What the OS should do with a physical key event."""
-
     PASS = auto()
     """Not ours: let it through unchanged."""
     SWALLOW = auto()
@@ -69,8 +32,6 @@ class Verdict(Enum):
 
 
 class Decision(Enum):
-    """How an undecided tap-hold key is resolved."""
-
     TAP = auto()
     HOLD = auto()
 
@@ -86,8 +47,6 @@ beyond that decides the key as a hold rather than growing."""
 
 @dataclass(frozen=True, slots=True)
 class Indicator:
-    """State the user can't see on the keys: the layer keys come from, and caps word."""
-
     layer: Layer = Layer.BASE
     caps_word: bool = field(default=False, kw_only=True)
     chord: bool = field(default=False, kw_only=True)
@@ -96,8 +55,6 @@ class Indicator:
 
 @dataclass(frozen=True, slots=True)
 class Pending:
-    """A tap-hold key that is down but not yet decided."""
-
     cell: int
     tap: Output
     hold: Mod | Layer
@@ -128,21 +85,15 @@ class LastTap:
 
 
 def elapsed(now: int, then: int) -> int:
-    """Milliseconds between two Windows timestamps, which wrap at 2**32."""
     return (now - then) & 0xFFFF_FFFF
 
 
 def is_typing(a: Action) -> bool:
-    """A typed character (for the typing streak): a key, maybe shifted, but not a shortcut."""
     return isinstance(a, Key) or (isinstance(a, Chord) and a.types)
 
 
 @dataclass(frozen=True, slots=True)
 class Modifiers:
-    """Which modifiers Windows has down, and how many held keys want each one.
-    Windows is told only when a count goes from 0 to 1 or back, so one key can't
-    release another's modifier."""
-
     counts: frozendict[Mod, int] = frozendict()
 
     def added(self, mod: Mod) -> Modifiers:
@@ -167,11 +118,9 @@ class Modifiers:
         )
 
     def chord(self, host: Host, chord: Chord) -> None:
-        """The chord's key goes down with its modifiers around it. Modifiers already
-        held are left alone; the ones added are released right after."""
         added = [
             mod for mod in Mod if mod in chord.mods and mod not in self.counts
-        ]  # in a fixed order
+        ]
         for mod in added:
             host.send(mod, down=True)
         host.send(chord.key, down=True)
@@ -179,7 +128,6 @@ class Modifiers:
             host.send(mod, down=False)
 
     def release_all(self, host: Host) -> None:
-        """Release every held modifier; the owner forgets them before calling."""
         failures = 0
         for mod in self.counts:
             try:
@@ -221,17 +169,13 @@ class EngineState:
     """What the indicator was last told."""
 
     def layer(self) -> Layer:
-        """The layer keys are read from: the top held layer, else the base layer."""
         return self.active_layers[-1] if self.active_layers else Layer.BASE
 
     def failed_open(self) -> EngineState:
-        """Input failed: stop remapping and forget the escape press."""
         return replace(self, enabled=False, escape_down_at=None)
 
 
 class UnreleasedError(OSError):
-    """Cleanup was refused for some input; `state` is the engine with all of it forgotten."""
-
     def __init__(self, state: EngineState, message: str) -> None:
         super().__init__(message)
         self.state: Final = state
@@ -239,9 +183,6 @@ class UnreleasedError(OSError):
 
 @dataclass(frozen=True, slots=True)
 class Engine:
-    """A layout's rules: what each key event turns into. Each method takes the
-    keyboard's `EngineState` and returns the next one; its caller keeps it."""
-
     bindings: Bindings
     timings: Timings
     escape: Scancode
@@ -260,7 +201,6 @@ class Engine:
         down: bool,
         now: int,
     ) -> tuple[EngineState, Verdict]:
-        """One physical key event, then the indicator. `now` is the event's timestamp in ms (it may wrap around)."""
         state, verdict = self.key(state, host, scancode, down=down, now=now)
         return refresh(state, host), verdict
 
@@ -273,7 +213,6 @@ class Engine:
         down: bool,
         now: int,
     ) -> tuple[EngineState, Verdict]:
-        # Escape key: tap = on/off, hold = quit. Checked first, works in both states.
         if scancode == self.escape:
             pressed_at = state.escape_down_at
             if down:
@@ -329,7 +268,7 @@ class Engine:
                 if (
                     bound := self.bindings.action(state.layer(), cell)
                 ) is BLANK:
-                    return state  # Nothing pressed, so its release has nothing to end.
+                    return state
                 match bound:
                     case TapHold(tap) if self.quick_tap(state, cell, now):
                         a: Action = tap
@@ -364,7 +303,7 @@ class Engine:
                 case KeyUp(_, now):
                     return self.resolve(state, host, Decision.TAP, now=now)
                 case KeyDown():
-                    return state  # auto-repeat of the undecided key is ignored
+                    return state
                 case _:
                     assert_never(e)
         buffer = state.buffer
@@ -375,17 +314,13 @@ class Engine:
                     for waiting in buffer
                 )
                 if not released_meanwhile:
-                    # A key held since before is already decided: repeat it now.
                     if current := state.pressed[cell]:
                         return repeat(state, host, current, now)
-                    # A buffered key's repeated down adds nothing; reuse the queued event.
                     for waiting in reversed(buffer):
                         if waiting.cell == cell:
                             if isinstance(waiting, KeyDown):
                                 return state
                             break
-                # The first press on the modifier's own hand is a roll, unless it is
-                # another home row mod: same-hand mods combine, as QMK's Chordal Hold.
                 first_press = not any(
                     isinstance(waiting, KeyDown) for waiting in buffer
                 )
@@ -410,7 +345,6 @@ class Engine:
             case _:
                 assert_never(e)
         if len(buffer) >= MAX_BUFFERED:
-            # Too many keys waiting: decide it as a hold, then handle this one.
             return self.event(
                 self.resolve(state, host, Decision.HOLD, now=e.at), host, e
             )
@@ -420,7 +354,6 @@ class Engine:
             isinstance(waiting, KeyDown) and waiting.cell == e.cell
             for waiting in buffer
         ):
-            # A home row mod holds only for a key on the other hand; a same-hand tap inside it is a roll.
             across = isinstance(p.hold, Layer) or any(
                 isinstance(waiting, KeyDown)
                 and self.bindings.hand(waiting.cell)
@@ -444,7 +377,6 @@ class Engine:
     def resolve(
         self, state: EngineState, host: Host, decision: Decision, *, now: int
     ) -> EngineState:
-        """Decide the undecided key. `now` is when the decision happened."""
         p = state.pending
         if p is None:
             return state
@@ -472,7 +404,6 @@ class Engine:
 
 
 def refresh(state: EngineState, host: Host) -> EngineState:
-    """Tells the indicator if what it should show has changed; every key event refreshes, so it builds a record only for a change."""
     layer, shown = state.layer(), state.shown
     chord = layer is Layer.APPS
     if (
@@ -487,7 +418,6 @@ def refresh(state: EngineState, host: Host) -> EngineState:
 
 
 def toggle(state: EngineState, host: Host) -> EngineState:
-    """Switch the layout on/off, releasing held input and clearing its indicator."""
     state = release_all(replace(state, escape_down_at=None), host)
     state = replace(state, enabled=not state.enabled)
     host.layout_state(LayoutState.ON if state.enabled else LayoutState.OFF)
@@ -497,7 +427,6 @@ def toggle(state: EngineState, host: Host) -> EngineState:
 def repeat(
     state: EngineState, host: Host, current: Action, now: int
 ) -> EngineState:
-    """Auto-repeat: repeat the output already chosen on the first press."""
     return (
         press(state, host, current, now)
         if isinstance(current, (Key, Chord))
@@ -506,10 +435,6 @@ def repeat(
 
 
 def release_all(state: EngineState, host: Host) -> EngineState:
-    """Clear ownership first and attempt every release, even after rejection.
-
-    A rejected release raises `UnreleasedError`, which carries the cleared state.
-    """
     failures = 0
     if state.pending is not None:
         try:
@@ -546,7 +471,6 @@ def release_all(state: EngineState, host: Host) -> EngineState:
 def apply_caps_word(
     state: EngineState, a: Action
 ) -> tuple[EngineState, Action]:
-    """Caps word: capitalise letters, let word characters through, end on anything else."""
     if not state.caps_word:
         return state, a
     match a:
@@ -554,7 +478,7 @@ def apply_caps_word(
             return state, Chord.shifted(a)
         case Key() if a.continues_word():
             return state, a
-        case Chord(Key.MINUS) as chord if chord.only_shifted:  # _
+        case Chord(Key.MINUS) as chord if chord.only_shifted:
             return state, a
         case Key() | Chord():
             return replace(state, caps_word=False), a
@@ -563,7 +487,6 @@ def apply_caps_word(
 
 
 def press(state: EngineState, host: Host, a: Action, now: int) -> EngineState:
-    # Both Shift keys held (this one is already recorded as pressed): toggle caps word.
     if a == Mod.SHIFT and state.pressed.count(Mod.SHIFT) >= 2:
         state = replace(state, caps_word=not state.caps_word)
     state, a = apply_caps_word(state, a)
@@ -577,13 +500,10 @@ def press(state: EngineState, host: Host, a: Action, now: int) -> EngineState:
                 host.send(a, down=True)
             state = replace(state, mods=state.mods.added(a))
         case Layer():
-            # A layer beyond MAX_LAYERS is ignored rather than stored.
             if len(state.active_layers) < MAX_LAYERS:
                 state = replace(state, active_layers=(*state.active_layers, a))
         case Tool() | Slot():
             if Mod.ALT in state.mods.counts:
-                # Applications see Alt pressed alone; tapping an unassigned key
-                # keeps its release from opening a menu.
                 host.send(Key.MENU_MASK, down=True)
                 host.send(Key.MENU_MASK, down=False)
             host.request(a, down=True)
@@ -601,14 +521,12 @@ def release(state: EngineState, host: Host, a: Action) -> EngineState:
         case Chord():
             host.send(a.key, down=False)
         case Mod():
-            # Forget the hold first: the caller keeps this state if Windows refuses the release.
             if state.mods.counts.get(a, 0) == 1:
                 host.send(a, down=False)
             return replace(state, mods=state.mods.removed(a))
         case Layer():
             layers = state.active_layers
             if a in layers:
-                # Remove the most recently added copy.
                 index = len(layers) - 1 - layers[::-1].index(a)
                 return replace(
                     state, active_layers=layers[:index] + layers[index + 1 :]

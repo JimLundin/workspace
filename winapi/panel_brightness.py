@@ -1,11 +1,3 @@
-"""The laptop's own panel brightness, read and set over WMI (root\\WMI's WmiMonitorBrightness).
-
-DDC/CI doesn't reach a built-in panel and this machine has no legacy `\\\\.\\LCD`
-device, so WMI is the way in. Only an active panel answers: with the lid
-closed there is none, and every call reports `Unavailable`. Brightness 0 is the
-darkest the panel goes; an LCD's backlight stays faintly on.
-"""
-
 import ctypes
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -48,19 +40,15 @@ lazy from win32more.Windows.Win32.System.Wmi import (
 
 @dataclass(frozen=True, slots=True)
 class Level:
-    """The panel's brightness, as a percentage from 0 to 100."""
-
     value: int
 
 
 @dataclass(frozen=True, slots=True)
-class Unavailable:
-    """No active built-in panel answered, or WMI refused the request."""
+class Unavailable: ...
 
 
 @contextmanager
 def _namespace() -> Generator[IWbemServices | None]:
-    """root\\WMI on this machine, in the multithreaded apartment; None when WMI can't be reached."""
     if FAILED(CoInitializeEx(None, COINIT_MULTITHREADED)):
         yield None
         return
@@ -106,7 +94,6 @@ def _namespace() -> Generator[IWbemServices | None]:
 def _active(
     services: IWbemServices, wmi_class: str, column: str
 ) -> IWbemClassObject | None:
-    """The active panel's row of `wmi_class`, with `column`; None when no panel is active."""
     rows = IEnumWbemClassObject(own=True)
     query = f"SELECT {column} FROM {wmi_class} WHERE Active = TRUE"
     if FAILED(
@@ -151,14 +138,13 @@ def brightness() -> Level | Unavailable:
                 level = int(value.Anonymous.Anonymous.Anonymous.bVal)
             finally:
                 VariantClear(value)
-                del row  # Released before the apartment closes.
+                del row
             return Level(level) if 0 <= level <= 100 else Unavailable()
     except OSError:
         return Unavailable()
 
 
 def set_brightness(level: int) -> Level | Unavailable:
-    """Sets the panel to `level` percent at once; the level set, or Unavailable when refused."""
     if level not in range(101):
         raise ValueError(
             f"brightness is a percentage from 0 to 100, not {level!r}"
@@ -186,7 +172,6 @@ def set_brightness(level: int) -> Level | Unavailable:
                 instance = path.Anonymous.Anonymous.Anonymous.bstrVal
                 if instance is None:
                     return Unavailable()
-                # WMI carries a uint32 argument as VT_I4 and a uint8 as VT_UI1.
                 (
                     timeout.Anonymous.Anonymous.vt,
                     timeout.Anonymous.Anonymous.Anonymous.lVal,
@@ -229,11 +214,6 @@ def set_brightness(level: int) -> Level | Unavailable:
                 return Level(level)
             finally:
                 VariantClear(path)
-                del (
-                    arguments,
-                    signature,
-                    methods,
-                    row,
-                )  # Released before the apartment closes.
+                del (arguments, signature, methods, row)
     except OSError:
         return Unavailable()

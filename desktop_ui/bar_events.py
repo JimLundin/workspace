@@ -1,12 +1,3 @@
-"""The bar's decisions: what the person did and what was published, folded into what the bar shows.
-
-The bar window, the views' publisher and the bar's own timers report what
-happened as an `Event`; `transition` returns the next `BarModel` and the `Effect`s
-to perform, lazily and in order. Measuring and painting stay with the bar: it
-performs them and reports what they computed (`Retargeted`, `Framed`) as facts,
-so even the motion it draws changes only through the fold.
-"""
-
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -72,8 +63,6 @@ NO_SCREEN: Final = Rect(0, 0, 0, 0)
 
 @dataclass(frozen=True, slots=True)
 class Surroundings:
-    """What the tick observed of the desktop, the shell and the system, as the bar shows it."""
-
     system: SystemStatus = field(default_factory=SystemStatus)
     ambient: Ambient = field(
         default_factory=lambda: Ambient("", PowerUnavailable.UNKNOWN)
@@ -92,8 +81,6 @@ class Surroundings:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class BarSpec:
-    """Everything the bar is declared as: what it shows, its menu, how it moves and its sizes."""
-
     island: IslandSpec
     controls: ControlsSpec
     springs: Springs
@@ -108,8 +95,6 @@ class BarSpec:
 
 @dataclass(frozen=True, slots=True)
 class BarModel:
-    """Everything the bar shows and decides from; replaced whole on the Qt thread."""
-
     spec: BarSpec
     closed: bool = False
     opened: Menu | None = None
@@ -117,8 +102,6 @@ class BarModel:
     menu_target: int = 0
     """The window that had the keyboard before the menu opened."""
     hovered: Key | None = None
-    # Each activity comes from its own owner: dictation and quick jobs from the
-    # voice controller, the recording from the meeting recorder.
     dictating: bool = False
     overlay_enabled: bool = False
     job: Job | None = None
@@ -130,7 +113,6 @@ class BarModel:
     """What the tick last observed."""
     next_material: float = 0.0
     next_power: float = 0.0
-    # What the window last computed.
     views: tuple[CapsuleView, ...] = ()
     motion: IslandMotion = field(default_factory=IslandMotion)
     """Reassigned each frame; the bar mutates no motion or view record."""
@@ -139,7 +121,6 @@ class BarModel:
 
 
 def memory_trace(model: BarModel) -> Trace:
-    """Memory in use against all installed: its graph's ceiling, and its reading's."""
     system, status = model.seen.system, model.spec.island.status
     used = memory_used(system.memory, status).text
     match system.memory:
@@ -156,7 +137,6 @@ def memory_trace(model: BarModel) -> Trace:
 
 
 def menu(model: BarModel, panel: Panel) -> Menu:
-    """`panel` for what's happening now, keeping its selection and month while it stays open."""
     recorded = (
         capture(model.recording, model.spec.island.words.phases)
         if model.recording.capturing
@@ -204,9 +184,6 @@ def menu(model: BarModel, panel: Panel) -> Menu:
     return replace(built, selected=kept.selected) if kept else built
 
 
-# ---- facts --------------------------------------------------------------------------
-
-
 @dataclass(frozen=True, slots=True)
 class Pressed:
     action: Action
@@ -214,8 +191,6 @@ class Pressed:
 
 @dataclass(frozen=True, slots=True)
 class PanelPressed:
-    """A reading in the status capsule was pressed: it opens its panel under it, or closes it if open."""
-
     panel: Panel
     slot: int | None = None
     """The reading's slot in the status capsule, which the panel hangs under."""
@@ -223,8 +198,6 @@ class PanelPressed:
 
 @dataclass(frozen=True, slots=True)
 class Paged:
-    """The calendar's arrow was pressed."""
-
     months: int
 
 
@@ -249,8 +222,7 @@ class MenuKey:
 
 
 @dataclass(frozen=True, slots=True)
-class Deactivated:
-    """Another window took the keyboard: the island closes without taking it back."""
+class Deactivated: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,7 +261,6 @@ class LayoutShown:
     enabled: bool
 
 
-# The views' publisher changed one of the activities the bar shows.
 type ActivityChange = (
     OverlayShown | DictationShown | JobShown | RecordingShown | LayoutShown
 )
@@ -302,16 +273,12 @@ class ChordHeld:
 
 @dataclass(frozen=True, slots=True)
 class Opening:
-    """The bar took the keyboard to show `opened`; `target` had it before, when it was closed."""
-
     opened: Menu
     target: int | None
 
 
 @dataclass(frozen=True, slots=True)
 class Ticked:
-    """What the tick observed, and when it next reads power and the material."""
-
     seen: Surroundings
     next_power: float
     next_material: float
@@ -319,8 +286,6 @@ class Ticked:
 
 @dataclass(frozen=True, slots=True)
 class Retargeted:
-    """The window measured the bar: its views and their motion's new targets."""
-
     views: tuple[CapsuleView, ...]
     motion: IslandMotion
     opened: Menu | None
@@ -363,26 +328,19 @@ type Event = (
     | Closing
 )
 
-# ---- effects ------------------------------------------------------------------------
-
 
 @dataclass(frozen=True, slots=True)
-class Render:
-    """Measure the bar and retarget its motion at what it should show now."""
+class Render: ...
 
 
 @dataclass(frozen=True, slots=True)
 class Expand:
-    """Take the keyboard (remembering who had it, if the menu was closed) and open `opened`."""
-
     opened: Menu
     remember: bool
 
 
 @dataclass(frozen=True, slots=True)
 class Release:
-    """Give the keyboard back to `target` (0: to no one) as the menu closes."""
-
     target: int
 
 
@@ -427,8 +385,6 @@ class ToggleAway:
 
 
 class SettingsPage(StrEnum):
-    """A page of Windows' Settings, by its address."""
-
     NOTIFICATIONS = "ms-settings:notifications"
     WIFI = "ms-settings:network-wifi"
     LOCATION = "ms-settings:privacy-location"
@@ -442,8 +398,6 @@ class OpenSettings:
 
 @dataclass(frozen=True, slots=True)
 class Survey:
-    """Read the Wi-Fi networks in range while `listing`: their panel is open."""
-
     listing: bool = field(kw_only=True)
 
 
@@ -498,7 +452,6 @@ type Effect = (
 def _closed(
     model: BarModel, *, restore: bool
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """The menu closes, giving the keyboard back to who had it if `restore`."""
     if model.opened is None:
         return model, ()
     return replace(model, opened=None), (
@@ -511,7 +464,6 @@ def _closed(
 def _ran(
     model: BarModel, choice: island_menu.Choice
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """What a menu choice does."""
     match choice:
         case ToolChoice(tool=tool):
             return model, (UseTool(tool),)
@@ -560,7 +512,6 @@ def _ran(
 def _volume(
     model: BarModel, level: float
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """The status observer applies it; the slider follows at once rather than at the next reading."""
     seen = replace(model.seen, system=replace(model.seen.system, volume=level))
     return replace(model, seen=seen), (SetVolume(level), Render())
 
@@ -568,7 +519,6 @@ def _volume(
 def _muted(
     model: BarModel, *, muted: bool
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """Like the level, the toggle and the capsule's speaker follow at once."""
     speakers = Speakers.MUTED if muted else Speakers.AUDIBLE
     seen = replace(
         model.seen, system=replace(model.seen.system, speakers=speakers)
@@ -577,7 +527,6 @@ def _muted(
 
 
 def _turned(model: BarModel, month: Month | None) -> BarModel:
-    """The open calendar shows `month`; None returns it to today's."""
     return (
         replace(model, opened=replace(model.opened, month=month))
         if model.opened is not None
@@ -586,7 +535,6 @@ def _turned(model: BarModel, month: Month | None) -> BarModel:
 
 
 def _paged(model: BarModel, months: int) -> BarModel:
-    """The calendar turned from the month it shows; past the representable dates it stays."""
     if not (opened := model.opened) or not (today := model.seen.ambient.today):
         return model
     try:
@@ -598,7 +546,6 @@ def _paged(model: BarModel, months: int) -> BarModel:
 def _tray(
     model: BarModel, slot: int, click: Click
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """The application gets the click and the keyboard; the island closes without taking it back."""
     model, closing = _closed(model, restore=False)
     return model, (*closing, ClickTray(slot, click))
 
@@ -631,7 +578,6 @@ def _pressed(
         case Action.CLOSE_MENU:
             return _closed(model, restore=True)
         case Action.STOP_DICTATION:
-            # The dictation toggle stops a capture that is listening.
             return model, (UseTool(Tool.DICTATE_TOGGLE),)
         case Action.STOP_RECORDING:
             return _ran(model, Command.STOP_RECORDING)
@@ -642,7 +588,6 @@ def _pressed(
 def _opened(
     model: BarModel, panel: Panel, anchor: int | None = None
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """Open `panel` under the reading at `anchor`, from the closed bar or from another panel."""
     if model.closed:
         return model, ()
     opening = replace(menu(model, panel), anchor=anchor)
@@ -655,7 +600,6 @@ def _opened(
 def _panel(
     model: BarModel, panel: Panel, slot: int | None
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """A reading's press opens its panel under it; pressed again it closes."""
     if (opened := model.opened) and opened.panel is panel:
         return _closed(model, restore=True)
     return _opened(model, panel, slot)
@@ -680,7 +624,6 @@ def _shown(model: BarModel, change: ActivityChange) -> BarModel:
 def _changed(
     before: BarModel, after: BarModel
 ) -> tuple[BarModel, tuple[Effect, ...]]:
-    """`after`, rendered only when it differs from `before`."""
     return after, ((Render(),) if after != before else ())
 
 
@@ -739,7 +682,6 @@ def _folded(
                 menu_target=target if target is not None else model.menu_target,
             ), (Render(),)
         case Ticked(seen, next_power, next_material):
-            # A changed reading re-measures, so a growing timer pushes its neighbours out.
             rendered = (Render(),) if seen != model.seen else ()
             return replace(
                 model,
@@ -762,16 +704,11 @@ def _folded(
 def transition(
     model: BarModel, event: Event
 ) -> tuple[BarModel, Iterator[Effect]]:
-    """The model after `event` and the effects it calls for, in order."""
     model, effects = _folded(model, event)
     return model, iter(effects)
 
 
-# ---- frames -------------------------------------------------------------------------
-
-
 def spinning(model: BarModel) -> bool:
-    """Work is running where the bar shows it: a capsule's dots."""
     return any(
         part is Marker.DOTS
         for view in model.views
@@ -782,8 +719,6 @@ def spinning(model: BarModel) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Frame:
-    """What one frame draws, and whether another frame should follow."""
-
     motion: IslandMotion
     pulse: float
     """How far through its cycle a quick job's pulse is, from 0 (at rest) to 1."""
@@ -796,8 +731,6 @@ class Frame:
 
 
 def next_frame(model: BarModel, now: float, *, animate: bool) -> Frame:
-    """The frame at `now`; without `animate` (hidden, or Windows' reduced motion) everything rests."""
-    # A frame after the loop was idle starts the motion now, rather than from the last frame.
     elapsed = now - (model.last_frame if model.last_frame is not None else now)
     motion = advance(model.motion, elapsed) if animate else finish(model.motion)
     working = spinning(replace(model, motion=motion))

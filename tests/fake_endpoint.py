@@ -1,6 +1,3 @@
-"""A local stand-in for an OpenAI-style endpoint: it records each request and
-answers with the replies it's given, in order (the last one repeats)."""
-
 import threading
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
@@ -67,7 +64,7 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
                     ConnectionResetError,
                     ConnectionAbortedError,
                 ):
-                    pass  # Stopping a streamed request closes its socket.
+                    pass
                 return
             if endpoint.respond is not None:
                 reply = endpoint.respond(request)
@@ -88,7 +85,6 @@ def fake_endpoint() -> Generator[FakeEndpoint]:
                 ),
             )
             if reply.status >= 400 and reply.retry_after_ms is not None:
-                # The client still retries what it would retry, without waiting out its real backoff.
                 self.send_header("retry-after-ms", str(reply.retry_after_ms))
             self.end_headers()
             self.wfile.write(reply.body)

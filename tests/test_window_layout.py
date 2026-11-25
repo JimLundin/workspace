@@ -1,9 +1,3 @@
-"""Monitor setups, declared positions, splitting and the place for others.
-
-The setups here are the test's own, so each test checks how windows are placed
-from whatever setups it is given, never Workspace's real layouts.
-"""
-
 from fractions import Fraction
 
 from desktop_ui.shell_items import EMPTY_SHELF, PinnedApp, shelf
@@ -61,7 +55,6 @@ SETUPS = Setups(
     ),
     layouts=frozendict(
         {
-            # Two shell places side by side on desktop 0, the editor alone on desktop 1, others on desktop 2.
             Setup.LAPTOP_ONLY: Layout(
                 frozendict(
                     {
@@ -137,9 +130,6 @@ def recognized(setup: Setup, roles: dict[Role, Monitor]) -> Screens:
 def test_setups_match_their_screens_and_assign_work_roles_by_orientation() -> (
     None
 ):
-    # Defects: a setup's screen isn't recognized, roles follow the screens'
-    # positions instead of their orientation, or an unknown screen set isn't
-    # treated as the laptop alone on its own panel.
     assert screens((LAPTOP, FOUR_K), SETUPS) == recognized(
         Setup.HOME, {Role.LAPTOP: LAPTOP, Role.MAIN: FOUR_K}
     )
@@ -173,7 +163,6 @@ def test_setups_match_their_screens_and_assign_work_roles_by_orientation() -> (
 
 
 def test_only_a_recognized_setups_protected_screens_go_dark_when_away() -> None:
-    # Defects: the laptop panel or an unknown screen is darkened, or a protected screen is missed.
     assert dark_when_away((LAPTOP, FOUR_K), SETUPS) == frozenset({FOUR_K})
     assert dark_when_away((LAPTOP, ABOVE, SIDE), SETUPS) == frozenset()
     assert dark_when_away((LAPTOP, FOUR_K, ABOVE), SETUPS) == frozenset()
@@ -182,13 +171,10 @@ def test_only_a_recognized_setups_protected_screens_go_dark_when_away() -> None:
 def test_windows_beyond_an_apps_places_share_its_last_place_and_fewer_leave_places_empty() -> (
     None
 ):
-    # Defects: a fourth window is dropped or overlaps the third, or a lone
-    # window is stretched over places meant for others.
     alone = screens((LAPTOP,), SETUPS)
     assert alone is not None
     assert targets(place(alone, (Group(SHELL, (3, 6, 7, 8)),))) == {
         3: (0, Rect(0, 0, 960, 1200)),
-        # The half-width laptop place is portrait, so the three stack.
         6: (0, Rect(960, 0, 1920, 400)),
         7: (0, Rect(960, 400, 1920, 800)),
         8: (0, Rect(960, 800, 1920, 1200)),
@@ -201,9 +187,6 @@ def test_windows_beyond_an_apps_places_share_its_last_place_and_fewer_leave_plac
 def test_undeclared_apps_share_the_place_for_others_and_add_no_desktops() -> (
     None
 ):
-    # Defects: an undeclared app gets a desktop of its own beyond the layout's,
-    # two undeclared apps overlap in the shared place, or a declared app's
-    # window is counted among the others.
     alone = screens((LAPTOP,), SETUPS)
     assert alone is not None
     placed = place(
@@ -222,8 +205,6 @@ def test_undeclared_apps_share_the_place_for_others_and_add_no_desktops() -> (
 def test_apps_given_the_same_place_share_it_equally_in_the_layouts_order() -> (
     None
 ):
-    # Defects: one app's windows overlap another's in their shared place, a
-    # lone window of each gets anything but half, or the order follows the shelf.
     together = Screens(
         Setup.HOME,
         frozendict(
@@ -255,7 +236,6 @@ def test_apps_given_the_same_place_share_it_equally_in_the_layouts_order() -> (
 
 
 def test_windows_stack_in_a_portrait_region() -> None:
-    # Defect: windows sharing a tall region are squeezed side by side.
     portrait = Screens(
         Setup.LAPTOP_ONLY,
         frozendict({Role.LAPTOP: Rect(0, 0, 1200, 1920)}),
@@ -269,8 +249,6 @@ def test_windows_stack_in_a_portrait_region() -> None:
 
 
 def test_pinned_web_apps_are_not_placed_as_ordinary_edge() -> None:
-    # Defects: a Teams window is also grouped as Edge, or an unmanaged window
-    # keeps its group alive and takes a share of the region.
     edge, teams, dialog = (
         Window(1, "News", "msedge.exe", minimized=False),
         Window(2, "Chat", "msedge.exe", minimized=False),
@@ -292,8 +270,6 @@ def test_pinned_web_apps_are_not_placed_as_ordinary_edge() -> None:
 def test_resizable_windows_of_other_programs_are_managed_even_when_minimized() -> (
     None
 ):
-    # Defect: a minimized window keeps its stale desktop after the monitors
-    # change, so the user has to find and restore it by hand.
     window = Window(1, "Editor", "code.exe", minimized=False)
     assert managed(window, resizable=True, own=False)
     assert not managed(window, resizable=False, own=False)
@@ -311,9 +287,6 @@ def test_resizable_windows_of_other_programs_are_managed_even_when_minimized() -
 def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() -> (
     None
 ):
-    # Defects: the pager orders a desktop's icons by when the apps started
-    # rather than where they sit, lists an app placed on another desktop, or
-    # leaves out an app the layout puts there because it isn't running.
     work = screens((LAPTOP, ABOVE, SIDE), SETUPS)
     assert work is not None
     apps = (
@@ -324,7 +297,6 @@ def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() 
     )
     placement = place(work, apps)
     windows = frozendict((group.app, group.windows) for group in apps)
-    # SIDE's editor is leftmost, then ABOVE's shell, then the laptop's chat, then ABOVE's browser.
     assert reading_order(work, windows, placement, 0) == (
         EDITOR,
         SHELL,

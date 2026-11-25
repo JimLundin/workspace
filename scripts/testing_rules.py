@@ -1,5 +1,3 @@
-"""The ban on patch and mock frameworks, in production and test source alike."""
-
 import ast
 from collections.abc import Iterator, Mapping, Sequence
 
@@ -26,7 +24,6 @@ FIXTURES = frozenset({"monkeypatch", "mocker"})
 
 
 def _forbidden(name: str) -> bool:
-    """A forbidden tool, or anything inside one."""
     return any(
         name == tool or name.startswith(tool + ".")
         for tool in FORBIDDEN_TEST_TOOLS
@@ -34,7 +31,6 @@ def _forbidden(name: str) -> bool:
 
 
 def _called_seam(call: str, args: Sequence[ast.expr]) -> str:
-    """The forbidden tool a call loads or uses, or nothing."""
     if call in DYNAMIC_IMPORTS:
         match args:
             case [ast.Constant(value=str() as module), *_] if (
@@ -49,7 +45,6 @@ def _called_seam(call: str, args: Sequence[ast.expr]) -> str:
 
 
 def _seam(node: ast.AST, aliases: Mapping[str, str]) -> str:
-    """The forbidden tool a node imports, calls or takes as a fixture, or nothing."""
     match node:
         case ast.Import(names=names):
             return next(
@@ -76,7 +71,6 @@ def _seam(node: ast.AST, aliases: Mapping[str, str]) -> str:
 
 
 def testing_dependencies(source: Source) -> Iterator[Finding]:
-    """Reject framework replacement seams in production and test source alike."""
     tree = parse(source)
     aliases = import_aliases(tree)
     detail = "Patches and mocks are disallowed; pass explicit dependencies or use real local resources: "

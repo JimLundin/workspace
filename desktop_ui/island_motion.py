@@ -1,12 +1,3 @@
-"""How the island's capsules move between views: a pure value advanced by its owner's frames.
-
-Each capsule springs its width toward its measured content and its presence
-toward shown (1) or gone (0); a panel springs along to the reading it hangs under. A capsule arrives from zero presence and leaves
-showing its last content until it has collapsed. When content changes, the new
-content fades in over the previous one at its own measured size while the width
-morphs between them.
-"""
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
@@ -25,8 +16,6 @@ from desktop_ui.motion import (
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Springs:
-    """How each kind of capsule change moves."""
-
     morph: Spring
     """A capsule changing shape."""
     appear: Spring
@@ -39,8 +28,6 @@ class Springs:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Timing:
-    """The bar's clocks beyond its springs."""
-
     pulse: float
     """Seconds per cycle of a quick job's pulsing dots..."""
     lag: float
@@ -53,8 +40,6 @@ class Timing:
 
 @dataclass(frozen=True, slots=True)
 class Shown:
-    """A view the bar wants on screen, with its measured content."""
-
     view: CapsuleView
     content: Content
     anchor: float = field(default=0.0, kw_only=True)
@@ -65,9 +50,7 @@ class Shown:
 class Moving:
     view: CapsuleView
     content: Content
-    previous: (
-        Content | None
-    )  # Fading out under `content`, until the fade rests.
+    previous: Content | None
     width: Motion
     height: Motion
     presence: Motion
@@ -104,7 +87,6 @@ def arrive(shown: Shown, springs: Springs, *, animate: bool) -> Moving:
 
 
 def outline(part: Part) -> object:
-    """A part as far as cross-fading cares: a reading that changes its text updates in place."""
     match part:
         case Text(tone=tone):
             return (Text, tone)
@@ -170,10 +152,6 @@ def retarget(
     *,
     animate: bool,
 ) -> IslandMotion:
-    """New targets for every capsule, continuing from where each is now.
-
-    Capsules keep their left-to-right key order; departing ones stay until they've collapsed.
-    """
     wanted = frozendict((each.view.key, each) for each in shown)
     current = frozendict((moving.key, moving) for moving in motion.capsules)
 
@@ -218,7 +196,6 @@ def advance(motion: IslandMotion, seconds: float) -> IslandMotion:
 
 
 def finish(motion: IslandMotion) -> IslandMotion:
-    """Every capsule where it's headed, at once: departing capsules are gone."""
     return IslandMotion(
         tuple(
             rest(moving)
@@ -245,7 +222,6 @@ def settled(motion: IslandMotion) -> bool:
 
 
 def placed(motion: IslandMotion, row: float) -> tuple[Placed, ...]:
-    """Each capsule's current frame; none is shorter than a capsule's `row` height."""
     return tuple(
         Placed(
             moving.key,

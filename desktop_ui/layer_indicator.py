@@ -1,5 +1,3 @@
-"""The quiet layer indicator and its timed feedback capsule."""
-
 from dataclasses import dataclass, field, replace
 
 lazy from PySide6 import QtCore, QtWidgets
@@ -25,8 +23,6 @@ prepare()
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class IndicatorSpec:
-    """The layer indicator: a capsule at the bottom of the work area that names the layer."""
-
     radius: float
     padding: float
     """Beside the text..."""

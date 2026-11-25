@@ -1,5 +1,3 @@
-"""Taskbar hiding and keyboard-language enforcement, against fake desktops."""
-
 import unittest
 
 from desktop_ui.shell_controls import TaskbarControl
@@ -12,8 +10,6 @@ from winapi.keyboard_language import Foreground
 
 
 class TaskbarDesktop:
-    """Own the fixture Explorer visibility catalog, including simulated restarts."""
-
     def __init__(self) -> None:
         self.shown = {101: True}
 
@@ -28,8 +24,6 @@ class TaskbarDesktop:
 
 
 class RecoveryGuard:
-    """Own the fixture recovery process's readiness and exit observation."""
-
     def __init__(self, *, ready: bool = True) -> None:
         self.handshake = ready
         self.code: int | None = None
@@ -55,7 +49,7 @@ def test_taskbar_is_rehidden_after_explorer_reappears_and_restored_on_close() ->
     control.enforce()
     assert desktop.shown == {101: False}
     desktop.shown[101] = True
-    desktop.shown[202] = True  # Explorer restart or a secondary monitor.
+    desktop.shown[202] = True
     control.enforce()
     assert desktop.shown == {101: False, 202: False}
     control.close()
@@ -80,7 +74,6 @@ def test_lost_recovery_guard_restores_taskbar_instead_of_leaving_it_hidden() -> 
 
 
 def test_taskbars_are_never_hidden_without_the_recovery_handshake() -> None:
-    """Detect acquiring shell ownership after a failed recovery startup."""
     desktop, guard = TaskbarDesktop(), RecoveryGuard(ready=False)
     control = TaskbarControl(desktop, lambda: guard)
     with unittest.TestCase().assertRaisesRegex(
@@ -92,8 +85,6 @@ def test_taskbars_are_never_hidden_without_the_recovery_handshake() -> None:
 
 
 class LanguageDesktop:
-    """Own changing foreground observations and language requests in this scenario."""
-
     def __init__(self) -> None:
         self.observations = iter(
             Foreground(*pair)
@@ -136,7 +127,6 @@ def test_keyboard_language_rechecks_each_foreground_and_both_toggle_states() -> 
 def test_firmware_keyboard_keeps_english_when_remapping_is_off_and_on_shutdown() -> (
     None
 ):
-    """Detect Colemak being applied a second time to firmware-generated output."""
     desktop = LanguageDesktop()
     desktop.observations = iter(
         Foreground(*pair)

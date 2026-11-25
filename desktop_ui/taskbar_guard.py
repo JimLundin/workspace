@@ -1,5 +1,3 @@
-"""Restore Windows taskbars even if Workspace's entire job is terminated."""
-
 import sys
 
 lazy from winapi.desktop_shell import taskbar_visible, taskbars, wait_for_exit

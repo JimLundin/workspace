@@ -1,5 +1,3 @@
-"""Workspace's packet boundaries and packet timing must not alter converted audio, sample clocks or the recording's continuity."""
-
 from array import array
 from dataclasses import dataclass
 from itertools import pairwise
@@ -59,7 +57,6 @@ def audio_cases(draw: strategies.DrawFn) -> AudioCase:
             sample.to_bytes(bits // 8, "little", signed=True)
             for sample in integers
         )
-    # Duplicate cuts include empty packets; every cut remains on a whole frame.
     cuts = tuple(
         sorted(
             draw(strategies.lists(strategies.integers(0, frames), max_size=16))
@@ -102,8 +99,6 @@ def test_packet_partition_preserves_audio_and_sample_clocks(
 
 @dataclass(frozen=True, slots=True)
 class Packet:
-    """A device packet placed `offset` frames from the published cursor; each sample is `value`."""
-
     offset: int
     length: int
     value: int
@@ -111,8 +106,6 @@ class Packet:
 
 @dataclass(frozen=True, slots=True)
 class Publish:
-    """A take `ahead` frames past the published cursor."""
-
     ahead: int
 
 
@@ -144,10 +137,6 @@ def timing_cases(draw: strategies.DrawFn) -> TimingCase:
 def test_late_and_early_packets_cost_only_their_reported_gaps(
     case: TimingCase,
 ) -> None:
-    # Defects: a late or early packet ends the recording; clipping a late packet
-    # drops more than the part already published; pushing the cursor forward
-    # republishes, reorders or loses buffered audio; a gap is unreported,
-    # misplaced, mismeasured or reported for audio that was kept.
     mixer = Mixer.ring(capacity=case.capacity, limit=8 * case.capacity)
     output = array("h", mixer.take(1))
     expected: dict[int, int] = {}

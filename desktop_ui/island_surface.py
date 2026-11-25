@@ -1,13 +1,3 @@
-"""The island bar's Qt surface: one screen-wide window, a widget per capsule, and glass behind them.
-
-The window is transparent except where capsules paint, so Windows' per-pixel
-hit-testing passes every other click through to the desktop. Each capsule is a
-real button, so it keeps its accessible name, tooltip and keyboard focus; each
-control inside it is a button of its own. Under glass, composition draws the
-veil in one scene behind the window and Qt paints only content over an
-invisible (alpha 1) hit fill; without glass, Qt paints the capsule itself.
-"""
-
 import math
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping
@@ -108,8 +98,6 @@ prepare()
 
 @dataclass(frozen=True, slots=True)
 class Drawn:
-    """One capsule's frame: its view and content, any content fading out under it, and how it reads."""
-
     view: CapsuleView
     content: Content
     previous: Content | None
@@ -120,11 +108,6 @@ class Drawn:
 
 @dataclass(frozen=True, slots=True)
 class Presented:
-    """One frame's capsules, reach and menu, the screen and scale it is shown at, and shared material observations.
-
-    Frost remains with the native bar publisher, which owns its composition shadow.
-    """
-
     drawn: tuple[Drawn, ...]
     height: float
     opened: Menu | None
@@ -141,22 +124,18 @@ def advance(text: str, font: Font) -> float:
 
 
 def radius(height: float, sizes: Sizes) -> float:
-    """The menu keeps a larger radius, concentric with its rows."""
     return sizes.menu.radius if expanded(height, sizes) else sizes.bar.radius
 
 
 def expanded(height: float, sizes: Sizes) -> bool:
-    """Taller than a capsule's row: the capsule shows the menu."""
     return height > sizes.capsule.height + 0.5
 
 
 def visibility(presence: float, timing: Timing) -> float:
-    """Glass and content become opaque before a capsule reaches its full width."""
     return min(1.0, max(0.0, presence / timing.opaque_at))
 
 
 def animated(part: Part) -> bool:
-    """Parts that move on their own, painted every frame rather than kept as a still."""
     match part:
         case Marker.DOTS | Marker.WAVE:
             return True
@@ -165,7 +144,6 @@ def animated(part: Part) -> bool:
 
 
 def controls(content: Content) -> tuple[tuple[Control, float], ...]:
-    """The controls a capsule shows, with their left edges."""
 
     def control(spot: Spot) -> tuple[tuple[Control, float], ...]:
         match spot.part:
@@ -179,11 +157,6 @@ def controls(content: Content) -> tuple[tuple[Control, float], ...]:
 
 @lru_cache(maxsize=32)
 def _veil(look: GlassLook, frost: Frost, glass: Glass) -> Veil:
-    """The bar owner retains bounded immutable composition publication values.
-
-    Rebuilding their stops and veil added 1.50 KB at p95 per frame in the
-    island benchmark; geometry still changes independently on every frame.
-    """
     return Veil(
         look.veil.color,
         look.veil.opacity,
@@ -211,8 +184,6 @@ def pane(drawn: Drawn, presented: Presented, spec: BarSpec) -> Pane | None:
 
 
 class ControlButton(KeyboardFocus):
-    """A circle concentric with its capsule; its model decides whether it is persistent or revealed."""
-
     def __init__(self, capsule: Capsule, control: Control) -> None:
         super().__init__(capsule)
         self.capsule = capsule
@@ -226,7 +197,6 @@ class ControlButton(KeyboardFocus):
         self.clicked.connect(self.pressed_control)
 
     def update_control(self, control: Control) -> None:
-        """Status changes retain the keyboard's current child instead of replacing it."""
         if self.control != control:
             self.control = control
             self.setToolTip(control.label)
@@ -253,7 +223,6 @@ class ControlButton(KeyboardFocus):
 
 
 def track(bounds: QtCore.QRectF, cells: Cells) -> QtCore.QRectF:
-    """The sound slider's bar: beside its speaker symbol, under its label."""
     return QtCore.QRectF(
         cells.text_x,
         bounds.height() - cells.track_bottom,
@@ -271,17 +240,12 @@ def sound_reading(slider: Slider, words: MenuWords) -> str:
 
 
 class MenuCell(QtWidgets.QAbstractButton):
-    """One tile of the expanded capsule. An activity card stops only from its Stop circle;
-    the sound slider sets the volume where it is pressed or dragged; a tray icon takes right clicks too."""
-
     def __init__(self, capsule: Capsule, tile: Tile) -> None:
         super().__init__(capsule)
         self.capsule = capsule
         self.tile = tile
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFocusPolicy(
-            Qt.FocusPolicy.NoFocus
-        )  # The window navigates; cells show its selection.
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.clicked.connect(self.picked)
         self.describe()
 
@@ -319,7 +283,6 @@ class MenuCell(QtWidgets.QAbstractButton):
                 assert_never(self.tile.cell.entry)
         if self.accessibleName() != name:
             self.setAccessibleName(name)
-        # An icon alone needs its name under the pointer; labelled cells already show theirs.
         match self.tile.cell.entry:
             case TrayIcon():
                 tip = name
@@ -353,7 +316,6 @@ class MenuCell(QtWidgets.QAbstractButton):
     def month_heading(
         self,
     ) -> tuple[QtCore.QRectF, QtCore.QRectF, QtCore.QRectF]:
-        """The calendar's heading, which returns it to today, and its earlier and later arrows."""
         cells = self.sizes.cells
         later = QtCore.QRectF(
             self.width() - cells.month_side - cells.month_arrow,
@@ -376,7 +338,7 @@ class MenuCell(QtWidgets.QAbstractButton):
             case Live():
                 return self.stop_circle().contains(QtCore.QPointF(pos))
             case Slider() | Calendar() | Graph() | Fact():
-                return False  # The slider and the calendar take the pointer themselves rather than clicking.
+                return False
             case Item() | Toggle() | TrayIcon() | Nearby():
                 return super().hitButton(pos)
             case _:
@@ -401,7 +363,6 @@ class MenuCell(QtWidgets.QAbstractButton):
                 pass
 
     def turn(self, pos: QtCore.QPointF) -> None:
-        """A press on the calendar's arrows turns it; on its heading, it returns to today."""
         match self.tile.cell.entry:
             case Calendar():
                 heading, earlier, later = self.month_heading()
@@ -419,7 +380,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         super().mousePressEvent(event)
         self.slide(event.position())
         self.turn(event.position())
-        event.accept()  # A miss on a cell stays in the menu, rather than reaching the capsule beneath it.
+        event.accept()
 
     @override
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
@@ -464,12 +425,7 @@ class MenuCell(QtWidgets.QAbstractButton):
                 )
             )
             painter.drawRoundedRect(bounds, corner, corner)
-        still = cell.face in (
-            Face.CARD,
-            Face.CALENDAR,
-            Face.GRAPH,
-            Face.FACT,
-        )  # Nothing to press but a part of it.
+        still = cell.face in (Face.CARD, Face.CALENDAR, Face.GRAPH, Face.FACT)
         paint_feedback(
             painter,
             lettering,
@@ -553,9 +509,7 @@ class MenuCell(QtWidgets.QAbstractButton):
     def paint_symbol(
         self, painter: QtGui.QPainter, name: str, *, on: bool
     ) -> None:
-        """A symbol in its own circle at the cell's leading edge, filled with the accent while its setting is on."""
         lettering = self.capsule.drawn.look.lettering
-        # Tiles and toggles share one leading edge, so their symbols line up down the grid.
         capsule = self.sizes.capsule
         at = QtCore.QPointF(
             self.sizes.cells.symbol_x, (self.height() - capsule.control) / 2
@@ -608,7 +562,6 @@ class MenuCell(QtWidgets.QAbstractButton):
         *,
         strong: bool,
     ) -> None:
-        """A title in ink over a quieter detail line, meeting at the cell's middle."""
         lettering, middle = self.capsule.drawn.look.lettering, area.height() / 2
         text = self.sizes.type
         painter.setFont(inter(text.strong if strong else text.reading))
@@ -692,7 +645,6 @@ class MenuCell(QtWidgets.QAbstractButton):
         )
 
     def paint_live(self, painter: QtGui.QPainter, activity: Live) -> None:
-        """An activity card: its glyph, its reading, and its Stop circle."""
         lettering, bounds, cells = (
             self.capsule.drawn.look.lettering,
             QtCore.QRectF(self.rect()),
@@ -735,7 +687,6 @@ class MenuCell(QtWidgets.QAbstractButton):
         )
 
     def paint_month(self, painter: QtGui.QPainter, shown: Calendar) -> None:
-        """The month's name and arrows, the weekdays, then six weeks: other months' days quiet, today on the accent."""
         lettering, cells, text = (
             self.capsule.drawn.look.lettering,
             self.sizes.cells,
@@ -782,7 +733,6 @@ class MenuCell(QtWidgets.QAbstractButton):
             for across, day in enumerate(week):
                 place = box(across, top + down * row, row)
                 if day == shown.today and self.capsule.contrast:
-                    # High contrast keeps the system's ink: today is ringed rather than filled.
                     painter.setPen(color(lettering.ink))
                     painter.setBrush(Qt.BrushStyle.NoBrush)
                     painter.drawEllipse(
@@ -806,7 +756,6 @@ class MenuCell(QtWidgets.QAbstractButton):
                 painter.drawText(place, centred, str(day.day))
 
     def paint_graph(self, painter: QtGui.QPainter, graph: Graph) -> None:
-        """The reading's name and latest value over its recent history: a line on the accent over a soft wash."""
         lettering, cells, text = (
             self.capsule.drawn.look.lettering,
             self.sizes.cells,
@@ -865,7 +814,6 @@ class MenuCell(QtWidgets.QAbstractButton):
             painter.drawPolyline(line)
 
     def paint_network(self, painter: QtGui.QPainter, nearby: Nearby) -> None:
-        """Four bars lit to the signal, the network's name over its state, then a lock if secured and a check if connected."""
         lettering, cells, icon = (
             self.capsule.drawn.look.lettering,
             self.sizes.cells,
@@ -925,12 +873,6 @@ class MenuCell(QtWidgets.QAbstractButton):
     def paint_tray(
         self, painter: QtGui.QPainter, slot: int, bounds: QtCore.QRectF
     ) -> None:
-        """The application's own image, one image pixel per screen pixel up to `tray_image`, on whole device pixels.
-
-        Windows asks applications for tray icons at its small-icon size for the
-        screen's scale, so drawing them unscaled keeps them as sharp as the taskbar.
-        One without an image reads as a window.
-        """
         images = self.capsule.window_.tray_images
         image = images[slot] if slot < len(images) else None
         if image is None:
@@ -969,8 +911,6 @@ class MenuCell(QtWidgets.QAbstractButton):
 
 @dataclass(frozen=True, slots=True)
 class Lit:
-    """The reading under the pointer, and the one it just left, which fades out as it fades in."""
-
     slot: int | None = None
     left: int | None = None
 
@@ -980,11 +920,6 @@ GLOW: Final = 160
 
 
 class Capsule(KeyboardFocus):
-    """One capsule: its strip to the screen edge, its shape, and its parts.
-
-    A press acts on what the capsule shows; the bar's owner decides what that is.
-    """
-
     def __init__(
         self, window: BarWindow, drawn: Drawn, *, contrast: bool
     ) -> None:
@@ -1023,12 +958,9 @@ class Capsule(KeyboardFocus):
         self.window_.report(Pressed(action))
 
     def signal(self, hue: str, ink: Shade) -> Shade:
-        """A signal's own hue; high contrast keeps the system colours instead of adding one."""
         return ink if self.contrast else Shade(hue)
 
     def pressed_capsule(self) -> None:
-        """A reading under the pointer opens its own panel; the keyboard, or a capsule without panels, presses the whole.
-        A panel's own card between its tiles does nothing."""
         view = self.drawn.view
         if view.zone is Zone.PANEL:
             return
@@ -1044,7 +976,6 @@ class Capsule(KeyboardFocus):
         self.press(view.action)
 
     def strip(self) -> float:
-        """The strip above a capsule in the bar's row, up to the screen's edge so a press there still lands; a panel has none."""
         return (
             0.0
             if self.drawn.view.zone is Zone.PANEL
@@ -1052,7 +983,6 @@ class Capsule(KeyboardFocus):
         )
 
     def describe(self, view: CapsuleView) -> None:
-        # A capsule of readings tips each reading under the pointer (`event`); any other tips as a whole.
         self.setToolTip(
             "" if view.action is Action.CLOSE_MENU or view.tips else view.label
         )
@@ -1060,7 +990,6 @@ class Capsule(KeyboardFocus):
 
     @override
     def event(self, event: QtCore.QEvent) -> bool:
-        """The reading under the pointer shows its own tip, held only while the pointer stays over that reading."""
         view = self.drawn.view
         if event.type() is not QtCore.QEvent.Type.ToolTip or not view.tips:
             return super().event(event)
@@ -1088,7 +1017,6 @@ class Capsule(KeyboardFocus):
         return True
 
     def show_view(self, drawn: Drawn, *, contrast: bool) -> None:
-        """Show `drawn`; a frame that only moves the capsule changes nothing it paints."""
         before, self.drawn = self.drawn, drawn
         if (
             contrast == self.contrast
@@ -1099,7 +1027,6 @@ class Capsule(KeyboardFocus):
         ):
             return
         if before.view.label != drawn.view.label:
-            # Each change raises an accessibility event; frames of a fade keep the label.
             self.describe(drawn.view)
         self.contrast = contrast
         wanted = controls(drawn.content)
@@ -1107,7 +1034,6 @@ class Capsule(KeyboardFocus):
             control.action for control, _ in wanted
         ):
             for button in self.controls:
-                # Deletion waits for the event loop; the replaced control must leave this frame.
                 button.hide()
                 button.deleteLater()
             self.controls = tuple(
@@ -1118,7 +1044,6 @@ class Capsule(KeyboardFocus):
         self.update()
 
     def show_menu(self, menu: Menu | None) -> None:
-        """The expanded capsule's cells, pooled for as long as the menu shows the same grid."""
         laid = (
             tiles(menu, self.window_.sizes.menu, self.window_.fit(menu))
             if menu is not None
@@ -1170,11 +1095,9 @@ class Capsule(KeyboardFocus):
             )
 
     def shift(self, content: Content) -> float:
-        """Content keeps its measured layout, centred while the capsule's width morphs around it."""
         return (self.width() - content.width) / 2
 
     def frame(self, framed: Framed) -> None:
-        """The widget spans its strip and the capsule below it."""
         top = round(self.strip())
         geometry = QtCore.QRect(
             round(framed.box.x),
@@ -1197,7 +1120,6 @@ class Capsule(KeyboardFocus):
         self.place_cells()
 
     def update_indicators(self) -> None:
-        """Repaint only the live indicators (dots, trace); the rest of the capsule is unchanged."""
         shift, sizes = self.shift(self.drawn.content), self.window_.sizes
         for spot in self.drawn.content.spots:
             if animated(spot.part):
@@ -1230,7 +1152,6 @@ class Capsule(KeyboardFocus):
         self.light(self.reading_under(event.position()))
 
     def reading_under(self, pointer: QtCore.QPointF) -> int | None:
-        """The reading whose panel a press here would open; None off the readings' row or on a capsule without them."""
         sizes = self.window_.sizes
         if (
             not self.drawn.view.panels
@@ -1242,7 +1163,6 @@ class Capsule(KeyboardFocus):
         )
 
     def light(self, slot: int | None) -> None:
-        """Fade `slot`'s pill in and the previous one's out."""
         if slot == self.lit.slot:
             return
         self.lit = Lit(slot, self.lit.slot)
@@ -1254,16 +1174,13 @@ class Capsule(KeyboardFocus):
         self.update()
 
     def paint_lit(self, painter: QtGui.QPainter) -> None:
-        """Each reading's pill: the open panel's reading held lit, the one under the pointer fading in over the one it left."""
         lettering, sizes, content = (
             self.drawn.look.lettering,
             self.window_.sizes,
             self.drawn.content,
         )
         glow = self.glow.currentValue()
-        rise = (
-            glow if isinstance(glow, float) else 1.0
-        )  # Before its first fade the animation holds no value.
+        rise = glow if isinstance(glow, float) else 1.0
         opened = self.window_.menu
         held = None
         if opened is not None:
@@ -1323,7 +1240,6 @@ class Capsule(KeyboardFocus):
         alpha = visibility(self.drawn.framed.presence, self.window_.spec.timing)
         paint_capsule(painter, path, self.drawn.look, alpha)
         drawn = self.drawn
-        # A capsule of readings lights the one under the pointer; any other lights as a whole.
         whole = (
             not expanded(drawn.content.height, sizes) and not drawn.view.panels
         )
@@ -1363,7 +1279,6 @@ class Capsule(KeyboardFocus):
             painter.restore()
 
     def still(self, content: Content) -> QtGui.QPixmap:
-        """The content's unmoving parts, rendered once: a morphing capsule blits them each frame."""
         key = (
             content,
             self.drawn.look,
@@ -1387,7 +1302,6 @@ class Capsule(KeyboardFocus):
             if not animated(spot.part):
                 self.paint_part(painter, spot, top + row / 2)
         painter.end()
-        # Only the content showing now and the content fading out are kept.
         kept = {
             (c, self.drawn.look, self.contrast, scale)
             for c in (self.drawn.content, self.drawn.previous)
@@ -1416,9 +1330,6 @@ class Capsule(KeyboardFocus):
                         )
                     )
                 )
-                # A reading in a reserved room keeps its right edge, so the room's slack sits
-                # beside its own symbol and every meter ends the same gap before the next.
-                # The room is a pixel wider on the side the text grows away from, so antialiasing never clips.
                 edge, left = (
                     (Qt.AlignmentFlag.AlignRight, spot.x - 1)
                     if reserve
@@ -1469,7 +1380,7 @@ class Capsule(KeyboardFocus):
                     charge,
                 )
             case Control():
-                pass  # A child button paints it.
+                pass
             case Marker.WAVE:
                 painter.setBrush(
                     color(
@@ -1515,8 +1426,6 @@ class Capsule(KeyboardFocus):
 
 
 class BarWindow(QtWidgets.QWidget):
-    """The bar's one window: the full width of the primary screen, as tall as the capsules."""
-
     def __init__(
         self,
         report: Callable[[Event], None],
@@ -1536,42 +1445,31 @@ class BarWindow(QtWidgets.QWidget):
         self.menu: Menu | None = None
         self.capsules: Mapping[Key, Capsule] = frozendict()
         self.pulse = 0.0
-        # Qt owns the painted trace; samples arrive from the bar's audio meter.
         self.samples: deque[float] = deque(
             [0.0] * sizes.capsule.wave_bars, maxlen=sizes.capsule.wave_bars
         )
         self.wave_from: tuple[float, ...] = tuple(self.samples)
         self.wave_progress = 1.0
-        # This UI owner retains the immutable last application frame to avoid
-        # native layout and glass work for unchanged indicator-only redraws.
         self.presentation: Presented | None = None
         self.scene: GlassScene | None = None
         self.panes: tuple[Pane, ...] = ()
         self.pager = Pager(self, sizes)
-        # The bar's latest tray snapshot and Qt copies of its images, for the menu's tray cells.
         self.tray: tuple[Entry, ...] = ()
         self.tray_images: tuple[QtGui.QPixmap | None, ...] = ()
         self.glass = False
         tool_window(self, "Workspace floating bar", on_top=True)
-        self.setFocusPolicy(
-            Qt.FocusPolicy.StrongFocus
-        )  # The open menu takes the keyboard here.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         borderless(int(self.winId()))
         windows.allow_activation(int(self.winId()), allowed=False)
-        # Several changes in one Qt turn publish one final glass frame.
         self.glass_timer = QtCore.QTimer(self)
         self.glass_timer.setSingleShot(True)
         self.glass_timer.timeout.connect(self.publish_glass)
-        # Native activation can briefly report inactive then active while Qt
-        # settles the first opening. Dismiss only after one frame of stable
-        # inactivity; a real focus transfer still closes the menu promptly.
         self.deactivation_timer = QtCore.QTimer(self)
         self.deactivation_timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         self.deactivation_timer.setSingleShot(True)
         self.deactivation_timer.timeout.connect(self.dismiss_inactive)
 
     def show_tray(self, entries: tuple[Entry, ...]) -> None:
-        """Adopt a tray snapshot, repainting open tray cells."""
         if entries == self.tray:
             return
         self.tray = entries
@@ -1584,7 +1482,6 @@ class BarWindow(QtWidgets.QWidget):
             cell.update()
 
     def tray_locations(self) -> tuple[Located, ...]:
-        """Where the open menu shows each tray icon, in device pixels, for applications anchoring their flyouts."""
         panel = self.capsules.get(Key.PANEL)
         if panel is None or not panel.isVisible():
             return ()
@@ -1622,7 +1519,6 @@ class BarWindow(QtWidgets.QWidget):
         )
 
     def fit(self, menu: Menu) -> float:
-        """The open panel's width for what its tiles show now."""
         return fitted(
             menu,
             advance,
@@ -1631,7 +1527,6 @@ class BarWindow(QtWidgets.QWidget):
         )
 
     def capsule(self, drawn: Drawn, *, contrast: bool) -> Capsule:
-        """The pooled capsule for `drawn`'s key, showing it."""
         existing = self.capsules.get(drawn.view.key)
         if existing is not None:
             existing.show_view(drawn, contrast=contrast)
@@ -1641,14 +1536,11 @@ class BarWindow(QtWidgets.QWidget):
         return created
 
     def present(self, presented: Presented) -> None:
-        """Show exactly these capsules where their frames put them; other pooled capsules hide."""
         if presented == self.presentation:
             return
         area = presented.screen
         sizes = self.sizes
         height = round(sizes.bar.top) + math.ceil(presented.height)
-        # Qt puts a new window on the screen under the pointer and keeps that screen's scale when
-        # it moves, so a bar started with the pointer on another screen would draw at its scale.
         primary = QtGui.QGuiApplication.primaryScreen()
         if self.screen() is not primary:
             self.setScreen(primary)
@@ -1668,7 +1560,6 @@ class BarWindow(QtWidgets.QWidget):
             if key not in keys:
                 capsule.hide()
         pager = self.pager
-        # The pager runs from the screen's edge, stopping before the leftmost capsule.
         leftmost = math.floor(
             min(
                 (each.framed.box.x for each in presented.drawn),
@@ -1708,7 +1599,6 @@ class BarWindow(QtWidgets.QWidget):
         self.presentation = presented
 
     def trace(self) -> Iterator[float]:
-        """Interpolate the displayed history between the meter's samples."""
         progress = self.wave_progress
         return (
             before + (after - before) * progress
@@ -1754,8 +1644,6 @@ class BarWindow(QtWidgets.QWidget):
             self.report(Deactivated())
 
     def bounds(self, key: Key) -> Rect | None:
-        """A shown capsule's screen rectangle in device pixels. Capsules stay alien widgets:
-        a native child window would break the bar's per-pixel hit-testing."""
         capsule = self.capsules.get(key)
         if capsule is None or not capsule.isVisible() or not self.isVisible():
             return None
@@ -1827,8 +1715,6 @@ def shifted(bounds: Rect, margin: int) -> Rect:
 
 @dataclass(frozen=True, slots=True)
 class Unit:
-    """A point in a unit box, scaled to wherever the shape draws."""
-
     x: float
     y: float
 
@@ -1855,8 +1741,6 @@ def paint_charge(
     inks: tuple[QtGui.QColor, QtGui.QColor, QtGui.QColor],
     charge: Charge,
 ) -> None:
-    """The battery symbol from `start`, centred on its height: a quiet outline and nub, the charge filled
-    from the left, and while powered a bolt over it with a clear edge, as a menu bar draws its battery."""
     outline_ink, fill_ink, bolt_ink = inks
     percent = charge.percent
     body = QtCore.QRectF(

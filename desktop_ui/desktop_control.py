@@ -1,16 +1,3 @@
-"""The desktop's control decisions: events in, a new state and effects out.
-
-The tray, the keyboard's messages, dictation, meetings and the bar all report
-what happened as an `Event`; none calls back into the application. The Qt thread
-folds each event through `transition`, which returns the next `DesktopState` and
-the `Effect`s to perform, lazily and in order. Only `desktop_ui.desktop_app`
-performs effects, and an effect can report a result as a new event (a menu choice,
-the voice state it resolved), so every decision here can be checked with values alone.
-
-An event is either a fact whose reaction depends on the state, or a request that
-is its own effect and passes straight through.
-"""
-
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -45,8 +32,6 @@ from protocol import App, LayoutState, Target, Tool, decode_indicator
 from winapi.caret import Anchor, Caret
 lazy from winapi.shell import MenuItem
 
-# ---- the tray menu ------------------------------------------------------------------
-
 
 class Menu(Enum):
     KEYMAP = 9
@@ -62,8 +47,6 @@ class Menu(Enum):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MenuState:
-    """The three observations that decide the tray's choices and labels."""
-
     layout: LayoutState | None
     overlay_enabled: bool
     capturing: bool
@@ -101,7 +84,6 @@ TRAY: Final[tuple[TrayAction | Separator, ...]] = (
 
 
 def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
-    """One item as it reads in `state`: its words, hint, and whether it's enabled or checked."""
     running = state.layout in (LayoutState.ON, LayoutState.OFF)
     hint = f"\t{item.key}" if item.key else ""
     match item.action:
@@ -149,7 +131,6 @@ def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
 
 
 def menu_items(state: MenuState) -> Iterator[MenuItem]:
-    """The tray menu as it reads in `state`; a separator is item 0."""
     for item in TRAY:
         match item:
             case TrayAction():
@@ -158,9 +139,6 @@ def menu_items(state: MenuState) -> Iterator[MenuItem]:
                 yield MenuItem(0)
             case _:
                 assert_never(item)
-
-
-# ---- the control window's messages --------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,8 +153,6 @@ class PhysicalKey:
 
 @dataclass(frozen=True, slots=True)
 class FeatureRequest:
-    """A key edge from the layout, or a press (`down`) from a Workspace menu."""
-
     request: Target
     down: bool = field(kw_only=True)
 
@@ -187,7 +163,6 @@ type ControlAction = PhysicalKey | FeatureRequest
 def control_event(
     message: int, wparam: int, lparam: int, apps: Sequence[App]
 ) -> ControlAction | None:
-    """A key state or request message to the control window, keeping key edges and requests' presses and releases."""
     if message == protocol.Message.KEY_STATE:
         return PhysicalKey(Scancode(wparam), down=bool(lparam))
     if (
@@ -199,13 +174,8 @@ def control_event(
     return None
 
 
-# ---- the fold -----------------------------------------------------------------------
-
-
 @dataclass(frozen=True, slots=True)
 class Shown:
-    """What dictation and meetings last reported that the tray and its menu read."""
-
     state: State = State.LAYOUT_OFF
     recording: RecordingState = field(default_factory=RecordingState)
     """The meeting recorder's last state, which also tells an interruption from a finish."""
@@ -220,20 +190,13 @@ class DesktopState:
     marker: MarkerState = field(default_factory=MarkerState)
 
 
-# ---- facts --------------------------------------------------------------------------
-
-
 @dataclass(frozen=True, slots=True)
 class VoiceShown:
-    """What the tray and the bar show of dictation, once listening has taken precedence."""
-
     state: State
 
 
 @dataclass(frozen=True, slots=True)
 class JobChanged:
-    """The quick job dictation runs, for the bar; None once it has finished."""
-
     job: Job | None
 
 
@@ -261,8 +224,6 @@ class MenuChosen:
 
 @dataclass(frozen=True, slots=True)
 class Controlled:
-    """A key edge, a feature request or a menu choice from the control window."""
-
     action: ControlAction | None
 
 
@@ -285,36 +246,27 @@ class OverlayToggled:
 
 @dataclass(frozen=True, slots=True)
 class Problem:
-    """Something failed that the user should hear about; it is also logged."""
-
     message: str
 
 
 @dataclass(frozen=True, slots=True)
 class Anchored:
-    """Where a capture's text will go, or that nothing was found to mark it by."""
-
     capture: int
     where: Anchor | UNFOUND
 
 
 @dataclass(frozen=True, slots=True)
 class Tracked:
-    """Where the caret of the app in front is, asked during `capture`; None when it has none to report."""
-
     capture: int
     caret: Caret | None
 
 
 @dataclass(frozen=True, slots=True)
-class MarkerFaded:
-    """The marker's outcome has shown for long enough."""
+class MarkerFaded: ...
 
 
 @dataclass(frozen=True, slots=True)
 class DictationFailed:
-    """Dictation failed, which the user hears about where they dictated as well as in the tray."""
-
     message: str
 
 
@@ -336,19 +288,14 @@ type Fact = (
     | MarkerFaded
 )
 
-# ---- requests: their own effect -----------------------------------------------------
-
 
 @dataclass(frozen=True, slots=True)
 class ShowVoice:
-    """Show `state` in the tray and the bar, unless listening takes precedence."""
-
     state: State
 
 
 @dataclass(frozen=True, slots=True)
-class ShowIdle:
-    """Show listening, ready or layout-off, whichever state the keys are in."""
+class ShowIdle: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,14 +305,11 @@ class Record:
 
 @dataclass(frozen=True, slots=True)
 class ExpireCapture:
-    """The control window's capture timer fired."""
-
     at: float
 
 
 @dataclass(frozen=True, slots=True)
-class RestoreTray:
-    """Explorer restarted: register the tray icon again."""
+class RestoreTray: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,14 +323,11 @@ class Quit:
 
 
 @dataclass(frozen=True, slots=True)
-class ToggleLayout:
-    """Switch the layout on or off, as if its escape key was tapped."""
+class ToggleLayout: ...
 
 
 @dataclass(frozen=True, slots=True)
 class ShowSwitcher:
-    """The window list was read off the Qt thread: show the switcher over it."""
-
     choices: tuple[winapi.shapes.Window, ...]
 
 
@@ -403,8 +344,6 @@ type Instruction = (
 )
 
 type Event = Fact | Instruction
-
-# ---- effects only reactions produce -------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,22 +365,16 @@ class TrayShow:
 
 @dataclass(frozen=True, slots=True)
 class ShowMarker:
-    """The dictation marker shows `marker` on the caret."""
-
     marker: MarkerState
 
 
 @dataclass(frozen=True, slots=True)
 class ShowActivity:
-    """The bar shows what dictation or a meeting is doing."""
-
     change: DictationShown | JobShown | RecordingShown
 
 
 @dataclass(frozen=True, slots=True)
 class HandleKey:
-    """A dictation or transcript key's edge, or its press from a menu."""
-
     tool: Tool
     down: bool
 
@@ -453,15 +386,11 @@ class ToggleMeeting:
 
 @dataclass(frozen=True, slots=True)
 class UseLayout:
-    """Dictation follows the layout: it stops a capture when the layout goes off."""
-
     on: bool
 
 
 @dataclass(frozen=True, slots=True)
 class ShowMenu:
-    """Show the tray menu and report the choice."""
-
     state: MenuState
 
 
@@ -482,15 +411,11 @@ class ShowOverlay:
 
 @dataclass(frozen=True, slots=True)
 class OverlayEnabled:
-    """The bar shows whether the overlay is enabled, and the setting is saved."""
-
     enabled: bool
 
 
 @dataclass(frozen=True, slots=True)
 class Flash:
-    """The layout was switched on or off: the indicator says so for a moment."""
-
     on: bool = field(kw_only=True)
 
 
@@ -513,8 +438,6 @@ class Indicate:
 
 @dataclass(frozen=True, slots=True)
 class Launch:
-    """Run the launcher on its own: `restart` with program names, or `stop`."""
-
     command: str
     names: tuple[str, ...] = ()
 
@@ -560,7 +483,6 @@ def tray_state(shown: Shown) -> State:
 
 
 def idle_state(*, listening: Tool | None, layout_on: bool) -> State:
-    """What the keys rest in: listening, ready, or the layout switched off."""
     return (
         State.LISTENING
         if listening is not None
@@ -573,7 +495,6 @@ def idle_state(*, listening: Tool | None, layout_on: bool) -> State:
 def recording_notice(
     prior: RecordingState, recording: RecordingState
 ) -> Notified | None:
-    """A warning when a recording pauses, is interrupted, or a capture ends with a problem."""
     failed_capture = (
         prior.capturing
         and recording.phase == "finishing"
@@ -592,7 +513,6 @@ def recording_notice(
 
 
 def _requested(request: Target, *, down: bool) -> Iterator[Effect]:
-    """A key edge or a menu press: the desktop's own keys act on press, dictation's keys get both edges."""
     match request:
         case App():
             if down:
@@ -644,7 +564,6 @@ def _overlay_after(
 def indicated(
     code: int, overlay: OverlayState
 ) -> tuple[str | None, OverlayState]:
-    """The indicator's words and the overlay after the layout's indicator word."""
     index, caps_word = decode_indicator(code)
     layer = Layer.coded(index) or Layer.BASE
     return indicator_text(layer, caps_word=caps_word), overlay.indicate(
@@ -660,7 +579,6 @@ def _layout(value: int, known: LayoutState | None) -> LayoutState | None:
 
 
 def _chosen(choice: int) -> Iterator[Effect]:
-    """What a tray menu choice does."""
     try:
         chosen = Menu(choice)
     except ValueError:
@@ -671,10 +589,9 @@ def _chosen(choice: int) -> Iterator[Effect]:
         case Menu.RESTART_LAYOUT:
             yield Launch("restart", ("layout",))
         case Menu.RESTART_DESKTOP:
-            # The launcher closes this program and starts it again.
             yield Launch("restart", ("desktop",))
         case Menu.OVERLAY:
-            pass  # `transition` folds it as `OverlayToggled`.
+            pass
         case Menu.KEYMAP:
             yield ShowKeymap()
         case Menu.MEETING:
@@ -684,7 +601,6 @@ def _chosen(choice: int) -> Iterator[Effect]:
         case Menu.LOGS:
             yield OpenLogs()
         case Menu.QUIT:
-            # The launcher asks every program to quit, this one last.
             yield Launch("stop")
         case _:
             assert_never(chosen)
@@ -693,7 +609,6 @@ def _chosen(choice: int) -> Iterator[Effect]:
 def _reacted(
     state: DesktopState, after: DesktopState, fact: Fact
 ) -> Iterator[Effect]:
-    """The effects of `fact`, given the state before it and after it."""
     match fact:
         case VoiceShown():
             yield from _marked(state.marker, after.marker)
@@ -748,9 +663,6 @@ def _reacted(
 
 
 def _marked(state: MarkerState, after: MarkerState) -> Iterator[Effect]:
-    """Dictation shows on the marker, or on the bar when nothing was found to anchor the marker to.
-
-    A new capture looks for its anchor last, so an answer found at once is shown after the search began."""
     bar = on_bar(after)
     yield ShowActivity(DictationShown(active=after.listening and bar))
     yield ShowActivity(JobShown(after.job if bar else None))
@@ -810,7 +722,6 @@ def _remembered(state: DesktopState, fact: Fact) -> DesktopState:
 def transition(
     state: DesktopState, event: Event
 ) -> tuple[DesktopState, Iterator[Effect]]:
-    """The state after `event` and the effects it calls for, in order, produced lazily."""
     match event:
         case (
             ShowVoice()

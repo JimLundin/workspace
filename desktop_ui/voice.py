@@ -1,10 +1,3 @@
-"""Dictation, meeting recording and the microphone, which the desktop calls on its Qt thread.
-
-What their worker threads report (the voice, a job, a notice, a problem, the
-recording) reaches the desktop as events through its inbox. Slow dictation jobs
-run one at a time on the worker thread.
-"""
-
 import os
 import queue
 import threading
@@ -35,7 +28,6 @@ from winapi.pcm import RATE
 
 
 def configured(settings: Settings | Missing) -> tuple[Settings, Missing | None]:
-    """The settings dictation and meetings run with and, when credentials are absent, what is missing."""
     match settings:
         case Missing():
             return Settings("", "", "", ""), settings
@@ -48,7 +40,6 @@ def _run_jobs(
     report: Callable[[Event], None],
     log: Callable[[str], None],
 ) -> None:
-    """The worker thread: slow jobs, one at a time."""
     while job := jobs.get():
         try:
             job()
@@ -63,8 +54,6 @@ def _run_jobs(
 
 @dataclass(frozen=True, slots=True)
 class Voice:
-    """The dictation keys, the meeting recorder and the microphone they share."""
-
     mic_event: system.EventHandle
     machine: WinDesktop
     meetings: Meetings
@@ -81,8 +70,6 @@ class Voice:
         log: Callable[[str], None],
         transcripts: Path,
     ) -> Voice:
-        """The owners over the default microphone; `owner` is the desktop's control window, which owns the clipboard,
-        and meeting transcripts go to `transcripts`."""
         mic_event = system.create_event()
         mic = audio.Microphone.open(RATE, MAX_SECONDS, mic_event)
         machine = WinDesktop(
@@ -134,11 +121,9 @@ class Voice:
         self.meetings.start_worker()
 
     def level(self) -> float | None:
-        """The microphone's level for the bar's trace, read off the Qt thread."""
         return self.machine.mic.level()
 
     def shown(self, state: State) -> State:
-        """What the tray and the bar show for `state`: listening takes precedence."""
         return (
             State.LISTENING if self.dictation.listening is not None else state
         )
@@ -160,7 +145,6 @@ class Voice:
         self.record("stop" if self.meetings.snapshot().capturing else "start")
 
     def record(self, action: RecordingAction) -> None:
-        """Raises OSError or ValueError when the recorder refuses `action`."""
         match action:
             case "start":
                 self.meetings.start("both")
@@ -179,7 +163,6 @@ class Voice:
                 os.startfile(path if path.exists() else self.meetings.root)
 
     def close(self, log: Callable[[str], None]) -> None:
-        """Finish a meeting's capture, drop a voice capture, and release the microphone."""
         self.dictation.stop_capture(discard=True, reason="shutdown")
         try:
             self.meetings.close()

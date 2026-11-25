@@ -1,5 +1,3 @@
-"""The toolbar's status worker applies speaker levels off the UI thread."""
-
 import threading
 import time
 
@@ -9,8 +7,6 @@ from winapi.machine_status import Memory
 
 
 class Speakers:
-    """A concrete machine that records where and what the worker applied."""
-
     def __init__(self) -> None:
         self.held = threading.Event()
         self.release = threading.Event()
@@ -40,9 +36,6 @@ class Speakers:
 def test_a_drag_applies_only_its_latest_level_and_keeps_a_mute_on_the_status_worker() -> (
     None
 ):
-    # Defects: every intermediate level of a drag queues a native write, a later level
-    # drops the mute requested beside it, the write runs on the caller's thread, or a
-    # request waits for the next polling second.
     speakers = Speakers()
     observer = StatusObserver.start(speakers.observe, speakers)
     try:
@@ -69,8 +62,6 @@ def test_a_drag_applies_only_its_latest_level_and_keeps_a_mute_on_the_status_wor
 def test_the_history_keeps_its_newest_samples_and_leaves_a_gap_for_an_unread_one() -> (
     None
 ):
-    # Defects: the history grows without bound, drops the newest sample instead of the
-    # oldest, or records an unread processor or memory reading as zero use.
     status = SystemStatus(
         cpu_history=History((1, 2, 3), capacity=3),
         memory_history=History((10, 20, 30), capacity=3),

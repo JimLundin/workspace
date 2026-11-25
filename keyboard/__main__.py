@@ -1,11 +1,3 @@
-"""Run the layout: `pythonw -m keyboard` (or double-click `keyboard.pyw`).
-
-Set the Windows keyboard to English (US). The key left of 1 (§) is the escape
-key: tap it to switch between this layout and your plain keyboard, hold it for
-2 seconds to quit. Spacebar holds dictation; B toggles dictation.
-Both need the assistant, started by `launch.py`.
-"""
-
 import os
 import sys
 
@@ -23,9 +15,7 @@ def main() -> None:
         Places.of(os.environ, programs.PROGRAMS),
     ):
         case Exit.QUIT:
-            sys.exit(
-                0
-            )  # a normal quit: the assistant doesn't restart the layout
+            sys.exit(0)
         case Exit.ALREADY_RUNNING:
             show_error("The Workspace keyboard is already running.")
             sys.exit(0)

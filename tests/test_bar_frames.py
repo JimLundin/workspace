@@ -1,5 +1,3 @@
-"""What each bar frame draws and whether the frame loop keeps running."""
-
 from dataclasses import replace
 
 from contracts.status import TRANSCRIBING
@@ -15,7 +13,6 @@ def model() -> BarModel:
 
 
 def working() -> BarModel:
-    """A settled bar whose island shows a quick job running."""
     return replace(
         model(),
         job=TRANSCRIBING,
@@ -24,7 +21,6 @@ def working() -> BarModel:
 
 
 def test_a_settled_idle_bar_stops_its_frame_loop() -> None:
-    # Defect: the frame timer keeps running once nothing moves.
     drawn = next_frame(model(), 10.0, animate=True)
     assert (
         not drawn.running
@@ -35,8 +31,6 @@ def test_a_settled_idle_bar_stops_its_frame_loop() -> None:
 
 
 def test_running_work_spins_only_while_motion_is_allowed() -> None:
-    # Defects: the job's dots paint frozen, keep the frame loop
-    # running after work ends, or ignores Windows' reduced-motion setting.
     first, later = (
         next_frame(working(), 10.0, animate=True),
         next_frame(working(), 10.3, animate=True),
@@ -54,8 +48,6 @@ def test_running_work_spins_only_while_motion_is_allowed() -> None:
 def test_dictation_moves_the_wave_between_samples_and_rests_behind_an_open_island() -> (
     None
 ):
-    # Defect: the waveform jumps sample to sample, keeps animating under an open
-    # island, or stops the frame loop mid-dictation.
     dictating = replace(model(), dictating=True, sampled_at=10.0)
     soon, later = (
         next_frame(dictating, 10.001, animate=True),

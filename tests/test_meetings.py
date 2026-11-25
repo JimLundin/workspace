@@ -1,5 +1,3 @@
-"""Durable meeting transcripts with generated PCM and a controlled endpoint."""
-
 import io
 import sqlite3
 import threading
@@ -111,8 +109,6 @@ def test_journal_orders_chunks_prefers_pauses_and_flushes_the_final_partial_seco
 def test_an_open_read_snapshot_does_not_hold_up_journaling_audio(
     tmp_path: Path,
 ) -> None:
-    # Defect: a transcription or catalog read holding its snapshot makes the
-    # audio append wait out the busy timeout and stop the recording.
     store = MeetingStore.create(tmp_path, "both")
     with store.reading() as connection:
         assert connection.execute("SELECT frames FROM meeting").fetchone() == (
@@ -148,12 +144,9 @@ def test_batch_reads_capture_completion_and_audio_from_one_snapshot(
         try:
             finish()
         except sqlite3.OperationalError as error:
-            # A reader snapshot may defer the writer; retry after it closes.
             if "locked" not in str(error):
                 errors.append(str(error))
 
-    # The writer starts mid-snapshot on its own thread: on the reader's thread it
-    # could only wait out the journal's whole busy timeout behind its own read.
     writer = threading.Thread(target=write)
 
     def interleave(statement: str) -> None:
@@ -334,8 +327,6 @@ def test_recording_uses_the_configured_endpoint_and_saves_incremental_text(
 def test_a_locked_journal_does_not_block_the_capture_thread(
     tmp_path: Path,
 ) -> None:
-    # Defect: the capture thread writes the journal itself, so another connection
-    # holding the meeting journal stalls the device drain and ends the recording.
     handed: list[float] = []
 
     class LockingCapture:
@@ -386,9 +377,6 @@ def test_a_locked_journal_does_not_block_the_capture_thread(
 def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(
     tmp_path: Path,
 ) -> None:
-    # Defect: on_update runs under the service lock, so a view that waits for
-    # another thread reading snapshot() deadlocks the recorder; or every
-    # journaled second publishes, running reads and view work once a second.
     capturing: list[RecordingState] = []
     blocked: list[RecordingState] = []
     service: Meetings | None = None
@@ -429,8 +417,6 @@ def test_publication_never_holds_the_service_lock_and_is_paced_during_capture(
 def test_recovered_capture_gaps_are_noted_without_ending_the_recording(
     tmp_path: Path,
 ) -> None:
-    # Defect: a recovered timing problem ends or interrupts the recording, or
-    # the saved transcript never says that audio is missing.
     class GappedCapture:
         __slots__ = ()
 
@@ -448,9 +434,6 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(
             report(Stall(RATE * 2, 12.5))
             report(Skipped(RATE * 2, RATE))
 
-    # Defect: capture problems never reach the assistant log, so a shortened
-    # recording leaves no trace of which condition or how long the stall was;
-    # or a stall without lost audio is counted as a gap.
     logged: list[str] = []
     with fake_endpoint() as endpoint:
         service = Meetings.open(
@@ -490,8 +473,6 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(
 
 
 def test_a_full_spool_refuses_audio_and_says_the_recording_stopped() -> None:
-    # Defect: a hung journal lets capture memory grow without bound, or a full
-    # spool silently drops audio while the recording appears to continue.
     spool = Spool(limit=8)
     spool.put(bytes(8))
     with TestCase().assertRaisesRegex(SpoolFullError, "Recording stopped"):
@@ -589,8 +570,6 @@ def test_restart_recovers_pending_audio_without_opening_the_microphone(
         )
         try:
             service.start_worker()
-            # Committing text to the journal precedes publishing its file. Wait
-            # for the public completion update before opening that file on Windows.
             assert exported.wait(HANG), service.snapshot()
         finally:
             service.close()
@@ -656,7 +635,6 @@ def test_a_full_backlog_stops_capture_and_saves_every_completed_block(
     tmp_path: Path,
 ) -> None:
     capture = GeneratedCapture(50)
-    # Defect: a recording that ends early leaves no reason in the assistant log.
     logged: list[str] = []
 
     def unavailable(audio: bytes, *, context: str) -> Failure:

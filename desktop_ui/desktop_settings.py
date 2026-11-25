@@ -1,8 +1,3 @@
-"""What the desktop is handed when it starts: the programs and places it shares with
-the others, the apps the chords reach, and its own views' specs. Declares no values;
-`desktop.__main__` builds them.
-"""
-
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,8 +17,6 @@ from protocol import App, Places, Programs
 
 @dataclass(frozen=True, slots=True)
 class Launcher:
-    """How the desktop runs the launcher on its own, for the tray's Restart and Quit."""
-
     command: tuple[str, ...]
     """The interpreter and the launcher's script."""
     root: Path

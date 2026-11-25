@@ -1,8 +1,5 @@
-"""Springs: interruptible, exact over any frame length, and still once they arrive."""
-
 from desktop_ui.motion import Motion, Spring, resting, settle, still, toward
 
-# The test's own springs, so each test checks how springs move, not how the bar's are tuned.
 BOUNCY = Spring(0.6, 0.3)
 CRITICAL = Spring(1.0, 0.3)
 
@@ -19,7 +16,6 @@ def frames(
 def test_retargeting_mid_flight_continues_from_the_value_and_velocity_on_screen() -> (
     None
 ):
-    # Defect: an interrupted capsule jumps back to its start, or stops dead before reversing.
     flight = frames(toward(still(0, BOUNCY), 100, BOUNCY), 0.1)[-1]
     reversed_ = toward(flight, 0, BOUNCY)
     assert (reversed_.value, reversed_.velocity) == (
@@ -32,13 +28,11 @@ def test_retargeting_mid_flight_continues_from_the_value_and_velocity_on_screen(
 
 
 def test_a_spring_arrives_exactly_and_then_rests() -> None:
-    # Defect: a value hovers a hair from its target, so the frame loop never stops.
     final = frames(toward(still(34, BOUNCY), 120, BOUNCY), 2)[-1]
     assert resting(final) and final.value == 120
 
 
 def test_one_long_frame_lands_where_many_short_frames_would() -> None:
-    # Defect: a stalled UI thread integrates one huge step and the capsule overshoots wildly.
     start = toward(still(0, BOUNCY), 1, BOUNCY)
     stalled, smooth = settle(start, 0.25), frames(start, 0.25, 1 / 240)[-1]
     assert (
@@ -50,7 +44,6 @@ def test_one_long_frame_lands_where_many_short_frames_would() -> None:
 def test_a_critically_damped_spring_never_passes_its_target_while_an_underdamped_one_overshoots() -> (
     None
 ):
-    # Defects: a leaving capsule bounces back into view, or arrival has no life to it.
     assert (
         min(
             motion.value
@@ -68,7 +61,6 @@ def test_a_critically_damped_spring_never_passes_its_target_while_an_underdamped
 
 
 def test_a_spring_needs_a_damping_ratio_up_to_critical_and_a_response() -> None:
-    # Defect: an overdamped or zero-response spring reaches the closed form and divides by zero.
     for damping, response in ((0, 0.4), (1.2, 0.4), (0.8, 0)):
         try:
             Spring(damping, response)

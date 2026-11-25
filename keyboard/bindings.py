@@ -1,8 +1,3 @@
-"""What each physical key does on each layer, built from a `keyboard.layout.Layout`
-and checked as it is built: a key used twice, a layer without a board or a hold of
-BASE raises `LayoutError`, so a broken layout never starts.
-"""
-
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -51,7 +46,6 @@ def _slots(layout: Layout) -> frozendict[Scancode, int | Unmapped]:
     slots = frozendict(entries)
     if len(slots) == len(entries):
         return slots
-    # The first entry whose scancode an earlier one already took, named by what it was meant to be.
     first = frozendict(
         (scancode, index)
         for index, (scancode, _) in reversed(tuple(enumerate(entries)))
@@ -76,8 +70,6 @@ def _slots(layout: Layout) -> frozendict[Scancode, int | Unmapped]:
 
 @dataclass(frozen=True, slots=True)
 class Bindings:
-    """A layout's lookups: what each cell does on each layer, each cell's hand, and each scancode's cell."""
-
     table: frozendict[Layer, tuple[Binding, ...]]
     """Every layer flattened, by layer then cell."""
     hands: tuple[Hand, ...]
@@ -87,7 +79,6 @@ class Bindings:
 
     @classmethod
     def of(cls, layout: Layout) -> Bindings:
-        """`layout`'s lookups, or `LayoutError` if it is inconsistent."""
         return cls(
             _table(layout),
             tuple(side for side, _ in layout.physical.placed()),
@@ -95,20 +86,16 @@ class Bindings:
         )
 
     def hand(self, cell: int) -> Hand:
-        """The hand that presses key `cell`."""
         return self.hands[cell]
 
     def action(self, layer: Layer, cell: int) -> Binding:
-        """What key `cell` does on `layer`."""
         return self.table[layer][cell]
 
     def actions(self, layer: Layer) -> tuple[Binding, ...]:
-        """What every key does on `layer`, by cell."""
         return self.table[layer]
 
     def slot(self, scancode: Scancode) -> int | Unmapped:
         return self.slots.get(scancode, Unmapped.BLOCKED)
 
     def pictured(self, scancode: Scancode) -> bool:
-        """A key the overlay shows: a layout key, or a blocked one (which lights to say so)."""
         return self.slots.get(scancode, Unmapped.FREE) is not Unmapped.FREE

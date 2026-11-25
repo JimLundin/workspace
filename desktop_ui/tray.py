@@ -1,5 +1,3 @@
-"""Workspace notification-area presentation and native icon lifetimes."""
-
 from dataclasses import dataclass
 
 from contracts.members import every_member
@@ -11,8 +9,6 @@ lazy from winapi import shell
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TraySpec:
-    """The notification-area icon: its name, its drawn size in pixels, and its dot's colour for each thing the assistant can be doing."""
-
     name: str
     size: int
     colours: frozendict[State, Rgb]
@@ -23,8 +19,6 @@ class TraySpec:
 
 @dataclass(frozen=True, slots=True)
 class Tray:
-    """The tray icon and the native icon handles it shows, kept until removal; used only on the Qt thread."""
-
     _spec: TraySpec
     _icons: frozendict[State, shell.Icon]
     _icon: shell.TrayIcon

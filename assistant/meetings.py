@@ -1,12 +1,3 @@
-"""Explicit long-running recording, independent of dictation, model work and the UI.
-
-The real-time capture thread only hands audio to a bounded in-memory spool. A
-journal thread writes it one second at a time and publishes progress every few
-seconds. A separate worker transcribes 20-30 second chunks, retries outages, and
-resumes pending text work after a restart. Restarting Workspace never resumes
-microphone or computer-audio capture.
-"""
-
 import queue
 import sqlite3
 import threading
@@ -55,14 +46,11 @@ PUBLISH_SECONDS: Final = 2.0
 """At most one progress publication per interval while capturing; storage, not the UI, paces capture."""
 
 
-class SpoolFullError(OSError):
-    """The journal fell further behind capture than the spool holds; capture must end."""
+class SpoolFullError(OSError): ...
 
 
 @dataclass(frozen=True, slots=True)
 class Handover:
-    """What the journal thread takes from the spool in one wake."""
-
     pcm: bytes
     problems: tuple[Problem, ...] = ()
     flagged: bool = False
@@ -81,12 +69,6 @@ class _Spooled:
 
 @dataclass(frozen=True, slots=True)
 class Spool:
-    """A bounded handover from the real-time capture thread to the journal thread.
-
-    `put` never waits for storage: it holds the lock only to append. A block that
-    would exceed the bound is refused, which ends the recording.
-    """
-
     limit: int = RATE * 2 * SPOOL_SECONDS
     _spooled: Cell[_Spooled] = field(
         default_factory=lambda: Cell(_Spooled()), init=False, repr=False
@@ -127,7 +109,6 @@ class Spool:
             self._condition.notify()
 
     def flag(self) -> None:
-        """Ask the journal thread to publish the current state soon."""
         with self._condition:
             self._spooled.update(lambda spooled: replace(spooled, flagged=True))
             self._condition.notify()
@@ -162,12 +143,9 @@ class Spool:
 
 @dataclass(frozen=True, slots=True)
 class _Blocks:
-    """Cut handed-over audio into the journal's one-second blocks."""
-
     store: MeetingStore
 
     def feed(self, pending: bytes, pcm: bytes) -> tuple[bytes, bool]:
-        """Append every whole block of `pending + pcm`; the rest waits for more, and whether any was written."""
         audio = pending + pcm
         whole = len(audio) - len(audio) % (RATE * 2)
         for start in range(0, whole, RATE * 2):
@@ -177,8 +155,6 @@ class _Blocks:
 
 @dataclass(frozen=True, slots=True)
 class _Journal:
-    """The capture's storage owner: writes spooled audio and paces its publication."""
-
     store: MeetingStore
     spool: Spool
     changed: Callable[[], None]
@@ -197,7 +173,6 @@ class _Journal:
         problem = self._journal()
         self.outcome.set_result(problem)
         if problem:
-            # Saving failed: end capture, and never store audio captured after the failure.
             stop.set()
 
     def _journal(self) -> str:
@@ -214,7 +189,6 @@ class _Journal:
                     self.changed()
                     dirty = True
                 if taken.problems:
-                    # Recovered timing problems are notes on the recording, never its end.
                     report = capture_report(taken.problems)
                     self.log(
                         f"{report.text} Recording {self.store.folder.name} continues."
@@ -223,7 +197,6 @@ class _Journal:
                         self.store.record_gaps(report.gaps, report.gap_frames)
                         dirty = True
                 now = time.monotonic()
-                # A phase change publishes even when capture has already ended.
                 if taken.flagged or (
                     dirty
                     and now - published >= PUBLISH_SECONDS
@@ -265,8 +238,6 @@ class _Recording:
 
 @dataclass(frozen=True, slots=True)
 class Meetings:
-    # Capture, transcription, storage and their independent publications
-    # are effect dependencies; no callback owns another owner's progress.
     settings: Settings
     factory: Callable[[AudioSource], Capture]
     archive: MeetingArchive
@@ -310,7 +281,6 @@ class Meetings:
         retry_policy: RetryPolicy | None = None,
         log: Callable[[str], None] | None = None,
     ) -> Meetings:
-        """The recorder over `archive`, with its unfinished journals found for recovery."""
 
         def configured_transcriber(
             audio: bytes, *, context: str
@@ -332,7 +302,6 @@ class Meetings:
 
     @property
     def shown(self) -> RecordingState:
-        """What the view shows; callers outside the lock use `snapshot`."""
         return self._state.get().state
 
     def _show(self, state: RecordingState) -> None:
@@ -435,9 +404,6 @@ class Meetings:
             ) from error
 
     def close(self, timeout: float = 5) -> None:
-        # Stop and journal the final partial second before ending network work.
-        # A request already in flight may finish later; its durable audio remains
-        # queued if shutdown wins, and no callback can touch a destroyed tray/UI.
         with self._lock:
             self._state.set(replace(self._state.get(), closing=True))
             self._state.get().stop.set()
@@ -543,7 +509,6 @@ class Meetings:
             thread.start()
 
             def ready() -> None:
-                # The capture thread only marks the phase; the journal thread publishes it.
                 with self._lock:
                     self._show(replace(self.shown, phase="recording"))
                 spool.flag()
@@ -559,7 +524,6 @@ class Meetings:
             if thread is not None:
                 thread.join()
             if journal is not None:
-                # A storage failure stops capture; report it, not the stop it caused.
                 problem = journal.problem or problem
             if problem:
                 self.log(
@@ -570,7 +534,6 @@ class Meetings:
                     store.finish_capture(problem)
                     self._publish(store)
                 except OSError, ValueError, sqlite3.Error:
-                    # In particular, never claim that a disk-full write succeeded.
                     with self._lock:
                         self._show(
                             replace(
@@ -603,7 +566,6 @@ class Meetings:
                 if not state.complete or not store.transcript.is_file():
                     self._schedule(store)
             except OSError, ValueError, sqlite3.Error:
-                # Keep damaged journals for recovery rather than deleting them.
                 with self._lock:
                     if not self.shown.visible:
                         self._show(
@@ -624,8 +586,6 @@ class Meetings:
             try:
                 self._transcribe(store)
             except Exception as error:
-                # Includes a broken connection adapter or a failed export. Do
-                # not let a dead worker leave the UI promising transcription.
                 detail = "Transcription paused after an error. Saved audio and text remain in the journal; choose Retry."
                 if isinstance(error, PermissionError):
                     detail = "Text is saved in the journal. Close the transcript in other apps or restore folder access, then choose Retry."
@@ -686,10 +646,6 @@ class Meetings:
                 self._wake.wait(0.5)
                 self._wake.clear()
                 continue
-            # True digital silence needs no model request and cannot hallucinate
-            # meeting text; quiet speech is still sent normally.
-            # Some endpoints reject tiny uploads. Pad only the request's final
-            # fragment; stored duration and timestamps retain the captured length.
             upload = batch.pcm.ljust(RATE * 2, b"\0")
             result = (
                 self.transcribe_audio(wav(upload, RATE), context=batch.context)
@@ -754,7 +710,6 @@ class Meetings:
         return "\n".join(entries) or "No saved meeting transcripts yet."
 
     def _entry(self, path: Path) -> str | None:
-        """One saved meeting's summary line, or nothing when its journal cannot be read."""
         try:
             store = self.archive.open(path.parent)
             state = store.state()

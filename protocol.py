@@ -1,9 +1,3 @@
-"""How the workspace's two programs talk. The layout (keyboard) owns the keyboard;
-the desktop does everything else. Keys on the layout send the desktop
-requests, as window messages: they are queued, ordered, cost the layout nothing
-to send, and need no admin rights. Plain Python: importable anywhere.
-"""
-
 import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -13,8 +7,6 @@ from typing import Final, Literal
 
 
 class Origin(IntEnum):
-    """Who sent an injected key, carried in its extra information so the layout's hook lets it through untouched."""
-
     LAYOUT = 0x4D49_5250
     """The layout's own output."""
     DESKTOP = 0x4D49_524F
@@ -22,8 +14,6 @@ class Origin(IntEnum):
 
 
 class Message(IntEnum):
-    """The window messages the programs send each other's control windows."""
-
     CLOSE = 0x0010
     """Windows' own WM_CLOSE: the gateway and the desktop take it as quit."""
     REQUEST = 0x8000 + 1
@@ -50,8 +40,6 @@ type Component = Literal["gateway", "layout", "desktop"]
 
 @dataclass(frozen=True, slots=True)
 class Window:
-    """The hidden control window a program creates; other processes find it by title."""
-
     title: str
     window_class: str | None
     """None matches any class: the program uses a system class, not its own."""
@@ -59,8 +47,6 @@ class Window:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Entry:
-    """A program the launcher starts, stops and restarts."""
-
     name: Component
     module: str
     """Started as `python -m <module>`."""
@@ -73,8 +59,6 @@ class Entry:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Programs:
-    """Workspace's programs, and the windows they find each other by."""
-
     gateway: Entry
     layout: Entry
     desktop: Entry
@@ -85,7 +69,6 @@ class Programs:
 
     @property
     def catalogue(self) -> frozendict[Component, Entry]:
-        """Every program by name, in startup order; shutdown reverses it."""
         return frozendict(
             {
                 entry.name: entry
@@ -95,14 +78,11 @@ class Programs:
 
 
 def interpreter(root: Path) -> Path:
-    """The checkout's environment interpreter, without a console, which runs every program and the launcher."""
     return root / ".venv" / "Scripts" / "pythonw.exe"
 
 
 @dataclass(frozen=True, slots=True)
 class Places:
-    """Where the programs keep their logs and state, read from the environment they run in."""
-
     directory: Path
     """Logs, remembered preferences and meeting transcripts."""
     state: Path | None
@@ -119,7 +99,6 @@ class Places:
 
     @property
     def gateway_endpoint(self) -> Path | None:
-        """Where the gateway publishes how to reach it; None outside the launcher."""
         return self.state / "endpoint-gateway" if self.state else None
 
 
@@ -131,9 +110,6 @@ class LayoutState(Enum):
 
 
 class Tool(Enum):
-    """What a tool key asks Workspace to do. Hold-to-talk tools use the key's
-    press and release; the rest act on press."""
-
     DICTATE = 1
     """Hold and speak: the words are typed as said."""
     MEETING_TOGGLE = 33
@@ -160,8 +136,6 @@ class Tool(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Installed:
-    """A program started from its command."""
-
     exe: str
     """The program's file name, as Task Manager shows it: `WindowsTerminal.exe`."""
     command: str
@@ -170,25 +144,17 @@ class Installed:
 
 @dataclass(frozen=True, slots=True)
 class PinnedWeb:
-    """One of the toolbar's pinned web apps, opened as an Edge app window like its slot."""
-
     slot: Literal["outlook", "teams"]
 
 
 @dataclass(frozen=True, slots=True)
 class App:
-    """An application an app key goes to: its placed window, the next one while it's
-    already in front, or starting it when it isn't running."""
-
     name: str
     target: Installed | PinnedWeb
 
 
 @dataclass(frozen=True, slots=True)
 class Slot:
-    """One of the Apps layer's app keys, by its place in chord-letter order. The layout
-    knows only the slot; the desktop decides which app, if any, is in it."""
-
     index: int
 
 
@@ -203,7 +169,6 @@ _SLOT_BASE: Final = 1000
 
 
 def encode(request: Request) -> int:
-    """The request as a message's wparam. A slot is sent by its place."""
     match request:
         case Tool():
             value: int = request.value
@@ -222,7 +187,6 @@ def decode(code: int) -> Request | None:
 
 
 def reaching(request: Request, apps: Sequence[App]) -> Target | None:
-    """What `request` reaches among `apps`, in slot order; None for a slot with no app in it."""
     match request:
         case Tool():
             return request
@@ -231,7 +195,6 @@ def reaching(request: Request, apps: Sequence[App]) -> Target | None:
 
 
 def encode_indicator(layer: int, *, caps_word: bool) -> int:
-    """The indicator's state as a message's wparam. `layer`: the layer's `code`, its place among the layout's layers (below 16)."""
     return layer | caps_word << 4
 
 

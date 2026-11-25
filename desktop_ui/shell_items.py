@@ -1,6 +1,3 @@
-"""The toolbar's applications: pinned web apps, then running applications grouped by
-executable, each with stable window ordering and cycling."""
-
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
@@ -61,8 +58,6 @@ EMPTY_SHELF = Shelf(tuple(Pinned(app, ()) for app in PinnedApp), ())
 
 @dataclass(frozen=True, slots=True, order=True)
 class Seat:
-    """Where a window sits when first seen: its desktop, then its top-left corner."""
-
     desktop: int
     left: int
     top: int
@@ -75,11 +70,6 @@ type Seats = Mapping[int, Seat]
 def retained(
     current: Sequence[Window], before: Sequence[Window], seats: Seats
 ) -> tuple[Window, ...]:
-    """Windows seen before keep their places; new ones follow in the order they sit, those with no seat last.
-
-    Placement fills an app's places in this order, so windows already placed by an
-    earlier run, or restored where they were by their program, keep their places.
-    """
     by_handle = frozendict((window.handle, window) for window in current)
     kept = tuple(
         window.handle for window in before if window.handle in by_handle
@@ -143,7 +133,6 @@ def not_kept_away(
     app_ids: Mapping[int, str | None],
     kept_away: frozenset[str],
 ) -> Iterator[Window]:
-    """The windows Workspace handles: all but those another program keeps for itself, by their AppUserModelID."""
     return (
         window
         for window in observed
@@ -158,7 +147,6 @@ def shelf(
     seats: Seats,
     web_apps: WebApps,
 ) -> Shelf:
-    """Pinned web-app windows fill their slots; every other window joins its running application."""
     owners = tuple(
         pinned_app(app_ids.get(window.handle), web_apps) for window in observed
     )
@@ -189,15 +177,12 @@ def shelf(
 def launch(
     pending: Launches, app: PinnedApp, now: float, grace: float
 ) -> Launches | None:
-    """The pending launches after launching `app` now; None while an earlier launch may still open its window,
-    which it may take `grace` seconds to show."""
     if pending.get(app, now) > now:
         return None
     return pending | {app: now + grace}
 
 
 def outstanding(pending: Launches, current: Shelf) -> Launches:
-    """A launch whose window has appeared is no longer pending, so reopening after closing it launches again."""
     return frozendict(
         (app, due)
         for app, due in pending.items()
@@ -210,14 +195,11 @@ def outstanding(pending: Launches, current: Shelf) -> Launches:
 def caption_clip(
     outer: Rect, caption: Rect, region: Rect | None
 ) -> Rect | None:
-    """The window region hiding a slot window's caption, which Edge paints inside its client
-    area; None when the current region already does. Regions don't follow resizing."""
     wanted = Rect(0, caption.bottom, outer.width, outer.height)
     return None if wanted == region else wanted
 
 
 def next_window(handles: Sequence[int], foreground: int) -> int:
-    """The window after the one in front, or the first: repeated presses visit them all."""
     return (
         handles[(handles.index(foreground) + 1) % len(handles)]
         if foreground in handles

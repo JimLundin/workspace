@@ -1,14 +1,7 @@
-"""Your apps: the ones the Apps layer's slots reach, in chord-letter order.
-Edit freely; it's checked when Workspace starts.
-(Secrets and the AI endpoint are environment variables instead; see the README.)
-"""
-
 from typing import Final
 
 from protocol import App, Installed, PinnedWeb
 
-# ---- Apps ------------------------------------------------------------------------------
-# Up to ten, in chord-letter order: Q W F P B, then A R S T G (see `keyboard.firmware.Chords`).
 
 APPS: Final[tuple[App, ...]] = (
     App("terminal", Installed("windowsterminal.exe", "wt.exe")),

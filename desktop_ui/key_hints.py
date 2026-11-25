@@ -1,11 +1,3 @@
-"""What the screen shows while either keyboard holds its Apps key: the request letters.
-
-Each placed window on the current desktop carries a badge with its app's letter
-and, beside the focused window, the focus letter that reaches it. The focused
-window adds Zoom. Badges ask the navigation decision itself where
-each letter leads, so a hint can't name a window the chord wouldn't reach.
-"""
-
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
@@ -27,24 +19,18 @@ from winapi.shapes import Rect
 
 @dataclass(frozen=True, slots=True)
 class AppCap:
-    """The app's chord letter; `next` marks which of its several windows the next press reaches."""
-
     letter: str
     next: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
 class DirectionCap:
-    """The focus chord that moves from the focused window to this one."""
-
     letter: str
     direction: Direction
 
 
 @dataclass(frozen=True, slots=True)
 class ActionCap:
-    """A chord acting on the focused window, shown quietly."""
-
     letter: str
 
 
@@ -60,7 +46,6 @@ class Badge:
 
 
 def reached(world: World, request: Target) -> int | None:
-    """The window this chord focuses now, as the navigation decision carries it out."""
     match request:
         case protocol.App():
             navigation: AppKey | SpatialFocus = AppKey(request)
@@ -80,7 +65,6 @@ def reached(world: World, request: Target) -> int | None:
 def placed(
     world: World, request: Target, letter: str
 ) -> Iterator[tuple[int, Keycap]]:
-    """The windows this chord's letter is drawn on, each with its keycap."""
     match request:
         case protocol.App(target=target):
             handles = world.windows.get(identity(launcher(target)), ())
@@ -105,7 +89,6 @@ def placed(
 
 
 def rank(keycap: Keycap) -> int:
-    """A badge reads its app's letter, then the focus letters reaching it, then the quiet actions."""
     match keycap:
         case AppCap():
             return 0
@@ -116,7 +99,6 @@ def rank(keycap: Keycap) -> int:
 
 
 def hints(world: World, letters: frozendict[Target, str]) -> tuple[Badge, ...]:
-    """The badges while the chord is held, each request's at its chord letter."""
     drawn = tuple(
         each
         for request, letter in letters.items()

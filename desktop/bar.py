@@ -1,7 +1,3 @@
-"""The island bar: what it shows, its panels, how it moves and its sizes.
-Only declarations; `desktop.__main__` builds the bar's spec from them.
-"""
-
 from typing import Final
 
 from contracts.members import every_literal, every_member
@@ -445,7 +441,7 @@ CONTROLS: Final = ControlsSpec(
         minutes_left="{minutes} min left",
         mains="On mains power",
     ),
-    first_weekday=0,  # Monday.
+    first_weekday=0,
 )
 """The status capsule's panels, each top to bottom: Workspace's own controls
 (press its glyph, or an activity) and each reading's own (press the reading).
@@ -465,9 +461,6 @@ Each entry is placed once in a panel; the sound slider takes Windows' own name.
 
 
 ISLAND: Final = IslandSpec(
-    # The fixed capsule at the screen's right edge: its readings left to right,
-    # evenly spaced, each opening its panel. Leave a reading out to hide it.
-    # The keyboard shows only while it types plainly.
     status=StatusSpec(
         (
             Reading.WORKSPACE,
@@ -510,9 +503,6 @@ ISLAND: Final = IslandSpec(
         widest_clock="Wed 00 May 00:00",
         clock="%a %#d %b %H:%M",
     ),
-    # Where activities sit beside the island, left to right. A transcription
-    # and a recording step out of the island while you dictate. Each activity is
-    # placed exactly once.
     activities=ActivitiesSpec(
         lead=(Activity.JOB,), trail=(Activity.RECORDING,)
     ),
@@ -558,7 +548,7 @@ ISLAND: Final = IslandSpec(
 
 SPRINGS: Final = Springs(
     morph=Spring(0.86, 0.42),
-    appear=Spring(0.78, 0.42),  # A little overshoot.
+    appear=Spring(0.78, 0.42),
     leave=Spring(1.0, 0.3),
     fade=Spring(1.0, 0.2),
 )

@@ -1,5 +1,3 @@
-"""Bounded PCM conversion and mixing for continuous, clock-aligned recording."""
-
 import math
 from array import array
 from collections.abc import Sequence
@@ -32,8 +30,6 @@ class PcmFormat:
 
 @dataclass(frozen=True, slots=True)
 class Position:
-    """How far a conversion has read and written, and the sample it carries across packets."""
-
     input_frames: int = 0
     output_frames: int = 0
     last: float = 0.0
@@ -41,18 +37,11 @@ class Position:
 
 @dataclass(frozen=True, slots=True)
 class Converter:
-    """Downmix native packets and resample with one carried sample, without drift.
-
-    Positions use integer ratios, so packet boundaries and hours of elapsed time
-    cannot accumulate rounding error. WASAPI supplies little-endian Windows PCM.
-    """
-
     format: PcmFormat
     _position: Cell[Position] = field(default_factory=lambda: Cell(Position()))
 
     @classmethod
     def at(cls, format: PcmFormat, position: Position) -> Converter:
-        """A conversion continuing from `position`."""
         return cls(format, Cell(position))
 
     @property
@@ -128,24 +117,18 @@ MAX_JUMP: Final = RATE * 60
 
 @dataclass(frozen=True, slots=True)
 class LateAudio:
-    """A packet began before audio already published; its first `frames` were dropped."""
-
     at: int
     frames: int
 
 
 @dataclass(frozen=True, slots=True)
 class Skipped:
-    """Capture fell further behind than the ring holds; `frames` of silence stand in for unheard audio."""
-
     at: int
     frames: int
 
 
 @dataclass(frozen=True, slots=True)
 class Dropout:
-    """The microphone reported a discontinuity: `frames` it captured were lost before Workspace read them."""
-
     at: int
     frames: int
 
@@ -155,8 +138,6 @@ type Gap = LateAudio | Skipped | Dropout
 
 @dataclass(frozen=True, slots=True)
 class Stall:
-    """The capture loop published nothing for `seconds` after frame `at`; any loss it caused is reported as a gap."""
-
     at: int
     seconds: float
 
@@ -171,7 +152,6 @@ DROPOUT_TOLERANCE: Final = RATE // 100
 def dropout(
     previous_end: int | None, start: int, *, discontinuous: bool
 ) -> Dropout | None:
-    """A continuous stream's flagged hole between its previous packet and this one."""
     if (
         previous_end is None
         or not discontinuous
@@ -183,8 +163,6 @@ def dropout(
 
 @dataclass(frozen=True, slots=True)
 class Placement:
-    """Where a packet goes on the ring, decided before any sample moves."""
-
     cursor: int
     """The published cursor after any forced advance."""
     clipped: int
@@ -196,7 +174,6 @@ class Placement:
 def place(
     cursor: int, end: int, start: int, length: int, capacity: int
 ) -> Placement:
-    """Push the cursor just far enough for the packet's end to fit, then clip what precedes it."""
     advanced = max(cursor, start + length - capacity)
     return Placement(
         advanced,
@@ -206,7 +183,6 @@ def place(
 
 
 def jump(cursor: int, end: int, until: int, capacity: int) -> int:
-    """Silent frames a take inserts beyond the ring, where no device delivered audio in time."""
     return until - max(cursor, end) if until - cursor > capacity else 0
 
 
@@ -224,17 +200,6 @@ class _Mixed:
 
 @dataclass(frozen=True, slots=True)
 class Mixer:
-    """A bounded ring on the shared device clock; absent playback is silence.
-
-    The mixer recovers rather than failing: audio that arrives after its time
-    was published loses only the part already published, and a device far
-    ahead of the cursor pushes it forward, publishing what the ring holds and
-    silence for the rest. Each recovery is a reported gap.
-
-    The ring is the one buffer written in place: copying it for each packet
-    would copy the whole ring every 10 ms. Everything else is one frozen record.
-    """
-
     _samples: array[int]
     limit: int
     _mixed: Cell[_Mixed]
@@ -253,14 +218,10 @@ class Mixer:
 
     @property
     def samples(self) -> Sequence[int]:
-        """The ring, for inspecting what it still holds."""
         return self._samples
 
     def add(self, start: int, pcm: bytes) -> None:
         samples = array("h", pcm)
-        # Idle WASAPI playback can timestamp silence from its last active
-        # clock. Zero contributions cannot alter published or buffered audio;
-        # ignore them before timing checks, while still accounting for late speech.
         if not any(samples):
             return
         mixed = self._mixed.get()
@@ -275,8 +236,6 @@ class Mixer:
                     mixed,
                     gaps=(*mixed.gaps, Skipped(silence_at, placement.silence)),
                 )
-        # One overlapping sample is packet-boundary rounding, not lost audio;
-        # before the first take, audio timestamped before Start is not part of the recording.
         if placement.clipped > 1 and mixed.cursor:
             mixed = replace(
                 mixed, gaps=(*mixed.gaps, LateAudio(start, placement.clipped))
@@ -310,7 +269,6 @@ class Mixer:
         return gaps
 
     def _published(self, mixed: _Mixed, until: int) -> _Mixed:
-        """`mixed` with the ring published up to `until`, clearing the published part of the ring."""
         cursor = mixed.cursor
         if until - cursor > self.limit:
             raise OSError(
@@ -336,5 +294,4 @@ class Mixer:
 
 
 def quiet_tail(pcm: bytes) -> bool:
-    """Prefer a half-second pause near a chunk boundary, without omitting speech."""
     return all(abs(sample) < 240 for sample in array("h", pcm[-RATE:]))

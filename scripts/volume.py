@@ -1,21 +1,3 @@
-"""Measure code volume as syntax nodes, which formatting and comments cannot move, beside its code lines.
-
-Lines reward dense code and punish Ruff's wrapping. A node count over the AST
-ignores layout, comments, trailing commas and docstrings, and still grows with
-every name, call, branch and literal the code actually adds. Page scripts and
-PowerShell count their tokens the same way: comments and layout drop out, and a
-string or regular-expression literal counts once, as a Python string is one node.
-Code lines (no blanks, comments or docstrings) are reported beside the nodes,
-because a line is easier to picture.
-
-    python -m scripts.volume [--top N]                print the measure
-    python -m scripts.volume --write docs/volume.md   rewrite the committed report
-    python -m scripts.volume --check docs/volume.md   fail when the report is stale
-
-With --staged the measure reads what is staged for the next commit, which the
-pre-commit hook (.githooks/pre-commit) writes into the commit it makes.
-"""
-
 import argparse
 import ast
 import io
@@ -68,7 +50,6 @@ def _docstring(body: Sequence[ast.stmt]) -> ast.Expr | None:
 def _levels(
     tree: ast.AST, skipped: frozenset[ast.Expr]
 ) -> Iterator[tuple[ast.AST, ...]]:
-    """The counted nodes one depth at a time; a skipped node hides its whole subtree."""
     level: tuple[ast.AST, ...] = (tree,)
     while level:
         yield level
@@ -98,7 +79,6 @@ _LAYOUT: Final = frozenset(
 
 
 def code_lines(text: str) -> int:
-    """Lines holding Python code: not blank, not only a comment, and not part of a docstring."""
     documented = frozenset(
         line
         for doc in docstrings(ast.parse(text))
@@ -115,7 +95,6 @@ def code_lines(text: str) -> int:
 
 _LITERAL = r"""'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`"""
 _WORD = r"[A-Za-z_$][\w$]*|\d[\w.]*"
-# A slash after an operator or an opening bracket starts a regular expression, not a division.
 _REGEX = (
     r"(?<=[(,=:\[!&|?{};])\s*/(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\n])+/[a-z]*"
 )
@@ -133,7 +112,6 @@ SCRIPTS: Final = frozendict({".js": _JS, ".ps1": _POWERSHELL})
 
 
 def tokens(text: str, suffix: str) -> int:
-    """A script's tokens: every match that isn't a comment or whitespace."""
     return sum(
         1
         for match in SCRIPTS[suffix].finditer(text)
@@ -142,7 +120,6 @@ def tokens(text: str, suffix: str) -> int:
 
 
 def _script_lines(text: str, suffix: str) -> int:
-    """Lines a script's tokens start on: comments and blank lines drop out."""
     return len(
         frozenset(
             text.count("\n", 0, match.start())
@@ -199,7 +176,6 @@ def working_tree(root: Path) -> Iterator[Measure]:
 
 
 def staged(root: Path) -> Iterator[Measure]:
-    """What is staged for the next commit: each source's blob, read in one batch."""
     listing = subprocess.run(
         ["git", "ls-files", "--stage", "-z", *_PATTERNS],
         cwd=root,
@@ -222,7 +198,6 @@ def staged(root: Path) -> Iterator[Measure]:
 
 
 def _blobs(output: bytes, paths: Sequence[str]) -> Iterator[Measure]:
-    """Each `git cat-file --batch` record, `<sha> blob <size>\\n<content>\\n`, measured as the path it was staged at."""
     offset = 0
     for path in paths:
         header_end = output.index(b"\n", offset)
@@ -250,7 +225,6 @@ def _total(name: str, measures: Iterable[Measure]) -> Total:
 def totals(
     measures: Sequence[Measure],
 ) -> tuple[tuple[Total, ...], Total, Total]:
-    """Each area by size, then product and support."""
     names = dict.fromkeys(area(m.path) for m in measures)
     areas = sorted(
         (
@@ -287,7 +261,6 @@ def report(measures: Sequence[Measure], top: int) -> str:
 
 
 def markdown(measures: Sequence[Measure], top: int = REPORT_TOP) -> str:
-    """The committed report: deterministic, so it changes only when the code does."""
     areas, product, support = totals(measures)
     largest = sorted(measures, key=lambda m: (-m.nodes, m.path))[:top]
     ratio = product.nodes / product.lines if product.lines else 0.0

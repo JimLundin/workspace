@@ -1,5 +1,3 @@
-"""Configure bounded Hypothesis campaigns for the existing callable test runner."""
-
 from collections.abc import Callable
 
 from hypothesis import given, settings

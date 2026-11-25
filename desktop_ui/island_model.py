@@ -1,22 +1,3 @@
-"""What the island bar shows: a pure view of Workspace's activity, independent of Qt.
-
-The bar's policy (docs/toolbar-design.md, "What the bar shows"):
-
-- The island is the user's point of attention. Only dictation, live from the
-  user, takes it over.
-- Activities run concurrently and each keeps one identity wherever it shows:
-  a quick job such as transcription (pulsing dots), and a meeting recording
-  (a red dot and timer).
-- Activities alone join the island, just left of the fixed capsule; at idle it is empty. While you dictate
-  they detach beside it as compact capsules.
-- The pinned web apps sit at the far left (the shell sections own that capsule).
-  One fixed capsule anchors right: CPU and memory use, the keyboard while it types plainly,
-  volume, Wi-Fi, clock and power. The system tray is in the controls menu.
-- That capsule expands into the panel of the reading pressed; Workspace's own
-  glyph opens its controls.
-- Stoppable activities reveal Stop under the pointer.
-"""
-
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum, auto
 from typing import Final, assert_never
@@ -38,26 +19,22 @@ from winapi.machine_status import (
 
 
 class Key(Enum):
-    """Stable capsule identities; the layout owns each zone's ordering."""
-
     JOB = auto()
     ISLAND = auto()
     RECORDING = auto()
     STATUS = auto()
-    PANEL = auto()  # The open panel, hanging under its reading.
+    PANEL = auto()
 
 
 class Zone(Enum):
     LEAD = auto()
     ISLAND = auto()
     TRAIL = auto()
-    RIGHT = auto()  # The fixed readings, independent of activity.
-    PANEL = auto()  # Below the readings, under the one it belongs to.
+    RIGHT = auto()
+    PANEL = auto()
 
 
 class Action(Enum):
-    """What a press does. A capsule has one; each control inside it has its own."""
-
     OPEN_MENU = auto()
     CLOSE_MENU = auto()
     STOP_DICTATION = auto()
@@ -65,20 +42,16 @@ class Action(Enum):
 
 
 class Marker(Enum):
-    """Live indicators without a payload."""
-
     WAVE = auto()
     DOT = auto()
-    DOTS = auto()  # A quick job in progress.
+    DOTS = auto()
 
 
 @dataclass(frozen=True, slots=True)
 class Text:
     text: str
     tone: meaning.Tone = meaning.Tone.INK
-    reserve: str = field(
-        default="", kw_only=True
-    )  # Representative widest reading; never painted.
+    reserve: str = field(default="", kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,8 +69,6 @@ class Control:
 
 @dataclass(frozen=True, slots=True)
 class Charge:
-    """The battery as a symbol filled to its charge, with a bolt while it is on mains power."""
-
     percent: int | None
     """None while the battery hasn't been read: the symbol stays empty."""
     powered: bool = field(kw_only=True)
@@ -124,8 +95,6 @@ class CapsuleView:
 
 @dataclass(frozen=True, slots=True)
 class Observed:
-    """Everything the island depends on, each from its own owner."""
-
     job: Job | None
     recording: RecordingState
     ambient: Ambient
@@ -137,8 +106,6 @@ class Observed:
 
 @dataclass(frozen=True, slots=True)
 class Capture:
-    """A recording phase as the bar shows it: its reading and whether it can still stop."""
-
     title: str
     can_stop: bool = field(kw_only=True)
     attention: bool = field(kw_only=True)
@@ -150,8 +117,6 @@ ELAPSED = sentinel("ELAPSED")
 
 @dataclass(frozen=True, slots=True)
 class Phased:
-    """How a recording phase shows: its title, or its elapsed time, and whether it can stop or needs you."""
-
     title: str | ELAPSED
     can_stop: bool = field(kw_only=True)
     attention: bool = field(kw_only=True)
@@ -176,33 +141,24 @@ def capture(recording: RecordingState, phases: Phases) -> Capture | None:
     return Capture(title, can_stop=phased.can_stop, attention=phased.attention)
 
 
-# ---- the bar's composition's shape: `desktop.bar.ISLAND` declares one ----------------------
-
-
 class Reading(StrEnum):
-    """A reading the status capsule can show; what each shows stays here."""
-
-    WORKSPACE = auto()  # Workspace's own glyph, which opens its controls.
-    KEYBOARD = auto()  # Only while the keyboard types plainly.
+    WORKSPACE = auto()
+    KEYBOARD = auto()
     SPEAKER = auto()
     WIFI = auto()
     CLOCK = auto()
-    BATTERY = auto()  # Its charge, and its symbol filled to it.
+    BATTERY = auto()
     CPU = auto()
     MEMORY = auto()
 
 
 class Activity(StrEnum):
-    """A capsule beside the island; when each shows stays here."""
-
     JOB = auto()
     RECORDING = auto()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Symbols:
-    """The status readings' symbols."""
-
     workspace: str
     keyboard: str
     charger: str
@@ -213,8 +169,6 @@ class Symbols:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Words:
-    """What the island's activities say and show."""
-
     jobs: frozendict[Job, str]
     phases: Phases
     stop: str
@@ -279,8 +233,6 @@ class ActivitiesSpec:
 
 @dataclass(frozen=True, slots=True)
 class IslandSpec:
-    """What the status capsule shows and where activities step aside to."""
-
     status: StatusSpec
     activities: ActivitiesSpec
     words: Words
@@ -292,7 +244,6 @@ ACTIVITY_KEYS: Final = every_member(
 
 
 def order(spec: IslandSpec) -> tuple[Key, ...]:
-    """Every capsule left to right: the lead, the island, the trail, then the status capsule."""
     lead = tuple(ACTIVITY_KEYS[each] for each in spec.activities.lead)
     trail = tuple(ACTIVITY_KEYS[each] for each in spec.activities.trail)
     return (*lead, Key.ISLAND, *trail, Key.STATUS, Key.PANEL)
@@ -341,7 +292,6 @@ def gigabytes(count: int, status: StatusSpec) -> str:
 def power_symbol(
     ambient: Ambient, symbols: Symbols, tone: meaning.Tone
 ) -> Part:
-    """The battery filled to its charge, empty while unread, or a plug on a machine without one."""
     match ambient.power:
         case Battery(percent=percent, powered=powered):
             return Charge(percent, powered=powered, tone=tone)
@@ -354,7 +304,6 @@ def power_symbol(
 
 
 def battery_tone(ambient: Ambient, status: StatusSpec) -> meaning.Tone:
-    """Low while the battery runs down on its own power."""
     match ambient.power:
         case Battery(percent=percent, powered=False) if (
             percent <= status.low_battery
@@ -365,7 +314,6 @@ def battery_tone(ambient: Ambient, status: StatusSpec) -> meaning.Tone:
 
 
 def usage(percent: int | None, status: StatusSpec) -> Text:
-    """The processor's share in use, reserving its widest form so a changing value never shifts the cluster."""
     return Text(
         status.unread if percent is None else f"{percent}%",
         reserve=status.widest_percent,
@@ -373,7 +321,6 @@ def usage(percent: int | None, status: StatusSpec) -> Text:
 
 
 def memory_used(memory: Memory | None, status: StatusSpec) -> Text:
-    """Memory in use, reserving the widest amount, so a changing value never shifts the cluster."""
     return Text(
         status.unread if memory is None else gigabytes(memory.used, status),
         reserve=status.widest_memory,
@@ -381,8 +328,6 @@ def memory_used(memory: Memory | None, status: StatusSpec) -> Text:
 
 
 def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
-    """One reading's parts. Each reserves its widest form, and power keeps one glyph,
-    so a changing reading never shifts the fixed cluster."""
     ambient, system, symbols = observed.ambient, observed.system, status.symbols
     match each:
         case Reading.WORKSPACE:
@@ -414,7 +359,6 @@ def reading(each: Reading, observed: Observed, status: StatusSpec) -> Slot:
 
 
 def tip(each: Reading, observed: Observed, spec: IslandSpec) -> str:
-    """What one reading says under the pointer, in words rather than symbols."""
     ambient, system, words, status = (
         observed.ambient,
         observed.system,
@@ -475,11 +419,6 @@ def island(
     hovered: Key | None = None,
     expanded: bool = False,
 ) -> tuple[CapsuleView, ...]:
-    """The capsules to show, in left-to-right order, with their contents and press actions.
-
-    The right-hand readings expand into the controls menu (`expanded`), where
-    ongoing activities become live rows, so they leave the bar.
-    """
     words = spec.words
     job, recorded = observed.job, capture(observed.recording, words.phases)
     detached = observed.dictating and not expanded
@@ -510,9 +449,6 @@ def island(
                 tint,
             ),
         )
-    # The readings stay the top row while their capsule expands into the menu. Each
-    # reading is its own slot; a reading with nothing to show (a keyboard typing
-    # normally) takes none, and a group without any takes no space or rule.
     shown = tuple(
         (each, slot)
         for each in spec.status.readings
@@ -572,7 +508,6 @@ def centre(
     *,
     hovered: Key | None,
 ) -> CapsuleView:
-    """Only live activity belongs here; persistent readings have fixed right anchors. `recorded` is the recording as captured."""
     revealed = hovered is Key.ISLAND
     job = observed.job
     if observed.dictating:

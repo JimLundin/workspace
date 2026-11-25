@@ -1,5 +1,3 @@
-"""The finding every architecture rule reports, and the module containment its policies are written in."""
-
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Annotated

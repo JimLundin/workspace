@@ -1,5 +1,3 @@
-"""Window messages and styles the layout and overlay rely on, on real hidden windows."""
-
 import ctypes
 import sys
 import unittest
@@ -48,7 +46,7 @@ def test_capture_watchdog_timer_is_delivered_to_its_hidden_window() -> None:
             message = next(system.messages())
         assert message.hwnd == hwnd and message.wparam == timer
     finally:
-        windows.destroy(hwnd)  # which kills its timer
+        windows.destroy(hwnd)
 
 
 def test_overlay_handle_accepts_mouse_input_without_taking_keyboard_focus() -> (

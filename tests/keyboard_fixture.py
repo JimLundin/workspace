@@ -1,5 +1,3 @@
-"""A fake keyboard platform and helpers for the layout hook's tests: no desktop effects."""
-
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 
@@ -18,12 +16,6 @@ PEERS = Peers(
 
 
 class KeyboardFixture:
-    """Own disposable input observations and output history, without desktop effects.
-
-    Mutable queues and failures model a driver changing between callbacks; only
-    this fixture owns them. The live keyboard consumes its ordinary typed interface.
-    """
-
     def __init__(self) -> None:
         self.current_foreground = 1
         self.current_title = ""
@@ -66,7 +58,6 @@ class KeyboardFixture:
     def find_window(self, window: Window) -> int | None:
         return self.handle if window == PEERS.desktop else None
 
-    # Keep the native delivery fields together in the concrete driver fixture.
     def post_message(
         self, hwnd: int, message: int, wparam: int, lparam: int
     ) -> bool:
@@ -115,7 +106,6 @@ def hook_key(
 
 
 def hold_apps(keyboard: Keyboard, *, at: int) -> None:
-    """Hold the Apps thumb past the tapping term (the fixture's timer is 17)."""
     keyboard.swallow(inputs.KeyEvent(0, APPS_THUMB, 0, at, 0), down=True)
     keyboard.timeout(17)
 
@@ -124,7 +114,6 @@ def hold_apps(keyboard: Keyboard, *, at: int) -> None:
 def observed_keyboard(
     *, platform: KeyboardFixture | None = None
 ) -> Generator[tuple[Keyboard, list[tuple[int, int, int]]]]:
-    """Use the same driver seam for input observations and captured notifications."""
     driver = platform if platform is not None else KeyboardFixture()
     yield Keyboard.open(layouts.LAYOUT, PEERS, driver), driver.messages
 
@@ -142,9 +131,7 @@ def firmware_keyboard() -> tuple[Keyboard, KeyboardFixture]:
     return keyboard, driver
 
 
-APPS_KEY = inputs.KeyEvent(
-    0xA5, 0x38, inputs.LLKHF_EXTENDED, 10, 0
-)  # Right Alt: the Charybdis's held Tab thumb
+APPS_KEY = inputs.KeyEvent(0xA5, 0x38, inputs.LLKHF_EXTENDED, 10, 0)
 
 
 CTRL = inputs.KeyEvent(0xA2, 0x1D, 0, 10, 0)
@@ -156,7 +143,7 @@ ALT = inputs.KeyEvent(0xA4, 0x38, 0, 10, 0)
 SHIFT = inputs.KeyEvent(0xA0, 0x2A, 0, 10, 0)
 
 
-DICTATE_LETTER = inputs.KeyEvent(0x48, 0x23, 0, 10, 0)  # H
+DICTATE_LETTER = inputs.KeyEvent(0x48, 0x23, 0, 10, 0)
 
 
 def requests_of(driver: KeyboardFixture) -> list[tuple[int, int]]:

@@ -1,5 +1,3 @@
-"""Whole-tree usage rules: unused definitions, duplicated function structure and Win32 functions declared twice."""
-
 import ast
 import copy
 import hashlib
@@ -26,8 +24,6 @@ REFERENCES = TypeAdapter[frozenset[str]](frozenset[str])
 
 @dataclass(frozen=True, slots=True)
 class Definition:
-    """A named definition, unused until a reference outside its own body names it."""
-
     finding: Finding
     own: int
     """How often the definition names itself, as a recursive function or a class's own annotations do."""
@@ -35,8 +31,6 @@ class Definition:
 
 @dataclass(frozen=True, slots=True)
 class Shape:
-    """A function's structure with its names, attributes and constants erased, which a copy shares."""
-
     finding: Finding
     digest: str
 
@@ -48,7 +42,6 @@ _ANNOTATION: Final = re.compile(r"[\w.\[\]]+(?:(?:, | \| )[\w.\[\]]+)*")
 
 
 def _overrides(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """A method whose caller is the base class it overrides, such as Qt or the SDK."""
     return any(
         isinstance(decorator, ast.Name | ast.Attribute)
         and ast.unparse(decorator).endswith("override")
@@ -77,7 +70,6 @@ def _defined(
 def definitions(
     body: Iterable[ast.stmt], module: str, owner: str = ""
 ) -> Iterator[Definition]:
-    """Named definitions in a module and its classes: functions, classes, and module-level values and type aliases."""
     for node in body:
         match node:
             case ast.ClassDef(name=name, body=inner):
@@ -103,7 +95,6 @@ def definitions(
 
 
 def references(tree: ast.AST) -> frozendict[str, int]:
-    """How often a module names each name: loads, attributes, imports, keywords, match attributes and annotation strings."""
     return frozendict(Counter(_referenced(tree)))
 
 
@@ -143,7 +134,6 @@ def unused_definitions(
     production: Mapping[str, int],
     tests: frozenset[str],
 ) -> Iterator[Finding]:
-    """Definitions production never names outside their own bodies; those only tests name say so."""
     for definition in found:
         finding = definition.finding
         if production.get(finding.expression, 0) <= definition.own:
@@ -159,8 +149,6 @@ SHAPE_NODES: Final = 40
 
 
 class _Erased(ast.NodeTransformer):
-    """Erase what a copy renames: identifiers, attributes, arguments, annotations and constant values."""
-
     @override
     def visit_Name(self, node: ast.Name) -> ast.Name:
         return ast.Name(id="_", ctx=node.ctx)
@@ -200,7 +188,6 @@ def _digest(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
 def shapes(
     tree: ast.AST, module: str, declaration: str = ""
 ) -> Iterator[Shape]:
-    """Every function of at least SHAPE_NODES nodes, with its erased structure."""
     for child in ast.iter_child_nodes(tree):
         match child:
             case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
@@ -233,7 +220,6 @@ def shapes(
 
 
 def duplicates(found: Iterable[Shape]) -> Iterator[Finding]:
-    """Each function whose erased structure another function shares, naming the first of its copies."""
     shaped = tuple(found)
     copies = Counter(shape.digest for shape in shaped)
     first = {shape.digest: shape.finding for shape in reversed(shaped)}
@@ -273,7 +259,6 @@ def natives(tree: ast.AST, module: str) -> Iterator[Finding]:
 
 
 def redeclarations(declared: Iterable[Finding]) -> Iterator[Finding]:
-    """Each declaration of an export that another module declares as well."""
     exports = tuple(declared)
     modules = Counter(
         export

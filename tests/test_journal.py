@@ -1,5 +1,3 @@
-"""The journal module through real SQLite files: transactions, schema versions and absence."""
-
 from pathlib import Path
 from unittest import TestCase
 
@@ -16,7 +14,6 @@ def _rows(path: Path) -> list[tuple[object, ...]]:
 
 
 def test_a_failed_write_keeps_none_of_its_statements(tmp_path: Path) -> None:
-    # Defect: an exception commits the statements that ran before it, or leaves the journal locked.
     path = tmp_path / "notes.sqlite3"
     with journal.writing(path) as connection:
         connection.execute(_CREATE[0])
@@ -37,8 +34,6 @@ def test_a_failed_write_keeps_none_of_its_statements(tmp_path: Path) -> None:
 def test_only_a_journal_that_chooses_a_write_ahead_log_relaxes_its_commits(
     tmp_path: Path,
 ) -> None:
-    # Defect: the meeting journal's WAL option weakens every other journal's
-    # durability, or never reaches the meeting journal's own connections.
     for durability, mode, synchronous in (
         (journal.Durability.FULL, "delete", 2),
         (journal.Durability.WAL, "wal", 1),
@@ -59,7 +54,6 @@ def test_only_a_journal_that_chooses_a_write_ahead_log_relaxes_its_commits(
 
 
 def test_a_new_journal_is_created_at_its_schema_version(tmp_path: Path) -> None:
-    # Defect: a new journal is not created at its version, or reopening it recreates its tables.
     schema = journal.Schema(
         3, (*_CREATE, "CREATE TABLE tags (note INTEGER NOT NULL)")
     )
@@ -77,7 +71,6 @@ def test_a_new_journal_is_created_at_its_schema_version(tmp_path: Path) -> None:
 def test_other_or_unversioned_journals_are_refused_without_changing_them(
     tmp_path: Path,
 ) -> None:
-    # Defect: an older, newer or foreign journal is opened or rewritten.
     schema = journal.Schema(3, _CREATE)
     for name, version in (("newer", 4), ("older", 2), ("unversioned", 0)):
         path = tmp_path / f"{name}.sqlite3"

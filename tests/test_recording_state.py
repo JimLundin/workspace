@@ -1,5 +1,3 @@
-"""Recording publication rules can be checked without devices, a database, or threads."""
-
 from dataclasses import replace
 
 from contracts.recording_state import (
@@ -80,7 +78,6 @@ def test_publication_rejects_older_progress_and_keeps_capture_finished() -> (
         and current.pending_seconds == 2
     )
     assert initial.seconds == 0
-    # Revisions, captured frames and transcribed progress must each reject stale data independently.
     for stale in (
         replace(incoming.saved, revision=9),
         replace(incoming.saved, frames=RATE * 9, pending=RATE),

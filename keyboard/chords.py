@@ -1,6 +1,3 @@
-"""Each Apps layer request by the base key at its place: the chord letters the desktop
-draws and the shortcuts the Charybdis sends, from one layout's bindings."""
-
 from dataclasses import dataclass
 
 from keyboard.actions import Layer, TapHold
@@ -23,8 +20,6 @@ def _base_key(bindings: Bindings, cell: int) -> Key | None:
 
 @dataclass(frozen=True, slots=True)
 class Chords:
-    """Each Apps layer request by the base key at its place: one map for both keyboards."""
-
     letters: frozendict[Request, str]
     """Each request's key under the Apps hold: the laptop's Apps layer, or the
     Charybdis's held Tab thumb, with the key its keymap sends there."""
@@ -33,7 +28,6 @@ class Chords:
 
     @classmethod
     def of(cls, bindings: Bindings) -> Chords:
-        """The layout's chords, or `LayoutError` if a request has no base key under it or two share one."""
         requests = tuple(
             (cell, request)
             for cell in range(Board.SIZE)
@@ -66,8 +60,4 @@ class Chords:
         )
 
     def shortcut(self, vk: int, *, apps_held: bool) -> Request | None:
-        """The request a fresh firmware key press makes while the Tab thumb holds Apps; other keys keep their meaning.
-
-        Keys are matched by virtual key, so the host layout can't move them.
-        """
         return self.by_vk.get(vk) if apps_held else None

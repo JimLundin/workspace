@@ -1,16 +1,3 @@
-"""Process isolation and coding policies, without importing application modules.
-
-The same inventory works in a Git checkout and a deployed source copy. Callers
-may supply Git-listed names to bind the review to their checked source snapshot.
-
-Parsing uses private mutable ASTs. Traversals are generators over immutable
-breadth-first levels: each level is one tuple and the visited set grows by one
-union per level, not per module, so the walks stay linear in the graph. Only
-immutable policy reports leave this owner. The rules live in the `*_rules`
-modules beside this one; this module reads the checkout, observes each module once
-and judges the findings against the declared exceptions.
-"""
-
 import ast
 import os
 import re
@@ -87,8 +74,6 @@ class Report:
 
 @dataclass(frozen=True, slots=True)
 class Configuration:
-    """The `[tool.workspace.architecture]` table: forbidden imports and exact exceptions."""
-
     exceptions: tuple[ExceptionSpec, ...] = ()
     constants: tuple[Text, ...] = ()
     """Packages whose modules read other modules' constants only as `module.NAME`, and only from declarations-only modules."""
@@ -120,7 +105,6 @@ OBSERVATION = TypeAdapter[Observation](Observation)
 
 
 def _walked(root: Path) -> Iterator[str]:
-    """Every file under root, pruning hidden and cache directories as os.walk descends."""
     for folder, directories, files in os.walk(root):
         directories[:] = sorted(
             name
@@ -188,7 +172,6 @@ def _observed(source: Source) -> Observation:
     tree = parse(source)
     module = module_name(source.name)
     return Observation(
-        # value_shapes also applies the scope rules (loop accumulation, state writes) to each function it walks.
         (*declarations(tree, module), *value_shapes(tree, module)),
         tuple(dynamic_imports(tree, module)),
         tuple(records(tree, module)),
@@ -210,8 +193,6 @@ TEXT_REFERENCES: Final = (".cmd", ".ps1", ".js")
 
 @dataclass(frozen=True, slots=True)
 class Checkout:
-    """The reviewed checkout: its root, every name listed in it, and every Python source read from it."""
-
     root: Path
     listed: tuple[str, ...]
     sources: tuple[Source, ...]
@@ -224,7 +205,6 @@ class Checkout:
         )
 
     def tested(self, cache: Cache | None) -> frozenset[str]:
-        """Every name the tests refer to."""
         return frozenset[str]().union(
             *(
                 cached_references(source, cache)
@@ -234,7 +214,6 @@ class Checkout:
         )
 
     def text_words(self) -> Counter[str]:
-        """The words in tracked launch and page scripts, which can name a Python definition."""
         texts = (
             name
             for name in self.listed
@@ -254,8 +233,6 @@ class Checkout:
 def _module_findings(
     observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None
 ) -> Iterator[Finding]:
-    """What each module shows on its own: its declarations, its plain records and its patches and mocks."""
-    # A class whose attribute another owner assigns (`calls.current = ...`) holds changing state.
     written = frozenset[str]().union(*(item.assigned for item in observed))
     yield from (finding for item in observed for finding in item.declarations)
     yield from (
@@ -274,7 +251,6 @@ def _module_findings(
 def _usage_findings(
     observed: tuple[Observation, ...], checkout: Checkout, cache: Cache | None
 ) -> Iterator[Finding]:
-    """What only every module together shows: unused definitions, copied functions and Win32 functions declared twice."""
     production = sum(
         (Counter(item.referenced) for item in observed), checkout.text_words()
     )
@@ -341,7 +317,6 @@ def _judged(
     findings: tuple[Finding, ...],
     exceptions: tuple[ExceptionSpec, ...],
 ) -> Report:
-    """The findings no exception accepts, and each exception that accepts none: its expression no longer exists."""
     accepted = tuple(
         exception
         for exception in exceptions

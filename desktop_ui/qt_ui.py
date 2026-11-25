@@ -1,5 +1,3 @@
-"""The desktop's Qt application, its one-shot timers, and the bar's frame loop with its composition."""
-
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -27,7 +25,6 @@ def application(log: Callable[[str], None]) -> QApplication:
 def later(
     parent: QtCore.QObject, milliseconds: int, callback: Callable[[], None]
 ) -> QtCore.QTimer:
-    """Schedule one UI-owned callback. Closing its owner cancels delivery."""
     timer = QtCore.QTimer(parent)
     timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
     timer.setSingleShot(True)
@@ -49,8 +46,6 @@ def cancel(timer: QtCore.QTimer | None) -> None:
 
 @dataclass(frozen=True, slots=True)
 class EventLoop:
-    """The bar's frame timer and the desktop composition its glass draws in."""
-
     app: QApplication
     timer: QtCore.QTimer
     """Every 16 ms while something moves; the bar connects its painting."""
@@ -61,7 +56,6 @@ class EventLoop:
 
     @classmethod
     def start(cls, app: QApplication, log: Callable[[str], None]) -> EventLoop:
-        """The loop; a composition that won't start goes to `log`."""
         timer = QtCore.QTimer(app)
         timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         timer.setInterval(16)
@@ -78,8 +72,6 @@ class EventLoop:
 
     def watch(self, *, visible: bool) -> None:
         if not self.closed:
-            # Observations and paint callbacks must preserve the next frame's
-            # deadline. Restarting an active timer lets frequent updates starve it.
             if visible and not self.timer.isActive():
                 self.timer.start()
             elif not visible:

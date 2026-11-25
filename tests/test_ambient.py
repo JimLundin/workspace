@@ -1,5 +1,3 @@
-"""Real ambient observations, including unavailable devices."""
-
 import unittest
 from dataclasses import replace
 
@@ -21,7 +19,6 @@ from winapi.machine_status import (
 
 
 def test_battery_percentage_remains_visible_when_plugged_in_or_full() -> None:
-    # Defect: external power or a full battery hides the requested percentage.
     for percent in (0, 73, 95, 96, 100):
         for powered, charging in ((True, True), (True, False), (False, False)):
             observed = Ambient(
@@ -43,9 +40,6 @@ def test_invalid_battery_is_not_presented_as_a_real_observation() -> None:
 
 
 def test_processor_load_is_the_busy_share_of_time_between_two_samples() -> None:
-    # Defects: kernel time is counted as busy although it includes idle time, the
-    # load comes from cumulative totals instead of the interval, or a first
-    # sample, a stalled counter or a counter that went backwards reads as 0%.
     before = CpuTimes(idle=1_000, kernel=5_000, user=3_000)
     assert (
         cpu_load(before, CpuTimes(idle=1_600, kernel=5_800, user=3_200)) == 40
@@ -76,7 +70,6 @@ def test_native_power_validates_missing_and_unknown_batteries() -> None:
     assert ambient.power_from_status(status) == Battery(
         73, powered=True, charging=True
     )
-    # Defects: Windows' all-ones "unknown" estimate reads as 136 years left, or a real one is dropped.
     status.ACLineStatus, status.BatteryFlag = 0, 0
     assert ambient.power_from_status(status) == Battery(
         73, powered=False, charging=False, remaining=5_000
@@ -108,9 +101,6 @@ def test_wifi_association_uses_all_interfaces_without_claiming_unknown_or_absent
 def test_networks_merge_by_name_keep_a_saved_profile_and_list_the_connected_one_first() -> (
     None
 ):
-    # Defects: a network heard on two bands, or once with its profile and once without,
-    # lists twice; the merge loses the profile or the connection; or a hidden network
-    # shows as a nameless line.
     heard = (
         Network("Cafe", 90, secured=False, connected=False, profile=None),
         Network("Home", 40, secured=True, connected=False, profile=None),

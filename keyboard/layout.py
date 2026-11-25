@@ -1,8 +1,3 @@
-"""The shape of a keyboard layout: which physical keys it owns, what each does on
-each layer, and its timings. Declares no layout itself; `keyboard.__main__`
-builds one and hands it in, and tests build their own.
-"""
-
 from dataclasses import dataclass
 
 from keyboard.actions import Binding, Layer
@@ -10,14 +5,11 @@ from keyboard.board import Board
 from keyboard.physical import Laptop, Scancode
 
 
-class LayoutError(Exception):
-    """The layout is inconsistent; raised when it is built, so a broken layout never starts."""
+class LayoutError(Exception): ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Timings:
-    """How long, in milliseconds, decides what a held key means."""
-
     tapping_term: int
     """Hold a tap-hold key longer than this and it becomes its modifier or layer."""
     streak: int
@@ -30,16 +22,12 @@ class Timings:
 
 @dataclass(frozen=True, slots=True)
 class UsbIdentity:
-    """A USB device's vendor and product numbers."""
-
     vendor: int
     product: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Layout:
-    """A whole layout: its physical keys, its layers and its timings."""
-
     physical: Board[Laptop]
     """The laptop keys the layout is written on, cell by cell."""
     unused: frozenset[Laptop]

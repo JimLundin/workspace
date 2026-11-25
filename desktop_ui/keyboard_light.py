@@ -1,15 +1,3 @@
-"""The Charybdis's backlight goes dark with the screens while nobody is looking, and comes back with them.
-
-`desktop_ui.away_screens` darkens this light when the session locks and restores
-it on unlock, with the screens. The keyboard can't see a lock, and locking
-doesn't suspend USB, so its own sleep handling never fires. Workspace tells it
-over VIA instead: it reads the effect the person set, turns the matrix off
-without saving, and puts that effect back. Nothing is written to the keyboard's
-EEPROM, so a keyboard unplugged meanwhile comes back lit as it was set. The
-effect to put back is also kept on disk, so a Workspace restarted while locked
-still restores it.
-"""
-
 from dataclasses import dataclass, replace
 from typing import Protocol
 
@@ -26,8 +14,6 @@ class Backlight(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ViaBacklight:
-    """The attached Charybdis's RGB matrix over its VIA interface."""
-
     firmware: UsbIdentity
 
     def effect(self) -> via.Effect | via.Absent:
@@ -47,8 +33,6 @@ class ViaBacklight:
 
 @dataclass(frozen=True, slots=True)
 class KeyboardLight:
-    """The lights-off state while away; each change returns the owner's next state."""
-
     backlight: Backlight
     kept: Kept
     restore_to: int | None = None
@@ -56,15 +40,14 @@ class KeyboardLight:
 
     @classmethod
     def resume(cls, backlight: Backlight, kept: Kept) -> KeyboardLight:
-        """The light as a previous Workspace may have left it: dark, with the effect to put back kept."""
         return cls(backlight, kept, kept.load())
 
     def darken(self) -> KeyboardLight:
         if self.restore_to is not None:
-            return self  # Already off: reading again would remember "off" as the person's setting.
+            return self
         match self.backlight.effect():
             case via.Effect(value=0):
-                return self  # The person's own setting: nothing to turn off, and nothing to put back.
+                return self
             case via.Effect(value=effect):
                 match self.backlight.set_effect(0):
                     case via.Effect():
@@ -78,7 +61,6 @@ class KeyboardLight:
     def restore(self) -> KeyboardLight:
         if self.restore_to is None:
             return self
-        # Absent means it was unplugged meanwhile, and it starts lit from its saved setting.
         self.backlight.set_effect(self.restore_to)
         self.kept.clear()
         return replace(self, restore_to=None)

@@ -1,5 +1,3 @@
-"""Recording values and decisions, independent of devices, storage, threads, and widgets."""
-
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from math import isfinite
@@ -59,8 +57,6 @@ class RetryPolicy:
 
 @dataclass(frozen=True, slots=True)
 class RecordingState:
-    """The view's progress snapshot; a starting capture may not yet have a journal."""
-
     phase: Phase = "idle"
     identity: str = ""
     title: str = "Meeting"
@@ -110,12 +106,10 @@ class StoredState:
 
     @property
     def export_current(self) -> bool:
-        """Every captured frame is transcribed and Markdown has the latest revision."""
         return not self.pending and self.revision == self.exported_revision
 
     @property
     def complete(self) -> bool:
-        """Capture finished and its current transcript is published."""
         return self.finished and self.export_current
 
 
@@ -141,7 +135,6 @@ class Publication:
 
 
 def completion_phase(saved: StoredState) -> CompletionPhase:
-    """Decide progress after capture finishes, unless an explicit pause overrides it."""
     match saved:
         case StoredState() if not saved.export_current:
             return "finishing"
@@ -158,10 +151,9 @@ def published(
     stopping: bool,
     paused: str | None = None,
 ) -> RecordingState | None:
-    """Reject stale observations before deriving the next immutable view snapshot."""
     saved, phase, detail = incoming.saved, incoming.phase, incoming.detail
     if current.phase == "starting" and not current.identity:
-        return None  # a new capture reserved the view before its journal exists
+        return None
     if current.identity and current.identity != incoming.identity:
         return None
     if (
@@ -205,8 +197,6 @@ def published(
 
 @dataclass(frozen=True, slots=True)
 class CaptureReport:
-    """Recovered capture problems: the gaps they add to the recording and one log line."""
-
     gaps: int
     gap_frames: int
     text: str

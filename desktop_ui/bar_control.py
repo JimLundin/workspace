@@ -1,5 +1,3 @@
-"""The bar's controls: Qt owns pointer, press and focus; each control paints its own feedback in the bar's reading face."""
-
 from dataclasses import dataclass
 from typing import override
 
@@ -15,8 +13,6 @@ prepare()
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Feedback:
-    """The states a control's feedback shows, and how far inside its bounds the keyboard ring sits."""
-
     pressed: bool
     hovered: bool
     ringed: bool = False
@@ -30,7 +26,6 @@ def paint_feedback(
     corner: float,
     feedback: Feedback,
 ) -> None:
-    """A press or hover fill over `bounds` and the keyboard ring inside it, rounded at `corner`."""
     pressed, hovered, inset = feedback.pressed, feedback.hovered, feedback.inset
     painter.save()
     if pressed or hovered:
@@ -49,13 +44,9 @@ def paint_feedback(
 
 
 class KeyboardFocus(QtWidgets.QAbstractButton):
-    """A button that rings itself only for keyboard focus, as `:focus-visible` does, and can paint the bar's round control feedback."""
-
     def __init__(self, parent: QtWidgets.QWidget) -> None:
         super().__init__(parent)
-        self.ringed = (
-            False  # Qt owns focus; the widget remembers only how focus arrived.
-        )
+        self.ringed = False
 
     @override
     def focusInEvent(self, event: QtGui.QFocusEvent) -> None:
@@ -79,7 +70,6 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
     def paint_round(
         self, painter: QtGui.QPainter, lettering: Lettering
     ) -> None:
-        """Press or hover fill and the keyboard ring, round at the button's height: a circle, or a pill when wider."""
         bounds = QtCore.QRectF(self.rect())
         paint_feedback(
             painter,

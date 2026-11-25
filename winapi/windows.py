@@ -1,6 +1,3 @@
-"""Other programs' windows: listing, focusing, moving; and hidden windows of our own
-that other processes can find and post messages to."""
-
 import ctypes
 import threading
 from ctypes import wintypes
@@ -220,7 +217,6 @@ _MA_NOACTIVATE: Final = 3
 def overlay_message(
     hwnd: int, message: int, wparam: int, lparam: int, subclass: int, _data: int
 ) -> int:
-    """Keep an interactive overlay from activating, even if its GUI workspace asks to."""
     if message == _WM_MOUSEACTIVATE:
         return _MA_NOACTIVATE
     if message == _WM_NCDESTROY:
@@ -228,9 +224,7 @@ def overlay_message(
     return int(_DefSubclassProc(hwnd, message, wparam, lparam))
 
 
-_OVERLAY_PROC = _SUBCLASSPROC(
-    overlay_message
-)  # keep the native callback alive until every overlay is destroyed
+_OVERLAY_PROC = _SUBCLASSPROC(overlay_message)
 
 
 def _title(hwnd: int) -> str:
@@ -259,7 +253,6 @@ def _exe(hwnd: int) -> str:
 
 
 def _cloaked(hwnd: int) -> bool:
-    """Hidden by the shell (suspended Store apps, other virtual desktops)."""
     value = wintypes.DWORD()
     return _DwmGetWindowAttribute(
         hwnd, _DWMWA_CLOAKED, ctypes.byref(value), ctypes.sizeof(value)
@@ -280,7 +273,6 @@ def _on_taskbar(hwnd: int, *, include_cloaked: bool = False) -> bool:
 
 
 def windows(*, include_cloaked: bool = False) -> list[Window]:
-    """Top-level windows that would be on the taskbar, front to back."""
     handles: list[int] = []
 
     def each(hwnd: int, _data: int) -> bool:
@@ -310,11 +302,6 @@ def process_id(hwnd: int) -> int:
 
 
 def focus(hwnd: int, timeout_s: float = 1.0) -> bool:
-    """Brings a window to the front and gives it the keyboard; True if it worked.
-
-    Done on a helper thread with a time limit: briefly joining the front program's
-    input queue (see `_focus`) waits on that program, and a hung one must never
-    freeze the caller."""
     result: list[bool] = []
     helper = threading.Thread(
         target=lambda: result.append(_focus(hwnd)), name="focus", daemon=True
@@ -329,8 +316,6 @@ def _focus(hwnd: int) -> bool:
         ShowWindow(hwnd, SW_RESTORE)
     if SetForegroundWindow(hwnd) and foreground() == hwnd:
         return True
-    # Windows only lets the program the user is using change the foreground window.
-    # Joining its input queue for a moment makes this thread count as that program.
     current = GetWindowThreadProcessId(foreground(), None)
     ours = GetCurrentThreadId()
     attached = bool(
@@ -354,7 +339,6 @@ def exe(hwnd: int) -> str:
 
 
 def show(hwnd: int, command: int) -> None:
-    """SW_MAXIMIZE or SW_SHOWNOACTIVATE."""
     ShowWindow(hwnd, command)
 
 
@@ -367,7 +351,6 @@ def is_minimized(hwnd: int) -> bool:
 
 
 def dragging() -> bool:
-    """The user is holding the left button or the foreground window is in a move or size loop."""
     info = GUITHREADINFO()
     info.cbSize = ctypes.sizeof(GUITHREADINFO)
     in_loop = bool(_GetGUIThreadInfo(0, ctypes.byref(info))) and bool(
@@ -381,7 +364,6 @@ def cloaked(hwnd: int) -> bool:
 
 
 def resizable(hwnd: int) -> bool:
-    """The window has a sizing border (WS_THICKFRAME): it is meant to be resized."""
     return bool(int(_GetWindowLongW(hwnd, _GWL_STYLE)) & _WS_THICKFRAME)
 
 
@@ -390,14 +372,12 @@ def scale(hwnd: int) -> float:
 
 
 def outer_rect(hwnd: int) -> Rect:
-    """The rectangle Windows positions the window by (it includes invisible borders)."""
     r = wintypes.RECT()
     _GetWindowRect(hwnd, ctypes.byref(r))
     return rect(r)
 
 
 def visible_rect(hwnd: int) -> Rect:
-    """The rectangle the window is actually drawn in."""
     r = wintypes.RECT()
     if (
         _DwmGetWindowAttribute(
@@ -413,7 +393,6 @@ def visible_rect(hwnd: int) -> Rect:
 
 
 def caption_buttons(hwnd: int) -> Rect | None:
-    """The caption buttons' bounds in window coordinates; their bottom is where a custom-drawn caption ends."""
     r = wintypes.RECT()
     if (
         _DwmGetWindowAttribute(
@@ -429,25 +408,21 @@ def caption_buttons(hwnd: int) -> Rect | None:
 
 
 def region(hwnd: int) -> Rect | None:
-    """The bounding box of the window's region in window coordinates; None when it has none."""
     r = wintypes.RECT()
     return rect(r) if _GetWindowRgnBox(hwnd, ctypes.byref(r)) > 0 else None
 
 
 def set_region(hwnd: int, box: Rect | None) -> None:
-    """Show only `box` of the window, in window coordinates; None restores the whole window."""
     shape = (
         _CreateRectRgn(box.left, box.top, box.right, box.bottom)
         if box is not None
         else None
     )
-    # On success Windows owns the region; it remains ours to delete only on failure.
     if not _SetWindowRgn(hwnd, shape, True) and shape:
         DeleteObject(shape)
 
 
 def move(hwnd: int, to: Rect) -> None:
-    """Positions by the outer rectangle (see `outer_rect`)."""
     SetWindowPos(
         hwnd,
         None,
@@ -460,8 +435,6 @@ def move(hwnd: int, to: Rect) -> None:
 
 
 def make_overlay(hwnd: int, *, click_through: bool = True) -> None:
-    """An overlay that never takes the keyboard or appears on the taskbar/Alt+Tab.
-    Clicks pass through by default; a drag handle can opt into mouse input."""
     style = (
         int(_GetWindowLongW(hwnd, _GWL_EXSTYLE))
         | _WS_EX_LAYERED
@@ -483,11 +456,6 @@ def make_overlay(hwnd: int, *, click_through: bool = True) -> None:
 
 
 def show_quietly(hwnd: int, *, visible: bool, topmost: bool = True) -> None:
-    """Keep the current size/state when revealing without activation.
-
-    SW_SHOWNOACTIVATE restores normal geometry, undoing Qt's maximization.
-    SW_SHOWNA preserves it. Overlays stay on top by default.
-    """
     if visible:
         ShowWindow(hwnd, _SW_SHOWNA)
         SetWindowPos(
@@ -504,7 +472,6 @@ def show_quietly(hwnd: int, *, visible: bool, topmost: bool = True) -> None:
 
 
 def allow_activation(hwnd: int, *, allowed: bool) -> None:
-    """Temporarily prevent a GUI workspace's Show call from taking the keyboard."""
     style = int(_GetWindowLongW(hwnd, _GWL_EXSTYLE))
     style = style & ~_WS_EX_NOACTIVATE if allowed else style | _WS_EX_NOACTIVATE
     _SetWindowLongW(
@@ -513,14 +480,11 @@ def allow_activation(hwnd: int, *, allowed: bool) -> None:
 
 
 def find(title: str) -> int | None:
-    """A top-level window by its exact title, hidden ones included."""
     hwnd: int | None = FindWindowW(None, title)
     return int(hwnd) if hwnd else None
 
 
 def create_hidden(title: str) -> int:
-    """A window that is never shown: something other processes can `find` and post
-    messages to. The messages arrive in this thread's message loop."""
     hwnd: int | None = CreateWindowExW(
         0,
         "STATIC",

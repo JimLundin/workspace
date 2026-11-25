@@ -1,5 +1,3 @@
-"""The bar's decisions, as values: opening and closing the menu, and what a publication changes."""
-
 from dataclasses import replace
 from datetime import date
 
@@ -44,7 +42,6 @@ def model() -> BarModel:
 def test_opening_the_menu_remembers_the_keyboard_only_when_the_island_was_closed() -> (
     None
 ):
-    # Defect: reopening the open menu forgets who had the keyboard first.
     closed = model()
     _, effects = transition(closed, Pressed(Action.OPEN_MENU))
     assert tuple(effects) == (
@@ -62,8 +59,6 @@ def test_opening_the_menu_remembers_the_keyboard_only_when_the_island_was_closed
 def test_a_reading_opens_its_panel_switches_from_another_and_closes_its_own() -> (
     None
 ):
-    # Defects: pressing the open panel's reading opens it again instead of closing, switching
-    # panels forgets who had the keyboard, or a closed bar still opens.
     closed = model()
     _, opening = transition(closed, PanelPressed(Panel.SOUND, 2))
     assert tuple(opening) == (
@@ -87,8 +82,6 @@ def test_a_reading_opens_its_panel_switches_from_another_and_closes_its_own() ->
 def test_losing_the_keyboard_closes_without_taking_it_back_but_escape_returns_it() -> (
     None
 ):
-    # Defect: another window taking focus is fought for, or closing with the menu
-    # key leaves the keyboard with Workspace.
     opened, _ = transition(model(), Opening(menu(model(), Panel.WORKSPACE), 42))
     lost, deactivated = transition(opened, Deactivated())
     assert lost.opened is None and tuple(deactivated) == (
@@ -101,7 +94,6 @@ def test_losing_the_keyboard_closes_without_taking_it_back_but_escape_returns_it
 
 
 def test_an_unchanged_publication_does_not_render_again() -> None:
-    # Defect: every repeated publication relays the bar out, or a real change doesn't.
     dictating, effects = transition(model(), DictationShown(active=True))
     assert dictating.dictating and tuple(effects) == (Render(),)
     _, repeated = transition(dictating, DictationShown(active=True))
@@ -109,8 +101,6 @@ def test_an_unchanged_publication_does_not_render_again() -> None:
 
 
 def test_mute_flips_the_speakers_and_shows_at_once() -> None:
-    # Defects: pressing Mute on muted speakers mutes them again instead of unmuting,
-    # or the toggle and the capsule wait for the next reading to show it.
     for before, after in ((Speakers.AUDIBLE, True), (Speakers.MUTED, False)):
         heard = replace(
             model(),
@@ -143,9 +133,6 @@ def test_mute_flips_the_speakers_and_shows_at_once() -> None:
 def test_the_calendar_turns_from_the_month_it_shows_and_returns_to_today() -> (
     None
 ):
-    # Defects: each arrow turns from today's month rather than the one shown, the turned
-    # month is lost on the next render, another panel inherits it, or the heading
-    # doesn't bring today back.
     dated = replace(
         model(),
         seen=replace(
@@ -176,8 +163,6 @@ def test_the_calendar_turns_from_the_month_it_shows_and_returns_to_today() -> (
 
 
 def test_networks_are_read_only_while_their_panel_is_open() -> None:
-    # Defects: the worker keeps scanning after the panel closes or switches away, or
-    # opening the Wi-Fi panel never starts reading the networks in range.
     _, opening = transition(model(), PanelPressed(Panel.NETWORK))
     assert Survey(listing=True) in tuple(opening)
     listing, _ = transition(model(), Opening(menu(model(), Panel.NETWORK), 42))

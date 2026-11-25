@@ -1,10 +1,3 @@
-"""Observe live Shell_NotifyIcon traffic while forwarding Explorer's shell ownership.
-
-Windows transports NOTIFYICONDATA as a fixed 32-bit wire layout in WM_COPYDATA,
-even from 64-bit senders. This small native adapter needs no injected DLL or
-cached registry icons. The hidden proxy is removed before Explorer is restored.
-"""
-
 import ctypes
 from dataclasses import dataclass, field, replace
 from enum import Enum
@@ -62,15 +55,11 @@ class Entry:
 
 @dataclass(frozen=True, slots=True)
 class Messages:
-    """The mouse messages a click sends a tray icon, then the select or context message a version 3 icon also gets."""
-
     mouse: tuple[int, ...]
     selected: tuple[int, ...]
 
 
 class Click(Enum):
-    """A click on a tray icon, with the messages it sends the icon."""
-
     LEFT = Messages((0x201, 0x202), (0x400,))
     RIGHT = Messages((0x204, 0x205), (0x7B,))
     DOUBLE = Messages((0x203,), ())
@@ -83,7 +72,6 @@ class Located:
 
 
 def position_reply(data: bytes, locations: tuple[Located, ...]) -> int | None:
-    """Shell_NotifyIconGetRect asks separately for the origin and extent."""
     if len(data) < 40:
         return None
     operation = int.from_bytes(data[4:8], "little")
@@ -199,8 +187,6 @@ def update(
 
 @dataclass(frozen=True, slots=True)
 class Notify:
-    """One callback message's parameters, as the icon's owner expects them."""
-
     wparam: int
     lparam: int
 
@@ -233,8 +219,6 @@ class _Hosted:
 def _proxied(
     hosted: Cell[_Hosted], message: int, wparam: int, lparam: int
 ) -> int | None:
-    """The proxy window's procedure: answer icon positions and registrations, forward the rest to Explorer."""
-    # Required Windows WNDPROC ABI; WM_COPYDATA pointers exist only during this callback.
     if hosted.get().closed:
         return None
     if message == WM_COPYDATA and lparam:
@@ -284,8 +268,6 @@ def _proxied(
 
 @dataclass(frozen=True, slots=True)
 class TrayHost:
-    """The Qt-thread effect owner publishes immutable registrations and pixel copies."""
-
     window: AppWindow
     _hosted: Cell[_Hosted]
 
@@ -344,7 +326,6 @@ class TrayHost:
         )
 
     def click(self, entry: Entry, click: Click, point: Point) -> None:
-        # The three inputs are the registered owner, action, and native click coordinates.
         if entry in self.entries and windows.exists(entry.window):
             AllowSetForegroundWindow(windows.process_id(entry.window))
             for notify in callbacks(entry, click, point):

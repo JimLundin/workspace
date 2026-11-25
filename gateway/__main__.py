@@ -1,11 +1,3 @@
-"""Run the AI connection: `pythonw -m gateway`. The keeper starts it before the
-other programs and ends it on stop; it holds no state of its own.
-
-It imports only `protocol`, `settings.programs` and its own modules, so a deploy that
-changes the rest of Workspace leaves it, and the provider connection that
-dictation, meetings and the agent share, running.
-"""
-
 import os
 import secrets
 

@@ -1,5 +1,3 @@
-"""The provider the gateway forwards to, and which parts of a request cross over."""
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
@@ -34,8 +32,6 @@ class Upstream:
 
 @dataclass(frozen=True, slots=True)
 class Unconfigured:
-    """Required environment variables that aren't set; the gateway answers with them."""
-
     names: tuple[str, ...]
 
 
@@ -46,7 +42,6 @@ def upstream_from(env: Mapping[str, str]) -> Upstream | Unconfigured:
 
 
 def target(upstream: Upstream, path: str) -> str | None:
-    """The provider URL for a client's `/v1/...` path and query; None for any other path."""
     if not path.startswith("/v1/"):
         return None
     return upstream.base_url + path.removeprefix("/v1")
@@ -55,7 +50,6 @@ def target(upstream: Upstream, path: str) -> str | None:
 def request_headers(
     headers: Iterable[tuple[str, str]], upstream: Upstream
 ) -> Headers:
-    """The client's headers with the gateway token swapped for the provider's key."""
     kept = tuple(
         (name, value)
         for name, value in headers
@@ -65,7 +59,6 @@ def request_headers(
 
 
 def response_headers(headers: Iterable[tuple[str, str]]) -> Headers:
-    """The provider's headers; the gateway re-frames the body itself, chunk by chunk."""
     return tuple(
         (name, value)
         for name, value in headers

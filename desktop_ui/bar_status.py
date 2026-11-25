@@ -1,14 +1,3 @@
-"""System indicators are observed off the UI thread, with one bounded result slot.
-
-The same worker applies the speakers' level and mute, and Wi-Fi scans and joins.
-Windows' audio interfaces need a multithreaded COM apartment, which Qt's thread
-cannot join, and a scan or join blocks. Requests coalesce by kind, so a drag
-applies its latest level rather than every intermediate one, and never drops a
-mute requested beside it.
-The same worker reads processor and memory use every two seconds, and the Wi-Fi
-networks in range each tick while their panel is open.
-"""
-
 import queue
 import threading
 import time
@@ -22,7 +11,7 @@ from desktop_ui.ambient import SystemStatus
 from winapi.machine_status import CpuTimes, Memory, cpu_load
 lazy from winapi import resources, system_status
 
-RESOURCES: Final = 2.0  # Seconds between processor and memory readings; faster readings only flicker.
+RESOURCES: Final = 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +25,6 @@ class _Sampled:
 def sampled_resources(
     last: SystemStatus, cpu: int | None, memory: Memory | None
 ) -> SystemStatus:
-    """The new processor and memory readings, each added to its history; an unread one leaves a gap."""
     return replace(
         last,
         cpu=cpu,
@@ -50,8 +38,6 @@ def sampled_resources(
 
 @dataclass(frozen=True, slots=True)
 class Observation:
-    """Each observation reads the speakers and Wi-Fi; processor load needs the previous sample to measure against."""
-
     clock: Callable[[], float] = time.monotonic
     _sampled: Cell[_Sampled] = field(
         default_factory=lambda: Cell(_Sampled()), init=False, repr=False
@@ -61,7 +47,6 @@ class Observation:
         audio = system_status.audio()
         now = self.clock()
         sampled = self._sampled.get()
-        # Until a first load is known, the next tick measures one; then every interval.
         if sampled.last.cpu is None or now - sampled.sampled >= RESOURCES:
             times = resources.cpu_times()
             sampled = _Sampled(
@@ -86,8 +71,6 @@ class Observation:
 
 @dataclass(frozen=True, slots=True)
 class Pending:
-    """Requests not yet applied: a later request of a kind replaces the earlier one."""
-
     volume: float | None = None
     muted: bool | None = None
     scan: bool = False
@@ -96,8 +79,6 @@ class Pending:
 
 
 class Machine(Protocol):
-    """What applies the requests."""
-
     def volume(self, level: float) -> bool: ...
     def mute(self, *, muted: bool) -> bool: ...
     def scan(self) -> None: ...
@@ -106,8 +87,6 @@ class Machine(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ThisMachine:
-    """Windows' default playback device and Wi-Fi adapters."""
-
     def volume(self, level: float) -> bool:
         return system_status.set_volume(level)
 
@@ -133,8 +112,6 @@ def apply(machine: Machine, pending: Pending) -> None:
 
 
 class Observe(Protocol):
-    """One reading of the system; `listing` reads the Wi-Fi networks in range too."""
-
     def __call__(self, *, listing: bool) -> SystemStatus: ...
 
 
@@ -184,7 +161,6 @@ class StatusObserver:
         self.request(lambda pending: replace(pending, muted=muted))
 
     def survey(self, *, listing: bool) -> None:
-        """Read the networks in range while `listing`, scanning afresh as it starts."""
         if listing and not self.listing.is_set():
             self.listing.set()
             self.request(lambda pending: replace(pending, scan=True))
@@ -195,7 +171,6 @@ class StatusObserver:
         self.request(lambda pending: replace(pending, join=profile))
 
     def taken(self) -> Pending:
-        """The pending requests, leaving none."""
         with self.lock:
             pending = self.requests.get()
             self.requests.set(Pending())

@@ -1,5 +1,3 @@
-"""Native taskbar ownership: Explorer's taskbars stay hidden while the desktop runs."""
-
 import os
 import subprocess
 import sys
@@ -27,12 +25,9 @@ class RecoveryGuard(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class NativeRecoveryGuard:
-    """Own the recovery subprocess and its bounded readiness read."""
-
     process: subprocess.Popen[bytes]
 
     def ready(self) -> bool:
-        # One worker publishes the bounded pipe read before signalling readiness.
         response: list[bytes] = []
         received = threading.Event()
 
@@ -84,8 +79,6 @@ class _Taskbars:
 
 @dataclass(frozen=True, slots=True)
 class TaskbarControl:
-    """Keep Explorer's taskbars hidden, and restore them on normal or abrupt exit."""
-
     desktop: TaskbarDesktop = desktop_shell
     launch: Callable[[], RecoveryGuard] = launch_recovery_guard
     _state: Cell[_Taskbars] = field(
@@ -99,7 +92,6 @@ class TaskbarControl:
         return self._state.get().ready
 
     def start(self) -> None:
-        """The handshake runs on a worker. No taskbar is hidden before recovery is ready."""
         guard = self.launch()
         ready = guard.ready() and guard.poll() is None
         with self.lock:

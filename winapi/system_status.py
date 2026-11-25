@@ -1,9 +1,3 @@
-"""Default speaker mute and level, Wi-Fi association and the networks in range.
-
-The writes are the speakers' level and mute, a scan for networks, and joining
-one through the profile Windows saved for it; joining a new network is Windows' own.
-"""
-
 import ctypes
 import math
 from collections.abc import Generator
@@ -59,7 +53,6 @@ from winapi.machine_status import (
 
 
 def wifi_state(states: tuple[int, ...]) -> Wifi:
-    """One associated interface suffices; absent adapters and invalid observations aren't disconnect alerts."""
     if not states:
         return Wifi.NO_ADAPTER
     if any(state not in range(8) for state in states):
@@ -104,7 +97,6 @@ def wifi() -> Wifi:
 
 @contextmanager
 def _adapters() -> Generator[tuple[ctypes.c_void_p, tuple[Guid, ...]]]:
-    """A WLAN client handle and each Wi-Fi adapter's identity, valid inside the block; none when Windows offers none."""
     handle, version, interfaces = (
         ctypes.c_void_p(),
         ctypes.c_uint32(),
@@ -137,7 +129,6 @@ def _adapters() -> Generator[tuple[ctypes.c_void_p, tuple[Guid, ...]]]:
 
 
 def scan() -> None:
-    """Ask every adapter to look for networks; their lists refresh a few seconds later."""
     with _adapters() as (handle, guids):
         for guid in guids:
             WlanScan(handle, ctypes.byref(guid), None, None, None)
@@ -152,7 +143,6 @@ ACCESS_DENIED: Final = 5
 
 
 def networks() -> Listing:
-    """The networks every adapter hears, one per name, the connected one first."""
     with _adapters() as (handle, guids):
         heard = tuple(_heard(handle, guid) for guid in guids)
         if any(each is LOCATION_OFF for each in heard):
@@ -193,7 +183,6 @@ def _heard(handle: ctypes.c_void_p, guid: Guid) -> Listing:
 
 
 def join(profile: str) -> bool:
-    """Connect through the saved `profile` on the first adapter that accepts it; False when none does."""
     with _adapters() as (handle, guids):
         parameters = WLAN_CONNECTION_PARAMETERS(
             wlanConnectionMode=wlan_connection_mode_profile,
@@ -210,7 +199,6 @@ def join(profile: str) -> bool:
 
 @contextmanager
 def endpoint() -> Generator[IAudioEndpointVolume | None]:
-    """The current default playback endpoint, resolved on each use so device changes are reflected."""
     if FAILED(CoInitializeEx(None, COINIT_MULTITHREADED)):
         yield None
         return
@@ -218,7 +206,6 @@ def endpoint() -> Generator[IAudioEndpointVolume | None]:
     device = IMMDevice(own=True)
     volume = IAudioEndpointVolume(own=True)
     try:
-        # Published Windows interface IDs; avoid the binding's private metadata.
         enumerator_id = Guid("{a95664d2-9614-4f35-a746-de8db63617e6}")
         volume_id = Guid("{5cdf2c82-841e-4546-9722-0cf74078229a}")
         if (
@@ -270,7 +257,6 @@ def audio() -> Audio:
 
 
 def set_volume(level: float) -> bool:
-    """Set the default speakers' master level, from 0 to 1; False when Windows refuses it."""
     if not (math.isfinite(level) and 0 <= level <= 1):
         raise ValueError("A speaker level runs from 0 to 1.")
     try:
@@ -283,7 +269,6 @@ def set_volume(level: float) -> bool:
 
 
 def set_mute(*, muted: bool) -> bool:
-    """Mute or unmute the default speakers; False when Windows refuses it."""
     try:
         with endpoint() as volume:
             return volume is not None and not FAILED(

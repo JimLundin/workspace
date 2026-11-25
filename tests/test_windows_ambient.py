@@ -1,5 +1,3 @@
-"""Windows power, Wi-Fi, speaker, processor and memory observations, including unknown readings."""
-
 import sys
 import time
 import unittest
@@ -14,9 +12,6 @@ from winapi.machine_status import cpu_load
 def test_speaker_level_round_trips_through_the_default_endpoint_without_changing_it() -> (
     None
 ):
-    # Defects: the level binding reads or writes the wrong native value, or the
-    # write accepts a level outside 0 to 1. Writing back the current level leaves
-    # the user's volume as it was.
     before = system_status.audio()
     if before.volume is None:
         raise unittest.SkipTest("No default playback endpoint reports a level.")
@@ -38,16 +33,12 @@ def test_speaker_level_round_trips_through_the_default_endpoint_without_changing
 
 
 def test_processor_and_memory_bindings_read_real_values() -> None:
-    # Defects: a wrong MEMORYSTATUSEX size makes Windows reject every memory read,
-    # or the FILETIME halves are combined so later samples run backwards.
     memory = resources.memory_use()
     assert memory is not None and 0 < memory.used < memory.total
     first = resources.cpu_times()
     assert first is not None and first.kernel >= first.idle > 0
     later = first
-    for _ in range(
-        50
-    ):  # Windows advances these counters at its clock tick, about 16 ms.
+    for _ in range(50):
         time.sleep(0.02)
         if (sample := resources.cpu_times()) is not None:
             later = sample

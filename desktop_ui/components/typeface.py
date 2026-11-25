@@ -1,10 +1,3 @@
-"""Workspace's typeface: Inter 4.1, loaded once into each Qt application.
-
-Inter stands in for SF Pro, which Apple licenses for its platforms only. The static
-Regular, Medium, SemiBold and Bold cuts ship in desktop_ui/fonts under the SIL Open
-Font License 1.1 (desktop_ui/fonts/OFL.txt).
-"""
-
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -28,8 +21,6 @@ CUTS: Final = (
 
 
 class Weight(IntEnum):
-    """A cut, by its CSS weight."""
-
     REGULAR = 400
     MEDIUM = 500
     SEMIBOLD = 600
@@ -37,8 +28,6 @@ class Weight(IntEnum):
 
 @dataclass(frozen=True, slots=True)
 class Font:
-    """Inter at a whole pixel size and weight."""
-
     pixels: int
     weight: Weight
     tabular: bool = field(default=False, kw_only=True)
@@ -51,8 +40,6 @@ class Font:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TypeScale:
-    """Every size and weight of text Workspace draws."""
-
     reading: Font
     """The bar's readings and labels."""
     strong: Font
@@ -76,7 +63,6 @@ class TypeScale:
 
 
 def load(log: Callable[[str], None]) -> None:
-    """Register the cuts with Qt's font database; views fall back to the system font if one is missing."""
     if FAMILY in QtGui.QFontDatabase.families():
         return
     for cut in CUTS:

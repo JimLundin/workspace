@@ -1,5 +1,3 @@
-"""The low-level keyboard hook, keyboard input sent as if typed, and the cursor position."""
-
 import ctypes
 from collections.abc import Callable, Sequence
 from ctypes import wintypes
@@ -73,7 +71,6 @@ class INPUT(ctypes.Structure):
     _fields_ = (("type", wintypes.DWORD), ("u", InputUnion))
 
 
-# Struct sizes must match Windows exactly, or SendInput silently does nothing.
 if ctypes.sizeof(INPUT) != (40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28):
     raise ImportError(
         f"INPUT is {ctypes.sizeof(INPUT)} bytes; Windows expects a different size"
@@ -138,8 +135,6 @@ HookProc = Callable[[int, int, int], int]
 
 @dataclass(frozen=True, slots=True)
 class KeyEvent:
-    """What a low-level keyboard hook receives for one key."""
-
     vk: int
     scancode: int
     flags: int
@@ -148,17 +143,14 @@ class KeyEvent:
 
     @property
     def extended(self) -> bool:
-        """An extended key (arrows, the right-hand modifiers, numpad Enter...), which shares a scancode with a plain one."""
         return bool(self.flags & LLKHF_EXTENDED)
 
     @property
     def injected(self) -> bool:
-        """Sent by a program, not typed on a keyboard."""
         return bool(self.flags & LLKHF_INJECTED)
 
 
 def transition(wparam: int) -> bool | None:
-    """What a low-level keyboard hook message is: True for a key going down, False for up, None for neither."""
     return (
         True if wparam in _KEY_DOWNS else False if wparam in _KEY_UPS else None
     )
@@ -166,8 +158,6 @@ def transition(wparam: int) -> bool | None:
 
 @dataclass(frozen=True, slots=True)
 class Hook:
-    """An installed hook. Holds the callback so it stays alive while installed."""
-
     handle: int
     callback: object
 
@@ -200,7 +190,6 @@ def call_next_hook(code: int, wparam: int, lparam: int) -> int:
 
 
 def scancode_for(vk: int) -> int:
-    """The key's scancode, from Windows' own layout table."""
     return int(_MapVirtualKeyW(vk, _MAPVK_VK_TO_VSC))
 
 
@@ -212,7 +201,6 @@ def _key(vk: int, scancode: int, flags: int, extra: int) -> INPUT:
 
 
 def _submit(events: Sequence[INPUT]) -> int:
-    """All in one call, so the user's own input can't land in the middle."""
     array = (INPUT * len(events))(*events)
     return int(_SendInput(len(events), array, ctypes.sizeof(INPUT)))
 
@@ -224,7 +212,6 @@ def _send(events: Sequence[INPUT]) -> int:
 
 
 def send_key(vk: int, *, down: bool, extended: bool, extra: int) -> None:
-    """One key, with the scancode some programs read, from Windows' own layout table."""
     flags = (0 if down else _KEYEVENTF_KEYUP) | (
         _KEYEVENTF_EXTENDEDKEY if extended else 0
     )
@@ -232,7 +219,6 @@ def send_key(vk: int, *, down: bool, extended: bool, extra: int) -> None:
 
 
 def type_text(text: str, extra: int) -> None:
-    """Types text as characters, whatever the keyboard layout. A newline presses Enter."""
     enter = scancode_for(_VK_RETURN)
     events = tuple(
         event

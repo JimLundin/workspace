@@ -1,12 +1,10 @@
-"""Observe attached keyboards without installing a hook or consuming their input."""
-
 import ctypes
 from ctypes import wintypes
 from typing import Final
 
 from winapi._core import fn, last_error, user32
 
-_KEYBOARD_USAGE: Final = (0x01, 0x06)  # HID generic desktop page, keyboard
+_KEYBOARD_USAGE: Final = (0x01, 0x06)
 _RIDEV_REMOVE, _RIDEV_INPUTSINK = 0x0001, 0x0100
 
 
@@ -17,8 +15,6 @@ class RawInputDevice(ctypes.Structure):
 
 
 class RawInputRegistration(ctypes.Structure):
-    """RAWINPUTDEVICE."""
-
     _fields_ = (
         ("usUsagePage", wintypes.USHORT),
         ("usUsage", wintypes.USHORT),
@@ -55,11 +51,6 @@ _GetRawInputDeviceInfo = fn(
 
 
 def names() -> tuple[str, ...]:
-    """Publish a keyboard snapshot; Win32 owns the bounded writable ABI buffers.
-
-    Device arrival can grow the list between calls, so retry that observation.
-    A device disappearing during name lookup is absent from this snapshot.
-    """
     for _ in range(3):
         count = wintypes.UINT()
         if (
@@ -81,7 +72,7 @@ def names() -> tuple[str, ...]:
                 for name in (_name(device.handle),)
                 if name
             )
-        if ctypes.get_last_error() != 122:  # ERROR_INSUFFICIENT_BUFFER
+        if ctypes.get_last_error() != 122:
             raise last_error()
     raise OSError("The connected keyboard list kept changing.")
 
@@ -91,7 +82,7 @@ def _name(handle: int) -> str:
     if (
         _GetRawInputDeviceInfo(handle, 0x20000007, None, ctypes.byref(size))
         == 0xFFFFFFFF
-    ):  # RIDI_DEVICENAME
+    ):
         return ""
     buffer = ctypes.create_unicode_buffer(size.value + 1)
     size.value += 1
@@ -104,11 +95,6 @@ def _name(handle: int) -> str:
 
 
 def watch_input(hwnd: int) -> None:
-    """Post WM_INPUT to `hwnd` for every keyboard event, even in the background.
-
-    Raw input arrives whether or not a keyboard hook still runs. The window is
-    never foreground, so each message is RIM_INPUTSINK and needs no cleanup.
-    """
     if not _register(_RIDEV_INPUTSINK, hwnd):
         raise last_error()
 

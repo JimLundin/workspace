@@ -1,13 +1,3 @@
-"""Paints the dictation marker on the caret: the microphone's trace while listening, pulsing dots while
-transcribing and typing, then a tick or a cross; between dictations, a blue microphone beside it, which
-sends out a ring when it appears or jumps.
-
-`desktop_ui.dictation_marker` decides what shows and where; this window only
-draws it. It is a click-through tool window that never activates, so the app
-being dictated into keeps the keyboard. Its timers run only while it shows
-something that moves.
-"""
-
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
@@ -56,8 +46,6 @@ FRAME_MS = 16
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MarkerSpec:
-    """The marker's own choices; its sizes, clocks and glass are the bar's."""
-
     height: float
     gap: float
     """Between the marker and what it marks."""
@@ -112,8 +100,6 @@ class _Drawn:
 
 
 class MarkerWindow(QtWidgets.QWidget):
-    """The marker's capsule; what it paints is in its owner's state."""
-
     __slots__ = ("bar", "drawn", "spec")
 
     def __init__(
@@ -158,7 +144,6 @@ class MarkerWindow(QtWidgets.QWidget):
         return (Symbol(name, lead), mark) if name is not None else (mark,)
 
     def content_width(self, parts: tuple[Part, ...]) -> float:
-        """The parts side by side, with the icon's inset at either end so a lone symbol sits in a circle."""
         capsule = self.bar.sizes.capsule
         inner = sum(_part_width(part, self.bar) for part in parts)
         return (
@@ -245,7 +230,6 @@ class MarkerWindow(QtWidgets.QWidget):
     def paint_pulse(
         self, painter: QtGui.QPainter, capsule: QtCore.QRectF, seconds: float
     ) -> None:
-        """A ring easing out from the capsule's edge to the halo's, fading as it goes."""
         progress = min(1.0, max(0.0, seconds / self.spec.pulse))
         spread = self.spec.halo * (1 - (1 - progress) ** 3)
         ring = capsule.adjusted(-spread, -spread, spread, spread)
@@ -270,7 +254,6 @@ def _part_width(part: Part, bar: BarSpec) -> float:
 
 
 def _trace(drawn: _Drawn, now: float, every: float) -> Iterator[float]:
-    """The trace moving from its previous samples to its latest across one sampling interval."""
     progress = min(1.0, max(0.0, (now - drawn.sampled_at) / every))
     return (
         before + (after - before) * progress
@@ -280,8 +263,6 @@ def _trace(drawn: _Drawn, now: float, every: float) -> Iterator[float]:
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class DictationMarker:
-    """Shows what `desktop_ui.dictation_marker` decides; reports when an outcome's flash has ended."""
-
     spec: MarkerSpec
     bar: BarSpec
     window: MarkerWindow
@@ -305,7 +286,6 @@ class DictationMarker:
         level_of: Callable[[], float | None],
         faded: Callable[[], None],
     ) -> DictationMarker:
-        """`level_of` reads the microphone off the Qt thread; `faded` reports an outcome's flash ending."""
         drawn = Cell(_Drawn())
         window = MarkerWindow(spec, bar, drawn)
         frame = int(window.winId())
@@ -381,8 +361,6 @@ class DictationMarker:
             windows.show_quietly(self.frame, visible=True)
 
     def _place(self, to: Rect) -> None:
-        """A shown marker glides to a new place from wherever it has got to, at its current speed; a hidden one
-        appears there."""
         now = time.monotonic()
         if not self.window.isVisible():
             self.glider.stop()
@@ -393,7 +371,6 @@ class DictationMarker:
         _run(self.glider, running=not _rests(self.glide.get()))
 
     def _pulse(self) -> None:
-        """A ring spreads from the marker once, so the eye finds where it has landed."""
         cancel(self.drawn.get().pulse_end)
         pulse_end = later(
             self.window, round(self.spec.pulse * 1000), self._pulsed
@@ -420,7 +397,6 @@ class DictationMarker:
         _run(self.glider, running=not _rests(glide))
 
     def _become(self, shown: Mark, before: _Drawn) -> _Drawn:
-        """Start what `shown` needs: the microphone's trace, the frames, an outcome's timer."""
         preference = appearance.preference()
         surface = look(
             preference, CanvasBar(self.spec.scheme), Tint.NONE, self.bar.glass
@@ -432,7 +408,6 @@ class DictationMarker:
             else None
         )
         listening = shown is Step.LISTENING
-        # A capture starts its trace silent; the steps after it keep the last trace.
         silent = (0.0,) * self.bar.sizes.capsule.wave_bars
         drawn = replace(
             before,
@@ -453,7 +428,6 @@ class DictationMarker:
         return drawn
 
     def sample(self) -> None:
-        """The microphone's latest level enters the trace, which moves to it over the next interval."""
         reading = level(self.meter.level())
         self.drawn.update(
             lambda drawn: replace(
@@ -484,8 +458,6 @@ class DictationMarker:
 
 @dataclass(frozen=True, slots=True)
 class _Glide:
-    """The marker's corner in flight toward `to`, as of `at`."""
-
     left: Motion
     top: Motion
     to: Rect
@@ -521,7 +493,6 @@ def _rests(glide: _Glide) -> bool:
 
 
 def _where(glide: _Glide) -> Rect:
-    """Where the window is now, at the size it's headed for."""
     left, top = round(glide.left.value), round(glide.top.value)
     return Rect(left, top, left + glide.to.width, top + glide.to.height)
 

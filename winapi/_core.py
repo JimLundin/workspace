@@ -1,13 +1,8 @@
-"""The DLLs, and how a function prototype is declared. Internal to `winapi`."""
-
 import ctypes
 import uuid
 from ctypes import wintypes
 from typing import Protocol, overload
-lazy from _ctypes import (  # Only annotations name them; _CData exists only in the stubs.
-    _CData,
-    _SimpleCData,
-)
+lazy from _ctypes import _CData, _SimpleCData
 
 from winapi.shapes import Rect
 
@@ -27,8 +22,6 @@ ole32 = ctypes.WinDLL("ole32", use_last_error=True)
 
 
 class NativeFunction[T](Protocol):
-    """ctypes validates positional ABI arguments; the prototype fixes the result."""
-
     def __call__(self, *args: object) -> T: ...
 
 
@@ -53,12 +46,10 @@ def fn[T](
     restype: type[_SimpleCData[T]] | None,
     *argtypes: type[_CData],
 ) -> NativeFunction[T] | NativeFunction[None]:
-    """A typed foreign function: `fn(user32, "GetForegroundWindow", HWND)`."""
     prototype = ctypes.WINFUNCTYPE(restype, *argtypes, use_last_error=True)
     return prototype((name, dll))
 
 
-# Functions more than one module calls, each declared once.
 FindWindowW = fn(
     user32, "FindWindowW", wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR
 )
@@ -174,14 +165,12 @@ type GuidBuffer = ctypes.Array[ctypes.c_char]
 
 
 def guid_buffer(value: str) -> GuidBuffer:
-    """A COM class or interface identifier, as the 16 bytes COM reads."""
     return ctypes.create_string_buffer(uuid.UUID(value).bytes_le, 16)
 
 
 def com_method(
     owner: str, pointer: ctypes.c_void_p, index: int, *arguments: type[_CData]
 ) -> NativeFunction[int]:
-    """The method at `index` in a COM object's table, returning its HRESULT: the object's first pointer is its table."""
     table = (
         ctypes.c_void_p.from_address(pointer.value).value
         if pointer.value

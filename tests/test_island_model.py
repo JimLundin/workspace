@@ -1,9 +1,3 @@
-"""Activity owns the island; fixed navigation and truthful readings own the right.
-
-The spec here is the test's own, and expectations come from `reading`, so each
-test checks how the model composes readings, never which glyphs or words they use.
-"""
-
 from dataclasses import replace
 
 from contracts.recording_state import RecordingState
@@ -140,7 +134,6 @@ def view(
     expanded: bool = False,
     hovered: Key | None = None,
 ) -> CapsuleView:
-    """Read one identity without depending on other capsules' inventory positions."""
     return next(
         each
         for each in island(observed, spec, expanded=expanded, hovered=hovered)
@@ -159,9 +152,6 @@ def parts(observed: Observed, *readings: Reading) -> tuple[Part, ...]:
 def test_at_rest_the_status_capsule_shows_each_reading_in_order_in_its_own_slot() -> (
     None
 ):
-    # Defects: idle readings reappear as activity, the fixed capsule gains or drops
-    # a reading, two readings share a slot and so their spacing, or the readings
-    # leave the order the spec gives.
     views = island(RESTING, SPEC)
     assert tuple((each.key, each.zone) for each in views) == (
         (Key.STATUS, Zone.RIGHT),
@@ -177,8 +167,6 @@ def test_at_rest_the_status_capsule_shows_each_reading_in_order_in_its_own_slot(
 def test_a_plain_keyboard_takes_its_place_and_a_reading_with_nothing_to_show_takes_no_slot() -> (
     None
 ):
-    # Defects: the keyboard shows while the layout remaps, it shows out of its
-    # place, or a reading with nothing to show leaves an empty slot.
     plain = replace(RESTING, plain_keyboard=True)
     assert (
         reading(Reading.KEYBOARD, RESTING, SPEC.status) == ()
@@ -204,10 +192,6 @@ def test_a_plain_keyboard_takes_its_place_and_a_reading_with_nothing_to_show_tak
 def test_resource_readings_keep_one_reserve_and_never_show_an_unread_value_as_zero() -> (
     None
 ):
-    # Defects: a changing value resizes the fixed capsule because its reserve
-    # follows the value, memory shows in bytes, decimal gigabytes or as a share
-    # rather than the gigabytes Windows reports, a reading becomes a control, or an
-    # unread value reads as 0.
     def texts(cpu: int | None, memory: Memory | None) -> tuple[Text, ...]:
         observed = replace(RESTING, system=SystemStatus(cpu=cpu, memory=memory))
         return tuple(
@@ -236,7 +220,6 @@ def test_resource_readings_keep_one_reserve_and_never_show_an_unread_value_as_ze
 
 
 def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
-    # Defect: moments hide status, or status becomes a central activity.
     for speakers in Speakers:
         for wifi in Wifi:
             baseline = replace(RESTING, system=SystemStatus(speakers, wifi))
@@ -246,7 +229,6 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
                 replace(baseline, job=TRANSCRIBING, recording=RECORDING),
             ):
                 for expanded in (False, True):
-                    # The open menu is the status capsule itself; its row stays.
                     fixed = view(observed, Key.STATUS, expanded=expanded)
                     assert fixed.slots == view(baseline, Key.STATUS).slots
                     assert expanded or fixed == view(baseline, Key.STATUS)
@@ -265,9 +247,6 @@ def test_fixed_controls_survive_all_activity_menu_and_device_states() -> None:
 def test_the_battery_fills_to_its_charge_follows_the_charger_and_warns_when_low() -> (
     None
 ):
-    # Defects: the battery symbol shows a stale or wrong charge, ignores the
-    # charger, an unread battery looks empty-but-read, or a low battery on its own
-    # power warns in its text but not its symbol (or not at all).
     def power(percent: int, *, powered: bool) -> tuple[Part, ...]:
         return parts(
             replace(
@@ -306,7 +285,6 @@ def test_the_battery_fills_to_its_charge_follows_the_charger_and_warns_when_low(
 def test_concurrent_activity_has_distinct_indicators_and_recording_stop_under_the_pointer() -> (
     None
 ):
-    # Defects: transcription and recording share one indicator, or Stop shows at rest.
     busy = replace(RESTING, job=TRANSCRIBING, recording=RECORDING)
     job, recording = view(busy, Key.ISLAND).slots
     assert job != recording
@@ -325,7 +303,6 @@ def test_concurrent_activity_has_distinct_indicators_and_recording_stop_under_th
 def test_dictation_takes_the_island_and_detaches_every_other_activity_beside_it() -> (
     None
 ):
-    # Defect: dictation shares the island with other activity, or loses its stop press.
     observed = replace(
         RESTING, dictating=True, job=TRANSCRIBING, recording=RECORDING
     )
@@ -355,9 +332,6 @@ def test_dictation_takes_the_island_and_detaches_every_other_activity_beside_it(
 def test_an_open_panel_hangs_below_the_status_capsule_which_keeps_its_readings() -> (
     None
 ):
-    # Defects: the panel opens as the island instead of below the readings, the status
-    # capsule loses its readings while open, or activity stays in the bar while the
-    # panel lists it.
     busy = replace(RESTING, job=TRANSCRIBING, recording=RECORDING)
     readings, panel = island(busy, SPEC, expanded=True)
     assert (readings.key, readings.slots, readings.action) == (
@@ -372,8 +346,6 @@ def test_an_open_panel_hangs_below_the_status_capsule_which_keeps_its_readings()
 def test_a_recording_reads_as_its_phase_says_and_its_elapsed_time_keeps_its_hours() -> (
     None
 ):
-    # Defects: an hour-long recording loses its hours, a phase's title or flags are
-    # lost on the way to the bar, or a phase that doesn't show lingers.
     assert capture(
         RecordingState(phase="recording", seconds=3725), PHASES
     ) == Capture("1:02:05", can_stop=True, attention=False)
@@ -387,9 +359,6 @@ def test_a_recording_reads_as_its_phase_says_and_its_elapsed_time_keeps_its_hour
 
 
 def test_each_reading_has_its_own_tip_slot_for_slot() -> None:
-    # Defects: the capsule tips every reading with one combined description, a hidden
-    # reading keeps its tip so every later reading shows its neighbour's, or a tip
-    # misses the value its reading shows.
     for observed in (RESTING, replace(RESTING, plain_keyboard=True)):
         status = view(observed, Key.STATUS)
         shown = tuple(

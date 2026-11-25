@@ -1,8 +1,3 @@
-"""The AI endpoint: settings, the SDK clients and transcription,
-against any OpenAI-style API. Pydantic validates the replies we read.
-`transcribe` returns its result or a `Failure`; it doesn't raise for
-network or server problems."""
-
 import io
 import wave
 from collections.abc import Mapping
@@ -22,8 +17,6 @@ MAX_SECONDS: Final = 300
 MIN_SECONDS: Final = 0.3
 """Shorter recordings are accidental taps, and aren't sent."""
 
-# ---- Settings --------------------------------------------------------------------------
-
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -40,15 +33,12 @@ class Settings:
 
 @dataclass(frozen=True, slots=True)
 class Missing:
-    """Required environment variables that aren't set."""
-
     names: tuple[str, ...]
 
 
 def settings_from(
     env: Mapping[str, str], gateway: Path | None = None
 ) -> Settings | Missing:
-    """Read from environment variables. The endpoint's are named as OpenAI's own tools name them."""
     required = ("OPENAI_BASE_URL", "OPENAI_API_KEY")
     if missing := tuple(name for name in required if not env.get(name)):
         return Missing(missing)
@@ -63,16 +53,11 @@ def settings_from(
     )
 
 
-# ---- Audio -----------------------------------------------------------------------------
-
-
 def long_enough(pcm: bytes) -> bool:
-    """16-bit mono at `RATE`: two bytes per sample."""
     return len(pcm) >= 2 * RATE * MIN_SECONDS
 
 
 def wav(pcm: bytes, rate: int) -> bytes:
-    """16-bit mono PCM as a WAV file."""
     out = io.BytesIO()
     with wave.open(out, "wb") as w:
         w.setnchannels(1)
@@ -82,15 +67,9 @@ def wav(pcm: bytes, rate: int) -> bytes:
     return out.getvalue()
 
 
-# ---- Results ---------------------------------------------------------------------------
-
-
 @dataclass(frozen=True, slots=True)
 class Failure:
     message: str
-
-
-# ---- Requests --------------------------------------------------------------------------
 
 
 class _Transcription(TypedDict):
@@ -101,22 +80,17 @@ class _ErrorDetail(TypedDict):
     message: str
 
 
-# The SDK builds reply objects without validating them (a proxy's HTML page arrives as
-# a `str`), so the calls read the raw body and validate only the fields used here.
 _TRANSCRIPTION = TypeAdapter(_Transcription)
 _ERROR_DETAIL = TypeAdapter(_ErrorDetail)
 
 
 def route(settings: Settings) -> tuple[str, str]:
-    """The base URL and key a client uses: the AI connection's, read afresh so a
-    restarted gateway is reached on the next request, else the provider's own."""
     if settings.gateway is not None and (endpoint := read(settings.gateway)):
         return endpoint.base_url, endpoint.token
     return settings.base_url, settings.api_key
 
 
 def _client(settings: Settings, timeout_s: float) -> OpenAI:
-    # A failed dictation is reported at once; the user or the meeting worker retries.
     base_url, api_key = route(settings)
     return OpenAI(
         base_url=base_url, api_key=api_key, timeout=timeout_s, max_retries=0
@@ -152,7 +126,6 @@ def transcribe(
     timeout_s: float = 60,
     context: str = "",
 ) -> str | Failure:
-    """The text spoken in a WAV file."""
     prompt = "\n".join(
         part for part in (settings.vocabulary, context[-600:]) if part
     )

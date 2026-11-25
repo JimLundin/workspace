@@ -1,5 +1,3 @@
-"""What each tool and app key does, against a fake desktop and a fake endpoint."""
-
 import json
 import time
 from collections.abc import Callable, Mapping
@@ -14,7 +12,7 @@ from tests.fake_endpoint import FakeEndpoint, Reply, fake_endpoint
 from winapi.pcm import RATE
 from winapi.shapes import InputRejectedError
 
-SPEECH = bytes(2 * RATE)  # a second of silence: long enough to send
+SPEECH = bytes(2 * RATE)
 
 
 def said(text: str) -> Reply:
@@ -71,8 +69,6 @@ def run_immediately(job: Callable[[], None]) -> None:
 
 
 class Rig:
-    """An assistant wired to fakes: what it did is in `desktop.log`, and what failed in `failed`."""
-
     __slots__ = ("assistant", "desktop", "endpoint", "failed")
 
     def __init__(
@@ -104,7 +100,6 @@ class Rig:
         self.assistant.handle(tool, down=False)
 
     def hold(self, tool: Tool) -> None:
-        """Down, speak, up."""
         self.assistant.handle(tool, down=True)
         self.assistant.handle(tool, down=False)
 
@@ -123,9 +118,6 @@ class Rig:
         return feature not in dict(self.failed)
 
 
-# ---- dictation -------------------------------------------------------------------------
-
-
 def test_dictate_types_what_was_said() -> None:
     with fake_endpoint() as endpoint:
         endpoint.replies = [said("hej på dig\n")]
@@ -141,7 +133,6 @@ def test_dictate_types_what_was_said() -> None:
 
 
 def test_transcription_then_typing_shows_and_ends_when_finished() -> None:
-    # Defect: transcription or typing never shows, they show out of order, or the job never ends.
     with fake_endpoint() as endpoint:
         endpoint.replies = [said("hej")]
         rig = Rig(endpoint)
@@ -297,16 +288,13 @@ def test_unexpected_microphone_stop_error_clears_capture_and_allows_another_reco
 
 
 def test_dictation_keeps_the_full_ending() -> None:
-    # Defect: the transcript is cut off after its first sentence.
     transcript = "It gets neatly cut off after like the first sentence.\nEverything afterwards just kind of disappears."
     with fake_endpoint() as endpoint:
         endpoint.replies = [said(transcript)]
         rig = Rig(endpoint)
         rig.hold(Tool.DICTATE)
         expected = transcript.replace("\n", " ") + " "
-        assert (
-            len(endpoint.received) == 1
-        )  # Dictation sends no cleanup request.
+        assert len(endpoint.received) == 1
         assert rig.take()[-1] == f"type {expected!r}"
 
 
@@ -395,9 +383,6 @@ def test_the_tray_shows_listening_then_working_then_ready() -> None:
             entry for entry in rig.desktop.log if entry.startswith("state ")
         ]
         assert states == ["state LISTENING", "state WORKING", "state READY"]
-
-
-# ---- without the AI settings -----------------------------------------------------------
 
 
 def test_without_ai_settings_ai_tools_say_what_is_missing_and_the_rest_works() -> (

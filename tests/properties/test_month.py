@@ -1,5 +1,3 @@
-"""Every month's calendar is six whole weeks that hold the month, and paging moves by whole months."""
-
 from dataclasses import dataclass
 from datetime import date, timedelta
 from itertools import pairwise
@@ -32,9 +30,6 @@ def month_cases(draw: strategies.DrawFn) -> MonthCase:
 def test_a_month_shows_six_consecutive_weeks_from_its_first_weekday_holding_every_day(
     case: MonthCase,
 ) -> None:
-    # Defects: a five-week month leaves a short grid (the panel jumps as it turns), the
-    # padding repeats or skips a day where two months meet, a column starts on the wrong
-    # weekday, or the month's own days fall outside the grid.
     shown = weeks(case.month, case.first_weekday)
     days = tuple(day for week in shown for day in week)
     assert len(shown) == WEEKS and all(len(week) == 7 for week in shown)
@@ -53,8 +48,6 @@ def test_a_month_shows_six_consecutive_weeks_from_its_first_weekday_holding_ever
 def test_paging_moves_by_whole_months_across_years_and_back(
     case: MonthCase,
 ) -> None:
-    # Defects: turning past December or January lands in the wrong year, or a page
-    # forward and back again doesn't return to the month it left.
     turned = case.month.paged(case.pages)
     assert (turned.year * 12 + turned.month) - (
         case.month.year * 12 + case.month.month

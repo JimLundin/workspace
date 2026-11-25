@@ -1,9 +1,3 @@
-"""Where the island bar's capsules sit, and where parts sit inside them.
-
-The sizes here are the test's own, so each test checks how the layout places
-capsules and parts relative to the sizes it is given, never the bar's real positions.
-"""
-
 from itertools import pairwise
 
 from desktop_ui.components.typeface import Font
@@ -59,8 +53,6 @@ def gaps(framed: tuple[Framed, ...]) -> list[float]:
 
 
 def test_activity_sits_one_gap_left_of_the_right_capsule_in_order() -> None:
-    # Defect: activity drifts away from the status capsule, touches it, flips its order,
-    # or the gap differs between neighbours.
     status = Placed(Key.STATUS, Zone.RIGHT, 216, 34)
     placed = [
         Placed(Key.RECORDING, Zone.TRAIL, 86, 34),
@@ -87,7 +79,6 @@ def test_activity_sits_one_gap_left_of_the_right_capsule_in_order() -> None:
 
 
 def test_a_capsule_part_way_in_opens_a_gap_scaled_by_its_presence() -> None:
-    # Defect: an entering capsule opens a full gap at once, or an absent one still takes space.
     status = Placed(Key.STATUS, Zone.RIGHT, 216, 34)
     entering = frame(
         [
@@ -114,7 +105,6 @@ def test_a_capsule_part_way_in_opens_a_gap_scaled_by_its_presence() -> None:
 
 
 def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
-    # Defect: Qt and composition round edges differently, so content and glass disagree by a pixel.
     framed = frame(
         [Placed(Key.ISLAND, Zone.ISLAND, 111.3, 34)], metrics(1001), ORDER
     )
@@ -129,7 +119,6 @@ def test_snapping_puts_every_edge_on_a_device_pixel() -> None:
 
 
 def test_the_fixed_right_cluster_survives_activity_changes() -> None:
-    # Defect: activity shifts the fixed cluster or overlaps it.
     fixed = (Placed(Key.STATUS, Zone.RIGHT, 216, 34),)
     for screen in (480, 1000):
         baseline = frame(fixed, metrics(screen), ORDER)
@@ -159,9 +148,6 @@ def width_of(text: Text) -> float:
 def test_text_content_pads_its_ends_and_separates_slots_and_readings_further_than_parts() -> (
     None
 ):
-    # Defects: readings crowd the capsule edge, two slots read as one, two
-    # readings run together, a meter's symbol drifts from its value, or Stop
-    # drifts from the reading it stops.
     content = arrange(
         ((Marker.DOTS,), (Text("10:22"), Text("73%"))), width_of, SIZES
     )
@@ -193,7 +179,6 @@ def test_text_content_pads_its_ends_and_separates_slots_and_readings_further_tha
 
 
 def test_a_control_at_the_edge_sits_concentric() -> None:
-    # Defect: Stop keeps the text padding and breaks the concentric inset.
     stop = Control("stop", "Stop recording", Action.STOP_RECORDING)
     content = arrange(((Marker.DOT, Text("02:05"), stop),), width_of, SIZES)
     last = content.spots[-1]
@@ -206,8 +191,6 @@ def test_a_control_at_the_edge_sits_concentric() -> None:
 def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> (
     None
 ):
-    # Defect: a shorter reading moves the power glyph or resizes fixed controls;
-    # an unexpected wider reading must not clip to its representative reserve.
     def measured(clock: str, battery: str) -> Content:
         return arrange(
             (
@@ -232,7 +215,6 @@ def test_reserved_readings_keep_following_parts_and_capsule_width_stable() -> (
 
 
 def test_content_narrower_than_a_circle_centres_in_one() -> None:
-    # Defect: a lone marker collapses the capsule below its height, losing its round shape.
     content = arrange(((Marker.DOT,),), width_of, SIZES)
     assert content.width == CAPSULE.height and content.spots == (
         Spot(Marker.DOT, (CAPSULE.height - CAPSULE.dot) / 2, CAPSULE.dot, 0),
@@ -242,8 +224,6 @@ def test_content_narrower_than_a_circle_centres_in_one() -> None:
 def test_a_press_goes_to_the_nearest_reading_and_the_ends_to_the_outer_ones() -> (
     None
 ):
-    # Defects: a press in the gap opens the far reading's panel, the gap between a
-    # reading's value and its symbol belongs to the neighbour, or the capsule's ends open nothing.
     content = arrange(
         ((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)),
         width_of,
@@ -264,8 +244,6 @@ def test_a_press_goes_to_the_nearest_reading_and_the_ends_to_the_outer_ones() ->
 def test_a_graph_ends_at_its_right_edge_spans_its_height_and_breaks_at_an_unread_sample() -> (
     None
 ):
-    # Defects: a young history stretches across the whole graph instead of growing from
-    # the right, shares plot upside down, or an unread sample draws as a drop to zero.
     box = Box(10, 20, 100, 50)
     assert tuple(plotted((0.0, 1.0), 11, box)) == (
         (Plotted(100, 70), Plotted(110, 20)),
@@ -279,8 +257,6 @@ def test_a_graph_ends_at_its_right_edge_spans_its_height_and_breaks_at_an_unread
 def test_a_reading_lights_as_a_pill_around_its_own_parts_and_a_lone_symbol_as_a_circle() -> (
     None
 ):
-    # Defects: the pill misses part of a reading (its symbol beside its value), spills over
-    # the next reading's parts, or a lone symbol lights as a sliver instead of a circle.
     content = arrange(
         ((Text("12%"), Glyph("cpu")), (Glyph("wifi"),), (Text("10:22"),)),
         width_of,
@@ -304,8 +280,6 @@ def test_a_reading_lights_as_a_pill_around_its_own_parts_and_a_lone_symbol_as_a_
 def test_a_panel_hangs_centred_under_its_reading_below_the_capsule_and_stays_on_screen() -> (
     None
 ):
-    # Defects: the panel opens at the capsule's left or the screen's corner instead of under
-    # its reading, overlaps the readings, runs off the screen's edge, or appears at full size.
     metrics = Metrics(1000, 8, 6, 12, drop=6)
     status = Placed(Key.STATUS, Zone.RIGHT, 400, 34)
     under = {
@@ -350,8 +324,6 @@ def test_a_panel_hangs_centred_under_its_reading_below_the_capsule_and_stays_on_
 def test_a_panel_hangs_from_the_reading_pressed_or_else_the_first_that_opens_it() -> (
     None
 ):
-    # Defects: the panel hangs from the wrong reading when two open it, or measures
-    # its reading from the capsule's left instead of the screen's right.
     content = arrange(
         ((Glyph("cpu"),), (Glyph("memory"),), (Text("10:22"),)), width_of, SIZES
     )
@@ -379,9 +351,6 @@ def test_a_panel_hangs_from_the_reading_pressed_or_else_the_first_that_opens_it(
 def test_a_panel_widens_past_its_least_only_where_a_tile_needs_the_room() -> (
     None
 ):
-    # Defects: a tile's text overflows a panel held at its least width, a tile that
-    # shares the grid's columns is fitted as if it had them all, or a panel whose
-    # tiles need little shrinks below its least.
     def advance(text: str, _: Font) -> float:
         return 10.0 * len(text)
 

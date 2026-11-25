@@ -1,5 +1,3 @@
-"""WASAPI ABI and continuous capture with synthetic devices, never the real mic."""
-
 import sys
 import threading
 import time

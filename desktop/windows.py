@@ -1,8 +1,3 @@
-"""The desktop's other windows: the key map and its overlay, the layer indicator,
-the dictation marker, the window switcher, the key-hint badges and the tray icon and its menu. Only
-declarations; `desktop.__main__` hands them to the desktop.
-"""
-
 from typing import Final
 
 from contracts.members import every_member
@@ -55,7 +50,7 @@ MARKER: Final = MarkerSpec(
     height=28,
     gap=6,
     flash=1.2,
-    glide=Spring(1.0, 0.3),  # Critically damped: it never overshoots the caret.
+    glide=Spring(1.0, 0.3),
     resting="mic.fill",
     rest=1.0,
     rest_opacity=1.0,
@@ -171,7 +166,7 @@ KEYMAP: Final = KeymapSpec(
 
 
 INDICATOR: Final = IndicatorSpec(
-    radius=bar.SIZES.bar.radius,  # The island's capsule, so the two read as one family.
+    radius=bar.SIZES.bar.radius,
     padding=16,
     leading=8,
     opacity=0.9,

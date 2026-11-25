@@ -1,5 +1,3 @@
-"""How capsules move between views: arriving, morphing, cross-fading and leaving."""
-
 from desktop_ui.island_layout import Content, Spot
 from desktop_ui.island_model import Action, CapsuleView, Glyph, Key, Text, Zone
 from desktop_ui.island_motion import (
@@ -43,7 +41,6 @@ def run(motion: IslandMotion, seconds: float) -> IslandMotion:
 
 
 def test_a_new_capsule_grows_from_nothing_beside_a_resting_island() -> None:
-    # Defects: an arriving capsule appears at full size, or the island restarts its own arrival.
     resting = retarget(IslandMotion(), (ISLAND,), SPRINGS, animate=False)
     arriving = retarget(resting, (ISLAND, RECORDING), SPRINGS, animate=True)
     island, recording = placed(arriving, 34)
@@ -62,7 +59,6 @@ def test_a_new_capsule_grows_from_nothing_beside_a_resting_island() -> None:
 def test_a_leaving_capsule_keeps_its_last_content_until_it_has_collapsed() -> (
     None
 ):
-    # Defects: the capsule vanishes at once, or empties before it has collapsed.
     both = retarget(IslandMotion(), (ISLAND, RECORDING), SPRINGS, animate=False)
     leaving = run(retarget(both, (ISLAND,), SPRINGS, animate=True), 0.1)
     assert [moving.key for moving in leaving.capsules] == [
@@ -77,7 +73,6 @@ def test_a_leaving_capsule_keeps_its_last_content_until_it_has_collapsed() -> (
 
 
 def test_returning_mid_departure_reverses_from_the_current_presence() -> None:
-    # Defect: a capsule called back while leaving restarts from zero and flickers.
     both = retarget(IslandMotion(), (ISLAND, RECORDING), SPRINGS, animate=False)
     leaving = run(retarget(both, (ISLAND,), SPRINGS, animate=True), 0.08)
     returning = retarget(leaving, (ISLAND, RECORDING), SPRINGS, animate=True)
@@ -90,7 +85,6 @@ def test_returning_mid_departure_reverses_from_the_current_presence() -> None:
 def test_new_parts_fade_over_the_old_but_a_changing_reading_updates_in_place() -> (
     None
 ):
-    # Defects: content swaps with no crossing, or a ticking timer blinks every second.
     resting = retarget(IslandMotion(), (ISLAND,), SPRINGS, animate=False)
     ticked = retarget(
         resting,
@@ -120,8 +114,6 @@ def test_new_parts_fade_over_the_old_but_a_changing_reading_updates_in_place() -
 
 
 def test_reduced_motion_finishes_every_capsule_at_once() -> None:
-    # Defects: turning motion off mid-flight leaves capsules half-shown with the
-    # loop running, or the menu opens collapsed.
     both = retarget(IslandMotion(), (ISLAND, RECORDING), SPRINGS, animate=False)
     flight = run(
         retarget(

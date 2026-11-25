@@ -1,9 +1,3 @@
-"""The desktop bar's pager: every desktop with its applications, each a round control in a scrollable capsule.
-
-Each target is a round control the bar paints itself, as the island's own
-controls are, so no stylesheet can pad, re-font or restyle it.
-"""
-
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -28,12 +22,10 @@ from winapi.tray_host import Click
 
 
 def face_inset(capsule: Capsule) -> int:
-    """An app icon's inset inside its circle; text keeps the same inset, so a wide keycap widens its control into a pill."""
     return round(capsule.control - capsule.app_icon) // 2
 
 
 def pixmap(image: Pixels) -> QtGui.QPixmap:
-    """A Qt copy of a shell icon's pixels."""
     copied = QtGui.QImage(
         image.bgra,
         image.size,
@@ -56,13 +48,10 @@ type Icon = Glyph | Pixels
 
 @dataclass(frozen=True, slots=True)
 class Stack:
-    """Several icons side by side, an app gap apart: a desktop's applications."""
-
     icons: tuple[Icon, ...]
 
 
 def step(capsule: Capsule) -> float:
-    """From one of a desktop's icons to the next."""
     return capsule.app_icon + capsule.app_gap
 
 
@@ -72,8 +61,6 @@ type Face = Stack | str
 
 @dataclass(frozen=True, slots=True)
 class Target:
-    """One shell control as shown: its accessible name, its face, what a click does and whether it is the current selection."""
-
     name: str
     face: Face
     invoke: Callable[[Click], None]
@@ -85,8 +72,6 @@ class Target:
 
 
 class ShellButton(KeyboardFocus):
-    """One accessible target: a control's circle, or a pill for text wider than one, painting its face at icon size."""
-
     def __init__(self, pager: Pager, target: Target) -> None:
         super().__init__(pager.body)
         self.pager = pager
@@ -113,9 +98,7 @@ class ShellButton(KeyboardFocus):
         self.setFixedSize(width, control)
         self.setToolTip(target.name)
         self.setAccessibleName(target.name)
-        self.setAttribute(
-            Qt.WidgetAttribute.WA_Hover
-        )  # Qt repaints it as the pointer enters and leaves.
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.pressed_at = 0.0
@@ -126,7 +109,6 @@ class ShellButton(KeyboardFocus):
         self.clicked.connect(lambda: self.choose(Click.LEFT))
 
     def icon_at(self, x: float) -> int:
-        """The desktop's icon under `x`: the one whose centre is nearest, so the gap between two splits evenly."""
         match self.target.face:
             case Stack(icons=icons) if icons:
                 pitch = step(self.pager.sizes.capsule)
@@ -178,7 +160,6 @@ class ShellButton(KeyboardFocus):
         click: Click,
         otherwise: Callable[[QtGui.QMouseEvent], None],
     ) -> None:
-        """Choose `click` for `button`; Qt handles any other button."""
         if event.button() is button:
             self.choose(click)
             event.accept()
@@ -186,7 +167,6 @@ class ShellButton(KeyboardFocus):
             otherwise(event)
 
     def paint_lit(self, painter: QtGui.QPainter, lettering: Lettering) -> None:
-        """Press and hover light only the app under the pointer in a desktop of several; the keyboard ring holds the whole desktop."""
         whole = QtCore.QRectF(self.rect())
         match self.target.face:
             case Stack(icons=icons) if len(icons) > 1 and self.underMouse():
@@ -230,7 +210,6 @@ class ShellButton(KeyboardFocus):
                 )
 
     def snapped(self) -> QtCore.QPointF:
-        """The face's corner on whole device pixels of the window, so a bitmap or symbol keeps its pixel edges."""
         capsule = self.pager.sizes.capsule
         scale = self.devicePixelRatioF()
         origin = QtCore.QPointF(self.mapTo(self.window(), QtCore.QPoint(0, 0)))
@@ -257,7 +236,6 @@ class ShellButton(KeyboardFocus):
         side = capsule.app_icon
         face = QtCore.QRectF(self.snapped(), QtCore.QSizeF(side, side))
         if self.target.active:
-            # The current desktop: a dot under its apps, as a dock marks a running app.
             below = QtCore.QPointF(
                 self.width() / 2, self.height() - face_inset(capsule) / 2
             )
@@ -300,16 +278,11 @@ class ShellButton(KeyboardFocus):
 
 @dataclass(frozen=True, slots=True)
 class Row:
-    """The pager's controls along its strip."""
-
     lefts: tuple[int, ...]
     width: int
 
 
 def spaced_row(widths: Sequence[int], capsule: Capsule) -> Row:
-    """Controls of `widths` left to right, a slot gap apart: with each control's own inset, desktops
-    sit well apart from each other while a desktop's apps keep their small app gap, so space alone groups them.
-    """
     gap = round(capsule.slot_gap)
     lefts = tuple(
         accumulate((width + gap for width in widths[:-1]), initial=0)
@@ -321,8 +294,6 @@ def spaced_row(widths: Sequence[int], capsule: Capsule) -> Row:
 
 
 class HorizontalScroll(QtWidgets.QScrollArea):
-    """Qt owns overflow; vertical wheel input moves the horizontal icon strip, as horizontal input does natively."""
-
     @override
     def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
         delta = event.angleDelta()
@@ -336,7 +307,6 @@ class HorizontalScroll(QtWidgets.QScrollArea):
 
 
 def pager_click(choose: Callable[[], None]) -> Callable[[Click], None]:
-    """A pager target acts on a left click or each click of a double-click; it has no menu."""
 
     def invoke(click: Click) -> None:
         match click:
@@ -355,7 +325,6 @@ def app_icon(
     images: Mapping[str, Pixels | None],
     symbols: Mapping[PinnedApp, str],
 ) -> Icon:
-    """The icon the bar shows an app by: a web app's symbol, else the program's own icon."""
     match app:
         case PinnedApp():
             return Glyph(symbols[app] + ".fill")
@@ -375,12 +344,6 @@ class _Paged:
 
 
 class Pager(QtWidgets.QWidget):
-    """The bar's only toolbar: every desktop with its apps, each app a click target, in a capsule of round controls.
-
-    The controls are concentric at the capsule's ends and one part gap apart; overflow stays reachable by
-    scrolling horizontally, so no icons are silently dropped. Native buttons exist only for the current snapshot.
-    """
-
     def __init__(self, parent: QtWidgets.QWidget, sizes: Sizes) -> None:
         super().__init__(parent)
         self.sizes = sizes
@@ -405,7 +368,6 @@ class Pager(QtWidgets.QWidget):
         self.hide()
 
     def show_targets(self, targets: tuple[Target, ...]) -> None:
-        """Replace the controls; only the pager builds them, so none outlives its snapshot."""
         for button in self.buttons:
             button.hide()
             button.deleteLater()
@@ -420,7 +382,6 @@ class Pager(QtWidgets.QWidget):
         self.body.setFixedSize(row.width, round(capsule.height))
 
     def remember_icons(self, shelf: Shelf) -> None:
-        """The running apps' icons, which the pager draws its programs by."""
         read = frozendict(
             (app.identity, app.image)
             for app in shelf.running
@@ -434,11 +395,6 @@ class Pager(QtWidgets.QWidget):
         invoke: Callable[[Navigation], None],
         on_app: Callable[[App, Click], None],
     ) -> bool:
-        """Each desktop with its apps, a click on an app going to it (and so to its desktop); whether the pager changed.
-
-        An empty desktop other than the current one is left out. Programs' icons come from
-        the running apps, so a newly read icon redraws the pager too.
-        """
         images: Mapping[str, Pixels | None] = self.paged.get().icons
         if (view, images) == self.paged.get().view:
             return False
@@ -448,7 +404,6 @@ class Pager(QtWidgets.QWidget):
             return pager_click(lambda: invoke(JumpDesktop(index)))
 
         def face(index: int, desktop: PagerDesktop) -> Face:
-            """The held chord's letter, else the desktop's apps, else its number."""
             if (
                 hint := hints.desktops[index]
                 if index < len(hints.desktops)

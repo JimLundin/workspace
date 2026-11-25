@@ -1,12 +1,3 @@
-"""Observe app windows on every virtual desktop, place them where the layout
-declares, carry out and log navigation, copy icons away from Qt's animation/audio
-thread and hide pinned web-app windows' captions.
-
-One worker owns all of it: placement moves and resizes the same windows whose
-regions hide their captions and that navigation focuses, zooms and launches, so a
-second owner would race the first.
-"""
-
 import os
 import queue
 import subprocess
@@ -74,8 +65,6 @@ RECENT = 32
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class PlacementSpec:
-    """Where windows go on each setup of screens, and the web apps pinned beside them."""
-
     setups: Setups
     web_apps: WebApps
     open_web_app: tuple[str, ...]
@@ -85,7 +74,6 @@ class PlacementSpec:
 
 
 def frame(window: int) -> None:
-    """Converge a slot window's region on hiding its caption; Edge keeps an applied region across resizes."""
     caption = windows.caption_buttons(window)
     if caption is not None and (
         clip := caption_clip(
@@ -96,20 +84,17 @@ def frame(window: int) -> None:
 
 
 def release(handles: frozenset[int]) -> None:
-    """Windows that are no longer slots, or outlive Workspace, get their captions back."""
     for handle in handles:
         if windows.exists(handle):
             windows.set_region(handle, None)
 
 
 def resize(handle: int, target: Target, *, slot: bool) -> None:
-    """Draw the window exactly over its target; a window already there is not touched."""
     if windows.is_maximized(handle) or windows.is_minimized(handle):
         windows.show(handle, windows.SW_SHOWNOACTIVATE)
     outer = windows.outer_rect(handle)
     visible = windows.visible_rect(handle)
     caption = windows.caption_buttons(handle) if slot else None
-    # A slot window's region hides everything above its caption buttons' bottom edge.
     drawn = (
         replace(visible, top=outer.top + caption.bottom)
         if caption is not None
@@ -121,7 +106,6 @@ def resize(handle: int, target: Target, *, slot: bool) -> None:
 
 
 def focus(handle: int) -> None:
-    """Desktop switches animate; the window can take the keyboard once the switch lets it."""
     for _ in range(10):
         if windows.focus(handle):
             return
@@ -130,8 +114,6 @@ def focus(handle: int) -> None:
 
 @dataclass(frozen=True, slots=True)
 class Observed:
-    """Taskbar windows on every desktop, front to back, and the desktop index of each one on a known desktop."""
-
     windows: tuple[Window, ...]
     desktops: frozendict[int, int]
     state: Desktops | None
@@ -143,9 +125,7 @@ type Connection = VirtualDesktops | None
 
 def connected(connection: Connection) -> Connection:
     if connection is None:
-        with suppress(
-            OSError
-        ):  # Another Windows build, or Explorer restarting: try again next poll.
+        with suppress(OSError):
             return VirtualDesktops.connect()
     return connection
 
@@ -156,7 +136,6 @@ def disconnected(connection: Connection) -> None:
 
 
 def observe(connection: Connection) -> tuple[Connection, Observed]:
-    """Other desktops' windows are cloaked; the shell's own cloaked hosts are on no desktop and stay out."""
     connection = connected(connection)
     try:
         state = connection.observe() if connection is not None else None
@@ -197,7 +176,6 @@ def observe(connection: Connection) -> tuple[Connection, Observed]:
 
 
 def seats(observed: Observed, known: Shelf) -> Seats:
-    """Where each window the shelf hasn't seen yet sits; only new windows are read."""
     seen = frozenset(
         window.handle
         for items in (known.pinned, known.running)
@@ -223,11 +201,6 @@ def seats(observed: Observed, known: Shelf) -> Seats:
 def fit(
     connection: Connection, observed: Observed, desktops: int
 ) -> tuple[Connection, Observed]:
-    """Keep exactly `desktops` desktops: create the missing ones and remove those after them.
-
-    A removed desktop's windows fall back to the last one kept, and so does the
-    screen when it was showing; placing moves them on to their own desktops.
-    """
     state = observed.state
     if connection is None or state is None:
         return connection, observed
@@ -240,9 +213,7 @@ def fit(
         return None, observed
     kept = ids[:desktops]
     for desktop in reversed(ids[desktops:]):
-        with suppress(
-            OSError
-        ):  # A desktop the shell won't remove yet is tried again next poll.
+        with suppress(OSError):
             connection.remove(desktop, kept[-1])
     return connection, replace(
         observed,
@@ -260,20 +231,13 @@ def arrange(
     *,
     follow: int,
 ) -> Connection:
-    """Converge every placed window on its desktop and rectangle, on desktops `fit` has made.
-
-    The window in front, `follow`, takes the user along when it moves to another desktop:
-    a window just opened or brought forward on the wrong desktop is the one being worked in.
-    """
     state = observed.state
     if connection is None or state is None:
         return connection
     ids = state.ids
     followed: int | None = None
     for handle, target in placement.items():
-        with suppress(
-            OSError
-        ):  # A window that closed or refuses a move is tried again next poll.
+        with suppress(OSError):
             if observed.desktops.get(handle) != target.desktop:
                 connection.move(handle, ids[target.desktop])
                 if handle == follow:
@@ -287,7 +251,6 @@ def arrange(
 
 
 def show(connection: Connection, handle: int) -> None:
-    """Bring a window forward, first switching to its desktop when it's on another one."""
     if connection is not None:
         with suppress(OSError):
             current, place_id = (
@@ -315,8 +278,6 @@ def switch(connection: Connection, index: int) -> tuple[Connection, bool]:
 
 @dataclass(frozen=True, slots=True)
 class Arrangement:
-    """What the bar shows: the applications, the desktops, whether placement is paused and the navigation world."""
-
     shelf: Shelf
     desktops: int
     current: int
@@ -332,8 +293,6 @@ EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
 
 @dataclass(frozen=True, slots=True)
 class ApplicationObserver:
-    """One worker owns native polling, placement, desktops, navigation and slot-window regions; callers receive immutable snapshots."""
-
     problem: Callable[[str], None]
     spec: PlacementSpec
     results: queue.Queue[Arrangement] = field(
@@ -389,11 +348,6 @@ class _Watched:
 
 @dataclass(frozen=True, slots=True)
 class Worker:
-    """The observer thread's work: each step takes what it has watched so far and returns what it watches now.
-
-    The thread's loop holds that record (`_Watched`); nothing else sees it.
-    """
-
     observer: ApplicationObserver
 
     def run(self) -> None:
@@ -412,7 +366,6 @@ class Worker:
 
     def poll(self, watched: _Watched) -> _Watched:
         connection, observed = observe(watched.connection)
-        # Only Edge hosts pinned web apps, which bounds the per-second property reads.
         app_ids = frozendict(
             (window.handle, app_user_model.app_id(window.handle))
             for window in observed.windows
@@ -454,9 +407,7 @@ class Worker:
                 )
             )
             placement = place(where, groups(grouped, eligible))
-            if (
-                not watched.paused and not windows.dragging()
-            ):  # A window being dragged snaps back once it's let go.
+            if not watched.paused and not windows.dragging():
                 kept = frozendict(
                     (handle, target)
                     for handle, target in placement.items()
@@ -556,7 +507,6 @@ class Worker:
         return replace(watched, previous=snapshot)
 
     def carry(self, watched: _Watched, order: Order) -> tuple[_Watched, bool]:
-        """Carry out one order; False when the next poll should run first."""
         match order:
             case Placing.TOGGLE_PAUSE:
                 return replace(watched, paused=not watched.paused), False
@@ -608,9 +558,7 @@ class Worker:
         match app:
             case protocol.Installed(command=command):
                 try:
-                    os.startfile(
-                        command
-                    )  # as the Run dialog would: program names, paths, URLs
+                    os.startfile(command)
                 except OSError:
                     subprocess.Popen(
                         ["cmd", "/c", "start", "", command],
@@ -623,7 +571,6 @@ class Worker:
                 assert_never(app)
 
     def open_web_app(self, watched: _Watched, app: PinnedApp) -> _Watched:
-        """The web apps' command opens the slot's app window; a repeated launch waits for it."""
         pending = launch(watched.launches, app, time.monotonic(), LAUNCH_GRACE)
         if pending is None:
             return watched

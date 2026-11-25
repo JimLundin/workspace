@@ -1,5 +1,3 @@
-"""Workspace's interface policy gate."""
-
 import ast
 import importlib.util
 import unittest

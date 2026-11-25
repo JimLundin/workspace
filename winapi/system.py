@@ -1,5 +1,3 @@
-"""Message loops, timers, events, locks and message boxes."""
-
 import ctypes
 from collections.abc import Iterator, Sequence
 from ctypes import wintypes
@@ -20,8 +18,6 @@ from winapi._core import (
 
 
 class WindowMessage(IntEnum):
-    """The Windows messages Workspace reads by number."""
-
     CLOSE = 0x0010
     INPUT = 0x00FF
     """Raw input arrived (see `keyboard_devices.watch_input`)."""
@@ -103,9 +99,7 @@ _WaitForMultipleObjects = fn(
 )
 
 _HIGH_PRIORITY_CLASS: Final = 0x0080
-_PROCESS_POWER_THROTTLING: Final = (
-    4  # PROCESS_INFORMATION_CLASS.ProcessPowerThrottling
-)
+_PROCESS_POWER_THROTTLING: Final = 4
 _THROTTLE_EXECUTION_SPEED: Final = 0x1
 
 
@@ -132,8 +126,6 @@ class Message:
 
 
 def messages() -> Iterator[Message]:
-    """Waits for and yields this thread's messages (without dispatching them to a
-    window procedure), until a quit message arrives."""
     msg = wintypes.MSG()
     while _GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
         yield Message(
@@ -150,17 +142,14 @@ def post_quit() -> None:
 
 
 def post_message(hwnd: int, message: int, wparam: int, lparam: int) -> bool:
-    """Queues a message for a window (any process's); doesn't wait for it."""
     return bool(PostMessageW(hwnd, message, wparam, lparam))
 
 
 def tick_count() -> int:
-    """Milliseconds since boot, wrapping at 2**32: the clock of message and key times."""
     return int(_GetTickCount())
 
 
 def set_timer(ms: int) -> int:
-    """A timer for this thread: a WM_TIMER message, every `ms`, with the returned id."""
     return int(_SetTimer(None, 0, ms, None))
 
 
@@ -169,7 +158,6 @@ def kill_timer(timer: int) -> None:
 
 
 def set_window_timer(hwnd: int, ms: int) -> int:
-    """A WM_TIMER delivered to a window through the ordinary dispatch loop."""
     timer = int(_SetTimer(hwnd, 1, ms, None))
     if not timer:
         raise OSError("Windows refused the capture watchdog timer.")
@@ -177,12 +165,10 @@ def set_window_timer(hwnd: int, ms: int) -> int:
 
 
 def error_box(text: str, title: str) -> None:
-    """An error message box; blocks until dismissed."""
     _MessageBoxW(None, text, title, _MB_ICONHAND)
 
 
 def create_lock(name: str) -> Lock | None:
-    """A named lock for this Windows session; None if another process holds it."""
     handle: int | None = _CreateMutexW(None, False, name)
     if handle and ctypes.get_last_error() == _ERROR_ALREADY_EXISTS:
         CloseHandle(handle)
@@ -195,7 +181,6 @@ def release_lock(lock: Lock) -> None:
 
 
 def create_event() -> EventHandle:
-    """An auto-reset event, private to this program."""
     handle: int | None = CreateEventW(None, False, False, None)
     if not handle:
         raise last_error()
@@ -209,7 +194,6 @@ def close_event(event: EventHandle) -> None:
 def wait_any(
     events: Sequence[EventHandle], timeout_ms: int | None = None
 ) -> int | None:
-    """Blocks until one of the events is set; its index, or None on timeout."""
     handles = (wintypes.HANDLE * len(events))(*events)
     index = int(
         _WaitForMultipleObjects(
@@ -221,23 +205,15 @@ def wait_any(
     )
     if index < len(events):
         return index
-    if index == 0x102:  # WAIT_TIMEOUT
+    if index == 0x102:
         return None
     raise last_error()
 
 
 def keep_responsive() -> None:
-    """Run this process at high priority and out of Windows 11's efficiency mode.
-
-    A process with no visible window counts as background work, so Windows may
-    put it on slow cores and let busier programs take its CPU. A low-level hook
-    that answers late misses Windows' deadline, and the key it meant to swallow
-    reaches the application anyway.
-    """
     process = _GetCurrentProcess()
     if not _SetPriorityClass(process, _HIGH_PRIORITY_CLASS):
         raise last_error()
-    # Control execution speed and set its state to off: never throttle.
     state = _PowerThrottling(1, _THROTTLE_EXECUTION_SPEED, 0)
     if not _SetProcessInformation(
         process,

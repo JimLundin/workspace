@@ -1,5 +1,3 @@
-"""How shared glass surfaces read under each material and their owner's observations."""
-
 from desktop_ui.colour import Rgb
 from desktop_ui.components.appearance import (
     Attention,
@@ -118,8 +116,6 @@ def brightness(color: str) -> int:
 
 
 def test_glass_takes_its_scheme_and_veil_from_the_desktop_behind_it() -> None:
-    # Defects: white ink stays on glass over a bright desktop, or a busy desktop
-    # gets the thin veil and small text loses contrast.
     match (
         material(
             appearance.Material.GLASS,
@@ -157,8 +153,6 @@ def test_glass_takes_its_scheme_and_veil_from_the_desktop_behind_it() -> None:
 
 
 def test_attention_keeps_its_meaning_under_every_material() -> None:
-    # Defects: a waiting question looks like the resting island when transparency
-    # is off, or high contrast drops the distinction entirely.
     def both(
         preference: appearance.Material, frost: appearance.Frost
     ) -> tuple[Look, Look]:
@@ -194,7 +188,6 @@ def test_attention_keeps_its_meaning_under_every_material() -> None:
 
 
 def test_high_contrast_keeps_every_reading_in_the_system_foreground() -> None:
-    # Defect: the microphone or a low battery keeps Workspace's colours under high contrast.
     contrast = material(
         appearance.Contrast("#000000", "#ffff00"),
         Capsule(appearance.Frost.SMOKED),
@@ -210,8 +203,6 @@ def test_high_contrast_keeps_every_reading_in_the_system_foreground() -> None:
 
 
 def test_the_scheme_owned_pane_uses_system_ink_under_high_contrast() -> None:
-    # Defect: routing a large surface through the recipe bypasses high contrast
-    # and retains Workspace's veil or translucent text instead of system colours.
     contrast = appearance.Contrast("#000000", "#ffff00")
     for scheme in Scheme:
         match material(contrast, CanvasBar(scheme), Tint.NONE):
@@ -227,8 +218,6 @@ def test_the_scheme_owned_pane_uses_system_ink_under_high_contrast() -> None:
 def test_reduce_transparency_gives_a_scheme_owned_pane_its_solid_surface() -> (
     None
 ):
-    # Defect: a scheme-owned pane keeps glass when transparency is disabled, or falls back
-    # to one fixed surface instead of its own app scheme.
     solids = tuple(
         material(appearance.Material.SOLID, CanvasBar(scheme), Tint.NONE)
         for scheme in Scheme
@@ -241,8 +230,6 @@ def test_reduce_transparency_gives_a_scheme_owned_pane_its_solid_surface() -> (
 
 
 def test_expanded_menu_glass_is_thicker_than_its_capsule() -> None:
-    # Defect: expansion reuses the capsule's thin veil or changes its colour,
-    # reducing the menu's text contrast over the same observed desktop.
     for frost in appearance.Frost:
         match (
             material(appearance.Material.GLASS, Capsule(frost), Tint.NONE),

@@ -1,8 +1,3 @@
-"""How Workspace's windows read: the colours that carry meaning, the glass and its
-schemes, the controls' metrics and the type scale. Only declarations, in the
-shapes `desktop_ui.components` declares; `desktop.__main__` hands them to the desktop.
-"""
-
 from typing import Final
 
 from contracts.members import every_member
@@ -26,10 +21,10 @@ from winapi import appearance
 from winapi.shapes import Lighting
 
 PALETTE: Final = Palette(
-    accent="#4b8fe8",  # a soft blue, lighter and less saturated than system blue
+    accent="#4b8fe8",
     attention="#f08a00",
     red="#ff453a",
-    microphone="#ff9f0a",  # as Apple's privacy indicator
+    microphone="#ff9f0a",
     on_accent="#ffffff",
 )
 
@@ -116,7 +111,6 @@ GLASS: Final = Glass(
             appearance.Frost.LIGHT: FrostLook(
                 Scheme.DARK, Shade("#1c1c20", 0.26), 0.36
             ),
-            # A mixed desktop needs a heavier veil to keep small text legible.
             appearance.Frost.SMOKED: FrostLook(
                 Scheme.DARK, Shade("#1c1c20", 0.62), 0.36
             ),

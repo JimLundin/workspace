@@ -1,18 +1,3 @@
-"""Where every managed window goes: the monitor setups Workspace recognizes, the
-declared desktop and screen region of each application in each setup, and the
-pure placement of observed windows onto them.
-
-Each declared application has an ordered list of places: a region of one
-role's monitor on one desktop. Its windows fill the places in their stable
-order, and windows beyond the last place share that place equally: side by side
-in a landscape region, stacked in a portrait one. Applications whose last place
-is the same share it, their windows in the layout's order. Every other application
-shares the setup's one place for others, so a setup has exactly the desktops its layout
-declares. Regions are exact fractions, so
-neighbours' pixel edges are computed from the same value and meet without
-overlapping.
-"""
-
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -47,7 +32,6 @@ def _ordered(sizes: Iterable[Size]) -> tuple[Size, ...]:
 def assigned(
     monitors: Sequence[Monitor], setups: Setups
 ) -> tuple[Setup, frozendict[Role, Monitor]] | None:
-    """Match the connected monitors to a setup; any other set is the laptop alone, on its panel or the primary monitor."""
     if not monitors:
         return None
     panels = tuple(
@@ -106,7 +90,6 @@ def screens(monitors: Sequence[Monitor], setups: Setups) -> Screens | None:
 def dark_when_away(
     monitors: Sequence[Monitor], setups: Setups
 ) -> frozenset[Monitor]:
-    """The recognized setup's protected external screens; an unrecognized set protects none."""
     match assigned(monitors, setups):
         case (setup, roles):
             return frozenset(
@@ -120,8 +103,6 @@ def dark_when_away(
 
 @dataclass(frozen=True, slots=True)
 class Program:
-    """An ordinary application, by its executable's lowercase file name."""
-
     exe: str
 
 
@@ -130,8 +111,6 @@ type App = PinnedApp | Program
 
 @dataclass(frozen=True, slots=True)
 class Region:
-    """Exact fractions of a monitor's work area."""
-
     left: Fraction
     top: Fraction
     width: Fraction
@@ -152,15 +131,12 @@ type Places = tuple[Position, ...]
 
 @dataclass(frozen=True, slots=True)
 class Layout:
-    """One setup's applications and their places, and where every other application goes."""
-
     places: frozendict[App, Places]
     others: Position
     """The place every application the layout doesn't name shares, in their stable order."""
 
     @property
     def desktops(self) -> int:
-        """How many desktops the setup uses: exactly those its places name, counted from the first."""
         return 1 + max(
             position.desktop
             for places in (*self.places.values(), (self.others,))
@@ -170,8 +146,6 @@ class Layout:
 
 @dataclass(frozen=True, slots=True)
 class Setups:
-    """The monitor setups Workspace recognizes and what each does with its screens."""
-
     externals: frozendict[Setup, frozendict[Size, Role]]
     """Each setup's external screens beside the laptop's own panel, by physical size."""
     layouts: frozendict[Setup, Layout]
@@ -180,38 +154,28 @@ class Setups:
     """Each setup's external screens that turn dark while nobody is at the machine."""
 
     def __post_init__(self) -> None:
-        """Every setup has its screens and its layout, so recognizing one always finds both."""
         every_member(Setup, self.externals)
         every_member(Setup, self.layouts)
 
 
 @dataclass(frozen=True, slots=True)
 class Screens:
-    """The recognized setup, the work area of each of its roles' monitors, and its layout."""
-
     setup: Setup
     roles: frozendict[Role, Rect]
     layout: Layout
 
 
 def managed(window: Window, *, resizable: bool, own: bool) -> bool:
-    """Workspace places resizable windows of other programs, minimized or not; dialogs and fixed-size windows keep their own places.
-
-    Every app has a place in every setup, so a minimized window is only a window out of place.
-    """
     return resizable and not own and bool(window.exe)
 
 
 @dataclass(frozen=True, slots=True)
 class Group:
-    """One application's managed windows, in their stable order."""
-
     app: App
     windows: tuple[int, ...]
 
 
 def groups(shelf: Shelf, eligible: frozenset[int]) -> tuple[Group, ...]:
-    """The shelf's applications with their managed windows, keeping the shelf's stable window order."""
     pinned = (
         Group(
             slot.app,
@@ -249,7 +213,6 @@ NOWHERE: Placement = frozendict()
 
 
 def place(where: Screens, apps: Sequence[Group]) -> Placement:
-    """Each managed window's desktop and rectangle; undeclared applications' windows share the layout's place for others."""
     declared = where.layout.places
     windows = frozendict((group.app, group.windows) for group in apps)
     others = tuple(
@@ -258,7 +221,6 @@ def place(where: Screens, apps: Sequence[Group]) -> Placement:
         if group.app not in declared
         for handle in group.windows
     )
-    # Each place before an app's last holds one of its windows; its last holds the rest.
     alone = (
         (
             handle,
@@ -279,7 +241,6 @@ def place(where: Screens, apps: Sequence[Group]) -> Placement:
         ),
         (where.layout.others, others),
     )
-    # Apps whose last place is the same share it equally, in the layout's order.
     shared = frozendict(
         (
             last,
@@ -316,7 +277,6 @@ def place(where: Screens, apps: Sequence[Group]) -> Placement:
 
 
 def _corner(rects: Iterable[Rect]) -> Point | None:
-    """The top-left corner of the leftmost rectangle, then the topmost; None for none."""
     return min(
         (Point(rect.left, rect.top) for rect in rects),
         key=lambda point: (point.x, point.y),
@@ -325,7 +285,6 @@ def _corner(rects: Iterable[Rect]) -> Point | None:
 
 
 def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
-    """Where each app the setup declares on this desktop first sits."""
     return frozendict(
         (app, corner)
         for app, places in where.layout.places.items()
@@ -345,11 +304,6 @@ def reading_order(
     placement: Placement,
     desktop: int,
 ) -> tuple[App, ...]:
-    """The desktop's apps as they read on screen, by their leftmost window and then its top.
-
-    An app the setup declares on the desktop is listed even when it isn't running,
-    at its first place there, so every desktop shows what belongs on it.
-    """
     placed: frozendict[App, Point] = frozendict(
         (app, corner)
         for app, handles in windows.items()
@@ -382,7 +336,6 @@ def reading_order(
 
 
 def split(work: Rect, region: Region, parts: int) -> tuple[Rect, ...]:
-    """`parts` equal rectangles filling the region: columns when it's landscape, rows when it's portrait."""
     across = region.width * work.width >= region.height * work.height
     return tuple(
         pixels(

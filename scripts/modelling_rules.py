@@ -1,10 +1,3 @@
-"""Modelling rules: enum translations as tables, named types for numeric tuples, scripts in .js files.
-
-The same walk also applies the function-scope rules of `scope_rules`
-(`loop-accumulation`, `piecemeal-state`, `mirrored-state`) to each function it
-enters, so `value_shapes` reports those findings too, in source order with its own.
-"""
-
 import ast
 import re
 from collections.abc import Iterable, Iterator
@@ -16,7 +9,6 @@ from scripts.source_analysis import parameters, qualified
 
 
 def _constant(value: ast.expr, bound: frozenset[str]) -> bool:
-    """A literal or a name from outside the function, or a call, tuple or attribute built only from those."""
     match value:
         case ast.Constant():
             return True
@@ -39,7 +31,6 @@ def _constant(value: ast.expr, bound: frozenset[str]) -> bool:
 
 
 def _members(pattern: ast.pattern) -> bool:
-    """A case that names only values: enum members or literals."""
     match pattern:
         case ast.MatchValue(value=ast.Attribute() | ast.Constant()):
             return True
@@ -56,7 +47,6 @@ def _wildcard(case: ast.match_case) -> bool:
 
 
 def _gives_constant(case: ast.match_case, bound: frozenset[str]) -> bool:
-    """A case whose whole body returns or assigns one constant."""
     match case.body:
         case [ast.Return(value=ast.expr() as value)] | [
             ast.Assign(value=value)
@@ -69,7 +59,6 @@ def _gives_constant(case: ast.match_case, bound: frozenset[str]) -> bool:
 def _bound(
     function: ast.FunctionDef | ast.AsyncFunctionDef | None,
 ) -> frozenset[str]:
-    """The function's parameters and every name it assigns: values that vary between calls."""
     if function is None:
         return frozenset()
     stored = (
@@ -93,9 +82,6 @@ def _translation(
     cases: Iterable[ast.match_case],
     function: ast.FunctionDef | ast.AsyncFunctionDef | None,
 ) -> bool:
-    """A `match` that only maps enum members to constants: at least two cases besides a wildcard, each naming members, unguarded, giving one constant.
-
-    The function's assigned names are collected only once every pattern names members, the rare case that needs them."""
     named = tuple(case for case in cases if not _wildcard(case))
     if len(named) < 2 or not all(
         _members(case.pattern) and case.guard is None for case in named
@@ -111,14 +97,6 @@ def value_shapes(
     declaration: str = "",
     function: ast.FunctionDef | ast.AsyncFunctionDef | None = None,
 ) -> Iterator[Finding]:
-    """One pass for the modelling rules and, on each function, the scope rules.
-
-    A `match` that only maps enum members to constants belongs in an `every_member`
-    table; a fixed `tuple` of only ints and floats is a point, size or span that
-    needs its own type; a page script belongs in a .js file. Each function is
-    handed to `scope_rules.loop_accumulations` and `scope_rules.state_writes`
-    before its body is walked.
-    """
     for child in ast.iter_child_nodes(tree):
         match child:
             case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
@@ -178,7 +156,6 @@ _SCRIPT_MARKS: Final = re.compile(
 
 
 def _script(text: str) -> bool:
-    """A string that reads as JavaScript: script syntax or DOM calls, over at least two lines that end as code does."""
     return (
         _SCRIPT_MARKS.search(text) is not None
         and sum(

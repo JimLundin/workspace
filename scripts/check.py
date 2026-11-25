@@ -1,11 +1,3 @@
-"""Every check, every time: the policy reviews, every production import, then every test.
-
-    python -m scripts.check [--standards] [tests/test_x.py[::test_name] ...]
-
-Named test files narrow only which tests run; the reviews and imports always run.
-Native modules (tests/test_windows_*.py) skip themselves off Windows.
-"""
-
 import argparse
 import contextlib
 import importlib
@@ -58,8 +50,6 @@ class Status(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Failed:
-    """A failed test, import or standard, with its complete console report."""
-
     node: str
     report: str
 
@@ -75,7 +65,6 @@ class Test(Protocol):
 
 
 def windows_only(error: BaseException) -> bool:
-    """Whether an import failed only because this isn't Windows; on Windows nothing is excused."""
     match sys.platform, error:
         case platform, ImportError() | AttributeError() | OSError() if (
             platform != "win32"
@@ -93,7 +82,6 @@ def failed(node: str, error: BaseException, output: str = "") -> Failed:
 
 
 def import_failures(root: Path) -> Iterator[Failed]:
-    """Import every production module: top-level modules and every module of a top-level package."""
     for name in python_sources(root):
         parts = Path(name).parts
         if (
@@ -109,7 +97,6 @@ def import_failures(root: Path) -> Iterator[Failed]:
 
 
 def module_outcomes(selector: str) -> Iterator[Outcome]:
-    """Import one test module and run its tests in order, or only the one `path::test_name` names."""
     path, separator, requested = selector.partition("::")
     module = module_name(path)
     try:
@@ -134,14 +121,11 @@ def module_outcomes(selector: str) -> Iterator[Outcome]:
 
 
 def test_outcome(node: str, test: Test) -> Outcome:
-    # Expected diagnostics from passing tests, such as SDK warnings for a
-    # deliberately broken stream, would bury real failures; only failing tests publish them.
     output = io.StringIO()
     try:
         parameters = inspect.signature(test).parameters
         if set(parameters) - {"tmp_path"}:
             raise TypeError("Only tmp_path fixtures are supported.")
-        # A shallow scratch folder: stores nest digest-named folders under it within Windows MAX_PATH.
         with (
             contextlib.redirect_stderr(output),
             tempfile.TemporaryDirectory(prefix="workspace-check-") as scratch,
@@ -202,7 +186,6 @@ def main() -> None:
     )
     args = parser.parse_args()
     started = time.perf_counter()
-    # No application import or native effect before the source policies pass.
     cache = Cache.bound(ROOT)
     findings = review(ROOT, cache=cache).failures
     for finding in findings:
@@ -233,7 +216,6 @@ def main() -> None:
             else ()
         )
         outcomes = (
-            # Hypothesis inspects loaded modules for constants: generated tests run before every production import.
             *(
                 outcome
                 for name in generated
@@ -245,7 +227,6 @@ def main() -> None:
                 for name in portable
                 for outcome in module_outcomes(name)
             ),
-            # Native fixtures have real deadlines: they wait for whole-tree mypy, which saturates the cores.
             *collected(standards),
             *(outcome for name in native for outcome in module_outcomes(name)),
         )

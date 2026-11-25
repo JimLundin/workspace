@@ -1,5 +1,3 @@
-"""Native key map windows and the draggable live keyboard overlay."""
-
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -42,24 +40,18 @@ prepare()
 
 @dataclass(frozen=True, slots=True)
 class Bindings:
-    """How a scheme tints a bound key: its fill's opacity, and each binding's hue, legible as text on the scheme."""
-
     tint: float
     hues: frozendict[Role, str]
 
 
 @dataclass(frozen=True, slots=True)
 class Lit:
-    """A key's fill and ink."""
-
     fill: str
     ink: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class KeysSpec:
-    """The drawn keyboard: its grid, its keys' faces, and how a binding or a press colours them."""
-
     unit: float
     """One key width, gap included, before the drawing's scale."""
     gap: float
@@ -94,8 +86,6 @@ class KeysSpec:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class OverlaySpec:
-    """The live keyboard overlay and the handle that moves it."""
-
     opacity: float
     radius: float
     side: float
@@ -144,7 +134,6 @@ class KeymapSpec:
 
 
 def _keycap(role: Role, theme: Tokens, keys: KeysSpec) -> Lit:
-    """A key's fill and ink: plain keys are solid, a binding tints its key with its hue, the held thumb takes the accent."""
     match role:
         case Role.KEY:
             return Lit(theme.solid, theme.ink.argb)
@@ -165,7 +154,6 @@ _LAYERS: Final[tuple[Layer, ...]] = tuple(Layer)
 
 
 def keyboard_height(keys: KeysSpec) -> float:
-    """The drawn keyboard's height before its scale: every row with the gap below it."""
     return len(keys.rows) * (keys.height + keys.gap)
 
 
@@ -266,7 +254,6 @@ class KeymapCanvas(QtWidgets.QWidget):
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
                 name,
             )
-            # Long labels shrink until they fit their key.
             legend = (
                 keys.legend
                 if len(cap.label) <= keys.legend_short
@@ -303,8 +290,6 @@ class OverlayDrag:
 
 
 class OverlayHandle(QtWidgets.QWidget):
-    """A small capsule above the overlay; the overlay itself lets clicks through."""
-
     def __init__(
         self,
         drag: OverlayDrag,
@@ -345,7 +330,6 @@ class OverlayHandle(QtWidgets.QWidget):
 
     @override
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
-        # The saved overlay position and native moves use physical pixels.
         self.drag.move(self.read_cursor())
 
     @override
@@ -387,7 +371,6 @@ class KeymapOverlay:
         design: Design,
         view: KeyboardView,
     ) -> KeymapOverlay:
-        """The overlay, its dragged position kept at `position`."""
         shown, look = NativeOverlayDesktop(), spec.overlay
         theme = design.tokens()
         window = QtWidgets.QWidget()
@@ -409,7 +392,6 @@ class KeymapOverlay:
         layout.addWidget(canvas)
         frame = shown.prepare(window, click_through=True)
 
-        # The handle reports its drag to the overlay made just after it.
         def start(point: Point) -> None:
             overlay._start_drag(point)
 
@@ -595,7 +577,6 @@ class KeymapWindow:
     def open(
         cls, spec: KeymapSpec, design: Design, view: KeyboardView
     ) -> KeymapWindow:
-        # The buttons and shortcuts act on the window record made just after them.
         def close() -> None:
             window.hide()
             window.deleteLater()

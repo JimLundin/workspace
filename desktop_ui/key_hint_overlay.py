@@ -1,11 +1,3 @@
-"""Paints the key hints: a keycap badge inside each window's corner.
-
-The bar owns the hints and hands this overlay its badges. Every badge is a
-click-through tool window that never activates. Badge windows are pooled, so
-showing hints only moves, repaints and reveals windows. Nothing runs while
-they're hidden.
-"""
-
 import math
 from dataclasses import dataclass, field, replace
 from typing import assert_never, override
@@ -42,8 +34,6 @@ prepare()
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class BadgeSpec:
-    """What a key-hint badge is made of."""
-
     height: float
     """The bar's capsule, scaled down to a badge."""
     cap: float
@@ -67,7 +57,6 @@ class BadgeSpec:
 def rim_gradient(
     bounds: QtCore.QRectF, rim: Rim, glass: Glass
 ) -> QtGui.QLinearGradient:
-    """The rim's CSS-angled gradient: brightest where light catches the upper-leading curve."""
     angle = math.radians(glass.lighting.rim_angle)
     dx, dy = math.sin(angle), -math.cos(angle)
     half = (abs(bounds.width() * dx) + abs(bounds.height() * dy)) / 2
@@ -93,8 +82,6 @@ def keycap_text(keycap: Keycap, arrows: frozendict[Direction, str]) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Style:
-    """How the hints read in the user's material."""
-
     surface: Look
     arrows: frozendict[Direction, str]
     palette: Palette
@@ -103,19 +90,15 @@ class Style:
 
 @dataclass(frozen=True, slots=True)
 class Face:
-    """One keycap as painted: its fill, if any, its ink and its text."""
-
     fill: Shade | None
     ink: Shade
     text: str
 
 
 def keycap_face(keycap: Keycap, style: Style) -> Face:
-    """The app's letter sits in a well and the window its next press reaches takes the accent; actions read quietly."""
     lettering, text = style.surface.lettering, keycap_text(keycap, style.arrows)
     match keycap:
         case AppCap(next=True) if style.contrast:
-            # High contrast swaps the system colours instead of adding a hue.
             return Face(lettering.ink, background(style.surface), text)
         case AppCap(next=True):
             return Face(
@@ -144,7 +127,6 @@ def background(surface: Look) -> Shade:
 
 
 def style(preference: Preference, spec: BadgeSpec) -> Style:
-    """Hints float over any window without composition's blur, so glass takes the thicker Qt-painted veil."""
     surface = look(preference, CanvasBar(spec.scheme), Tint.NONE, spec.glass)
     match preference:
         case Contrast():
@@ -158,7 +140,6 @@ def style(preference: Preference, spec: BadgeSpec) -> Style:
 def keycap_width(
     keycap: Keycap, metrics: QtGui.QFontMetricsF, spec: BadgeSpec
 ) -> float:
-    """A circle, widened into a pill with its text inset when the text needs more room."""
     return max(
         spec.cap,
         metrics.horizontalAdvance(keycap_text(keycap, spec.arrows))
@@ -178,7 +159,6 @@ def badge_width(
 def paint_surface(
     painter: QtGui.QPainter, bounds: QtCore.QRectF, surface: Look, glass: Glass
 ) -> None:
-    """A capsule. Glass without composition: its veil and rim light, painted by Qt; solid and high contrast fill and edge."""
     edge = bounds.adjusted(0.5, 0.5, -0.5, -0.5)
     path = outline(edge, bounds.height() / 2 - 0.5)
     match surface:
@@ -206,8 +186,6 @@ def paint_keycap(
 
 
 class BadgeWindow(QtWidgets.QWidget):
-    """One window's badge: a capsule of keycaps."""
-
     __slots__ = ("keycaps", "look", "spec")
 
     def __init__(self, spec: BadgeSpec) -> None:
@@ -250,7 +228,6 @@ class BadgeWindow(QtWidgets.QWidget):
 
 
 def logical(x: int, y: int) -> QtCore.QPoint:
-    """A physical desktop pixel in Qt's coordinates, which keep each screen's native origin and scale within it."""
     for screen in QtGui.QGuiApplication.screens():
         geometry, ratio = screen.geometry(), screen.devicePixelRatio()
         left, top = geometry.x(), geometry.y()
@@ -273,8 +250,6 @@ class _Badges:
 
 @dataclass(frozen=True, slots=True)
 class KeyHintOverlay:
-    """Shows the badges the bar decides; unchanged badges repaint nothing."""
-
     spec: BadgeSpec
     surface: NativeOverlayDesktop = field(default_factory=NativeOverlayDesktop)
     _state: Cell[_Badges] = field(
@@ -298,7 +273,6 @@ class KeyHintOverlay:
         look = style(preference, self.spec)
         for window, badge in zip(grown, badges, strict=False):
             window.draw(badge.keycaps, look)
-            # The window's right edge is exclusive and can belong to the next monitor, so map its last pixel.
             window.move(
                 logical(badge.rect.right - 1, badge.rect.top)
                 + QtCore.QPoint(

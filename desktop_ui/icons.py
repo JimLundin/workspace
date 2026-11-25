@@ -1,12 +1,9 @@
-"""The tray icon: a coloured dot whose colour says what the assistant is doing."""
-
 import math
 
 from desktop_ui.colour import Rgb
 
 
 def dot(size: int, colour: Rgb) -> bytes:
-    """A filled circle with a soft edge on a transparent square: BGRA, top row first."""
     r, g, b = colour.red, colour.green, colour.blue
     centre, radius = (size - 1) / 2, size * 0.42
     return bytes(

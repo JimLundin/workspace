@@ -1,5 +1,3 @@
-"""Rules over a function's own scope: no local container filled in a loop, and state replaced whole."""
-
 import ast
 from collections.abc import Iterator
 from itertools import pairwise
@@ -47,7 +45,6 @@ SCOPES: Final = (
 def _scope_levels(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> Iterator[ast.AST]:
-    """A function's own nodes, one breadth-first level at a time, never entering a nested scope."""
     frontier = tuple(
         node
         for node in ast.iter_child_nodes(function)
@@ -66,7 +63,6 @@ def _scope_levels(
 def _own_nodes(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> tuple[ast.AST, ...]:
-    """The nodes of a function's own scope; nested functions and classes are checked as their own scopes."""
     return tuple(_scope_levels(function))
 
 
@@ -88,7 +84,6 @@ def _creates_container(value: ast.expr) -> bool:
 
 
 def _container_targets(node: ast.AST) -> tuple[ast.expr, ...]:
-    """What an assignment of a new container binds; nothing for any other node."""
     match node:
         case (
             ast.Assign(value=value) | ast.AnnAssign(value=ast.expr() as value)
@@ -99,7 +94,6 @@ def _container_targets(node: ast.AST) -> tuple[ast.expr, ...]:
 
 
 def _created(nodes: tuple[ast.AST, ...]) -> frozenset[str]:
-    """The local names a function binds to a new container."""
     return frozenset(
         target.id
         for node in nodes
@@ -109,7 +103,6 @@ def _created(nodes: tuple[ast.AST, ...]) -> frozenset[str]:
 
 
 def _filled(node: ast.AST) -> str | None:
-    """The local name a statement or call grows in place, if it grows one."""
     match node:
         case ast.Call(
             func=ast.Attribute(value=ast.Name(id=name), attr=method)
@@ -130,7 +123,6 @@ def _filled(node: ast.AST) -> str | None:
 
 
 def _fills(loop: ast.AST, own: frozenset[int]) -> Iterator[str]:
-    """The names a loop grows in place within its own function."""
     return (
         name
         for node in ast.walk(loop)
@@ -141,7 +133,6 @@ def _fills(loop: ast.AST, own: frozenset[int]) -> Iterator[str]:
 def _loop_fills(
     nodes: tuple[ast.AST, ...], created: frozenset[str]
 ) -> frozendict[str, int]:
-    """Each created container a loop fills, with the line of the first loop that fills it."""
     own = frozenset(map(id, nodes))
     loops = tuple(
         node
@@ -166,7 +157,6 @@ def loop_accumulations(
     module: str,
     declaration: str,
 ) -> Iterator[Finding]:
-    """A local container created in the function and filled inside one of its loops."""
     nodes = _own_nodes(function)
     grown = frozenset(
         name for node in nodes if (name := _filled(node)) is not None
@@ -189,7 +179,6 @@ STATE_WRITES: Final = frozenset({"set", "update"})
 
 
 def _written(statement: ast.stmt) -> str | None:
-    """The state a statement replaces, written as its owner reaches it (`self._state`), if it replaces one."""
     match statement:
         case ast.Expr(
             value=ast.Call(
@@ -202,7 +191,6 @@ def _written(statement: ast.stmt) -> str | None:
 
 
 def _blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
-    """The statement sequences a node holds, each run in order: a branch never continues another."""
     match node:
         case (
             ast.FunctionDef(body=body)
@@ -233,7 +221,6 @@ def _blocks(node: ast.AST) -> Iterator[list[ast.stmt]]:
 
 
 def _field_read(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """A property whose whole body returns one field of a held value: `return self._state.get().field`."""
     body = [
         statement
         for statement in function.body
@@ -259,7 +246,6 @@ def _field_read(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
 
 
 def _mirrors(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    """A private property that only returns one field of the state: an old attribute kept alive."""
     if not function.name.startswith("_"):
         return False
     decorated = any(
@@ -274,7 +260,6 @@ def _piecemeal(
     module: str,
     declaration: str,
 ) -> Iterator[Finding]:
-    """Each statement that writes the same state as the statement before it."""
     detail = "Change several fields in one replace(...), reading the state once; a frozen record is not a set of attributes."
     for statements in (
         block
@@ -300,11 +285,6 @@ def state_writes(
     module: str,
     declaration: str,
 ) -> Iterator[Finding]:
-    """State written one field at a time: a mutable object behind a frozen record.
-
-    Two writes in a row to the same state belong in one `replace`; a private property
-    that returns one field of the state is an old attribute kept alive, so read the
-    record once instead."""
     yield from _piecemeal(function, module, declaration)
     if _mirrors(function):
         detail = "Read the state once (state = self._state.get()) where it is needed, rather than through a private property per field."

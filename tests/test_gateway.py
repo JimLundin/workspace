@@ -1,6 +1,3 @@
-"""The AI connection: a loopback pass-through to the provider, against a local fake
-provider; runs anywhere."""
-
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -18,7 +15,6 @@ TOKEN = "boot-token"
 
 
 def through(tmp_path: Path, gateway: Gateway) -> Settings:
-    """Assistant settings whose requests go through `gateway`'s published endpoint."""
     path = tmp_path / "endpoint-gateway"
     publish(path, Endpoint(gateway.port, TOKEN))
     return Settings(
@@ -33,8 +29,6 @@ def through(tmp_path: Path, gateway: Gateway) -> Settings:
 def test_requests_reach_the_provider_with_its_key_not_the_gateway_token(
     tmp_path: Path,
 ) -> None:
-    # Defect: the gateway forwards the client's token (or no key) to the provider,
-    # loses the path, or the assistant still calls the provider directly.
     with fake_endpoint() as provider:
         gateway = Gateway.listen(Upstream(provider.url, "provider-key"), TOKEN)
         gateway.start()
@@ -54,7 +48,6 @@ def test_requests_reach_the_provider_with_its_key_not_the_gateway_token(
 def test_a_wrong_token_is_refused_before_the_provider_is_called(
     tmp_path: Path,
 ) -> None:
-    # Defect: any local program reaching the port spends the provider key.
     with fake_endpoint() as provider:
         gateway = Gateway.listen(
             Upstream(provider.url, "provider-key"), "another-boot"
@@ -72,8 +65,6 @@ def test_a_wrong_token_is_refused_before_the_provider_is_called(
 def test_an_unconfigured_gateway_names_the_missing_variables(
     tmp_path: Path,
 ) -> None:
-    # Defect: a gateway started without credentials crashes (and the keeper gives
-    # up on it) or answers with an error that doesn't say what to set.
     gateway = Gateway.listen(Unconfigured(("OPENAI_API_KEY",)), TOKEN)
     gateway.start()
     try:
@@ -85,8 +76,6 @@ def test_an_unconfigured_gateway_names_the_missing_variables(
 
 
 def test_streamed_replies_are_relayed_as_they_arrive() -> None:
-    # Defect: the gateway buffers a streamed reply until it ends, so the agent's
-    # live text and Stop wait for the whole answer.
     first_read = threading.Event()
 
     def stream(_: Received) -> Iterator[bytes]:
@@ -117,7 +106,6 @@ def test_streamed_replies_are_relayed_as_they_arrive() -> None:
 
 
 def test_a_restarted_gateway_takes_back_its_port() -> None:
-    # Defect: a gateway restart moves the port, so clients built before it fail.
     first = Gateway.listen(Unconfigured(()), TOKEN)
     port = first.port
     first.close()
@@ -131,7 +119,6 @@ def test_a_restarted_gateway_takes_back_its_port() -> None:
 def test_settings_without_a_published_gateway_call_the_provider(
     tmp_path: Path,
 ) -> None:
-    # Defect: before the gateway first listens, the assistant's requests go nowhere.
     with fake_endpoint() as provider:
         settings = Settings(
             provider.url,

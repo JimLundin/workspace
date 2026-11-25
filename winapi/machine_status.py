@@ -1,5 +1,3 @@
-"""Plain observations of the machine's speakers, Wi-Fi and its networks, power, processor and memory. No ctypes: importable anywhere."""
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -14,8 +12,6 @@ class Speakers(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Audio:
-    """The default speakers: their mute state and master level from 0 to 1, None when Windows reports none."""
-
     speakers: Speakers
     volume: float | None
 
@@ -29,8 +25,6 @@ class Wifi(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Network:
-    """A Wi-Fi network in range: its name, signal from 0 to 100, and the profile Windows saved for it, if any."""
-
     ssid: str
     signal: int
     secured: bool = field(kw_only=True)
@@ -45,8 +39,6 @@ type Listing = tuple[Network, ...] | LOCATION_OFF
 
 
 def nearby(heard: Iterable[Network]) -> tuple[Network, ...]:
-    """One entry per name, as strong as its strongest sighting and keeping any saved profile:
-    the connected network first, then by signal. Hidden networks, without a name, are left out."""
 
     def merged(ssid: str, sightings: tuple[Network, ...]) -> Network:
         profiles = (
@@ -100,8 +92,6 @@ type Power = Battery | PowerUnavailable
 
 @dataclass(frozen=True, slots=True)
 class CpuTimes:
-    """Cumulative processor time across all cores, in 100 ns units. Kernel time includes idle time."""
-
     idle: int
     kernel: int
     user: int
@@ -109,8 +99,6 @@ class CpuTimes:
 
 @dataclass(frozen=True, slots=True)
 class Memory:
-    """Physical memory in use and installed, in bytes."""
-
     used: int
     total: int
 
@@ -122,7 +110,6 @@ class Memory:
 
 
 def cpu_load(before: CpuTimes | None, after: CpuTimes | None) -> int | None:
-    """The busy share of processor time between two samples, as a whole percent; None without a valid interval."""
     if before is None or after is None:
         return None
     idle = after.idle - before.idle

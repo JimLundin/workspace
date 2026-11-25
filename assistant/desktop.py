@@ -1,6 +1,3 @@
-"""The `Desktop` the assistant's features use: the microphone, typing and the clipboard on
-Windows, and callbacks for what the desktop process should show."""
-
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -21,8 +18,6 @@ class WinDesktop:
     on_notify: Callable[[str, str], None] = field(kw_only=True)
     on_problem: Callable[[str], None] = field(kw_only=True)
 
-    # ---- the microphone ----------------------------------------------------------------
-
     def start_listening(self) -> str | None:
         if error := self.mic.start():
             return f"Can't open the microphone (Windows error {error}). Is microphone access on for desktop apps?"
@@ -35,8 +30,6 @@ class WinDesktop:
         self.mic_follower.close()
         self.mic.close()
 
-    # ---- text in other programs --------------------------------------------------------
-
     def type_text(self, text: str) -> None:
         inputs.type_text(text, Origin.DESKTOP)
 
@@ -45,8 +38,6 @@ class WinDesktop:
             raise OSError(
                 "The clipboard is busy. Try copying the transcript again."
             )
-
-    # ---- what the desktop shows --------------------------------------------------------
 
     def show_state(self, state: State) -> None:
         self.on_state(state)

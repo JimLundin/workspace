@@ -1,9 +1,3 @@
-"""The live marks an activity draws: the microphone's trace and a quick job's pulsing dots.
-
-The bar draws them in its capsules and the dictation marker on the caret,
-each at the sizes its capsule declares.
-"""
-
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -18,8 +12,6 @@ from desktop_ui.island_layout import Capsule, Markers
 
 @dataclass(frozen=True, slots=True)
 class Beat:
-    """Where the dots' pulse is in its cycle, from 0 to 1."""
-
     cycle: float
     lag: float
     """How far each dot's pulse trails the one before, in cycles."""
@@ -28,7 +20,6 @@ class Beat:
 
 
 def level(value: float | None) -> float:
-    """A microphone level as a wave bar's height, on a perceptual scale."""
     return min(
         1.0, math.log10(1 + max(0.0, value or 0.0) * 90) / math.log10(91)
     )
@@ -41,7 +32,6 @@ def paint_wave(
     capsule: Capsule,
     markers: Markers,
 ) -> None:
-    """One bar per sample from `start`, centred on its height, in the painter's brush."""
     painter.setPen(Qt.PenStyle.NoPen)
     pitch, corner = capsule.wave_bar + capsule.wave_gap, markers.wave_corner
     for index, sample in enumerate(trace):
@@ -65,7 +55,6 @@ def paint_dots(
     markers: Markers,
     ink: Shade,
 ) -> None:
-    """Dots pulsing in turn, each centred in an equal share of `room`'s width."""
     pitch, radius, middle = (
         room.width() / markers.dot_count,
         markers.dots_radius,

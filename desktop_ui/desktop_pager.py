@@ -1,12 +1,3 @@
-"""The bar's desktop pager: a pure view of the observer's desktops.
-
-The pager shows each desktop as its applications' icons, side by side left to
-right as they sit on screen, with the current one marked; an empty desktop shows
-its number. A click goes straight to that desktop. Desktops are reached directly,
-never cycled. Its names list the applications placed on each desktop. While either keyboard holds
-its Apps key, each desktop carries its letter, read from the chord table.
-"""
-
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, assert_never
@@ -25,14 +16,11 @@ JUMPS: Final = (
 
 
 def _jump_letters(letters: Mapping[Target, str]) -> tuple[str | None, ...]:
-    """The chord letter for each desktop in order, from each request's letter on the layout."""
     return tuple(letters.get(tool) for tool in JUMPS)
 
 
 @dataclass(frozen=True, slots=True)
 class PagerSpec:
-    """What the pager reads: each web app's name and symbol, and the chord letter reaching each desktop."""
-
     web_apps: WebApps
     desktop: str
     """A desktop's name, before its number..."""
@@ -47,8 +35,6 @@ class PagerSpec:
 
 @dataclass(frozen=True, slots=True)
 class Hints:
-    """The chord letter reaching each desktop; empty unless a keyboard holds its Apps key."""
-
     desktops: tuple[str | None, ...]
 
 
@@ -91,10 +77,6 @@ def pager(
     *,
     chord: bool,
 ) -> PagerView:
-    """The pager for these desktops, each with the applications placed on it.
-
-    The hints show while an Apps key is held, so the letter alone completes the request.
-    """
 
     def desktop(index: int, apps: Sequence[App]) -> PagerDesktop:
         listed = (

@@ -1,7 +1,3 @@
-"""What each physical key does, per layer, as the key map window draws it; and the
-words the layer indicator shows. Plain Python, read from the layout the desktop is
-handed (`KeyboardView`)."""
-
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final
@@ -86,14 +82,11 @@ PHYSICAL_NAMES: Final = frozendict(
 
 @dataclass(frozen=True, slots=True)
 class Shortcut:
-    """Physical keycaps: a tap and, for a layer binding, its held thumb."""
-
     tap: str
     hold: str | None
 
 
 def shortcut_hint(binding: Shortcut | None, *, compact: bool = False) -> str:
-    """Use README keycap notation, shortened for the floating menu's trailing edge."""
     match binding:
         case Shortcut(tap, None):
             return tap
@@ -104,8 +97,6 @@ def shortcut_hint(binding: Shortcut | None, *, compact: bool = False) -> str:
 
 
 class Role(Enum):
-    """What a key does, for its colour."""
-
     KEY = auto()
     MOD = auto()
     LAYER = auto()
@@ -155,8 +146,6 @@ TOOL_NAMES: Final = every_member(Tool, {
 
 @dataclass(frozen=True, slots=True)
 class KeyboardView:
-    """The layout as the desktop draws and names it, with its apps in the slots: its lookups and each target's chord letter."""
-
     layout: Layout
     bindings: Bindings
     apps: tuple[App, ...]
@@ -166,7 +155,6 @@ class KeyboardView:
 
     @classmethod
     def of(cls, layout: Layout, apps: tuple[App, ...]) -> KeyboardView:
-        """`layout` as the desktop reads it with `apps` in its slots, or `LayoutError` if the layout is inconsistent."""
         bindings = Bindings.of(layout)
         reached = (
             (reaching(request, apps), letter)
@@ -184,7 +172,6 @@ class KeyboardView:
         )
 
     def shortcut(self, tool: Tool) -> Shortcut | None:
-        """The first binding in the held layers' order, else the tool's firmware chord."""
         physical = self.layout.physical.cells()
         for layer in Layer:
             held = self._holding(layer)
@@ -199,7 +186,6 @@ class KeyboardView:
         return Shortcut(letter, CHORD_HOLD) if letter is not None else None
 
     def describe(self, a: Binding) -> tuple[str, Role]:
-        """A key's label and role, as drawn."""
         if a is BLANK:
             return "", Role.BLANK
         match a:
@@ -242,7 +228,6 @@ class KeyboardView:
                 return ""
 
     def _holding(self, layer: Layer) -> int | None:
-        """The cell of the base layer's thumb that holds `layer`; None for the base layer itself."""
         base = self.bindings.actions(Layer.BASE)
         return next(
             (
@@ -254,7 +239,6 @@ class KeyboardView:
         )
 
     def _cap(self, layer: Layer, held: int | None, key: Laptop) -> Cap:
-        """The cap for one physical key as `layer` has it, with `held` the cell holding that layer."""
         name = key.legend
         if key.scancode == self.layout.escape:
             return Cap(name, "On/off", "hold: quit", Role.SPECIAL)
@@ -269,7 +253,6 @@ class KeyboardView:
                 return Cap(name, label, self._hold(a), role)
 
     def keymap(self, layer: Layer) -> tuple[tuple[Cap, ...], ...]:
-        """The keyboard, row by row, as `layer` has it."""
         held = self._holding(layer)
         return tuple(
             tuple(self._cap(layer, held, key) for key in row) for row in ROWS
@@ -277,7 +260,6 @@ class KeyboardView:
 
 
 def indicator_text(layer: Layer, *, caps_word: bool) -> str | None:
-    """What the layer indicator says; None: nothing to show. The base layer says nothing."""
     parts = [layer.name] if layer is not Layer.BASE else []
     if caps_word:
         parts.append("CAPS WORD")

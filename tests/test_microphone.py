@@ -1,5 +1,3 @@
-"""Voice capture through a concrete Windows input-device fixture."""
-
 import ctypes
 import sys
 import threading
@@ -36,12 +34,6 @@ class Completion(Enum):
 
 
 class InputDevice:
-    """Owns simulated driver state and the capture buffer supplied by Microphone.
-
-    Mutable driver observations model a device returning its buffer over time;
-    no application objects or module bindings are replaced.
-    """
-
     __slots__ = (
         "bound",
         "completion",
@@ -181,7 +173,7 @@ class InputDevice:
         return self.default
 
     def say(self, mic: audio.Microphone) -> bytes:
-        self.spoken_at = self.now  # speech starts with the key press
+        self.spoken_at = self.now
         assert mic.start() == 0
         self.now = self.spoken_at + len(self.speech) / (RATE * 2)
         return mic.stop()
@@ -214,8 +206,6 @@ def test_captures_the_first_words_again_after_an_idle_pause() -> None:
 def test_capture_follows_a_changed_default_device_without_losing_the_first_words() -> (
     None
 ):
-    # Defect: the handle opened at startup stays bound to the old default device,
-    # so dictation and the level meter keep observing a microphone Windows no longer selects.
     device = InputDevice()
     mic = device.microphone()
     try:
@@ -302,7 +292,6 @@ def test_a_failed_recording_releases_the_device_and_can_be_retried() -> None:
 def test_stop_waits_for_the_final_audio_buffer_after_a_stale_open_event() -> (
     None
 ):
-    """Detect reading the last byte count before the driver returns its buffer."""
     device = InputDevice()
     device.completion = Completion.DELAYED
     mic = device.microphone()
@@ -349,15 +338,13 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     device.spoken_at = device.now
     assert mic.start() == 0
     assert device.header is not None
-    pcm = b"\x00\x40" * 640  # constant half-scale signal, exactly 40 ms
+    pcm = b"\x00\x40" * 640
     ctypes.memmove(cast("int", device.header.lpData), pcm, len(pcm))
     assert device.header.dwBytesRecorded == 0
     device.position_bytes = len(pcm)
     assert mic.level() == 0.5
-    assert mic.level() == 0  # No new data: don't invent continued activity.
+    assert mic.level() == 0
     ctypes.memmove(cast("int", device.header.lpData), b"\x00\x20" * 320, 640)
-    # Defect: after a default-device switch restarts the stream's position, the
-    # meter reports silence until the new position passes the old one.
     device.position_bytes = 640
     assert mic.level() == 0.25
     ctypes.memmove(
@@ -367,7 +354,6 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     assert mic.level() == 0.5, (
         "Only the PCM recorded since the previous read is measured."
     )
-    # Defect: a driver reporting TIME_SAMPLES is read as bytes, so the meter lags at half the data.
     ctypes.memmove(
         cast("int", device.header.lpData) + 1280, b"\x00\x20" * 320, 640
     )
@@ -378,7 +364,7 @@ def test_live_meter_reads_recorded_pcm_without_trusting_the_unfinished_header() 
     assert mic.level() is None
     device.failure = Failure.NONE
     device.now += 3
-    assert mic.stop() == SPEECH  # Metering has not changed the final recording.
+    assert mic.stop() == SPEECH
     assert mic.level() is None
     mic.close()
 

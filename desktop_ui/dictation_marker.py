@@ -1,14 +1,3 @@
-"""The dictation marker's decisions: which step it shows, where, and when the bar shows dictation instead.
-
-Between dictations the marker rests beside the caret of the app in front,
-which it keeps following (`tracked`). A capture starts on that caret, or looks
-for one once (`FindAnchor`) when none was resting, and stays where it started;
-the first answer for the current capture wins. It shows listening, then
-transcribing and typing, then a brief tick or cross; the tick follows the caret
-to where the typed text ends. When nothing can be found the bar shows
-dictation as before.
-"""
-
 from dataclasses import dataclass, replace
 from enum import Enum, auto
 
@@ -27,8 +16,6 @@ type Where = Anchor | PROBING | UNFOUND
 
 
 class Outcome(Enum):
-    """How the last dictation ended, flashed briefly once it has."""
-
     DONE = auto()
     FAILED = auto()
 
@@ -63,13 +50,10 @@ class MarkerState:
 
 @dataclass(frozen=True, slots=True)
 class FindAnchor:
-    """Look for where `capture`'s text will go, and report it as `anchored`."""
-
     capture: int
 
 
 def listened(state: MarkerState, *, listening: bool) -> MarkerState:
-    """A capture starting drops any flash and starts on the resting caret, else looks for its anchor afresh."""
     if listening and not state.listening:
         return replace(
             state,
@@ -82,7 +66,6 @@ def listened(state: MarkerState, *, listening: bool) -> MarkerState:
 
 
 def found(state: MarkerState, after: MarkerState) -> FindAnchor | None:
-    """The look for an anchor a new capture asks for when no caret was resting."""
     return (
         FindAnchor(after.capture)
         if after.capture != state.capture and after.where is PROBING
@@ -91,7 +74,6 @@ def found(state: MarkerState, after: MarkerState) -> FindAnchor | None:
 
 
 def job_changed(state: MarkerState, job: Job | None) -> MarkerState:
-    """Typing that ends without a failure is done; a new job ends any flash."""
     if job is not None:
         return replace(state, job=job, flash=None)
     finished = (
@@ -105,7 +87,6 @@ def job_changed(state: MarkerState, job: Job | None) -> MarkerState:
 
 
 def failed(state: MarkerState) -> MarkerState:
-    """A failure flashes only where dictation is showing; the tray reports every failure."""
     return (
         replace(state, flash=Outcome.FAILED)
         if shown(state) is not None
@@ -116,7 +97,6 @@ def failed(state: MarkerState) -> MarkerState:
 def anchored(
     state: MarkerState, capture: int, where: Anchor | UNFOUND
 ) -> MarkerState:
-    """The first answer for the current capture places it; later and stale answers are dropped."""
     return (
         replace(state, where=where)
         if capture == state.capture and state.where is PROBING
@@ -125,14 +105,12 @@ def anchored(
 
 
 def tracking(state: MarkerState) -> bool:
-    """The caret is followed except while a capture is listening, transcribing or typing, which stays put."""
     return not state.listening and state.job is None
 
 
 def tracked(
     state: MarkerState, capture: int, caret: Caret | None
 ) -> MarkerState:
-    """Where the caret of the app in front is, asked during `capture`; a tick on a caret follows it too."""
     if capture != state.capture:
         return state
     where = (
@@ -150,14 +128,12 @@ def faded(state: MarkerState) -> MarkerState:
 
 
 def shown(state: MarkerState) -> Shown | None:
-    """What dictation is doing: listening takes precedence over a job, and a job over a flash."""
     if state.listening:
         return Step.LISTENING
     return _STEPS[state.job] if state.job is not None else state.flash
 
 
 def marked(state: MarkerState) -> tuple[Anchor, Mark] | None:
-    """Where the marker shows and what, resting beside the caret between dictations, or None while it's hidden."""
     step = shown(state)
     match state.where:
         case Caret() | Field() | Window() as anchor if step is not None:
@@ -169,7 +145,6 @@ def marked(state: MarkerState) -> tuple[Anchor, Mark] | None:
 
 
 def on_bar(state: MarkerState) -> bool:
-    """The bar shows dictation only when nothing was found to anchor the marker to."""
     return state.where is UNFOUND
 
 
@@ -190,8 +165,6 @@ def _bottom_left(rect: Rect, size: Size, work: Rect, gap: int) -> Rect:
 
 
 def rested(caret: Caret, size: Size, work: Rect, gap: int) -> Rect:
-    """The resting marker's rect: just ahead of the caret, or just behind it when the screen ends first; centred on
-    its line; always within `work`."""
     rect = caret.rect
     ahead = rect.right + gap
     return _clamped(
@@ -205,15 +178,10 @@ def rested(caret: Caret, size: Size, work: Rect, gap: int) -> Rect:
 
 
 def leapt(before: Rect, after: Rect, far: int) -> bool:
-    """The marker jumped rather than followed: its corner moved more than `far` along either axis."""
     return max(abs(after.left - before.left), abs(after.top - before.top)) > far
 
 
 def placed(anchor: Anchor, size: Size, work: Rect, gap: int) -> Rect:
-    """The marker's rect on screen: centred on the caret; outside a field's corner when
-    there's room, else just inside;
-    bottom-left inside a window or a pane-sized field;
-    always within `work`."""
     match anchor:
         case Caret(rect):
             return _clamped(

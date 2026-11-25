@@ -1,13 +1,9 @@
-"""Plain value types the bindings return. No ctypes: importable anywhere."""
-
 from dataclasses import dataclass, field
 from typing import overload
 
 
 @dataclass(frozen=True, slots=True)
 class Offset:
-    """How far one screen position lies from another, in physical pixels."""
-
     dx: int
     dy: int
 
@@ -17,8 +13,6 @@ class Offset:
 
 @dataclass(frozen=True, slots=True)
 class Point:
-    """A screen position in physical pixels; negative left of or above the primary monitor."""
-
     x: int
     y: int
 
@@ -39,8 +33,6 @@ class Point:
 
 @dataclass(frozen=True, slots=True)
 class Size:
-    """A width and height in physical pixels, neither negative."""
-
     width: int
     height: int
 
@@ -53,8 +45,6 @@ class Size:
 
 @dataclass(frozen=True, slots=True)
 class Rect:
-    """A screen rectangle in physical pixels; `right` and `bottom` are exclusive."""
-
     left: int
     top: int
     right: int
@@ -88,8 +78,6 @@ class Stop:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Lighting:
-    """How light falls on every pane of a glass scene."""
-
     shadow_blur: float
     shadow_drop: float
     """The shadow's blur and how far it falls below the pane, in DIPs."""
@@ -102,8 +90,6 @@ class Lighting:
 
 @dataclass(frozen=True, slots=True)
 class Veil:
-    """How a pane's glass reads: its tint over the blurred desktop, its rim light and its shadow."""
-
     tint: str
     opacity: float
     rim: tuple[Stop, ...]
@@ -112,8 +98,6 @@ class Veil:
 
 @dataclass(frozen=True, slots=True)
 class Pane:
-    """One rounded pane, in device pixels within its scene; the radius is capped at half the height."""
-
     key: str
     bounds: Rect
     radius: float
@@ -123,8 +107,6 @@ class Pane:
 
 @dataclass(frozen=True, slots=True)
 class Window:
-    """A top-level window, as the taskbar would show it."""
-
     handle: int
     title: str
     exe: str
@@ -133,7 +115,6 @@ class Window:
 
 
 def utf16_units(text: str) -> list[int]:
-    """Windows types text as UTF-16 code units: two for characters past U+FFFF."""
     data = text.encode("utf-16-le")
     return [
         int.from_bytes(data[i : i + 2], "little")
@@ -142,8 +123,6 @@ def utf16_units(text: str) -> list[int]:
 
 
 class InputRejectedError(OSError):
-    """Windows accepted only part of an input batch; retrying could duplicate it."""
-
     def __init__(self, accepted: int, expected: int) -> None:
         self.accepted = accepted
         self.expected = expected
@@ -153,6 +132,5 @@ class InputRejectedError(OSError):
 
 
 def require_input_count(sent: int, expected: int) -> None:
-    """Reject partial input rather than silently losing keystrokes or clicks."""
     if sent != expected:
         raise InputRejectedError(sent, expected)

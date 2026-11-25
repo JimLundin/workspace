@@ -1,11 +1,3 @@
-"""Rounded desktop glass and shadows, owned by the assistant's UI thread.
-
-Windows composes a host backdrop through a rounded geometry. A separate,
-nonactivating window places it immediately behind the per-pixel Qt foreground;
-neither desktop captures nor color keys participate in rendering. `GlassScene`
-composes several panes in one window, so panes move without moving any window.
-"""
-
 import ctypes
 import math
 import threading
@@ -81,15 +73,11 @@ def _color(value: str, opacity: float) -> Color:
 
 
 def borderless(handle: int) -> None:
-    """The vector silhouette supplies the edge; suppress Windows 11's rectangular frame."""
-    none = ctypes.c_uint32(
-        0xFFFF_FFFE
-    )  # DWMWA_COLOR_NONE; older Windows can ignore this attribute.
+    none = ctypes.c_uint32(0xFFFF_FFFE)
     DwmSetWindowAttribute(handle, 34, ctypes.byref(none), ctypes.sizeof(none))
 
 
 def stack_behind(handle: int, foreground: int) -> None:
-    """Place native glass below its foreground without activation or movement."""
     SetWindowPos(handle, foreground, 0, 0, 0, 0, 0x0013)
 
 
@@ -103,7 +91,6 @@ _GLASS_HOST: Final = (
 
 
 def glass_host(title: str) -> int:
-    """Composition owns the pixels; Windows skips this layered host for input."""
     handle = (
         CreateWindowExW(
             _GLASS_HOST,
@@ -168,7 +155,6 @@ class DesktopComposition:
         return GlassScene.create(self, title, lighting)
 
     def close(self, pump: Callable[[], None]) -> None:
-        """Drain the native dispatcher before its owning UI thread can exit."""
         if self.closed:
             return
         self._closed.set()
@@ -201,19 +187,11 @@ class Float3(ctypes.Structure):
     )
 
 
-# Windows.UI.Composition.IVisual's ABI slots, after IUnknown's three and IInspectable's three.
 _PUT_OFFSET, _PUT_OPACITY, _PUT_SIZE = 21, 23, 36
 
 
 @dataclass(frozen=True, slots=True)
 class VisualWriter:
-    """A visual's three per-frame property writes, straight through its COM slots.
-
-    win32more's generic WinRT dispatch binds and converts arguments on every call:
-    measured 44 µs per write, against 2.2 µs through the slot. The writer holds only
-    the interface pointer; its PaneGroup owns the visual's reference and lifetime.
-    """
-
     this: ctypes.c_void_p
     offset: NativeFunction[int]
     opacity: NativeFunction[int]
@@ -243,14 +221,6 @@ class VisualWriter:
 
 @dataclass(frozen=True, slots=True)
 class PaneGroup:
-    """One pane's retained native visuals, reused each time its key reappears.
-
-    Expression animations derive the clip geometry, corner radius, rim, shadow
-    and its mask from the group's own size, offset and opacity, so publishing
-    a frame writes only those three properties. Native ownership requires the
-    published state to live with the visuals it describes.
-    """
-
     compositor: Compositor
     tint: CompositionColorBrush
     rim: CompositionLinearGradientBrush
@@ -279,7 +249,6 @@ class PaneGroup:
         rim_brush: CompositionLinearGradientBrush = (
             compositor.CreateLinearGradientBrush()
         )
-        # The gradient runs along the rim's angle, from one edge of the pane's unit square to the opposite one.
         direction = math.radians(lighting.rim_angle)
         dx, dy = math.sin(direction), -math.cos(direction)
         reach = 0.5 / max(abs(dx), abs(dy))
@@ -406,12 +375,6 @@ class _Composed:
 
 @dataclass(frozen=True, slots=True)
 class GlassScene:
-    """Several glass panes composed in one nonactivating window behind their Qt foreground.
-
-    Pane groups are pooled by key for the scene's lifetime: a capsule that leaves
-    and returns reuses its native visuals instead of allocating new ones.
-    """
-
     stack: Callable[[int, int], None]
     handle: int
     target: DesktopWindowTarget
@@ -461,7 +424,6 @@ class GlassScene:
         return self._composed.get().groups
 
     def place(self, bounds: Rect, scale: float) -> None:
-        """Cover the screen area the panes can reach, in device pixels."""
         composed = self._composed.get()
         if composed.bounds != bounds:
             windows.move(self.handle, bounds)
@@ -472,12 +434,10 @@ class GlassScene:
         self._composed.set(replace(composed, bounds=bounds, scale=scale))
 
     def cast(self, group: PaneGroup, scale: float) -> None:
-        """The group's shadow at the scene's scale."""
         group.shadow.put_BlurRadius(self.lighting.shadow_blur * scale)
         group.shadow.Offset = Vector3(0, self.lighting.shadow_drop * scale, 0)
 
     def publish(self, panes: tuple[Pane, ...]) -> None:
-        """Show exactly these panes; any other pooled pane hides until its key returns."""
         keys = frozenset(pane.key for pane in panes)
         for pane in panes:
             composed = self._composed.get()
@@ -512,10 +472,7 @@ class GlassScene:
             self._composed.update(
                 lambda composed: replace(composed, visible=True)
             )
-        # Keep the native blur below the corresponding text, including after a
-        # new bubble or a context menu changes the topmost window order.
-        # Observe actual ordering: cached state would miss intervening windows.
-        if GetWindow(foreground, 2) != self.handle:  # GW_HWNDNEXT
+        if GetWindow(foreground, 2) != self.handle:
             self.stack(self.handle, foreground)
 
     def hide(self) -> None:

@@ -1,11 +1,3 @@
-"""Run Workspace's desktop: `pythonw -m desktop`. `launch.py` starts it with the gateway and the layout.
-
-The desktop owns the bar, the tray, window placement, dictation and meetings.
-Quit in its tray menu quits Workspace. This entry point gathers what the desktop
-is handed: the values the programs share (`settings`) and the desktop's own
-(`desktop.look`, `desktop.bar`, `desktop.windows`, `desktop.placement`).
-"""
-
 import os
 import sys
 from pathlib import Path

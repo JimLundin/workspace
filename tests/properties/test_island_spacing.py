@@ -1,5 +1,3 @@
-"""Across every transition between capsule arrangements, capsules never touch and rest one gap apart."""
-
 from dataclasses import dataclass
 from itertools import pairwise
 

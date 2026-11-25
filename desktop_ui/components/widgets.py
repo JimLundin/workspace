@@ -1,5 +1,3 @@
-"""Shared Qt controls, selection-preserving text updates and native window behavior."""
-
 import threading
 from collections.abc import Callable, Sequence
 from typing import override
@@ -23,7 +21,6 @@ prepare()
 
 
 def window_style(theme: Tokens, design: Design) -> str:
-    """The shared controls on the kit's solid window, and its segmented choices."""
     kit = design.kit
     segment, choice = theme.segment, kit.choice
     return (
@@ -39,7 +36,6 @@ QFrame#segmented QToolButton:checked {{ background: {segment}; }}
 
 
 def surface_style(theme: Tokens, radius: int, kit: Kit) -> str:
-    """A solid surface from the kit: the window colour, a hairline edge and large concentric corners."""
     edge = f"{kit.hairline}px solid {theme.solid_edge.css}"
     return f"QFrame#surface {{ background: {theme.window}; border: {edge}; border-radius: {radius}px; }}"
 
@@ -47,7 +43,6 @@ def surface_style(theme: Tokens, radius: int, kit: Kit) -> str:
 def tool_window(
     window: QtWidgets.QWidget, title: str | None, *, on_top: bool
 ) -> None:
-    """A frameless, translucent tool window that shows without activating; `on_top` keeps it above other windows."""
     if title is not None:
         window.setWindowTitle(title)
     flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
@@ -59,14 +54,12 @@ def tool_window(
 
 
 def device_size(widget: QtWidgets.QWidget, scale: float) -> Size:
-    """A widget's logical size in device pixels at `scale`."""
     return Size(round(widget.width() * scale), round(widget.height() * scale))
 
 
 def surface(
     window: QtWidgets.QWidget, theme: Tokens, radius: int, kit: Kit
 ) -> QtWidgets.QFrame:
-    """Draw a `tool_window` as one rounded surface; its corners stay transparent."""
     frame = QtWidgets.QFrame(window)
     frame.setObjectName("surface")
     frame.setStyleSheet(surface_style(theme, radius, kit))
@@ -77,7 +70,6 @@ def surface(
 def segmented(
     buttons: Sequence[QtWidgets.QToolButton], kit: Kit
 ) -> QtWidgets.QFrame:
-    """Checkable choices in one well; the checked choice carries the thumb."""
     frame = QtWidgets.QFrame()
     frame.setObjectName("segmented")
     layout = row(frame)
@@ -90,7 +82,6 @@ def segmented(
 
 
 def glyph(name: str, ink: Shade, size: int = 16) -> QtGui.QPixmap:
-    """A symbol in translucent ink, such as the secondary ink; SVG fills take no alpha."""
     solid = icon(name, ink.color, size).pixmap(QtCore.QSize(size, size))
     faded = QtGui.QPixmap(solid.size())
     faded.setDevicePixelRatio(solid.devicePixelRatio())
@@ -145,8 +136,6 @@ def show_window(
         window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         window.show()
         windows.show_quietly(handle, visible=True, topmost=False)
-        # Qt's first quiet show can leave a maximized widget at normal native
-        # geometry. Apply its requested state while activation is still blocked.
         if window.isMaximized() and not windows.is_maximized(handle):
             windows.show(handle, windows.SW_MAXIMIZE)
     finally:
@@ -161,7 +150,6 @@ def show_window(
 
 
 def near_pointer(window: QtWidgets.QWidget, width: int, height: int) -> None:
-    """Size `window` and put it under the pointer, inside the pointer's screen."""
     point = QtGui.QCursor.pos()
     display = QtWidgets.QApplication.screenAt(point) or window.screen()
     area = display.availableGeometry()

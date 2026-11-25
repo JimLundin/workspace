@@ -1,5 +1,3 @@
-"""The interactive session's lock state, and its lock and unlock notifications."""
-
 import ctypes
 from ctypes import wintypes
 from enum import Enum, auto
@@ -42,12 +40,10 @@ _CHANGES: Final = frozendict({7: Change.LOCKED, 8: Change.UNLOCKED})
 
 
 def change(message: int, wparam: int) -> Change | None:
-    """A window message as a lock change; every other session event is None."""
     return _CHANGES.get(wparam) if message == WM_WTSSESSION_CHANGE else None
 
 
 def subscribe(hwnd: int) -> None:
-    """`hwnd` receives WM_WTSSESSION_CHANGE for this session until `unsubscribe`."""
     if not _WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION):
         raise last_error()
 
@@ -61,7 +57,6 @@ _LOCKED: Final = frozendict({0: True, 1: False})
 
 
 def locked() -> bool | None:
-    """Whether this session is locked now; None when Windows doesn't say."""
     buffer = ctypes.c_wchar_p()
     size = ctypes.c_ulong()
     if not WTSQuerySessionInformationW(

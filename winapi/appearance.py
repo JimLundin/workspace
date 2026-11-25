@@ -1,9 +1,3 @@
-"""Desktop material preferences and bounded background observations.
-
-Composition and Qt retain opaque text on a translucent surface. This module
-reads accessibility settings and samples nearby pixels off the UI thread.
-"""
-
 import ctypes
 import math
 import threading
@@ -67,13 +61,6 @@ class _Sampling:
 
 @dataclass(frozen=True, slots=True)
 class FrostSampler:
-    """One bounded background read; GetPixel can wait on the desktop compositor.
-
-    The UI submits immutable bounds and polls the result on its existing pointer
-    timer. This worker never touches widgets, and neither submitting nor polling waits
-    for desktop pixels. The owner discards observations after a card moves.
-    """
-
     sample: Callable[[tuple[Rect, ...]], tuple[Backdrop, ...]] = (
         sample_backgrounds
     )
@@ -131,13 +118,6 @@ class NativeTimerPeriod:
 
 @dataclass(frozen=True, slots=True)
 class TimerResolution:
-    """Keep the UI's short frame timers accurate only while UI motion is running.
-
-    Windows' default timer granularity can turn a 16 ms wait into 31 ms. Each
-    successful request is balanced when movement ends, history opens or the
-    view closes; idle notifications and the keyboard process never request it.
-    """
-
     period: TimerPeriod = field(default_factory=NativeTimerPeriod)
     _active: threading.Event = field(
         default_factory=threading.Event, init=False, repr=False
@@ -189,7 +169,6 @@ def preference() -> Preference:
 
 
 def light_apps() -> bool:
-    """Windows' app mode: large glass and content windows follow it."""
     try:
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
@@ -207,16 +186,9 @@ def system_color(index: int) -> str:
 
 
 def background_frost(bounds: Rect) -> Frost:
-    """Sample four surrounding pixels, off the animation path; retain no image.
-
-    Uniform dark and bright surroundings can use a light tint with contrasting
-    ink. Mixed or unavailable backgrounds need more shading. Only neighboring
-    pixels are read, and no desktop image is retained.
-    """
     dc = GetDC(None)
     if not dc:
         return Frost.SMOKED
-    # Sample the sides: above/below can contain a neighboring conversation bubble.
     points = tuple(
         (x, bounds.top + bounds.height * third // 3)
         for x in (bounds.left - 12, bounds.right + 12)
@@ -234,7 +206,6 @@ def background_frost(bounds: Rect) -> Frost:
 
 
 def frost_for(colors: tuple[int, ...]) -> Frost:
-    """Use light glass on uniform backgrounds; shade mixed or unknown surfaces."""
     values = tuple(luminance(color) for color in colors)
     if values and all(value < 0.18 for value in values):
         return Frost.LIGHT

@@ -1,11 +1,3 @@
-"""Every way the user moves between windows and desktops, as one union decided purely.
-
-Keys, the pager, toolbar clicks and the window switcher
-each produce a navigation. `effect` turns it and the current world into one
-effect for the application observer to carry out, and `destination` names the
-desktop it leads to.
-"""
-
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Final, assert_never
@@ -25,22 +17,16 @@ class Direction(Enum):
 
 @dataclass(frozen=True, slots=True)
 class AppKey:
-    """An app key: go to the app's window, cycling while it's already in front, or start it."""
-
     app: protocol.App
 
 
 @dataclass(frozen=True, slots=True)
 class CycleApp:
-    """A toolbar application or slot: its next window, or launching a slot's web app that isn't open."""
-
     app: App
 
 
 @dataclass(frozen=True, slots=True)
 class ShowWindow:
-    """One particular window, chosen from the toolbar's window list or the window switcher."""
-
     window: int
 
 
@@ -51,14 +37,11 @@ class SpatialFocus:
 
 @dataclass(frozen=True, slots=True)
 class JumpDesktop:
-    """A desktop key or a click on the pager."""
-
     desktop: int
 
 
 @dataclass(frozen=True, slots=True)
-class Zoom:
-    """Fill the focused window's monitor until pressed again or focus leaves it."""
+class Zoom: ...
 
 
 type Navigation = (
@@ -100,8 +83,6 @@ def keyed(tool: protocol.Tool) -> Order | None:
 
 @dataclass(frozen=True, slots=True)
 class World:
-    """What a navigation is decided against: the observer's latest view, refreshed with the foreground."""
-
     desktops: int
     current: int
     foreground: int
@@ -168,7 +149,6 @@ def identity(target: protocol.Installed | PinnedApp) -> App:
 
 
 def slot_launcher(app: App) -> PinnedApp | None:
-    """Only a slot's web app can be launched from the toolbar; a running application always has windows."""
     match app:
         case PinnedApp():
             return app
@@ -188,7 +168,6 @@ def cycle(
 
 
 def remembered(world: World, desktop: int) -> int | None:
-    """The window to land on when arriving at a desktop: the one last in front there, else its first placed window."""
     placed = tuple(
         handle
         for handle, target in world.placement.items()
@@ -207,7 +186,6 @@ def arrive(world: World, desktop: int) -> Effect:
 
 
 def nearest(world: World, direction: Direction) -> int | None:
-    """The placed window on the current desktop closest in `direction` from the window in front; None when there is none."""
     here = tuple(
         (handle, target.rect)
         for handle, target in world.placement.items()
@@ -220,7 +198,6 @@ def nearest(world: World, direction: Direction) -> int | None:
         return None
 
     def score(rect: Rect) -> tuple[bool, int, int, int] | None:
-        """Prefer the window sharing the most edge with the origin, then the closest, then the best centred."""
         horizontal = direction in (Direction.LEFT, Direction.RIGHT)
         overlap = (
             min(rect.bottom, origin.bottom) - max(rect.top, origin.top)
@@ -280,7 +257,6 @@ def effect(navigation: Navigation, world: World) -> Effect:
 
 
 def destination(chosen: Effect, world: World) -> int:
-    """The desktop `chosen` leads to: a focused window's own, a switch's, else the current one."""
     match chosen:
         case (
             Focus(window=window)
@@ -297,5 +273,4 @@ def destination(chosen: Effect, world: World) -> int:
 
 
 def zoom_after(zoomed: int | None, foreground: int) -> int | None:
-    """A zoomed window keeps its zoom only while it stays in front; then its slot is restored."""
     return zoomed if zoomed == foreground else None

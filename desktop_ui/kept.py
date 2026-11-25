@@ -1,10 +1,3 @@
-"""A setting Workspace must put back, kept on disk while it is changed, so a restart can still put it back.
-
-The away-screens owner turns the keyboard's backlight and the laptop's panel
-down while the session is locked. If Workspace restarts meanwhile, the new
-process reads the value it should restore from here instead of the dark one.
-"""
-
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,8 +14,6 @@ class Kept(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class KeptFile:
-    """One whole number in a file. A failed write only loses the value across a restart, so it is ignored."""
-
     path: Path
 
     def load(self) -> int | None:

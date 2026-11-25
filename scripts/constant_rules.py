@@ -1,5 +1,3 @@
-"""Constants and tables across modules: constants shared only out of data modules, and enums that hide another shape."""
-
 import ast
 import re
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -14,7 +12,6 @@ CONSTANT: Final = re.compile(r"[A-Z][A-Z0-9_]*")
 
 
 def _sentinel(statement: ast.stmt) -> bool:
-    """`NAME = sentinel("NAME")`: a marker that is its own type, shared as freely as a class."""
     match statement:
         case (
             ast.Assign(value=ast.Call(func=ast.Name(id="sentinel")))
@@ -26,7 +23,6 @@ def _sentinel(statement: ast.stmt) -> bool:
 
 
 def _constants(tree: ast.Module) -> frozenset[str]:
-    """The constants a module declares at its top level; a sentinel is a type, not a constant."""
     assigned = (
         target
         for statement in tree.body
@@ -46,7 +42,6 @@ def _constants(tree: ast.Module) -> frozenset[str]:
 
 
 def _declarations_only(tree: ast.Module) -> bool:
-    """A data module: a docstring, imports and declarations, nothing that runs or defines behaviour."""
     for statement in tree.body:
         match statement:
             case (
@@ -64,8 +59,6 @@ def _declarations_only(tree: ast.Module) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class ConstantIndex:
-    """What the reviewed modules share: their names, the constants each declares, and which are data modules."""
-
     modules: frozenset[str]
     constants: frozendict[str, frozenset[str]]
     data: frozenset[str]
@@ -77,11 +70,6 @@ class ConstantIndex:
 def shared_constants(
     sources: Iterable[Source], scope: Sequence[str]
 ) -> Iterator[Finding]:
-    """Constants cross a module boundary only as `module.NAME`, and only out of a data module.
-
-    A bare name always means the module's own constant; another module's
-    behaviour owns its constants, so it shares them as an enum, a function or a
-    type's property instead."""
     trees = {
         module_name(source.name): ast.parse(source.text) for source in sources
     }
@@ -112,7 +100,6 @@ def _constant_imports(
     imported: Iterable[ast.Import | ast.ImportFrom],
     index: ConstantIndex,
 ) -> Iterator[Finding]:
-    """`from x import NAME` of another module's constant, which reads as this module's own."""
     for node in imported:
         match node:
             case ast.ImportFrom(module=str() as base, names=names):
@@ -135,7 +122,6 @@ def _constant_imports(
 def _shared_constant(
     read: ast.Attribute, bound: Mapping[str, str], index: ConstantIndex
 ) -> str | None:
-    """The constant `module.NAME` reads out of a module with behaviour, if it reads one."""
     match read.value:
         case ast.Name(id=name) if (
             source := bound.get(name)
@@ -178,7 +164,6 @@ ENUM_BASES: Final = frozenset({"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag"})
 
 
 def _enum_members(definition: ast.ClassDef) -> tuple[str, ...] | None:
-    """The members an enum declares, or None for a class that isn't an enum."""
     bases = frozenset(
         base.id if isinstance(base, ast.Name) else base.attr
         for base in definition.bases
@@ -208,7 +193,6 @@ def _member_of(node: ast.expr | None, enums: frozenset[str]) -> bool:
 
 
 def _keyed_by(value: ast.expr, enums: frozenset[str]) -> bool:
-    """A table literal keyed by one of the module's enums: `{E.A: ..., E.B: ...}`, `frozenset({E.A, E.B})`, or one built over `E`."""
     match value:
         case ast.Call(
             func=ast.Name(id="frozendict" | "frozenset" | "dict" | "set"),
@@ -235,7 +219,6 @@ def _keyed_by(value: ast.expr, enums: frozenset[str]) -> bool:
 
 
 def enum_shapes(sources: Iterable[Source]) -> Iterator[Finding]:
-    """Enums that hide another shape: one member is a sentinel, and a table beside an enum is its members' values."""
     for source in sources:
         module, tree = module_name(source.name), ast.parse(source.text)
         enums: frozendict[str, tuple[str, ...]] = frozendict(

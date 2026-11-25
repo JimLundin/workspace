@@ -1,5 +1,3 @@
-"""A colour as the desktop draws it: three 8-bit channels, checked as the value is built."""
-
 import re
 from dataclasses import dataclass
 from typing import Final
@@ -26,7 +24,6 @@ class Rgb:
 
     @classmethod
     def parse(cls, text: str) -> Rgb:
-        """`#rrggbb`, as stylesheets and design tokens write it."""
         match = _HEX.fullmatch(text)
         if match is None:
             raise ValueError(f"A colour is written #rrggbb, not {text!r}.")

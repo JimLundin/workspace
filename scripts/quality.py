@@ -1,12 +1,3 @@
-"""Apply Workspace's interface policies through Ruff and direct import observations.
-
-Ruff owns the Boolean-parameter and signature-size rules; this adapter adds the
-import ownership rules Ruff lacks. Every finding blocks. A wide signature that a
-real interface needs takes a per-file ignore in `pyproject.toml`, recorded
-with its reason in `exceptions.toml`.
-Checks and CI need Ruff, a development dependency.
-"""
-
 import ast
 import subprocess
 import sys
@@ -113,8 +104,6 @@ def scan(
             "Signature lint did not complete: " + result.stderr.strip()
         )
     diagnostics = DIAGNOSTICS.validate_json(result.stdout)
-    # Group once instead of comparing every diagnostic's Windows path to every
-    # source; a stable sort keeps each source's diagnostics in Ruff's order.
     named = sorted(
         (
             (Path(item.filename).relative_to(root).as_posix(), item)

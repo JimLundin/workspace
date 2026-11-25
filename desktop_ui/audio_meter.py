@@ -1,5 +1,3 @@
-"""Observe a potentially slow native microphone without waiting on Qt's thread."""
-
 import threading
 import time
 from collections.abc import Callable
@@ -24,12 +22,6 @@ class _Reading:
 
 @dataclass(frozen=True, slots=True)
 class AudioMeter:
-    """Own one native reader and publish only its latest immutable observation.
-
-    Native reading happens outside the handoff lock, so a slow driver cannot hold Qt.
-    Revisions discard a read completed after its capture was stopped/restarted.
-    """
-
     read: Callable[[], float | None]
     clock: Callable[[], float]
     enabled: threading.Event

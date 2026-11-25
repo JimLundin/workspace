@@ -1,5 +1,3 @@
-"""Plain classes that only hold their inputs, which a frozen, slotted dataclass would model."""
-
 import ast
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -11,14 +9,11 @@ from scripts.source_analysis import qualified, targets
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
-    """A plain class whose `__init__` only stores its inputs, and the attributes it stores."""
-
     finding: Finding
     attributes: frozenset[str]
 
 
 def _self_attributes(target: ast.expr) -> Iterator[str]:
-    """The `self` attributes an assignment target binds or deletes, at any depth."""
     return (
         node.attr
         for node in ast.walk(target)
@@ -46,7 +41,6 @@ COMPUTED: Final = (
 
 
 def _stored(statement: ast.stmt) -> frozenset[str] | None:
-    """The attributes a statement stores from its inputs, or None if it does anything else."""
     match statement:
         case ast.Expr(value=ast.Constant(value=str())):
             return frozenset()
@@ -79,7 +73,6 @@ def _rebinds(
     methods: tuple[ast.FunctionDef | ast.AsyncFunctionDef, ...],
     init: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
-    """Whether a method besides `__init__` assigns or deletes an attribute of `self`."""
     return any(
         next(_self_attributes(target), None) is not None
         for method in methods
@@ -92,7 +85,6 @@ def _rebinds(
 def _held(
     init: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> frozenset[str] | None:
-    """The attributes an `__init__` stores, if all it does is store its inputs."""
     stored = tuple(_stored(statement) for statement in init.body)
     if any(item is None for item in stored):
         return None
@@ -102,8 +94,6 @@ def _held(
 
 
 def _record(node: ast.ClassDef) -> frozenset[str] | None:
-    """The attributes of a class that could be a frozen dataclass: no base or decorator,
-    an `__init__` that only stores its inputs, and no other method rebinding an attribute."""
     if any((node.bases, node.keywords, node.decorator_list)):
         return None
     methods = tuple(
@@ -122,7 +112,6 @@ def _record(node: ast.ClassDef) -> frozenset[str] | None:
 def records(
     tree: ast.AST, module: str, declaration: str = ""
 ) -> Iterator[Candidate]:
-    """Plain classes that only hold their inputs, which a frozen, slotted dataclass would model."""
     for child in ast.iter_child_nodes(tree):
         match child:
             case ast.ClassDef(name=name):
@@ -148,7 +137,6 @@ def records(
 
 
 def assigned(tree: ast.AST) -> frozenset[str]:
-    """Attribute names assigned or deleted through any receiver but `self`: writes from outside an owner."""
     return frozenset(
         node.attr
         for node in ast.walk(tree)

@@ -1,5 +1,3 @@
-"""Enum and Literal translations name every value, or their module refuses to import."""
-
 from enum import Enum, auto
 from typing import Literal
 
@@ -15,9 +13,6 @@ class Light(Enum):
 
 
 def test_a_translation_missing_a_member_is_refused_by_name() -> None:
-    # Defect: a member added to an enum has no value in a translation table, so
-    # the first lookup for it raises KeyError deep in a paint or a reply instead
-    # of when the module loads.
     try:
         every_member(Light, {Light.RED: "stop"})
     except ValueError as error:
@@ -33,8 +28,6 @@ def test_a_translation_missing_a_member_is_refused_by_name() -> None:
 
 
 def test_a_literal_translation_missing_a_value_is_refused_by_name() -> None:
-    # Defect: a value added to a Literal alias has no entry in its table, so the
-    # first lookup raises KeyError mid-render instead of when the module loads.
     try:
         every_literal(Signal, {"walk": "Walk now"})
     except ValueError as error:

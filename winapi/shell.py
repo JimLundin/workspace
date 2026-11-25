@@ -1,6 +1,3 @@
-"""A window of our own with a window procedure, its notification-area (tray) icon,
-popup menus, and icons drawn from pixels."""
-
 import ctypes
 from collections.abc import Callable, Sequence
 from ctypes import wintypes
@@ -63,7 +60,6 @@ from winapi._core import (
 from winapi.screen import top_down
 from winapi.shapes import Rect
 
-# Failures read the thread's last error, which win32more's bindings don't keep.
 _RegisterClassW = fn(user32, "RegisterClassW", wintypes.ATOM, ctypes.c_void_p)
 _CreateIconIndirect = fn(
     user32, "CreateIconIndirect", wintypes.HICON, ctypes.c_void_p
@@ -78,10 +74,6 @@ WindowProc = Callable[[int, int, int, int], "int | None"]
 
 @dataclass(frozen=True, slots=True)
 class AppWindow:
-    """A hidden top-level window with our own window procedure. Other processes can
-    find it by its title. Its messages are handled while this thread runs a message
-    loop."""
-
     handle: int
     _callback: object
     """The ctypes callback, kept alive as long as the window."""
@@ -135,8 +127,6 @@ class AppWindow:
 
 @dataclass(frozen=True, slots=True)
 class Icon:
-    """An icon drawn from 32-bit BGRA pixels (with alpha), top row first."""
-
     handle: int
 
     @classmethod
@@ -164,9 +154,6 @@ class Icon:
 
 @dataclass(frozen=True, slots=True)
 class TrayIcon:
-    """An icon in the notification area. Mouse events on it arrive at `window` as
-    `message`, with the mouse message (WM_RBUTTONUP...) in lparam."""
-
     _data: NOTIFYICONDATAW
     """The shell's registration, which each update rewrites in place for `Shell_NotifyIconW`."""
 
@@ -190,7 +177,6 @@ class TrayIcon:
         Shell_NotifyIconW(NIM_MODIFY, self._data)
 
     def notify(self, title: str, text: str, kind: int = NIIF_INFO) -> None:
-        """A notification ("balloon") next to the icon."""
         self._data.uFlags = NIF_INFO
         self._data.szInfoTitle = title[:63]
         self._data.szInfo = text[:255]
@@ -201,12 +187,10 @@ class TrayIcon:
         Shell_NotifyIconW(NIM_DELETE, self._data)
 
     def restore(self) -> None:
-        """Re-register the retained icon after Explorer or the tray host restarts."""
         self._data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
         Shell_NotifyIconW(NIM_ADD, self._data)
 
     def bounds(self) -> Rect | None:
-        """Observe the host's icon position for native popup anchoring."""
         identifier = NOTIFYICONIDENTIFIER(
             cbSize=ctypes.sizeof(NOTIFYICONIDENTIFIER),
             hWnd=self._data.hWnd,
@@ -229,7 +213,6 @@ class MenuItem:
 
 
 def show_menu(window: int, items: Sequence[MenuItem]) -> int:
-    """A popup menu at the mouse; the chosen item's id, or 0 if dismissed."""
     menu = CreatePopupMenu()
     try:
         for item in items:
@@ -244,9 +227,7 @@ def show_menu(window: int, items: Sequence[MenuItem]) -> int:
                 AppendMenuW(menu, flags, item.id, item.text)
         point = wintypes.POINT()
         GetCursorPos(ctypes.byref(point))
-        SetForegroundWindow(
-            window
-        )  # without this the menu doesn't close when clicking elsewhere
+        SetForegroundWindow(window)
         chosen = int(
             TrackPopupMenu(
                 menu,

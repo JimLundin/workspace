@@ -1,15 +1,3 @@
-"""Windows' virtual desktops, the ones Task View shows: list, create, remove and switch them,
-and read or move any program's window between them.
-
-Reading a window's desktop uses the documented IVirtualDesktopManager. Moving
-another process's window, creating and switching desktops need the shell's
-undocumented IVirtualDesktopManagerInternal and IApplicationViewCollection. Their
-interface IDs and method order here are Windows 11 24H2's (build 26100), as pyvda
-0.6.0 records them; another build that changed them fails to connect rather than
-calling the wrong method. The calling thread must already be in a COM apartment,
-and an Explorer restart disconnects the interfaces: connect again after an error.
-"""
-
 import ctypes
 import uuid
 from ctypes import wintypes
@@ -36,7 +24,6 @@ _IID_DESKTOP_MANAGER_INTERNAL = guid_buffer(
 _IID_VIEW_COLLECTION = guid_buffer("1841C6D7-4F9D-42C0-AF41-8747538F10E5")
 _IID_DESKTOP = guid_buffer("3F07F4BE-B107-441A-AF0F-39D82529072C")
 
-# Method slots, after IUnknown's QueryInterface, AddRef and Release.
 _RELEASE = 2
 _QUERY_SERVICE = 3
 _ARRAY_COUNT, _ARRAY_AT = 3, 4
@@ -80,16 +67,12 @@ def _desktop_id(desktop: ctypes.c_void_p) -> uuid.UUID:
 
 @dataclass(frozen=True, slots=True)
 class Desktops:
-    """The desktops in Task View's order, and the one on screen."""
-
     ids: tuple[uuid.UUID, ...]
     current: uuid.UUID
 
 
 @dataclass(frozen=True, slots=True)
 class VirtualDesktops:
-    """The shell's desktop interfaces, owned by the thread that connected them."""
-
     manager: ctypes.c_void_p
     internal: ctypes.c_void_p
     views: ctypes.c_void_p
@@ -219,7 +202,6 @@ class VirtualDesktops:
             _release(desktop)
 
     def create(self) -> uuid.UUID:
-        """A new desktop after the existing ones."""
         desktop = ctypes.c_void_p()
         _check(
             com_method(
@@ -236,7 +218,6 @@ class VirtualDesktops:
             _release(desktop)
 
     def remove(self, desktop: uuid.UUID, fallback: uuid.UUID) -> None:
-        """Remove `desktop`; its windows go to `fallback`, and so does the screen when it was showing."""
         target, into = ctypes.c_void_p(), ctypes.c_void_p()
         try:
             self._find(desktop, target)
@@ -256,7 +237,6 @@ class VirtualDesktops:
             _release(target)
 
     def window_desktop(self, hwnd: int) -> uuid.UUID | None:
-        """The desktop a top-level window is on; None for windows on none, such as the shell's hidden hosts."""
         value = ctypes.create_string_buffer(16)
         if (
             com_method(
@@ -273,7 +253,6 @@ class VirtualDesktops:
         return None if found.int == 0 else found
 
     def move(self, hwnd: int, desktop: uuid.UUID) -> None:
-        """Move any program's window to `desktop`, without switching to it."""
         view, target = ctypes.c_void_p(), ctypes.c_void_p()
         try:
             _check(
@@ -302,7 +281,6 @@ class VirtualDesktops:
             _release(view)
 
     def switch(self, desktop: uuid.UUID) -> None:
-        """Show `desktop`; the window activated next takes the keyboard."""
         target = ctypes.c_void_p()
         try:
             self._find(desktop, target)

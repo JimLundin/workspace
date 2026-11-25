@@ -1,5 +1,3 @@
-"""The learning overlay's state, placement and remembered preferences."""
-
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -40,7 +38,6 @@ def _save[T](data: T, path: Path, adapter: TypeAdapter[T]) -> None:
 
 
 def load_enabled(path: Path) -> bool:
-    """Start with the learning aid visible unless the user has hidden it."""
     preference = _read(path, _PREFERENCE)
     return preference.enabled if preference is not None else True
 
@@ -50,7 +47,6 @@ def save_enabled(*, enabled: bool, path: Path) -> None:
 
 
 def load_position(path: Path) -> Point | None:
-    """The drag handle's horizontal centre and top, in physical screen pixels."""
     return _read(path, _POSITION)
 
 
@@ -59,7 +55,6 @@ def save_position(position: Point, path: Path) -> None:
 
 
 def nearest_work_area(position: Point, areas: Sequence[Rect]) -> Rect:
-    """The monitor under the handle, or the nearest remaining one after unplugging."""
     x, y = position.x, position.y
 
     def distance(area: Rect) -> int:
@@ -72,7 +67,6 @@ def nearest_work_area(position: Point, areas: Sequence[Rect]) -> Rect:
 
 
 def fit_position(position: Point, size: Size, work: Rect) -> Point:
-    """Keep the keyboard and handle on this monitor, with the handle always reachable."""
     visible_width = min(size.width, work.width)
     x = max(
         work.left + visible_width // 2,
@@ -84,8 +78,6 @@ def fit_position(position: Point, size: Size, work: Rect) -> Point:
 
 @dataclass(frozen=True, slots=True)
 class KeyHighlights:
-    """Held keys stay lit; a quick tap stays visible for at least the tap span it is given."""
-
     held: frozenset[Scancode] = frozenset()
     until: frozendict[Scancode, float] = frozendict()
     """When each recently pressed key may go dark."""
@@ -93,7 +85,6 @@ class KeyHighlights:
     def updated(
         self, held: frozenset[Scancode], now: float, tap: float
     ) -> KeyHighlights:
-        """The highlights once `held` are the keys down at `now`; a newly pressed key stays lit for at least `tap` seconds."""
         pressed = frozendict((key, now + tap) for key in held - self.held)
         kept = frozendict(
             (key, until)
@@ -110,7 +101,6 @@ class KeyHighlights:
         )
 
     def delay(self, now: float) -> int | None:
-        """Milliseconds until the next released key goes dark; no polling while held."""
         deadlines = tuple(
             until
             for key, until in self.until.items()
@@ -125,8 +115,6 @@ class KeyHighlights:
 
 @dataclass(frozen=True, slots=True)
 class OverlayState:
-    """An observation replaced by the UI owner after each layout event."""
-
     enabled: bool = field(default=True, kw_only=True)
     layout_on: bool = field(default=False, kw_only=True)
     layer: Layer = Layer.BASE
@@ -139,7 +127,6 @@ class OverlayState:
 
     @property
     def title(self) -> str:
-        """The layer indicator's words, led by BASE while no layer is held."""
         words = indicator_text(self.layer, caps_word=self.caps_word)
         if self.layer is not Layer.BASE and words is not None:
             return words

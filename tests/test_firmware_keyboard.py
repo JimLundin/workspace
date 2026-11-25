@@ -1,5 +1,3 @@
-"""Detect selecting unrelated keyboards, losing the device across USB ports, or misreading its shortcuts."""
-
 from keyboard.bindings import Bindings
 from keyboard.chords import Chords
 from keyboard.firmware import connected
@@ -29,8 +27,6 @@ def test_only_the_configured_firmware_keyboard_suspends_remapping() -> None:
 def test_without_the_apps_thumb_and_for_unassigned_keys_keys_keep_their_meaning() -> (
     None
 ):
-    # Defects: a key is taken without the Apps thumb held, an unassigned letter
-    # or punctuation is swallowed, or Tab gets a chord though the Charybdis holds it for Apps.
     for vk in (0x09, 0xDB, 0x31):
         assert CHORDS.shortcut(vk, apps_held=True) is None
     for vk in (ord("H"), ord("J"), ord("Q")):

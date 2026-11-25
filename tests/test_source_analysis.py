@@ -1,5 +1,3 @@
-"""Cached policy observations must still detect changed ownership and interfaces."""
-
 from pathlib import Path
 
 from scripts.architecture import review
@@ -12,8 +10,6 @@ from tests.test_quality import development_lint, source_tree
 def test_cached_policy_review_recomputes_changed_imports(
     tmp_path: Path,
 ) -> None:
-    # Detect an old module observation hiding a new transitive keyboard import,
-    # or damaged cache records producing a passing report.
     root = tmp_path / "source"
     root.mkdir()
     write_tree(
@@ -36,7 +32,6 @@ def test_cached_policy_review_recomputes_changed_imports(
     assert report == review(root) and any(
         item.rule == "keyboard-isolation" for item in report.failures
     )
-    # Cache damage must fall back to analysis, never produce a passing report.
     for path in cache.folder.glob("*.json"):
         path.write_text("partial")
     assert review(root, cache=cache) == report
@@ -45,8 +40,6 @@ def test_cached_policy_review_recomputes_changed_imports(
 def test_cached_quality_cannot_accept_changed_boolean_signature_or_import_ownership(
     tmp_path: Path,
 ) -> None:
-    # Detect reusing an earlier valid source when an edit introduces a forbidden
-    # signature or forwarding import, including a move that changes source lines.
     development_lint()
     source_tree(tmp_path, "def update(*, enabled: bool):\n    pass\n")
     cache = Cache.bound(tmp_path, folder=tmp_path / "cache")

@@ -1,5 +1,3 @@
-"""No two windows placed on one desktop overlap, and none goes beyond the setup's desktops, in any setup."""
-
 from dataclasses import dataclass
 from itertools import combinations
 
@@ -70,7 +68,6 @@ def apps(draw: strategies.DrawFn, handles: range) -> tuple[Group, ...]:
 
 
 def placement_cases(draw: strategies.DrawFn) -> PlacementCase:
-    # Screens never overlap: each external starts right of the ones before it.
     size = draw(strategies.sampled_from(((1920, 1200), (2560, 1600))))
     laptop = monitor(draw, beside(draw, size, 0), internal=True)
     sizes = draw(strategies.sampled_from(SIZES))
@@ -107,9 +104,6 @@ def overlapping(placement: Placement) -> tuple[tuple[int, int], ...]:
 def test_placed_windows_never_overlap_and_each_gets_one_place(
     case: PlacementCase,
 ) -> None:
-    # Defects: neighbouring regions or split columns round to overlapping edges,
-    # undeclared apps overlap in the place for others, a window lands on a
-    # desktop the setup doesn't keep, or a window is dropped.
     placement = place(case.where, case.apps)
     assert not overlapping(placement)
     assert set(placement) == {

@@ -1,17 +1,3 @@
-"""The status capsule's panels: grids of tiles, and keyboard navigation as pure transitions.
-
-The status capsule expands into the panel of the reading pressed: the speaker's
-sound, or Workspace's own controls. In those, ongoing activities lead as cards
-with their Stop; toggles sit beside Workspace's views; then recording, sound, the
-desktop tools, the system tray's icons and links. Arrows move to the nearest cell in their direction, and
-Up and Down wrap. On the sound slider, Left and Right change the volume. Toggles
-and the slider apply in place and keep the menu open; a choice that opens a view
-or acts on a window closes it. A letter jumps to the next cell starting with it.
-Choosing a window tool or leaving with Escape returns the keyboard to the window
-that had it; opening a Workspace view keeps it there, and a tray icon hands it to
-its application.
-"""
-
 from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import Enum, StrEnum, auto
@@ -50,36 +36,26 @@ class Command(Enum):
 
 @dataclass(frozen=True, slots=True)
 class ToolChoice:
-    """A Tool selected from the menu; window tools retain the window that had the keyboard."""
-
     tool: Tool
 
 
 @dataclass(frozen=True, slots=True)
 class Volume:
-    """A requested speaker level, from 0 to 1."""
-
     level: float
 
 
 @dataclass(frozen=True, slots=True)
 class TrayChoice:
-    """A tray icon's primary click, by its place in the bar's current tray snapshot."""
-
     slot: int
 
 
 @dataclass(frozen=True, slots=True)
 class Page:
-    """Turn the calendar `months` later, or earlier when negative."""
-
     months: int
 
 
 @dataclass(frozen=True, slots=True)
 class Join:
-    """Connect to a network through the profile Windows saved for it."""
-
     profile: str
 
 
@@ -91,20 +67,17 @@ class Item:
     label: str
     icon: str
     choice: Choice
-    key: str = ""  # A shortcut hint, shown quietly at the trailing edge.
+    key: str = ""
 
 
 def tool_item(
     label: str, icon: str, tool: Tool, hints: frozendict[Tool, str]
 ) -> Item:
-    """Tool cells advertise the physical keys from the layout that triggers them."""
     return Item(label, icon, ToolChoice(tool), hints.get(tool, ""))
 
 
 @dataclass(frozen=True, slots=True)
 class Live:
-    """An ongoing activity: its reading (empty while it has none) and its Stop."""
-
     label: str
     detail: str
     stop: Command
@@ -112,8 +85,6 @@ class Live:
 
 @dataclass(frozen=True, slots=True)
 class Toggle:
-    """A setting that flips in place; `detail` says its state in words."""
-
     label: str
     detail: str
     icon: str
@@ -123,8 +94,6 @@ class Toggle:
 
 @dataclass(frozen=True, slots=True)
 class Slider:
-    """The speaker level; None while Windows hasn't reported one."""
-
     label: str
     level: float | None
     muted: bool = field(kw_only=True)
@@ -132,16 +101,12 @@ class Slider:
 
 @dataclass(frozen=True, slots=True)
 class TrayIcon:
-    """A system tray application, by its place in the bar's tray snapshot; the bar owns its image."""
-
     label: str
     slot: int
 
 
 @dataclass(frozen=True, slots=True)
 class Calendar:
-    """A month's weeks, with today marked when it falls in them."""
-
     label: str
     month: Month
     today: date
@@ -149,8 +114,6 @@ class Calendar:
 
 @dataclass(frozen=True, slots=True)
 class Trace:
-    """A reading's recent samples as shares of its ceiling, oldest first (None where unread), and its latest reading."""
-
     shares: tuple[float | None, ...]
     capacity: int
     """How many samples the graph spans; a younger history fills it from the right."""
@@ -161,7 +124,6 @@ NO_TRACE: Final = Trace((), 1, "")
 
 
 def traced(history: History, ceiling: int | None, reading: str) -> Trace:
-    """`history` as shares of `ceiling`, held within it; without a ceiling, nothing reads."""
     shares = tuple(
         None
         if sample is None or ceiling is None or ceiling <= 0
@@ -173,16 +135,12 @@ def traced(history: History, ceiling: int | None, reading: str) -> Trace:
 
 @dataclass(frozen=True, slots=True)
 class Graph:
-    """A reading's recent history as a line, under its name and latest reading."""
-
     label: str
     trace: Trace
 
 
 @dataclass(frozen=True, slots=True)
 class Nearby:
-    """A Wi-Fi network in range, by its name, and how it reads."""
-
     label: str
     network: Network
     detail: str
@@ -190,8 +148,6 @@ class Nearby:
 
 @dataclass(frozen=True, slots=True)
 class Fact:
-    """A reading to look at, not act on: its value over what it means."""
-
     label: str
     icon: str
     value: str
@@ -204,44 +160,35 @@ type Entry = (
 
 
 class Face(StrEnum):
-    """How a cell presents its entry."""
-
-    CARD = auto()  # An ongoing activity across the grid, with its Stop.
-    TOGGLE = auto()  # A round switch with the setting and its state.
-    WIDE = auto()  # A full-width tile with its symbol beside its label.
+    CARD = auto()
+    TOGGLE = auto()
+    WIDE = auto()
     SLIDER = auto()
-    TOOL = auto()  # A small square with its symbol above a caption.
-    LINK = auto()  # A quiet line of text.
-    ICON = auto()  # A tray application's own image, icon-sized.
-    CALENDAR = auto()  # A month under its name, with arrows to turn it.
-    GRAPH = auto()  # A reading's recent history under its name.
-    NETWORK = auto()  # A network's signal, name and state, across the grid.
-    FACT = auto()  # A symbol beside a value over its meaning.
+    TOOL = auto()
+    LINK = auto()
+    ICON = auto()
+    CALENDAR = auto()
+    GRAPH = auto()
+    NETWORK = auto()
+    FACT = auto()
 
 
-# Eight narrow columns: tray icons take one each, the other tiles span pairs.
 COLUMNS: Final = 8
 
 
 @dataclass(frozen=True, slots=True)
 class Cell:
-    """An entry's place in the grid: columns from the left, tracks from the top."""
-
     entry: Entry
     face: Face
     column: int
     span: int
     track: int
     tracks: int
-    caption: str = (
-        ""  # A tile's short name; its entry's label stays its accessible name.
-    )
+    caption: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class Controls:
-    """What the menu reads: running activities' readings, each toggle's state and the speaker's."""
-
     recording: str | None
     layout: bool = field(default=True, kw_only=True)
     """The keyboard layout is on, rather than typing plainly."""
@@ -249,9 +196,7 @@ class Controls:
     placement_paused: bool = field(default=False, kw_only=True)
     dark_when_away: bool = field(default=False, kw_only=True)
     sound: Slider = Slider("", None, muted=False)
-    tray: tuple[
-        str, ...
-    ] = ()  # Each tray icon's label, in the bar's snapshot order.
+    tray: tuple[str, ...] = ()
     today: date | None = field(default=None, kw_only=True)
     networks: Listing = field(default=(), kw_only=True)
     power: Power = field(default=PowerUnavailable.UNKNOWN, kw_only=True)
@@ -263,13 +208,8 @@ class Controls:
     """Each tool's keys on the layout, at a tool cell's trailing edge."""
 
 
-# ---- the panels' shape: `desktop.bar.CONTROLS` declares them --------------------------------
-
-
 class Panel(StrEnum):
-    """A grid the status capsule expands into; each reading opens one."""
-
-    WORKSPACE = auto()  # Workspace's own controls, its activities and the tray.
+    WORKSPACE = auto()
     KEYBOARD = auto()
     SOUND = auto()
     NETWORK = auto()
@@ -280,9 +220,6 @@ class Panel(StrEnum):
 
 
 class EntryId(StrEnum):
-    """The entries a spec can place. What each does, and any wording that follows
-    state, stays here; the spec gives its place, look, label and symbol."""
-
     LAYOUT = auto()
     OVERLAY = auto()
     PLACEMENT = auto()
@@ -293,9 +230,7 @@ class EntryId(StrEnum):
     CALENDAR = auto()
     CPU_GRAPH = auto()
     MEMORY_GRAPH = auto()
-    LOCATION = (
-        auto()
-    )  # Only while Windows withholds the networks for want of location.
+    LOCATION = auto()
     WIFI_SETTINGS = auto()
     BATTERY = auto()
     POWER_SETTINGS = auto()
@@ -320,32 +255,23 @@ class CellSpec:
 
 @dataclass(frozen=True, slots=True)
 class CellsRow:
-    """Cells left to right; one whose entry is absent now (Record while recording)
-    gives its place to the next, and a row with none takes no space."""
-
     tracks: int
     cells: tuple[CellSpec, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class ActivitiesRow:
-    """A full-width card for each running activity, `tracks` tall each."""
-
     tracks: int
 
 
 @dataclass(frozen=True, slots=True)
 class NetworksRow:
-    """The Wi-Fi networks in range, the connected one first: a full-width line each, `tracks` tall, at most `most`."""
-
     tracks: int
     most: int
 
 
 @dataclass(frozen=True, slots=True)
 class TrayRow:
-    """The system tray's icons, a column each, wrapping onto lines `tracks` tall."""
-
     tracks: int
 
 
@@ -354,8 +280,6 @@ type RowSpec = CellsRow | ActivitiesRow | TrayRow | NetworksRow
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MenuWords:
-    """What the menu's entries say beyond their labels."""
-
     on: str
     off: str
     paused: str
@@ -390,16 +314,12 @@ class MenuWords:
 
 @dataclass(frozen=True, slots=True)
 class PanelSpec:
-    """A panel's rows, top to bottom, and the narrowest it gets; its tiles' text can widen it."""
-
     least: float
     rows: tuple[RowSpec, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class ControlsSpec:
-    """Each panel and the panels' wording."""
-
     panels: frozendict[Panel, PanelSpec]
     words: MenuWords
     first_weekday: int = field(kw_only=True)
@@ -413,7 +333,6 @@ def toggle(spec: CellSpec, detail: str, choice: Command, *, on: bool) -> Toggle:
 def entry(
     spec: CellSpec, controls: Controls, menu: ControlsSpec
 ) -> Entry | None:
-    """The entry `spec` places, as it reads now; None while it doesn't apply."""
     words = menu.words
     match spec.entry:
         case EntryId.LAYOUT:
@@ -508,7 +427,6 @@ def activities(controls: Controls, words: MenuWords) -> tuple[Live, ...]:
 
 
 def left(seconds: int, words: MenuWords) -> str:
-    """The charge left in hours and minutes, or in minutes alone under an hour."""
     hours, minutes = seconds // 3600, seconds // 60 % 60
     return (
         words.hours_left.format(hours=hours, minutes=minutes)
@@ -518,7 +436,6 @@ def left(seconds: int, words: MenuWords) -> str:
 
 
 def battery(spec: CellSpec, power: Power, words: MenuWords) -> Fact | None:
-    """The battery's charge over whether it charges or how long it lasts; mains power on a machine without one."""
     match power:
         case Battery(charging=True, percent=percent):
             return Fact(spec.label, spec.icon, f"{percent}%", words.charging)
@@ -541,7 +458,6 @@ def battery(spec: CellSpec, power: Power, words: MenuWords) -> Fact | None:
 def heard(
     controls: Controls, row: NetworksRow, words: MenuWords
 ) -> tuple[Nearby, ...]:
-    """The networks to list, each with what it reads as; none while Windows withholds them."""
     if controls.networks is LOCATION_OFF:
         return ()
 
@@ -561,7 +477,6 @@ def heard(
 def present_cells(
     controls: Controls, specs: tuple[CellSpec, ...], menu: ControlsSpec
 ) -> tuple[tuple[CellSpec, Entry], ...]:
-    """A row's cells that show now, in order: a cell whose entry is absent leaves no gap."""
     return tuple(
         (each, present)
         for each in specs
@@ -570,7 +485,6 @@ def present_cells(
 
 
 def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
-    """The tracks `row` takes now: an empty row takes none."""
     match row:
         case ActivitiesRow(tracks=tracks):
             return tracks * len(activities(controls, spec.words))
@@ -587,7 +501,6 @@ def height(row: RowSpec, controls: Controls, spec: ControlsSpec) -> int:
 def row_cells(
     row: RowSpec, controls: Controls, top: int, spec: ControlsSpec
 ) -> tuple[Cell, ...]:
-    """`row`'s cells from `top`, each following the one before it."""
     match row:
         case ActivitiesRow(tracks=tracks):
             cards = enumerate(activities(controls, spec.words))
@@ -649,8 +562,6 @@ def row_cells(
 def entries(
     controls: Controls, spec: ControlsSpec, panel: Panel
 ) -> tuple[Cell, ...]:
-    """`panel`'s grid for what's happening now, flowed from its rows: each row
-    starts below the one before it, so no two cells overlap. Tracks include the gutters."""
     rows = spec.panels[panel].rows
     tops = accumulate((height(row, controls, spec) for row in rows), initial=0)
     return tuple(
@@ -663,8 +574,6 @@ def entries(
 
 @dataclass(frozen=True, slots=True)
 class Menu:
-    """The open panel: which it is, its grid and the cell under the keyboard or pointer."""
-
     panel: Panel
     cells: tuple[Cell, ...]
     selected: int | None = None
@@ -711,15 +620,11 @@ type Press = Key | Letter
 
 @dataclass(frozen=True, slots=True)
 class Chosen:
-    """A choice that closes the menu."""
-
     choice: Choice
 
 
 @dataclass(frozen=True, slots=True)
 class Applied:
-    """A choice applied in place: the menu stays open to show its new state."""
-
     choice: Choice
 
 
@@ -740,7 +645,6 @@ def current(menu: Menu) -> Cell | None:
 
 
 def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
-    """The nearest cell in an arrow's direction that shares the selected cell's row or column."""
     here = cells[index]
 
     def gap(cell: Cell) -> int | None:
@@ -765,7 +669,6 @@ def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
                 return None
 
     def offset(cell: Cell) -> int:
-        # Centres in half units, so odd spans compare exactly.
         if key in (Key.UP, Key.DOWN):
             return abs(
                 2 * cell.column + cell.span - 2 * here.column - here.span
@@ -790,9 +693,7 @@ def move(menu: Menu, key: Key) -> Menu:
         )
     target = towards(cells, menu.selected, key)
     if target is None and key in (Key.DOWN, Key.UP):
-        target = (
-            0 if key is Key.DOWN else len(cells) - 1
-        )  # Up and Down wrap; Left and Right stop at the edge.
+        target = 0 if key is Key.DOWN else len(cells) - 1
     return menu if target is None else replace(menu, selected=target)
 
 
@@ -800,7 +701,6 @@ VOLUME_STEP: Final = 0.05
 
 
 def sideways(menu: Menu, entry: Entry | None, key: Key) -> Outcome:
-    """Left and Right change the volume on the slider, turn the calendar, and otherwise move."""
     match entry:
         case Calendar():
             return Applied(Page(1 if key is Key.RIGHT else -1))
@@ -875,7 +775,6 @@ def jump(menu: Menu, character: str) -> Menu:
 
 
 def restores_focus(choice: Choice) -> bool:
-    """Window tools and quiet toggles hand the keyboard back; Workspace's own views keep it."""
     match choice:
         case ToolChoice() | Volume() | Page() | Join():
             return True

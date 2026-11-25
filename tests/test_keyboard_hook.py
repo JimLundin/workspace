@@ -1,5 +1,3 @@
-"""The layout hook's glue in keyboard.win, driven through the fake keyboard platform."""
-
 import unittest
 from collections.abc import Callable
 from dataclasses import replace
@@ -40,14 +38,12 @@ from winapi import inputs, system
 
 def test_physical_press_is_reported_before_a_tap_hold_is_resolved() -> None:
     with observed_keyboard() as (keyboard, messages):
-        key = inputs.KeyEvent(0x4D, 0x32, 0, 10, 0)  # M: Enter/Symbols thumb
+        key = inputs.KeyEvent(0x4D, 0x32, 0, 10, 0)
         assert keyboard.swallow(key, down=True)
         assert messages == [(Message.KEY_STATE, 0x32, 1)]
         assert keyboard.engine_state.layer() is Layer.BASE
         assert keyboard.state.pressed == {Scancode(0x32)}
-        keyboard.swallow(
-            key, down=True
-        )  # auto-repeat must not refresh the highlight
+        keyboard.swallow(key, down=True)
         assert messages == [(Message.KEY_STATE, 0x32, 1)]
         keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 40, 0), down=False)
         keyboard.swallow(inputs.KeyEvent(0x4D, 0x32, 0, 41, 0), down=False)
@@ -61,8 +57,6 @@ def test_physical_press_is_reported_before_a_tap_hold_is_resolved() -> None:
 def test_desktop_outage_keeps_remapping_and_reconnects_without_replaying_shortcuts() -> (
     None
 ):
-    # Detect routing temporary desktop unavailability into input-failure
-    # recovery, or retaining the old HWND after a fresh desktop starts.
     driver = KeyboardFixture()
     keyboard = Keyboard.open(layouts.LAYOUT, PEERS, driver)
     keyboard.host.remember_window(1)
@@ -131,8 +125,6 @@ def test_blocked_keys_light_up_but_unpictured_keys_do_not() -> None:
 def test_apps_l_holds_dictation_until_release_and_updates_its_highlight() -> (
     None
 ):
-    # Defect: L emits the toggle request or repeats instead of sending one
-    # hold/release pair through the assistant's existing push-to-talk handler.
     with observed_keyboard() as (keyboard, messages):
         hold_apps(keyboard, at=0)
         messages.clear()
@@ -249,8 +241,6 @@ def test_toggle_and_input_failure_clear_held_keys() -> None:
 def test_reinstalling_a_dead_hook_ends_voice_capture_and_a_held_escape() -> (
     None
 ):
-    # Defects: real input the hook missed is never probed or reinstalled, dictation
-    # stays captured, or the stale Escape press quits the layout on the next tap.
     driver = KeyboardFixture()
     keyboard = Keyboard.open(layouts.LAYOUT, PEERS, driver)
     hold_apps(keyboard, at=990)
@@ -260,7 +250,6 @@ def test_reinstalling_a_dead_hook_ends_voice_capture_and_a_held_escape() -> (
     ):
         driver.key = key
         keyboard.hook_proc(0, system.WindowMessage.KEYDOWN, 0)
-    # Windows drops the hook, so both key-ups reach only raw input.
     keyboard.raw_key(5_000)
     assert keyboard.watch_hook(5_300) is None
     assert driver.output[-2:] == [(Key.MENU_MASK, True), (Key.MENU_MASK, False)]
@@ -284,14 +273,10 @@ def test_reinstalling_a_dead_hook_ends_voice_capture_and_a_held_escape() -> (
     ):
         driver.key = inputs.KeyEvent(0xC0, ESCAPE, 0, tick, 0)
         keyboard.hook_proc(0, wparam, 0)
-    assert (
-        not keyboard.engine_state.enabled
-    )  # the tap toggles; the stale press would quit
+    assert not keyboard.engine_state.enabled
 
 
 def test_a_refused_probe_keeps_the_hook_and_its_held_keys() -> None:
-    # Defect: typing into an elevated window or on the lock screen, where Windows
-    # refuses the probe, reads as a dead hook and drops held keys.
     driver = KeyboardFixture()
     keyboard = Keyboard.open(layouts.LAYOUT, PEERS, driver)
     hold_apps(keyboard, at=990)
@@ -381,9 +366,7 @@ def test_recovery_retries_are_bounded_and_enabling_waits_for_accepted_releases()
     keyboard.input_failed(OSError("Input rejected"))
     for _ in range(10):
         keyboard.maintenance()
-    assert (
-        len(driver.output) == 6
-    )  # Immediate cleanup plus five timer attempts.
+    assert len(driver.output) == 6
     assert keyboard.state.recovery is None
     keyboard.on_message(Message.TOGGLE_LAYOUT)
     assert not bool(keyboard.engine_state.enabled)
@@ -395,7 +378,6 @@ def test_recovery_retries_are_bounded_and_enabling_waits_for_accepted_releases()
 def test_firmware_keyboard_bypasses_remapping_and_restores_the_previous_mode() -> (
     None
 ):
-    """Detect firmware keys invoking voice/remapping, stuck output, or unwanted enable."""
     driver = KeyboardFixture()
     keyboard = Keyboard.open(layouts.LAYOUT, PEERS, driver)
     keyboard.swallow(inputs.KeyEvent(0x32, 0x03, 0, 10, 0), down=True)
@@ -456,10 +438,9 @@ def test_firmware_keyboard_bypasses_remapping_and_restores_the_previous_mode() -
 def test_firmware_apps_thumb_voice_holds_pair_each_press_with_its_release() -> (
     None
 ):
-    """Detect Right Alt reaching applications, repeat starts, leaked keys, or a hold cut short by releasing the thumb."""
     keyboard, driver = firmware_keyboard()
     assert keyboard.swallow(APPS_KEY, down=True)
-    assert keyboard.swallow(APPS_KEY, down=True)  # its auto-repeat
+    assert keyboard.swallow(APPS_KEY, down=True)
     assert keyboard.swallow(DICTATE_LETTER, down=True)
     assert keyboard.swallow(DICTATE_LETTER, down=True)
     assert requests_of(driver) == [(Tool.DICTATE.value, 1)]
@@ -480,7 +461,6 @@ def test_firmware_apps_thumb_voice_holds_pair_each_press_with_its_release() -> (
 def test_firmware_keys_without_the_apps_thumb_or_already_held_stay_native() -> (
     None
 ):
-    """Detect taking keys without the thumb, the retired modifier chords, or starting voice halfway through native repeat."""
     for modifiers in ((), (CTRL, SHIFT), (CTRL, ALT, SHIFT)):
         keyboard, driver = firmware_keyboard()
         for key in modifiers:
@@ -499,7 +479,6 @@ def test_firmware_keys_without_the_apps_thumb_or_already_held_stay_native() -> (
 def test_firmware_voice_finishes_on_unplug_and_swallows_the_late_voice_key_release() -> (
     None
 ):
-    """Detect capture remaining open, the Apps thumb staying held, or a phantom remapped key."""
     keyboard, driver = firmware_keyboard()
     for key in (APPS_KEY, DICTATE_LETTER):
         keyboard.swallow(key, down=True)
@@ -519,7 +498,6 @@ def test_firmware_voice_finishes_on_unplug_and_swallows_the_late_voice_key_relea
 def test_firmware_voice_finishes_on_hook_failure_and_keyboard_shutdown() -> (
     None
 ):
-    """Detect an orphaned microphone request when the input owner stops or fails."""
     stops: tuple[Callable[[Keyboard], None], ...] = (
         release_keyboard,
         lambda keyboard: keyboard.input_failed(OSError("hook failed")),
@@ -539,7 +517,6 @@ def test_firmware_voice_finishes_on_hook_failure_and_keyboard_shutdown() -> (
 def test_generated_input_neither_arms_nor_finishes_firmware_voice_shortcuts() -> (
     None
 ):
-    """Detect dictation/automation output impersonating the Apps thumb or a voice key."""
     for flags, extra in (
         (inputs.LLKHF_INJECTED, 0),
         (0, Origin.DESKTOP),
@@ -569,11 +546,10 @@ def test_generated_input_neither_arms_nor_finishes_firmware_voice_shortcuts() ->
 def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_and_release() -> (
     None
 ):
-    """Detect a typed letter, an unpaired release, Right Alt leaking, or a request outside the Apps map."""
     keyboard, driver = firmware_keyboard()
     assert keyboard.swallow(APPS_KEY, down=True)
     assert driver.messages == [(Message.CHORD, 1, 0)]
-    letter = inputs.KeyEvent(0x4A, 0x24, 0, 20, 0)  # J
+    letter = inputs.KeyEvent(0x4A, 0x24, 0, 20, 0)
     assert keyboard.swallow(letter, down=True)
     assert keyboard.swallow(letter, down=True)
     assert keyboard.swallow(letter, down=False)
@@ -596,7 +572,7 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
         and not driver.output
     )
     assert keyboard.swallow(APPS_KEY, down=True)
-    app = inputs.KeyEvent(0x51, 0x10, 0, 40, 0)  # Q
+    app = inputs.KeyEvent(0x51, 0x10, 0, 40, 0)
     assert keyboard.swallow(app, down=True)
     driver.devices = ()
     keyboard.update_devices()
@@ -619,11 +595,10 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
 def test_laptop_apps_layer_reaches_navigation_and_publishes_the_chord_like_firmware() -> (
     None
 ):
-    """Detect an Apps layer key that types its letter, or a held layer that never shows the pager's chord hints."""
     driver = KeyboardFixture()
     with observed_keyboard(platform=driver) as (keyboard, messages):
         hold_apps(keyboard, at=0)
-        letter = inputs.KeyEvent(0, 0x09, 0, 20, 0)  # Colemak J
+        letter = inputs.KeyEvent(0, 0x09, 0, 20, 0)
         assert keyboard.swallow(letter, down=True)
         assert keyboard.swallow(letter, down=False)
         assert keyboard.swallow(
@@ -681,9 +656,7 @@ def test_physical_shift_arrow_selection_remains_native_with_layout_enabled() -> 
                     arrow_vk, arrow_scancode, inputs.LLKHF_EXTENDED, 1, 0
                 )
                 assert not keyboard.swallow(arrow, down=True)
-                assert not keyboard.swallow(
-                    arrow, down=True
-                )  # Holding an arrow still repeats.
+                assert not keyboard.swallow(arrow, down=True)
                 assert not keyboard.swallow(arrow, down=False)
             assert not keyboard.swallow(shift, down=False)
         assert messages == [] and not keyboard.state.pressed
@@ -806,7 +779,7 @@ def test_failed_key_release_during_tray_toggle_still_turns_the_layout_off() -> (
             keyboard.engine_state,
             pressed=(Key.Q, *keyboard.engine_state.pressed[1:]),
         )
-    )  # An output held before opening the tray.
+    )
     keyboard.on_message(Message.TOGGLE_LAYOUT)
     assert not bool(keyboard.engine_state.enabled)
     assert not keyboard.state.busy

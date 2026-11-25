@@ -1,5 +1,3 @@
-"""Workspace's bundled typeface reaches Qt."""
-
 import sys
 import unittest
 
@@ -17,8 +15,6 @@ prepare()
 
 def test_bundled_typeface_resolves_every_shipped_weight() -> None:
     logged: list[str] = []
-    # Defect: the font files aren't shipped or their path is wrong, so every view
-    # silently falls back to the system font.
     application(logged.append)
     for weight in (
         QtGui.QFont.Weight.Normal,

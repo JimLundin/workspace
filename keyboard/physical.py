@@ -1,6 +1,3 @@
-"""The laptop's physical keys: the scancode each sends and the Nordic keycap
-printed on it. A `keyboard.layout.Layout` places them on its board."""
-
 from dataclasses import dataclass
 from enum import Enum
 from typing import NewType
@@ -11,15 +8,11 @@ Scancode = NewType("Scancode", int)
 
 @dataclass(frozen=True, slots=True)
 class Keycap:
-    """A physical key: the scancode it sends and the name printed on it."""
-
     scancode: int
     legend: str
 
 
 class Laptop(Enum):
-    """The laptop's physical keys that the layout or the key map use, by their Nordic keycaps."""
-
     SECTION = Keycap(0x29, "§")
     N1 = Keycap(0x02, "1")
     N2 = Keycap(0x03, "2")

@@ -1,5 +1,3 @@
-"""Navigation decisions: spatial focus, desktop jumps, zoom, and app keys."""
-
 from dataclasses import replace
 
 from desktop_ui.navigation import (
@@ -48,9 +46,6 @@ from tests.test_window_layout import (
 )
 from winapi.screen import Monitor
 
-# The test's own arrangement: at home, terminals two thirds and Code a third across
-# the 4K screen with Teams on the laptop, then Edge and Outlook on the next desktop;
-# at work, Teams and Outlook on the laptop, Terminal and Edge above it, Code on the side.
 SETUPS = Setups(
     externals=test_window_layout.SETUPS.externals,
     layouts=frozendict(
@@ -121,7 +116,6 @@ def world(
     apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1
 ) -> World:
     placement = place(WORK if work else HOME, apps)
-    # The test's setups leave the first desktop empty; the apps start on the second.
     return World(
         4,
         1,
@@ -149,8 +143,6 @@ def focused(at: World, direction: Direction) -> int | None:
 def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors() -> (
     None
 ):
-    # Defects: focus skips the adjacent terminal for a farther window, crosses to
-    # a window that only touches a corner, wraps around, or leaves the desktop.
     home = world(HOME_APPS)
     assert focused(home, Direction.RIGHT) == 2
     assert focused(home, Direction.LEFT) == 4
@@ -158,7 +150,6 @@ def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors
     assert focused(replace(home, foreground=3), Direction.UP) is None
     assert focused(replace(home, foreground=2), Direction.LEFT) == 1
     work = world(WORK_APPS, work=True)
-    # Teams and Outlook on the laptop, Terminal ⅔ and Edge ⅓ above it, Code on the portrait SIDE.
     assert focused(work, Direction.RIGHT) == 2
     assert focused(work, Direction.UP) == 3
     assert focused(replace(work, foreground=2), Direction.UP) == 5
@@ -171,8 +162,6 @@ def test_spatial_focus_picks_the_neighbour_sharing_the_most_edge_across_monitors
 def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_used_there() -> (
     None
 ):
-    # Defects: a jump leaves the existing desktops, a jump to the current
-    # desktop switches anyway, or arriving ignores the last window used.
     home = world(HOME_APPS)
     assert effect(JumpDesktop(4), home) is None
     assert effect(JumpDesktop(1), home) is None
@@ -181,7 +170,6 @@ def test_desktop_jumps_stay_on_existing_desktops_and_land_on_the_last_window_use
         2, 6
     )
     assert effect(JumpDesktop(3), home) == Switch(3, None)
-    # Defect: the observer keeps the old desktop as current after a switch, or after focusing a window on another desktop.
     assert destination(effect(JumpDesktop(2), home), home) == 2
     assert destination(Focus(5), home) == home.located[5]
     assert destination(None, home) == home.current
@@ -199,8 +187,6 @@ def test_zoom_exempts_the_window_in_front_until_pressed_again_or_focus_leaves() 
 
 
 def test_app_keys_cycle_the_apps_windows_or_launch_it() -> None:
-    # Defects: a repeated tap stays on the same window, a missing app isn't
-    # started, or a web-app key launches desktop Outlook instead of its slot.
     home = world(HOME_APPS)
     assert effect(AppKey(TERMINAL_KEY), replace(home, foreground=3)) == Focus(1)
     assert effect(AppKey(TERMINAL_KEY), home) == Focus(2)

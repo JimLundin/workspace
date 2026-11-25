@@ -1,5 +1,3 @@
-"""Monitors, DPI awareness, and capturing the screen."""
-
 import ctypes
 from dataclasses import dataclass, field
 
@@ -64,7 +62,6 @@ class Monitor:
 
 
 def top_down(width: int, height: int) -> BITMAPINFO:
-    """A 32-bit device-independent bitmap's header, top row first."""
     header = BITMAPINFOHEADER(
         biSize=ctypes.sizeof(BITMAPINFOHEADER),
         biWidth=width,
@@ -76,8 +73,6 @@ def top_down(width: int, height: int) -> BITMAPINFO:
 
 
 def use_physical_pixels() -> None:
-    """Makes every coordinate this process sees a real pixel, on every monitor.
-    Call before creating any window."""
     if not SetProcessDpiAwarenessContext(
         DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
     ):
@@ -85,10 +80,7 @@ def use_physical_pixels() -> None:
 
 
 def built_in_devices() -> frozenset[str]:
-    """The GDI device names of the active displays driven by a built-in panel connection."""
-    for _attempt in range(
-        3
-    ):  # The configuration can change between sizing and querying.
+    for _attempt in range(3):
         paths, modes = ctypes.c_uint32(), ctypes.c_uint32()
         if GetDisplayConfigBufferSizes(
             QDC_ONLY_ACTIVE_PATHS, ctypes.byref(paths), ctypes.byref(modes)
@@ -129,7 +121,6 @@ def _source_name(path: DISPLAYCONFIG_PATH_INFO) -> str | None:
     name.header.size = ctypes.sizeof(DISPLAYCONFIG_SOURCE_DEVICE_NAME)
     name.header.adapterId = path.sourceInfo.adapterId
     name.header.id = path.sourceInfo.id
-    # The header opens the request, so its address is the whole request's.
     return (
         str(name.viewGdiDeviceName)
         if DisplayConfigGetDeviceInfo(name.header) == 0
@@ -140,7 +131,6 @@ def _source_name(path: DISPLAYCONFIG_PATH_INFO) -> str | None:
 def _monitor(handle: int, built_in: frozenset[str]) -> Monitor:
     info = MONITORINFOEXW()
     info.monitorInfo.cbSize = ctypes.sizeof(MONITORINFOEXW)
-    # The base fields open the extended structure, so their address is the whole structure's.
     GetMonitorInfoW(handle, info.monitorInfo)
     primary, internal = (
         bool(info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY),
@@ -156,7 +146,6 @@ def _monitor(handle: int, built_in: frozenset[str]) -> Monitor:
 
 
 def attached() -> tuple[tuple[int, Monitor], ...]:
-    """Each monitor's HMONITOR and what Windows reports of it, in enumeration order."""
     found: list[tuple[int, Monitor]] = []
     built_in = built_in_devices()
 
@@ -169,7 +158,6 @@ def attached() -> tuple[tuple[int, Monitor], ...]:
 
 
 def monitors() -> list[Monitor]:
-    """All monitors, left to right."""
     return sorted(
         (monitor for _handle, monitor in attached()),
         key=lambda monitor: (monitor.area.left, monitor.area.top),
@@ -184,7 +172,6 @@ def monitor_of(hwnd: int) -> Monitor:
 
 
 def capture(area: Rect, width: int, height: int) -> bytes:
-    """The pixels in `area`, scaled to width x height: BGRA, top row first."""
     header = top_down(width, height)
     screen = GetDC(None)
     memory = CreateCompatibleDC(screen)
@@ -194,9 +181,7 @@ def capture(area: Rect, width: int, height: int) -> bytes:
     )
     previous = SelectObject(memory, bitmap)
     try:
-        SetStretchBltMode(
-            memory, HALFTONE
-        )  # averages pixels when shrinking, so text stays legible
+        SetStretchBltMode(memory, HALFTONE)
         SetBrushOrgEx(memory, 0, 0, None)
         StretchBlt(
             memory,

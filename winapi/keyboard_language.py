@@ -1,5 +1,3 @@
-"""Windows input layouts, selected without changing the user's installed languages."""
-
 import os
 import winreg
 from ctypes import wintypes
@@ -43,7 +41,6 @@ def _values(path: str) -> tuple[str, ...]:
 
 
 def colemak_layout() -> str:
-    """Prefer the configured Colemak variant, including Windows substitute IDs."""
     override = os.environ.get("WORKSPACE_COLEMAK_LAYOUT")
     candidates = (
         (override,) if override else _values(r"Keyboard Layout\Preload")
@@ -75,8 +72,6 @@ def colemak_layout() -> str:
 
 @dataclass(frozen=True, slots=True)
 class Foreground:
-    """The foreground window, 0 when there is none, and the keyboard layout its thread uses."""
-
     window: int
     layout: int
 
@@ -91,8 +86,6 @@ class LanguageDesktop(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class NativeLanguageDesktop:
-    """Adapt layout handles and foreground observations before language policy runs."""
-
     def load(self, identity: str) -> int:
         return int(_LoadKeyboardLayout(identity, 0x82) or 0)
 
@@ -129,8 +122,6 @@ class _Enforced:
 
 @dataclass(frozen=True, slots=True)
 class KeyboardLanguages:
-    """Run on the layout's message-loop timer, never in a keyboard-hook callback."""
-
     desktop: LanguageDesktop
     english: int
     colemak: int

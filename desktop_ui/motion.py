@@ -1,16 +1,8 @@
-"""Springs for interface motion, in Apple's terms: a damping ratio and a response.
-
-A response is roughly the time a spring takes to reach its target; it isn't a
-duration, because a spring settles when its motion falls below what anyone can
-see. Values advance in closed form, so a frame of any length lands exactly where
-the spring would be, and retargeting keeps the value and velocity on screen.
-"""
-
 import math
 from dataclasses import dataclass
 from typing import Final
 
-REST: Final = 0.005  # Below this distance and speed (per second, in the value's units) a value rests.
+REST: Final = 0.005
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,8 +19,6 @@ class Spring:
 
 @dataclass(frozen=True, slots=True)
 class Motion:
-    """A value in flight toward its target."""
-
     value: float
     target: float
     spring: Spring
@@ -40,14 +30,12 @@ def still(value: float, spring: Spring) -> Motion:
 
 
 def toward(motion: Motion, target: float, spring: Spring) -> Motion:
-    """A new target, continuing from the current value and velocity."""
     if (motion.target, motion.spring) == (target, spring):
         return motion
     return Motion(motion.value, target, spring, motion.velocity)
 
 
 def jump(motion: Motion, target: float) -> Motion:
-    """Reduced motion: arrive at once."""
     return Motion(target, target, motion.spring)
 
 
@@ -56,7 +44,6 @@ def resting(motion: Motion) -> bool:
 
 
 def settle(motion: Motion, seconds: float) -> Motion:
-    """Where the spring is after `seconds`, as a damped harmonic oscillator."""
     if resting(motion) or seconds <= 0:
         return motion
     omega = 2 * math.pi / motion.spring.response

@@ -1,9 +1,3 @@
-"""Shared vector icons, rendered at native Qt resolution.
-
-Symbols are Fluent UI System Icons drawn for 16 px (see desktop_ui/fluent_icons.py).
-A ".fill" suffix selects the filled variant for active states, as SF Symbols names them.
-"""
-
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Final
@@ -17,9 +11,7 @@ from desktop_ui.qt_runtime import prepare
 
 prepare()
 
-# A small rounded square reads as Stop at toolbar size, as SF Symbols' stop.fill does.
 _STOP = '<rect x="4.25" y="4.25" width="7.5" height="7.5" rx="1.8"/>'
-# A chip with two pins a side reads as the processor; a module with its chips and contacts as memory.
 _CPU = (
     '<path fill-rule="evenodd" d="M4.5 4h7a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-7a.5.5 0 0 1 .5-.5zM5 5v6h6V5z"/>'
     '<rect x="6.5" y="6.5" width="3" height="3" rx=".5"/>'
@@ -30,7 +22,6 @@ _MEMORY = (
     '<path d="M3.5 6h2v3h-2zM7 6h2v3H7zM10.5 6h2v3h-2zM3 11h1v2H3zM5 11h1v2H5zM7 11h1v2H7zM9 11h1v2H9zM11 11h1v2h-1z"/>'
 )
 
-# Chevrons turn the calendar's months.
 _EARLIER = '<path d="M10.35 3.15l.7.7L6.9 8l4.15 4.15-.7.7L5.5 8z"/>'
 _LATER = '<path d="M5.65 3.15l-.7.7L9.1 8l-4.15 4.15.7.7L10.5 8z"/>'
 
@@ -40,8 +31,6 @@ _ABSENT = '<path d="M11 11h4v1h-4z"/>'
 
 @dataclass(frozen=True, slots=True)
 class Badged:
-    """A symbol shrunk into the corner of its square with a badge beside it."""
-
     base: str
     badge: str
 
@@ -59,8 +48,6 @@ OWN: Final = frozendict(
 """Symbols drawn here rather than taken from Fluent."""
 BADGED: Final = frozendict(
     {
-        # Unavailable is not muted or disconnected: a question badge retains the
-        # device identity without asserting a state Windows could not observe.
         "speaker-unknown": Badged("speaker-on", _QUESTION),
         "wifi-unknown": Badged("wifi", _QUESTION),
         "wifi-absent": Badged("wifi", _ABSENT),
@@ -72,7 +59,6 @@ FALLBACK: Final = "doc"
 
 
 def symbol(name: str) -> str:
-    """The SVG body for a symbol name; unknown names fall back to the document symbol."""
     if (own := OWN.get(name)) is not None:
         return own
     if (badged := BADGED.get(name)) is not None:
@@ -109,10 +95,6 @@ def paint_icon(
     ink: Shade,
     bounds: QtCore.QRect | QtCore.QRectF,
 ) -> None:
-    """A symbol in translucent ink, rendered for the device's pixels at `bounds`, which may sit between logical pixels.
-
-    SVG fills take no alpha, so the painter's opacity carries it.
-    """
     area = QtCore.QRectF(bounds)
     symbol = icon(name, ink.color).pixmap(
         QtCore.QSize(round(area.width()), round(area.height())),

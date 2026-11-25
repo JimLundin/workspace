@@ -1,5 +1,3 @@
-"""The desktop pager's view."""
-
 from desktop_ui.desktop_pager import NO_HINTS, PagerSpec, pager
 from desktop_ui.shell_items import PinnedApp
 from protocol import Target, Tool
@@ -16,8 +14,6 @@ LETTERS: frozendict[Target, str] = frozendict(
 def test_pager_names_and_carries_each_desktops_apps_in_order_and_marks_the_current_one() -> (
     None
 ):
-    # Defects: a desktop's icons lose the on-screen order they were given, an
-    # empty desktop gets another desktop's apps, or two desktops read alike.
     placed = (
         (PinnedApp.TEAMS,),
         (TERMINAL, CODE, PinnedApp.TEAMS),
@@ -39,7 +35,6 @@ def test_pager_names_and_carries_each_desktops_apps_in_order_and_marks_the_curre
 def test_pager_hints_are_the_chord_letters_while_ctrl_alt_shift_is_held() -> (
     None
 ):
-    # Defects: hints show without the chord, or a desktop past the direct keys gets one.
     placed = ((), (), (), ())
     assert pager(placed, 0, SPEC, LETTERS, chord=True).hints.desktops == (
         "Q",

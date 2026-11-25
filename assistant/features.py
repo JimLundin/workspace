@@ -1,13 +1,3 @@
-"""What each tool and app key does. Everything that touches Windows goes through a
-`Desktop`, so the behaviour can be tested without Windows (like the layout's
-engine and its `Host`).
-
-Requests arrive on the desktop's Qt thread, which receives the layout's
-messages, and anything quick happens right there: the microphone starts the moment a talk key goes down,
-even while an earlier dictation is still being transcribed. Anything slow is
-handed to the worker thread (`submit`), which does one job at a time, in order.
-"""
-
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
@@ -32,24 +22,17 @@ from winapi.pcm import RATE
 
 
 class Desktop(Protocol):
-    """What the assistant needs from Windows and its windows."""
+    def start_listening(self) -> str | None: ...
 
-    def start_listening(self) -> str | None:
-        """Starts recording; a problem's description, or None."""
-
-    def stop_listening(self) -> bytes:
-        """Stops recording; 16-bit mono PCM at `RATE`."""
-        ...
+    def stop_listening(self) -> bytes: ...
 
     def type_text(self, text: str) -> None: ...
     def set_clipboard(self, text: str) -> None: ...
     def show_state(self, state: State) -> None: ...
-    def busy(self, job: Job | None) -> None:
-        """The quick job now running, for the bar; None once it has finished."""
+    def busy(self, job: Job | None) -> None: ...
 
     def notify(self, title: str, text: str) -> None: ...
-    def problem(self, message: str) -> None:
-        """Something went wrong that the user should hear about."""
+    def problem(self, message: str) -> None: ...
 
 
 Recorder = Callable[[str, Mapping[str, Detail]], None]
@@ -58,12 +41,6 @@ Recorder = Callable[[str, Mapping[str, Detail]], None]
 
 @dataclass(frozen=True, slots=True)
 class Progress:
-    """A job's diagnostic details so far, kept for `Features.timed` even when the job raises.
-
-    The job notes each phase as it reaches it; each note replaces the held
-    `frozendict`, so a reader never sees one change partway through.
-    """
-
     _details: Cell[frozendict[str, Detail]]
 
     @classmethod
@@ -81,7 +58,6 @@ class Progress:
 def submit_voice_text(
     text: str, send: Callable[[str], None], progress: Progress
 ) -> None:
-    """Measure submission, without retaining content or claiming the app displayed it."""
     progress.note(requested_characters=len(text), phase="submitting")
     started = time.monotonic()
     try:
@@ -93,8 +69,6 @@ def submit_voice_text(
 
 @dataclass(frozen=True, slots=True)
 class Capture:
-    """The initiating request owns its release, even when tools share dictation."""
-
     identity: int
     source: Tool
     tool: Tool
@@ -123,8 +97,6 @@ class _Keys:
 
 @dataclass(frozen=True, slots=True)
 class Assistant:
-    """Turns the dictation and transcript keys into actions."""
-
     desktop: Desktop
     settings: Settings
     failed: Recorder = field(kw_only=True)
@@ -151,17 +123,13 @@ class Assistant:
         return self._state.get().layout_on
 
     def use_layout(self, *, on: bool) -> None:
-        """Record whether the keyboard layout is on, which decides the idle state shown."""
         self._state.set(replace(self._state.get(), layout_on=on))
-
-    # ---- requests ----------------------------------------------------------------------
 
     @property
     def listening(self) -> Tool | None:
         return capture.tool if (capture := self.capture) else None
 
     def handle(self, tool: Tool, *, down: bool) -> None:
-        """Dispatch a key edge or menu press."""
         kind = ROUTES[tool]
         if self.missing is not None and NEEDS_SETTINGS[kind]:
             if down:
@@ -182,7 +150,7 @@ class Assistant:
             case Route.TRANSCRIPT:
                 self.submit(self.copy_transcript)
             case Route.NAVIGATE | Route.SWITCHER | Route.MEETING:
-                pass  # The desktop's own (see `desktop_ui.desktop_control`).
+                pass
             case _:
                 assert_never(kind)
 
@@ -203,7 +171,6 @@ class Assistant:
         *,
         progress: Progress | None = None,
     ) -> None:
-        """Runs a job, and reports and logs a failure (never the content) with the details the job noted."""
         started = time.monotonic()
         outcome: Failure | None = Failure("crashed")
         evidence: dict[str, Detail] = {}
@@ -252,7 +219,6 @@ class Assistant:
                 problem = self.desktop.start_listening()
             except Exception as error:
                 self.capture_problem(capture, "starting", error)
-                # A start may have acquired the device before failing.
                 try:
                     self.desktop.stop_listening()
                 except Exception as cleanup:
@@ -342,7 +308,6 @@ class Assistant:
         return True
 
     def expire_capture(self, now: float) -> None:
-        """Recover a lost release/toggle at the microphone's existing buffer limit."""
         if (
             (held := self.capture)
             and now >= held.started + MAX_SECONDS
@@ -352,8 +317,6 @@ class Assistant:
                 "Recording finished",
                 "The five-minute voice limit was reached; your recording was queued for transcription.",
             )
-
-    # ---- the tools ---------------------------------------------------------------------
 
     def heard(
         self, tool: Tool, pcm: bytes, progress: Progress
@@ -381,7 +344,6 @@ class Assistant:
         return None
 
     def remember_transcript(self, text: str) -> None:
-        """Keep recovery independent of both the clipboard and the insertion attempt."""
         if not text.strip():
             return
         self._state.set(replace(self._state.get(), latest_transcription=text))

@@ -1,5 +1,3 @@
-"""Qt colours, fonts and capsules from the kit's shades, type and looks."""
-
 from functools import lru_cache
 from typing import assert_never
 
@@ -21,7 +19,6 @@ def color(shade: Shade) -> QColor:
 
 @lru_cache(maxsize=32)
 def inter(font: typeface.Font) -> QFont:
-    """The Qt font for `font`, shared and never changed."""
     value = QFont(typeface.FAMILY)
     value.setPixelSize(font.pixels)
     value.setWeight(QFont.Weight(int(font.weight)))
@@ -31,7 +28,6 @@ def inter(font: typeface.Font) -> QFont:
 
 
 def hit() -> QColor:
-    """Invisible, but Windows' per-pixel hit-testing routes the pointer here."""
     return QColor(0, 0, 0, 1)
 
 
@@ -44,8 +40,6 @@ def outline(bounds: QRectF, radius: float) -> QPainterPath:
 def paint_capsule(
     painter: QPainter, path: QPainterPath, look: Look, opacity: float = 1.0
 ) -> None:
-    """A capsule's material. Composition draws glass behind the window, so Qt paints only the hit fill;
-    solid takes its fill and a 1 px edge at `opacity`."""
     match look:
         case GlassLook():
             painter.fillPath(path, hit())

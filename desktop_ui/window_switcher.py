@@ -1,5 +1,3 @@
-"""A searchable window list, independent of the window manager and its workspaces."""
-
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import override
@@ -24,8 +22,6 @@ prepare()
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SwitcherSpec:
-    """The window switcher: a panel with a search field over rows of windows, and its painted shadow."""
-
     width: int
     tallest: int
     """The panel's width, and the most height it grows to..."""
@@ -85,8 +81,6 @@ def matching(
 
 
 class _Rows(QtWidgets.QStyledItemDelegate):
-    """Paints each window as its title over its program, with the selection in the accent."""
-
     def __init__(
         self,
         theme: Tokens,
@@ -192,7 +186,6 @@ QLabel#hint {{ color: {theme.ink3.css}; {design.type.detail.css} }}
 def _field(
     panel: QtWidgets.QWidget, theme: Tokens, spec: SwitcherSpec
 ) -> tuple[QtWidgets.QHBoxLayout, QtWidgets.QLineEdit]:
-    """Spotlight's field: a large borderless query after its symbol."""
     field = row()
     field.setContentsMargins(
         spec.field_side, spec.field_top, spec.field_side, spec.field_bottom
@@ -210,8 +203,6 @@ def _field(
 
 
 class WindowSwitcher(QtWidgets.QDialog):
-    """A Spotlight-like panel: a large search field over rows, on the kit's solid window."""
-
     def __init__(
         self,
         windows: Sequence[winapi.shapes.Window],
@@ -220,7 +211,6 @@ class WindowSwitcher(QtWidgets.QDialog):
         title: str,
         design: Design,
     ) -> None:
-        """The switcher over `windows`, titled `title`, which the layout recognises to pass it Esc, Enter and Tab."""
         super().__init__()
         self.spec = spec
         self.windows = tuple(windows)
@@ -325,7 +315,6 @@ class WindowSwitcher(QtWidgets.QDialog):
 
     @override
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-        # A frameless translucent window has no system shadow; paint a soft one under the panel.
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -335,7 +324,6 @@ class WindowSwitcher(QtWidgets.QDialog):
             shadow, shadow - lift, -shadow, -shadow - lift
         )
         for step in range(shadow, 0, -spec.shadow_step):
-            # Fading from the innermost ring's alpha to 1 at the outermost.
             painter.setBrush(
                 QtGui.QColor(
                     0,

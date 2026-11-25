@@ -1,5 +1,3 @@
-"""Shared native panel controls. Qt objects stay on the UI thread."""
-
 from collections.abc import Callable
 
 lazy from PySide6 import QtWidgets
@@ -17,8 +15,6 @@ def button(text: str, callback: Callable[[], None]) -> QtWidgets.QToolButton:
     widget.setCursor(Qt.CursorShape.PointingHandCursor)
     widget.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-    # Plain slotted controllers need not support weak references just because a
-    # Qt signal owns a callback. Qt retains this small closure with the button.
     def clicked() -> None:
         callback()
 

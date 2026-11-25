@@ -1,12 +1,3 @@
-"""The island bar: Workspace's floating capsules at the top of the primary screen.
-
-Activity sits just left of the status capsule and acts on what it shows;
-persistent navigation and status anchor right; the system tray lives in the
-Workspace's controls panel. `island_model` decides the views, `island_layout` where they sit,
-and `ui_components.appearance` how they read. This owner observes the desktop and
-publishes each result to the one bar window and its glass.
-"""
-
 import queue
 import threading
 import time
@@ -121,8 +112,6 @@ class BarActions:
 
 @dataclass(frozen=True, slots=True)
 class _Shell:
-    """The production desktop's native owners: system status, shell controls and taskbar recovery."""
-
     status: StatusObserver
     controls: shell.AppWindow
     away: AwayScreens
@@ -134,9 +123,6 @@ class _Shell:
 
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class DesktopBar:
-    # Qt connects the timers to bound methods through a weak reference to the bar.
-    """The bar's native owners and window, and the fold of everything reported to it into what it shows."""
-
     actions: BarActions
     taskbar: TaskbarControl
     shell: _Shell
@@ -166,7 +152,6 @@ class DesktopBar:
         *,
         audio_level: Callable[[], float | None] | None = None,
     ) -> DesktopBar:
-        # The window reports to the bar made just after it.
         def report(event: Event) -> None:
             bar.handle(event)
 
@@ -214,22 +199,17 @@ class DesktopBar:
             tick.timeout.connect(bar.tick)
             audio.timeout.connect(bar.sample_audio)
             bar.timer.start()
-            bar.tick()  # The first observation renders the bar.
+            bar.tick()
         except BaseException:
             bar.close()
             raise
         return bar
 
-    # ---- what the model says ------------------------------------------------------------
-
     @property
     def model(self) -> BarModel:
         return self._model.get()
 
-    # ---- the fold ----------------------------------------------------------------------
-
     def handle(self, event: Event) -> None:
-        """Qt thread: fold `event` into the model and perform its effects in order."""
         if self.model.closed and not isinstance(event, Closing):
             return
         model, effects = transition(self.model, event)
@@ -291,7 +271,6 @@ class DesktopBar:
                 assert_never(effect)
 
     def _show_hints(self) -> None:
-        """The hints follow the window in front, which can change while the chord is held."""
         model = self.model
         world = model.seen.arrangement.world
         if not model.chord_held or world is None:
@@ -304,8 +283,6 @@ class DesktopBar:
             model.seen.preference,
         )
 
-    # ---- measuring and painting ----------------------------------------------------------
-
     def _measure(
         self, view: CapsuleView, opened: Menu | None, spec: BarSpec
     ) -> Content:
@@ -316,7 +293,6 @@ class DesktopBar:
     def _shown(
         self, views: tuple[CapsuleView, ...], opened: Menu | None, spec: BarSpec
     ) -> tuple[Shown, ...]:
-        """Each view measured; the panel hangs under the reading that opened it."""
         measured = tuple(
             (view, self._measure(view, opened, spec)) for view in views
         )
@@ -340,7 +316,6 @@ class DesktopBar:
         )
 
     def render(self) -> None:
-        """Retarget the capsules at what the bar should show now, then paint; frames carry them there."""
         model = self.model
         opened = (
             menu(model, previous.panel) if (previous := model.opened) else None
@@ -423,7 +398,6 @@ class DesktopBar:
             for moving in model.motion.capsules
             if moving.key in framed
         )
-        # The window keeps the room a capsule is heading for, so it resizes only as a panel starts and settles.
         reach = max(
             (
                 framed[moving.key].box.y
@@ -449,12 +423,10 @@ class DesktopBar:
                 ),
             )
         )
-        # A closed menu keeps the last locations: a clicked application anchors its flyout where its icon was.
         if model.opened is not None:
             self.shell.tray.locate(self.window.tray_locations())
 
     def paint(self) -> None:
-        """Paint the next frame."""
         model = self.model
         if model.closed:
             return
@@ -472,7 +444,6 @@ class DesktopBar:
         self.handle(Framed(drawn.motion, now if drawn.running else None))
 
     def tick(self) -> None:
-        """Observe the desktop, the shell and the system."""
         model = self.model
         if model.closed:
             return
@@ -496,7 +467,6 @@ class DesktopBar:
         sample_bounds = self.window.bounds(Key.ISLAND) or self.window.bounds(
             Key.STATUS
         )
-        # Small glass takes its scheme from the desktop beside the island.
         frost = next(
             (
                 sample.frost
@@ -540,16 +510,12 @@ class DesktopBar:
         self.handle(Ticked(observed, next_power, next_material))
 
     def _poll_shell(self, model: BarModel) -> Arrangement:
-        self.window.show_tray(
-            self.shell.tray.poll()
-        )  # The tick's render rebuilds an open menu's tray cells.
+        self.window.show_tray(self.shell.tray.poll())
         arrangement = model.seen.arrangement
         with suppress(queue.Empty):
             arrangement = self.shell.applications.results.get_nowait()
         pager_bar = self.window.pager
         pager_bar.remember_icons(arrangement.shelf)
-        # Changed pager targets must also publish section geometry when the island is still,
-        # or a pager that loses its hints keeps its wider capsule.
         if pager_bar.desktops(
             pager(
                 arrangement.placed,
@@ -567,12 +533,9 @@ class DesktopBar:
         return arrangement
 
     def sample_audio(self) -> None:
-        """Sample the microphone for the dictation trace."""
         model = self.model
         if model.closed or not model.dictating:
             return
-        # Begin at the last painted interpolation, including if a sample
-        # arrives early. The bounded history stays with its Qt paint owner.
         self.window.wave_from = tuple(self.window.trace())
         self.window.samples.append(
             level(
@@ -592,7 +555,6 @@ class DesktopBar:
         self.handle(Sampled(time.monotonic()))
 
     def app_click(self, app: App, click: Click) -> None:
-        """A pager icon: go to the app, cycling its windows or starting it; right-click lists its windows."""
         shelf = self.model.seen.arrangement.shelf
         match app:
             case PinnedApp():
@@ -612,7 +574,6 @@ class DesktopBar:
                     self._application_click(running, click)
                 elif click is not Click.RIGHT:
                     self.handle(Deactivated())
-                    # A configured app key also starts the app when it isn't running.
                     key = next(
                         (
                             each
@@ -648,10 +609,7 @@ class DesktopBar:
             case Application(identity=identity):
                 self.navigate(CycleApp(Program(identity)))
 
-    # ---- what others tell the bar ------------------------------------------------------
-
     def navigate(self, order: Order) -> None:
-        """The application observer owns windows and desktops; it carries out every navigation."""
         if not self.model.closed:
             self.shell.applications.order(order)
 

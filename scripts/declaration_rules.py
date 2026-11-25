@@ -1,5 +1,3 @@
-"""Declaration rules: frozen, slotted records without kind fields or mutable fields, immutable parameters, no reflection."""
-
 import ast
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
@@ -42,8 +40,6 @@ OVERRIDES: Final = frozenset({"typing.override", "typing_extensions.override"})
 
 @dataclass(frozen=True, slots=True)
 class Scope:
-    """Where a node sits: its module, the declaration that holds it, and the names its scope imports."""
-
     module: str
     declaration: str
     aliases: frozendict[str, str]
@@ -56,12 +52,10 @@ class Scope:
         )
 
     def member(self, name: str) -> Scope:
-        """The scope of one of the declaration's fields or parameters, named after it as `Record.field`."""
         return replace(self, declaration=self.declaration + "." + name)
 
 
 def _scope_nodes(tree: ast.AST) -> Iterator[ast.AST]:
-    """The nodes of tree's own scope, depth first from its last child, skipping nested classes and functions."""
     for node in reversed(tuple(ast.iter_child_nodes(tree))):
         match node:
             case ast.ClassDef() | ast.FunctionDef() | ast.AsyncFunctionDef():
@@ -74,7 +68,6 @@ def _scope_nodes(tree: ast.AST) -> Iterator[ast.AST]:
 def _bound_alias(
     local: frozendict[str, str], node: ast.AST
 ) -> frozendict[str, str]:
-    """The aliases after node: imports bind names, and so does assigning a reflection builtin."""
     match node:
         case ast.Import(names=names):
             return local | {
@@ -99,12 +92,10 @@ def _bound_alias(
 def _scope_aliases(
     tree: ast.AST, inherited: Mapping[str, str]
 ) -> frozendict[str, str]:
-    # Only an import statement or a reflection alias makes a new map; other nodes pass it on.
     return reduce(_bound_alias, _scope_nodes(tree), frozendict(inherited))
 
 
 def _constant_tag(annotation: ast.expr, aliases: Mapping[str, str]) -> bool:
-    """`Literal[x]` with one value: the JSON tag of a union member, which decides nothing."""
     match annotation:
         case ast.Subscript(value=value, slice=ast.Constant() | ast.Attribute()):
             return call_name(value, aliases) == "typing.Literal"
@@ -113,7 +104,6 @@ def _constant_tag(annotation: ast.expr, aliases: Mapping[str, str]) -> bool:
 
 
 def _mutable(annotation: ast.expr, aliases: Mapping[str, str]) -> bool:
-    """An annotation that names a concrete mutable collection anywhere inside it."""
     return any(
         call_name(node, aliases) in MUTABLE_TYPES
         for node in ast.walk(annotation)
@@ -129,7 +119,6 @@ def _true(flag: ast.expr | None) -> bool:
 
 
 def _annotated(body: Iterable[ast.stmt]) -> Iterator[ast.AnnAssign]:
-    """The fields a class body annotates under a plain name."""
     return (
         statement
         for statement in body
@@ -141,7 +130,6 @@ def _annotated(body: Iterable[ast.stmt]) -> Iterator[ast.AnnAssign]:
 def _decorator_call(
     decorator: ast.expr,
 ) -> tuple[ast.expr, frozendict[str | None, ast.expr]]:
-    """The function a decorator names, and the keywords it is called with, if it is called."""
     match decorator:
         case ast.Call(func=function, keywords=keywords):
             return function, frozendict(
@@ -166,7 +154,6 @@ def _kind_fields(fields: Iterable[ast.stmt], scope: Scope) -> Iterator[Finding]:
 def _mutable_fields(
     fields: Iterable[ast.stmt], scope: Scope
 ) -> Iterator[Finding]:
-    """A frozen record's concrete mutable fields: each needs its own declared exception, where a mutable owner has one state exception."""
     detail = "Frozen records must not contain concrete mutable collections without an exact necessity."
     return (
         scope.member(ast.unparse(field.target)).finding(
@@ -178,7 +165,6 @@ def _mutable_fields(
 
 
 def _dataclass(node: ast.ClassDef, scope: Scope) -> Iterator[Finding]:
-    """Each dataclass decorator's record: no kind field, frozen and slotted, and no mutable field once frozen."""
     for decorator in node.decorator_list:
         function, flags = _decorator_call(decorator)
         if call_name(function, scope.aliases) != "dataclasses.dataclass":
@@ -243,10 +229,6 @@ def _findings(tree: ast.AST, scope: Scope) -> Iterator[Finding]:
 
 
 def _entered(tree: ast.AST, outer: Scope) -> Scope:
-    """The scope inside tree: a class or function names a declaration, and each lexical scope binds its own imports.
-
-    Aliases are copied once per lexical scope, not for every expression; imports
-    inside conditional statements still belong to their enclosing scope."""
     match tree:
         case (
             ast.ClassDef(name=name)
@@ -276,5 +258,4 @@ def _walk(tree: ast.AST, outer: Scope) -> Iterator[Finding]:
 
 
 def declarations(tree: ast.Module, module: str) -> Iterator[Finding]:
-    """Every declaration finding in a module, in source order of the nodes that make them."""
     return _walk(tree, Scope(module, "", frozendict()))

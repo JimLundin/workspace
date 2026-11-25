@@ -1,6 +1,3 @@
-"""The AI endpoint: settings, transcription and one-shot questions.
-Against a local fake endpoint; runs anywhere."""
-
 from assistant.llm import (
     Failure,
     Missing,
@@ -19,9 +16,6 @@ def settings(url: str, vocabulary: str = "") -> Settings:
     return Settings(url, "secret", "gpt-4o-transcribe", vocabulary)
 
 
-# ---- settings --------------------------------------------------------------------------
-
-
 def test_settings_need_the_endpoint_and_key() -> None:
     assert settings_from({}) == Missing(("OPENAI_BASE_URL", "OPENAI_API_KEY"))
     assert settings_from(
@@ -30,7 +24,6 @@ def test_settings_need_the_endpoint_and_key() -> None:
 
 
 def test_settings_take_their_overrides() -> None:
-    # Defect: a configured setting is ignored.
     env = {
         **ENV,
         "WORKSPACE_TRANSCRIBE_MODEL": "whisper-1",
@@ -41,11 +34,7 @@ def test_settings_take_their_overrides() -> None:
     )
 
 
-# ---- transcription ---------------------------------------------------------------------
-
-
 def test_transcribe_posts_the_audio_and_returns_the_text() -> None:
-    # Defect: the configured key, transcription model or audio file is not what reaches the endpoint.
     with fake_endpoint() as endpoint:
         audio = wav(bytes(2 * RATE), RATE)
         assert transcribe(settings(endpoint.url), audio) == "hello there"
@@ -64,7 +53,6 @@ def test_transcribe_posts_the_audio_and_returns_the_text() -> None:
 
 
 def test_transcribe_sends_vocabulary_and_context_when_set() -> None:
-    # Defect: the configured vocabulary, or the meeting context is dropped.
     with fake_endpoint() as endpoint:
         transcribe(
             settings(endpoint.url, vocabulary="Miryoku, Colemak"),
@@ -78,7 +66,6 @@ def test_transcribe_sends_vocabulary_and_context_when_set() -> None:
 
 
 def test_failures_carry_the_servers_message() -> None:
-    # Defect: the user sees a generic error instead of the endpoint's explanation.
     with fake_endpoint() as endpoint:
         endpoint.replies = [
             Reply(
@@ -92,7 +79,6 @@ def test_failures_carry_the_servers_message() -> None:
 
 
 def test_failures_without_a_server_message_carry_the_status() -> None:
-    # Defect: a proxy's plain-text error page escapes as an exception or an empty message.
     with fake_endpoint() as endpoint:
         endpoint.replies = [
             Reply(b"upstream down", status=502, content_type="text/plain")
@@ -103,7 +89,6 @@ def test_failures_without_a_server_message_carry_the_status() -> None:
 
 
 def test_failures_for_replies_that_arent_what_was_asked() -> None:
-    # Defect: a proxy login page is typed as the transcript, or raises.
     with fake_endpoint() as endpoint:
         endpoint.replies = [Reply(b"<html>proxy login</html>")]
         assert transcribe(settings(endpoint.url), wav(b"", RATE)) == Failure(
@@ -112,7 +97,6 @@ def test_failures_for_replies_that_arent_what_was_asked() -> None:
 
 
 def test_truncated_replies_are_retriable_failures() -> None:
-    # Defect: a dropped connection mid-reply raises instead of becoming a Failure the meeting worker retries.
     with fake_endpoint() as endpoint:
         endpoint.replies = [Reply(b'{"text":"incomplete', content_length=1000)]
         result = transcribe(settings(endpoint.url), wav(b"", RATE))
@@ -123,8 +107,6 @@ def test_truncated_replies_are_retriable_failures() -> None:
 
 
 def test_failures_for_an_unreachable_endpoint() -> None:
-    # Defect: an unreachable endpoint raises or hides which host was tried.
-    # Windows takes about 2 s to refuse a closed loopback port; a timeout is the same failure to reach it.
     result = transcribe(
         settings("http://127.0.0.1:9/v1"), wav(b"", RATE), timeout_s=0.2
     )
