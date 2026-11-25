@@ -141,16 +141,28 @@ _CHORD_NAMES: Final = frozendict(
         Chord.ctrl(Key.X): "Cut",
     }
 )
-TOOL_NAMES: Final = every_member(Tool, {
-    Tool.DICTATE: "Talk",
-    Tool.ZOOM: "Zoom",
-    Tool.FOCUS_LEFT: "Focus ←", Tool.FOCUS_DOWN: "Focus ↓", Tool.FOCUS_UP: "Focus ↑", Tool.FOCUS_RIGHT: "Focus →",
-    Tool.DESKTOP_1: "Desk 1", Tool.DESKTOP_2: "Desk 2", Tool.DESKTOP_3: "Desk 3", Tool.DESKTOP_4: "Desk 4", Tool.DESKTOP_5: "Desk 5",
-    Tool.PLACEMENT_PAUSE: "Pause place", Tool.PLACE_NOW: "Re-place",
-    Tool.MEETING_TOGGLE: "Record", Tool.COPY_TRANSCRIPT: "Copy speech",
-    Tool.DICTATE_TOGGLE: "Dictate toggle",
-    Tool.WINDOW_SWITCHER: "Windows",
-})  # fmt: skip
+TOOL_NAMES: Final = every_member(
+    Tool,
+    {
+        Tool.DICTATE: "Talk",
+        Tool.ZOOM: "Zoom",
+        Tool.FOCUS_LEFT: "Focus ←",
+        Tool.FOCUS_DOWN: "Focus ↓",
+        Tool.FOCUS_UP: "Focus ↑",
+        Tool.FOCUS_RIGHT: "Focus →",
+        Tool.DESKTOP_1: "Desk 1",
+        Tool.DESKTOP_2: "Desk 2",
+        Tool.DESKTOP_3: "Desk 3",
+        Tool.DESKTOP_4: "Desk 4",
+        Tool.DESKTOP_5: "Desk 5",
+        Tool.PLACEMENT_PAUSE: "Pause place",
+        Tool.PLACE_NOW: "Re-place",
+        Tool.MEETING_TOGGLE: "Record",
+        Tool.COPY_TRANSCRIPT: "Copy speech",
+        Tool.DICTATE_TOGGLE: "Dictate toggle",
+        Tool.WINDOW_SWITCHER: "Windows",
+    },
+)
 
 
 @dataclass(frozen=True, slots=True)

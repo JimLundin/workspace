@@ -20,8 +20,9 @@ them there and run `uv lock`.
 ## Edit loop
 
 Ruff owns linting and formatting. `Dev.cmd lint --fix .` applies safe fixes and
-`Dev.cmd format .` formats the tree; CI checks both. Existing `fmt: off` regions
-keep keyboard grids and tables readable.
+`Dev.cmd format .` formats the tree; CI checks both. Nothing opts out of the
+formatter: no `fmt: off` or `fmt: skip`. Where its output of a table is hard to
+read, restructure the table.
 
 `Dev.cmd typecheck` runs mypy (strict, configured in `[tool.mypy]`); with file
 arguments it checks just those. `typings/` holds stubs only for a dependency
