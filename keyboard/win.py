@@ -82,7 +82,8 @@ class NativeKeyboardSystem:
     log: Path
     """The keyboard's own log: its input recoveries."""
 
-    def send_key(self, key: Key | Mod, *, down: bool) -> None:
+    @staticmethod
+    def send_key(key: Key | Mod, *, down: bool) -> None:
         inputs.send_key(
             key.vk, down=down, extended=key.extended, extra=Origin.LAYOUT
         )
@@ -101,12 +102,12 @@ class NativeKeyboardSystem:
         inputs.call_next_hook
     )
 
-    def find_window(self, window: Window) -> int | None:
+    @staticmethod
+    def find_window(window: Window) -> int | None:
         return windows.find(window.title)
 
-    def post_message(
-        self, hwnd: int, message: int, wparam: int, lparam: int
-    ) -> bool:
+    @staticmethod
+    def post_message(hwnd: int, message: int, wparam: int, lparam: int) -> bool:
         return system.post_message(hwnd, message, wparam, lparam)
 
     set_timer: ClassVar[staticmethod[[int], int]] = staticmethod(

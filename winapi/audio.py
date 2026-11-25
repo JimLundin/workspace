@@ -170,8 +170,9 @@ class InputDriver(Protocol):
 class WaveInput:
     """Adapts typed capture operations to Windows' positional waveIn contract."""
 
+    @staticmethod
     def open(
-        self, format: WAVEFORMATEX, event: EventHandle
+        format: WAVEFORMATEX, event: EventHandle
     ) -> tuple[int, wintypes.HANDLE]:
         handle = _HWAVEIN()
         error = int(
@@ -186,47 +187,56 @@ class WaveInput:
         )
         return error, handle
 
-    def prepare(self, handle: wintypes.HANDLE, header: WAVEHDR) -> int:
+    @staticmethod
+    def prepare(handle: wintypes.HANDLE, header: WAVEHDR) -> int:
         return int(
             _waveInPrepareHeader(
                 handle, ctypes.byref(header), ctypes.sizeof(WAVEHDR)
             )
         )
 
-    def add(self, handle: wintypes.HANDLE, header: WAVEHDR) -> int:
+    @staticmethod
+    def add(handle: wintypes.HANDLE, header: WAVEHDR) -> int:
         return int(
             _waveInAddBuffer(
                 handle, ctypes.byref(header), ctypes.sizeof(WAVEHDR)
             )
         )
 
-    def start(self, handle: wintypes.HANDLE) -> int:
+    @staticmethod
+    def start(handle: wintypes.HANDLE) -> int:
         return int(_waveInStart(handle))
 
-    def reset(self, handle: wintypes.HANDLE) -> int:
+    @staticmethod
+    def reset(handle: wintypes.HANDLE) -> int:
         return int(_waveInReset(handle))
 
-    def unprepare(self, handle: wintypes.HANDLE, header: WAVEHDR) -> int:
+    @staticmethod
+    def unprepare(handle: wintypes.HANDLE, header: WAVEHDR) -> int:
         return int(
             _waveInUnprepareHeader(
                 handle, ctypes.byref(header), ctypes.sizeof(WAVEHDR)
             )
         )
 
-    def close(self, handle: wintypes.HANDLE) -> int:
+    @staticmethod
+    def close(handle: wintypes.HANDLE) -> int:
         return int(_waveInClose(handle))
 
-    def position(self, handle: wintypes.HANDLE, result: MMTIME) -> int:
+    @staticmethod
+    def position(handle: wintypes.HANDLE, result: MMTIME) -> int:
         return int(
             _waveInGetPosition(
                 handle, ctypes.byref(result), ctypes.sizeof(MMTIME)
             )
         )
 
-    def wait(self, event: EventHandle, timeout_ms: int) -> bool:
+    @staticmethod
+    def wait(event: EventHandle, timeout_ms: int) -> bool:
         return wait_any([event], timeout_ms=timeout_ms) is not None
 
-    def device(self) -> str | None:
+    @staticmethod
+    def device() -> str | None:
         index, flags = wintypes.DWORD(), wintypes.DWORD()
         if _waveInMessage(
             _HWAVEIN(_WAVE_MAPPER),

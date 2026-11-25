@@ -107,7 +107,8 @@ class LanguageDesktop:
         self.loads += (identity,)
         return 0x4090409 if identity == "00000409" else 0xF002041D
 
-    def colemak(self) -> str:
+    @staticmethod
+    def colemak() -> str:
         return "d001041d"
 
     def activate(self, layout: int) -> None:

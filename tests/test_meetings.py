@@ -341,8 +341,8 @@ def test_a_locked_journal_does_not_block_the_capture_thread(
     class LockingCapture:
         __slots__ = ()
 
+        @staticmethod
         def record(
-            self,
             stop: threading.Event,
             consume: Callable[[bytes], None],
             ready: Callable[[], None],
@@ -434,8 +434,8 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(
     class GappedCapture:
         __slots__ = ()
 
+        @staticmethod
         def record(
-            self,
             stop: threading.Event,
             consume: Callable[[bytes], None],
             ready: Callable[[], None],

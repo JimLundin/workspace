@@ -179,7 +179,8 @@ class Host:
     def send(self, key: Key | Mod, *, down: object) -> None:
         pass
 
-    def start_timer(self) -> int:
+    @staticmethod
+    def start_timer() -> int:
         return 1
 
     def stop_timer(self, timer: int) -> None:

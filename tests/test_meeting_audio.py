@@ -72,13 +72,15 @@ class Wasapi:
         self.calls: list[tuple[int, int]] = []
         self.fail: tuple[int, int] | None = None
 
-    def initialize(self) -> int:
+    @staticmethod
+    def initialize() -> int:
         return 0
 
     def uninitialize(self) -> None:
         pass
 
-    def create_enumerator(self, pointer: ctypes.c_void_p) -> int:
+    @staticmethod
+    def create_enumerator(pointer: ctypes.c_void_p) -> int:
         pointer.value = 1
         return 0
 

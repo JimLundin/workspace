@@ -26,10 +26,12 @@ class Brightness(Protocol):
 class WmiBrightness:
     """The built-in panel's brightness over WMI."""
 
-    def level(self) -> Level | Unavailable:
+    @staticmethod
+    def level() -> Level | Unavailable:
         return panel_brightness.brightness()
 
-    def set_level(self, level: int) -> Level | Unavailable:
+    @staticmethod
+    def set_level(level: int) -> Level | Unavailable:
         return panel_brightness.set_brightness(level)
 
 

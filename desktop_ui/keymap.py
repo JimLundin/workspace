@@ -241,7 +241,8 @@ class KeyboardView:
                     case _:
                         return "", Role.BLANK
 
-    def _hold(self, a: Binding) -> str:
+    @staticmethod
+    def _hold(a: Binding) -> str:
         match a:
             case Tool() if ROUTES[a] is Route.HOLD:
                 return "hold"

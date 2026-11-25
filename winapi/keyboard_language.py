@@ -93,19 +93,23 @@ class LanguageDesktop(Protocol):
 class NativeLanguageDesktop:
     """Adapt layout handles and foreground observations before language policy runs."""
 
-    def load(self, identity: str) -> int:
+    @staticmethod
+    def load(identity: str) -> int:
         return int(_LoadKeyboardLayout(identity, 0x82) or 0)
 
-    def colemak(self) -> str:
+    @staticmethod
+    def colemak() -> str:
         return colemak_layout()
 
-    def activate(self, layout: int) -> None:
+    @staticmethod
+    def activate(layout: int) -> None:
         if not _ActivateKeyboardLayout(layout, 0):
             raise OSError(
                 "Windows refused to activate the requested input keyboard."
             )
 
-    def foreground(self) -> Foreground:
+    @staticmethod
+    def foreground() -> Foreground:
         hwnd = int(GetForegroundWindow() or 0)
         return Foreground(
             hwnd,
@@ -114,7 +118,8 @@ class NativeLanguageDesktop:
             else 0,
         )
 
-    def request(self, hwnd: int, layout: int) -> None:
+    @staticmethod
+    def request(hwnd: int, layout: int) -> None:
         if not PostMessageW(hwnd, 0x0050, 0, layout):
             raise OSError(
                 "The foreground application refused the keyboard-language request."

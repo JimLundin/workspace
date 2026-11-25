@@ -57,7 +57,8 @@ class Cache:
         digest.update((root / "pyproject.toml").read_bytes())
         return cls(folder / digest.hexdigest())
 
-    def key(self, namespace: str, source: Source, *, extra: bytes = b"") -> str:
+    @staticmethod
+    def key(namespace: str, source: Source, *, extra: bytes = b"") -> str:
         digest = hashlib.sha256(
             namespace.encode()
             + b"\0"

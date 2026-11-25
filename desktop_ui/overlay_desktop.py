@@ -18,23 +18,29 @@ prepare()
 
 @dataclass(frozen=True, slots=True)
 class NativeOverlayDesktop:
-    def clock(self) -> float:
+    @staticmethod
+    def clock() -> float:
         return time.monotonic()
 
-    def cursor(self) -> Point:
+    @staticmethod
+    def cursor() -> Point:
         return inputs.cursor_position()
 
-    def work_areas(self) -> tuple[Rect, ...]:
+    @staticmethod
+    def work_areas() -> tuple[Rect, ...]:
         return tuple(monitor.work for monitor in screen.monitors())
 
-    def prepare(self, window: QtWidgets.QWidget, *, click_through: bool) -> int:
+    @staticmethod
+    def prepare(window: QtWidgets.QWidget, *, click_through: bool) -> int:
         frame = int(window.winId())
         windows.make_overlay(frame, click_through=click_through)
         return frame
 
-    def present(self, window: QtWidgets.QWidget) -> None:
+    @staticmethod
+    def present(window: QtWidgets.QWidget) -> None:
         window.show()
         windows.show_quietly(int(window.winId()), visible=True)
 
-    def move(self, frame: int, area: Rect) -> None:
+    @staticmethod
+    def move(frame: int, area: Rect) -> None:
         windows.move(frame, area)

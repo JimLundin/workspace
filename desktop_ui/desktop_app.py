@@ -432,10 +432,9 @@ class DesktopApp:
             case _:
                 assert_never(effect)
 
+    @staticmethod
     def _on_bar(
-        self,
-        bar: DesktopBar,
-        effect: ShowActivity | Navigate | Chord | LayoutShown,
+        bar: DesktopBar, effect: ShowActivity | Navigate | Chord | LayoutShown
     ) -> None:
         match effect:
             case ShowActivity(change):

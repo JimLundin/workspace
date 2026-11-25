@@ -108,16 +108,20 @@ class Machine(Protocol):
 class ThisMachine:
     """Windows' default playback device and Wi-Fi adapters."""
 
-    def volume(self, level: float) -> bool:
+    @staticmethod
+    def volume(level: float) -> bool:
         return system_status.set_volume(level)
 
-    def mute(self, *, muted: bool) -> bool:
+    @staticmethod
+    def mute(*, muted: bool) -> bool:
         return system_status.set_mute(muted=muted)
 
-    def scan(self) -> None:
+    @staticmethod
+    def scan() -> None:
         system_status.scan()
 
-    def join(self, profile: str) -> bool:
+    @staticmethod
+    def join(profile: str) -> bool:
         return system_status.join(profile)
 
 

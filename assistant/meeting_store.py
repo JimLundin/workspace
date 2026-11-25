@@ -133,7 +133,8 @@ class MeetingStore:
         with self.reading() as connection:
             return self._state(connection)
 
-    def _state(self, connection: journal.Connection) -> StoredState:
+    @staticmethod
+    def _state(connection: journal.Connection) -> StoredState:
         row = connection.execute(
             "SELECT title, source, started, frames, pending, finished, problem, revision, exported_revision FROM meeting WHERE id=1"
         ).fetchone()

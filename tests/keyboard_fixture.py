@@ -60,7 +60,8 @@ class KeyboardFixture:
             raise self.read_error
         return self.key
 
-    def call_next_hook(self, code: int, wparam: int, lparam: int) -> int:
+    @staticmethod
+    def call_next_hook(code: int, wparam: int, lparam: int) -> int:
         return 7
 
     def find_window(self, window: Window) -> int | None:
@@ -77,7 +78,8 @@ class KeyboardFixture:
         self.messages.append((message, wparam, lparam))
         return True
 
-    def set_timer(self, ms: int) -> int:
+    @staticmethod
+    def set_timer(ms: int) -> int:
         return 17
 
     def kill_timer(self, timer: int) -> None:

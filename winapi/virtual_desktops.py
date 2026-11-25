@@ -200,7 +200,8 @@ class VirtualDesktops:
         finally:
             _release(array)
 
-    def _at(self, array: ctypes.c_void_p, index: int) -> uuid.UUID:
+    @staticmethod
+    def _at(array: ctypes.c_void_p, index: int) -> uuid.UUID:
         desktop = ctypes.c_void_p()
         _check(
             com_method(

@@ -37,7 +37,8 @@ class WinDesktop:
 
     # ---- text in other programs --------------------------------------------------------
 
-    def type_text(self, text: str) -> None:
+    @staticmethod
+    def type_text(text: str) -> None:
         inputs.type_text(text, Origin.DESKTOP)
 
     def set_clipboard(self, text: str) -> None:

@@ -94,32 +94,39 @@ class WasapiApi(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class NativeWasapi:
-    def initialize(self) -> int:
+    @staticmethod
+    def initialize() -> int:
         return CoInitializeEx(None, COINIT_MULTITHREADED)
 
-    def uninitialize(self) -> None:
+    @staticmethod
+    def uninitialize() -> None:
         CoUninitialize()
 
-    def create_enumerator(self, pointer: ctypes.c_void_p) -> int:
+    @staticmethod
+    def create_enumerator(pointer: ctypes.c_void_p) -> int:
         return CoCreateInstance(
             _ENUMERATOR, None, 23, _IID_ENUMERATOR, ctypes.byref(pointer)
         )
 
-    def free_format(self, pointer: ctypes.c_void_p) -> None:
+    @staticmethod
+    def free_format(pointer: ctypes.c_void_p) -> None:
         CoTaskMemFree(pointer)
 
+    @staticmethod
     def method(
-        self, pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType
+        pointer: ctypes.c_void_p, index: int, *arguments: ArgumentType
     ) -> NativeCall:
         # The declared c_long restype supplies an integer HRESULT. Keep that
         # native callable directly: packet draining creates no extra wrapper.
         return com_method("The audio interface", pointer, index, *arguments)
 
-    def clock(self) -> float:
+    @staticmethod
+    def clock() -> float:
         """Seconds on the QueryPerformanceCounter clock that WASAPI timestamps packets with."""
         return time.perf_counter()
 
-    def wait(self, stop: threading.Event, timeout: float) -> bool:
+    @staticmethod
+    def wait(stop: threading.Event, timeout: float) -> bool:
         return stop.wait(timeout)
 
 

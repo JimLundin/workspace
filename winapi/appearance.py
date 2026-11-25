@@ -122,10 +122,12 @@ class TimerPeriod(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class NativeTimerPeriod:
-    def request(self) -> bool:
+    @staticmethod
+    def request() -> bool:
         return bool(timeBeginPeriod(1) == 0)
 
-    def release(self) -> None:
+    @staticmethod
+    def release() -> None:
         timeEndPeriod(1)
 
 
