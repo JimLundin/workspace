@@ -1,5 +1,3 @@
-"""The bar warns once when memory runs low, and once when an app holds the processor for a while."""
-
 from dataclasses import replace
 
 from desktop_ui.ambient import SystemStatus
@@ -29,9 +27,6 @@ def notices_over(
 def test_low_memory_warns_once_until_memory_recovers_past_the_higher_line() -> (
     None
 ):
-    # Defects: every reading under the line warns again, so the tray repeats each two
-    # seconds; a reading hovering between the lines re-arms it; or memory that has
-    # recovered never warns again.
     counts = [
         len(notices)
         for notices in notices_over(
@@ -44,9 +39,6 @@ def test_low_memory_warns_once_until_memory_recovers_past_the_higher_line() -> (
 def test_an_app_warns_once_after_holding_the_processor_for_the_whole_stretch() -> (
     None
 ):
-    # Defects: a moment's burst warns; the bar's every-second tick counts as new
-    # readings of the same apps, so the stretch passes early; the app warns again on
-    # each reading while it stays busy; or once calm and busy again it never warns.
     def busy(at: float, cores: float) -> SystemStatus:
         return SystemStatus(apps=(AppUse("Code", 1, cores),), ranked_at=at)
 
@@ -67,7 +59,6 @@ def test_an_app_warns_once_after_holding_the_processor_for_the_whole_stretch() -
 
 
 def test_the_warnings_name_the_largest_apps_and_the_busy_one() -> None:
-    # Defect: a warning says the laptop strains without naming what to close.
     low = replace(
         available(50),
         apps=(AppUse("small", 1, None), AppUse("msedge", 900, None)),

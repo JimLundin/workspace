@@ -342,7 +342,7 @@ class MenuCell(QtWidgets.QAbstractButton):
             case Live():
                 return self.stop_circle().contains(QtCore.QPointF(pos))
             case Slider() | Calendar() | Graph() | Ranking() | Fact():
-                return False  # The slider and the calendar take the pointer themselves rather than clicking.
+                return False
             case Item() | Toggle() | TrayIcon() | Nearby():
                 return super().hitButton(pos)
             case _:
@@ -435,7 +435,7 @@ class MenuCell(QtWidgets.QAbstractButton):
             Face.GRAPH,
             Face.RANKING,
             Face.FACT,
-        )  # Nothing to press but a part of it.
+        )
         paint_feedback(
             painter,
             lettering,
@@ -514,7 +514,6 @@ class MenuCell(QtWidgets.QAbstractButton):
     def paint_fact(
         self, painter: QtGui.QPainter, fact: Fact, bounds: QtCore.QRectF
     ) -> None:
-        """The fact's symbol beside its value over what it means."""
         cells = self.sizes.cells
         self.paint_symbol(painter, fact.icon, on=False)
         area = QtCore.QRectF(
@@ -833,8 +832,6 @@ class MenuCell(QtWidgets.QAbstractButton):
             painter.drawPolyline(line)
 
     def paint_ranking(self, painter: QtGui.QPainter, ranking: Ranking) -> None:
-        """The ranking's name over its apps: each app's name and reading, over a bar filled to its
-        share in the graphs' accent."""
         lettering, cells, text = (
             self.capsule.drawn.look.lettering,
             self.sizes.cells,

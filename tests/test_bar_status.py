@@ -87,8 +87,6 @@ def test_the_history_keeps_its_newest_samples_and_leaves_a_gap_for_an_unread_one
 def test_each_apps_use_is_read_at_once_then_at_the_pace_of_whether_it_shows() -> (
     None
 ):
-    # Defects: the first read waits a whole interval, so the panels open empty; the
-    # slow pace applies while a panel shows the apps; or the fast one never stops.
     assert due(None, 0.0, ranking=False)
     last = ProcessSample(100.0, ())
     assert not due(last, 100.0 + RESOURCES / 2, ranking=True)

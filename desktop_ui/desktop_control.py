@@ -205,7 +205,6 @@ class Notified:
     title: str
     text: str
     warning: bool = field(default=False, kw_only=True)
-    """The tray shows it as a warning: something the person should act on."""
 
 
 @dataclass(frozen=True, slots=True)

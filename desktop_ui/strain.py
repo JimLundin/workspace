@@ -1,11 +1,3 @@
-"""When the laptop strains: memory running low, or one app holding the processor.
-
-The bar decides from each reading whether to warn, and the tray shows the warning.
-Each warning is given once: low memory again only after memory has recovered past
-a higher line, so a reading hovering at the line stays quiet; a busy app again only
-after it has calmed down.
-"""
-
 from dataclasses import dataclass, field, replace
 from typing import Final
 
@@ -13,16 +5,11 @@ from desktop_ui.ambient import SystemStatus
 from desktop_ui.island_model import StatusSpec, gigabytes
 from winapi.machine_status import AppUse
 
-LARGEST: Final = (
-    3  # Apps a low-memory warning names: enough to find the one to close.
-)
+LARGEST: Final = 3
 
 
 @dataclass(frozen=True, slots=True)
 class StrainSpec:
-    """When the bar warns: under `low_memory` bytes available, and again only after more than `recovered`;
-    and when one app has kept `busy_cores` processors busy for `busy_for` seconds."""
-
     low_memory: int
     recovered: int
     busy_cores: float
@@ -41,16 +28,10 @@ class StrainSpec:
 
 @dataclass(frozen=True, slots=True)
 class Watch:
-    """What the warnings have seen."""
-
     memory_low: bool = False
-    """Low memory was warned of, and memory hasn't recovered since."""
     ranked_at: float | None = None
-    """When the apps last judged were read."""
     busy_since: frozendict[str, float] = field(default=frozendict())
-    """Each busy app, by when it was first read busy in this stretch."""
     warned: frozenset[str] = frozenset()
-    """The busy apps already warned of in this stretch."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +55,6 @@ def _largest(apps: tuple[AppUse, ...], status: StatusSpec) -> str:
 def _memory(
     watch: Watch, system: SystemStatus, spec: StrainSpec, status: StatusSpec
 ) -> tuple[bool, tuple[Notice, ...]]:
-    """Whether memory stays warned of as low, and the warning when it first runs low."""
     available = _available(system)
     if available is None:
         return watch.memory_low, ()
@@ -93,7 +73,6 @@ def _memory(
 def watched(
     watch: Watch, system: SystemStatus, spec: StrainSpec, status: StatusSpec
 ) -> tuple[Watch, tuple[Notice, ...]]:
-    """What the warnings have seen after `system`, and what to warn of now."""
     memory_low, memory = _memory(watch, system, spec, status)
     now = system.ranked_at
     if now is None or now == watch.ranked_at:

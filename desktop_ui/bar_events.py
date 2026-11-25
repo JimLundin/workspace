@@ -95,7 +95,6 @@ class BarSpec:
     hints: frozendict[Tool, str]
     """Each tool's keys on the layout the desktop is handed, which the menu shows beside its tools."""
     strain: StrainSpec
-    """When the bar warns that memory runs low or an app holds the processor."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +111,6 @@ class BarModel:
     job: Job | None = None
     recording: RecordingState = field(default_factory=RecordingState)
     watch: Watch = field(default_factory=Watch)
-    """What the strain warnings have seen."""
     chord_held: bool = False
     """Either keyboard is holding its Apps key."""
     layout_enabled: bool = True
@@ -144,8 +142,6 @@ def memory_trace(model: BarModel) -> Trace:
 
 
 def rankings(model: BarModel) -> tuple[tuple[Ranked, ...], tuple[Ranked, ...]]:
-    """The apps keeping the processor busiest, as shares of every processor, then those holding the
-    most memory, as shares of all installed."""
     system, status = model.seen.system, model.spec.island.status
     processors = system.processors
     busiest = ranking(
@@ -429,9 +425,6 @@ class OpenSettings:
 
 @dataclass(frozen=True, slots=True)
 class Survey:
-    """What the open panel needs read: the Wi-Fi networks in range while `listing`, and each app's
-    use at the panels' pace while `ranking`."""
-
     listing: bool = field(kw_only=True)
     ranking: bool = field(kw_only=True)
 
@@ -464,8 +457,6 @@ class ShowHints:
 
 @dataclass(frozen=True, slots=True)
 class Warn:
-    """Tell the person, through the tray, that the laptop strains."""
-
     title: str
     text: str
 

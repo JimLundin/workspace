@@ -1,16 +1,3 @@
-"""System indicators are observed off the UI thread, with one bounded result slot.
-
-The same worker applies the speakers' level and mute, and Wi-Fi scans and joins.
-Windows' audio interfaces need a multithreaded COM apartment, which Qt's thread
-cannot join, and a scan or join blocks. Requests coalesce by kind, so a drag
-applies its latest level rather than every intermediate one, and never drops a
-mute requested beside it.
-The same worker reads processor and memory use every two seconds, and the Wi-Fi
-networks in range each tick while their panel is open. It reads what each app uses
-every two seconds while the processor or memory panel is open, and every half
-minute otherwise; a read takes about 5 ms for 400 processes.
-"""
-
 import os
 import queue
 import threading
@@ -32,10 +19,8 @@ from winapi.machine_status import (
 )
 lazy from winapi import resources, system_status
 
-RESOURCES: Final = 2.0  # Seconds between processor and memory readings; faster readings only flicker.
-RANKED_AWAY: Final = (
-    30.0  # Seconds between reads of each app's use while no panel shows them.
-)
+RESOURCES: Final = 2.0
+RANKED_AWAY: Final = 30.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,13 +30,11 @@ class _Sampled:
     """The processor times the next load measures against."""
     sampled: float = 0.0
     processes: ProcessSample | None = None
-    """The processes the next apps' processor use measures against."""
 
 
 def ranked(
     last: SystemStatus, before: ProcessSample | None, after: ProcessSample
 ) -> SystemStatus:
-    """The apps' use as of `after`, their processor use measured since `before`."""
     return replace(
         last,
         apps=tuple(apps(before, after)),
@@ -61,7 +44,6 @@ def ranked(
 
 
 def due(last: ProcessSample | None, now: float, *, ranking: bool) -> bool:
-    """Whether the apps' use is read now: at once, then every interval, a shorter one while it shows."""
     return last is None or now - last.taken >= (
         RESOURCES if ranking else RANKED_AWAY
     )
@@ -171,9 +153,6 @@ def apply(machine: Machine, pending: Pending) -> None:
 
 
 class Observe(Protocol):
-    """One reading of the system; `listing` reads the Wi-Fi networks in range too, and `ranking`
-    reads each app's use at the panels' pace."""
-
     def __call__(self, *, listing: bool, ranking: bool) -> SystemStatus: ...
 
 
@@ -190,7 +169,6 @@ class StatusObserver:
     listing: threading.Event = field(default_factory=threading.Event)
     """The Wi-Fi panel is open: each tick reads the networks in range."""
     ranking: threading.Event = field(default_factory=threading.Event)
-    """The processor or memory panel is open: each app's use is read at its pace."""
     requests: Cell[Pending] = field(default_factory=lambda: Cell(Pending()))
     lock: threading.Lock = field(default_factory=threading.Lock)
     """Serializes the UI thread's requests with the worker taking them."""
@@ -225,8 +203,6 @@ class StatusObserver:
         self.request(lambda pending: replace(pending, muted=muted))
 
     def survey(self, *, listing: bool, ranking: bool) -> None:
-        """Read the networks in range while `listing`, scanning afresh as it starts, and each app's
-        use at the panels' pace while `ranking`, at once as it starts."""
         if listing and not self.listing.is_set():
             self.listing.set()
             self.request(lambda pending: replace(pending, scan=True))

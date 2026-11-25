@@ -593,8 +593,5 @@ PAGER: Final = PagerSpec(
 
 
 STRAIN: Final = StrainSpec(
-    low_memory=3 << 29,  # 1.5 GB available.
-    recovered=2 << 30,
-    busy_cores=0.5,
-    busy_for=10 * 60,
+    low_memory=3 << 29, recovered=2 << 30, busy_cores=0.5, busy_for=10 * 60
 )

@@ -1,5 +1,3 @@
-"""Windows power, Wi-Fi, speaker, processor and memory observations, including unknown readings."""
-
 import os
 import sys
 import time
@@ -54,9 +52,6 @@ def test_processor_and_memory_bindings_read_real_values() -> None:
 def test_the_process_table_reads_this_process_by_its_id_name_memory_and_time() -> (
     None
 ):
-    # Defect: the entry's declared layout is off by a field, so names, ids, memory
-    # or processor times are read from their neighbours' offsets, or the walk stops
-    # at the first entry.
     processes = resources.process_use()
     this = [process for process in processes if process.pid == os.getpid()]
     assert len(this) == 1, (

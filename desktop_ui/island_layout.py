@@ -180,9 +180,7 @@ class Cells:
     """A graph's name and reading above it..."""
     graph_line: float
     rank_row: float
-    """An app's line in a ranking, with its share's bar under it."""
     rank_bar: float
-    """The share's bar under an app in a ranking."""
     """...and its line's width."""
     signal_bar: float
     """A network's signal bar's width; four span a symbol."""

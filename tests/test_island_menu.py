@@ -562,10 +562,6 @@ def test_the_battery_says_whether_it_charges_or_how_long_it_lasts() -> None:
 def test_a_ranking_lists_the_apps_using_the_most_first_and_leaves_out_the_unread() -> (
     None
 ):
-    # Defects: the apps come in name or read order, so the one to blame sits below
-    # idle ones; every app is listed and the panel grows past the screen; an app not
-    # yet measured counts as using nothing and pushes a busy one out; or one using
-    # more than the whole draws a bar past its tile.
     used = (
         AppUse("idle", 1, 0.0),
         AppUse("unread", 9, None),
@@ -586,8 +582,6 @@ def test_a_ranking_lists_the_apps_using_the_most_first_and_leaves_out_the_unread
 
 
 def test_a_ranking_takes_no_place_until_its_apps_have_been_read() -> None:
-    # Defect: the memory panel opens with an empty ranking under its graph before the
-    # first read, or never shows the apps once they are read.
     def ranked(controls: Controls) -> list[Ranking]:
         return [
             cell.entry

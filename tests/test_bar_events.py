@@ -177,8 +177,6 @@ def test_networks_are_read_only_while_their_panel_is_open() -> None:
 def test_each_apps_use_is_read_at_the_panels_pace_only_while_theirs_is_open() -> (
     None
 ):
-    # Defects: the processor or memory panel lists apps a half minute stale, or the
-    # worker keeps reading every process every two seconds after the panel closes.
     for panel in (Panel.PROCESSOR, Panel.MEMORY):
         _, opening = transition(model(), PanelPressed(panel))
         assert Survey(listing=False, ranking=True) in tuple(opening)
@@ -188,7 +186,6 @@ def test_each_apps_use_is_read_at_the_panels_pace_only_while_theirs_is_open() ->
 
 
 def test_a_reading_that_strains_the_laptop_warns_through_the_tray() -> None:
-    # Defect: the strain is noticed but its warning never leaves the bar.
     seen = model().seen
     low = replace(seen, system=replace(seen.system, memory=Memory(950, 1_000)))
     _, effects = transition(model(), Ticked(low, 0.0, 0.0))

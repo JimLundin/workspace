@@ -1,5 +1,3 @@
-"""However processes come and go between two samples, the apps' processor use adds up to the time spent since."""
-
 from dataclasses import dataclass
 
 from hypothesis import strategies
@@ -15,7 +13,6 @@ class Samples:
     before: ProcessSample
     after: ProcessSample
     spent: int
-    """The processor time every process in `after` spent since `before`, or since it started."""
 
 
 def samples(draw: strategies.DrawFn) -> Samples:
@@ -67,8 +64,6 @@ def samples(draw: strategies.DrawFn) -> Samples:
 
 @property_test(cases(samples))
 def test_apps_account_for_every_process_once(case: Samples) -> None:
-    # Defects: a process is counted under two apps or dropped from its own, a reused
-    # id goes negative, or the memory of the apps differs from the processes'.
     used = tuple(apps(case.before, case.after))
     cores = [app.cores for app in used]
     assert all(core is not None and core >= 0 for core in cores)
