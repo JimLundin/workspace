@@ -18,14 +18,6 @@ from pydantic import TypeAdapter
 
 from assistant import journal
 from contracts.capture import AudioSource
-from contracts.meetings import (
-    MEETING,
-    Ended,
-    InProgress,
-    Meeting,
-    TranscriptState,
-    UnknownEnd,
-)
 from contracts.recording_state import SOURCE_NAMES, Batch, StoredState, duration
 from winapi.pcm import RATE, quiet_tail
 
@@ -261,35 +253,6 @@ class MeetingStore:
                     "INSERT INTO capture_end (id, at) VALUES (1, ?)", (at,)
                 )
 
-    def meeting(self) -> Meeting:
-        return self._meeting(self.state())
-
-    def _meeting(self, saved: StoredState) -> Meeting:
-        period = (
-            InProgress(saved.started)
-            if not saved.finished
-            else UnknownEnd(saved.started)
-            if saved.ended_at is None
-            else Ended(saved.started, saved.ended_at)
-        )
-        observed = Meeting(
-            self.folder.name,
-            saved.title,
-            period,
-            saved.source,
-            saved.frames / RATE,
-            saved.pending / RATE,
-            str(self.transcript.absolute()),
-            TranscriptState.COMPLETE
-            if saved.finished and not saved.pending
-            else TranscriptState.PENDING,
-            saved.revision,
-            saved.problem,
-        )
-        # Existing dataclass instances are trusted by Pydantic. The IO round trip
-        # revalidates constrained journal numbers before publishing typed values.
-        return MEETING.validate_json(MEETING.dump_json(observed))
-
     def batch(self) -> Batch | None:
         with self.reading() as connection:
             # Capture may append its tail and finish between these queries.
@@ -367,19 +330,6 @@ class MeetingStore:
             f"**{duration(_integer(row[0]) / RATE)}**  {_text(row[2])[:2000]}"
             for row in reversed(rows)
         )
-
-    def observation(self) -> tuple[Meeting, str]:
-        """One bounded native-event/preview snapshot for catalog intake."""
-        with self.reading() as connection:
-            meeting = self._meeting(self._state(connection))
-            rows = connection.execute(
-                "SELECT start, text FROM segments WHERE text!='' ORDER BY start DESC LIMIT 8"
-            ).fetchall()
-        preview = "\n\n".join(
-            f"{duration(_integer(row[0]) / RATE)}  {_text(row[1])[:2000]}"
-            for row in reversed(rows)
-        )
-        return meeting, preview[:6000]
 
     def export(self) -> None:
         temporary = self.transcript.with_suffix(".tmp")
