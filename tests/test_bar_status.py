@@ -2,8 +2,14 @@ import threading
 import time
 
 from desktop_ui.ambient import History, SystemStatus
-from desktop_ui.bar_status import StatusObserver, sampled_resources
-from winapi.machine_status import Memory
+from desktop_ui.bar_status import (
+    RANKED_AWAY,
+    RESOURCES,
+    StatusObserver,
+    due,
+    sampled_resources,
+)
+from winapi.machine_status import Memory, ProcessSample
 
 
 class Speakers:
@@ -12,7 +18,7 @@ class Speakers:
         self.release = threading.Event()
         self.applied: list[tuple[float | bool, str]] = []
 
-    def observe(self, *, listing: bool) -> SystemStatus:
+    def observe(self, *, listing: bool, ranking: bool) -> SystemStatus:
         self.held.set()
         self.release.wait(2)
         return SystemStatus()
@@ -76,3 +82,16 @@ def test_the_history_keeps_its_newest_samples_and_leaves_a_gap_for_an_unread_one
         (3, 4, None),
         (30, 40, None),
     )
+
+
+def test_each_apps_use_is_read_at_once_then_at_the_pace_of_whether_it_shows() -> (
+    None
+):
+    # Defects: the first read waits a whole interval, so the panels open empty; the
+    # slow pace applies while a panel shows the apps; or the fast one never stops.
+    assert due(None, 0.0, ranking=False)
+    last = ProcessSample(100.0, ())
+    assert not due(last, 100.0 + RESOURCES / 2, ranking=True)
+    assert due(last, 100.0 + RESOURCES, ranking=True)
+    assert not due(last, 100.0 + RESOURCES, ranking=False)
+    assert due(last, 100.0 + RANKED_AWAY, ranking=False)

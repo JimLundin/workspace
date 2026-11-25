@@ -398,7 +398,11 @@ class OpenSettings:
 
 @dataclass(frozen=True, slots=True)
 class Survey:
+    """What the open panel needs read: the Wi-Fi networks in range while `listing`, and each app's
+    use at the panels' pace while `ranking`."""
+
     listing: bool = field(kw_only=True)
+    ranking: bool = field(kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -456,7 +460,7 @@ def _closed(
         return model, ()
     return replace(model, opened=None), (
         Release(model.menu_target if restore else 0),
-        Survey(listing=False),
+        Survey(listing=False, ranking=False),
         Render(),
     )
 
@@ -593,7 +597,10 @@ def _opened(
     opening = replace(menu(model, panel), anchor=anchor)
     return model, (
         Expand(opening, remember=model.opened is None),
-        Survey(listing=panel is Panel.NETWORK),
+        Survey(
+            listing=panel is Panel.NETWORK,
+            ranking=panel in (Panel.PROCESSOR, Panel.MEMORY),
+        ),
     )
 
 

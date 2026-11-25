@@ -8,11 +8,15 @@ from desktop_ui.island_model import Reading, battery_text, tip
 from tests import test_island_model
 from winapi import ambient, system_status
 from winapi.machine_status import (
+    AppUse,
     Battery,
     CpuTimes,
     Network,
     PowerUnavailable,
+    ProcessSample,
+    ProcessUse,
     Wifi,
+    apps,
     cpu_load,
     nearby,
 )
@@ -114,3 +118,53 @@ def test_networks_merge_by_name_keep_a_saved_profile_and_list_the_connected_one_
     assert home == Network(
         "Home", 60, secured=True, connected=True, profile="Home"
     )
+
+
+SECOND = 10_000_000  # Processor time's units in a second.
+
+
+def test_an_apps_processes_add_up_under_its_name_without_the_exe() -> None:
+    # Defects: processes are listed one by one, so an app of many (a browser) hides
+    # behind its largest; or the memory of one process is counted for its app twice.
+    sample = ProcessSample(
+        0.0,
+        (
+            ProcessUse(10, "msedge.exe", 300, 0),
+            ProcessUse(11, "msedge.exe", 200, 0),
+            ProcessUse(12, "Code.EXE", 50, 0),
+            ProcessUse(4, "System", 1, 0),
+        ),
+    )
+    assert set(apps(None, sample)) == {
+        AppUse("msedge", 500, None),
+        AppUse("Code", 50, None),
+        AppUse("System", 1, None),
+    }
+
+
+def test_processor_use_counts_only_the_time_spent_since_the_previous_sample() -> (
+    None
+):
+    # Defects: an app's lifetime total reads as its current use; a process that ended
+    # and left its id to a new program subtracts the old one's time and goes negative;
+    # or a process started since the last sample reads as idle.
+    before = ProcessSample(
+        100.0,
+        (
+            ProcessUse(10, "msedge.exe", 0, 90 * SECOND),
+            ProcessUse(20, "old.exe", 0, 500 * SECOND),
+        ),
+    )
+    after = ProcessSample(
+        102.0,
+        (
+            ProcessUse(10, "msedge.exe", 0, 92 * SECOND),
+            ProcessUse(20, "new.exe", 0, 1 * SECOND),
+            ProcessUse(30, "msedge.exe", 0, 1 * SECOND),
+        ),
+    )
+    assert {app.name: app.cores for app in apps(before, after)} == {
+        "msedge": 1.5,
+        "new": 0.5,
+    }
+    assert all(app.cores is None for app in apps(after, after))

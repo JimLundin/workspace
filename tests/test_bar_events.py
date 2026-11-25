@@ -46,7 +46,7 @@ def test_opening_the_menu_remembers_the_keyboard_only_when_the_island_was_closed
     _, effects = transition(closed, Pressed(Action.OPEN_MENU))
     assert tuple(effects) == (
         Expand(menu(closed, Panel.WORKSPACE), remember=True),
-        Survey(listing=False),
+        Survey(listing=False, ranking=False),
     )
     opened, _ = transition(closed, Opening(menu(closed, Panel.WORKSPACE), 42))
     assert opened.menu_target == 42
@@ -63,13 +63,13 @@ def test_a_reading_opens_its_panel_switches_from_another_and_closes_its_own() ->
     _, opening = transition(closed, PanelPressed(Panel.SOUND, 2))
     assert tuple(opening) == (
         Expand(replace(menu(closed, Panel.SOUND), anchor=2), remember=True),
-        Survey(listing=False),
+        Survey(listing=False, ranking=False),
     )
     sound, _ = transition(closed, Opening(menu(closed, Panel.SOUND), 42))
     _, switching = transition(sound, PanelPressed(Panel.WORKSPACE))
     assert tuple(switching) == (
         Expand(menu(sound, Panel.WORKSPACE), remember=False),
-        Survey(listing=False),
+        Survey(listing=False, ranking=False),
     )
     _, closing = transition(sound, PanelPressed(Panel.SOUND))
     assert Release(42) in tuple(closing)
@@ -86,7 +86,7 @@ def test_losing_the_keyboard_closes_without_taking_it_back_but_escape_returns_it
     lost, deactivated = transition(opened, Deactivated())
     assert lost.opened is None and tuple(deactivated) == (
         Release(0),
-        Survey(listing=False),
+        Survey(listing=False, ranking=False),
         Render(),
     )
     _, closed = transition(opened, Pressed(Action.CLOSE_MENU))
@@ -164,9 +164,22 @@ def test_the_calendar_turns_from_the_month_it_shows_and_returns_to_today() -> (
 
 def test_networks_are_read_only_while_their_panel_is_open() -> None:
     _, opening = transition(model(), PanelPressed(Panel.NETWORK))
-    assert Survey(listing=True) in tuple(opening)
+    assert Survey(listing=True, ranking=False) in tuple(opening)
     listing, _ = transition(model(), Opening(menu(model(), Panel.NETWORK), 42))
     _, switching = transition(listing, PanelPressed(Panel.SOUND))
-    assert Survey(listing=False) in tuple(switching)
+    assert Survey(listing=False, ranking=False) in tuple(switching)
     _, closing = transition(listing, PanelPressed(Panel.NETWORK))
-    assert Survey(listing=False) in tuple(closing)
+    assert Survey(listing=False, ranking=False) in tuple(closing)
+
+
+def test_each_apps_use_is_read_at_the_panels_pace_only_while_theirs_is_open() -> (
+    None
+):
+    # Defects: the processor or memory panel lists apps a half minute stale, or the
+    # worker keeps reading every process every two seconds after the panel closes.
+    for panel in (Panel.PROCESSOR, Panel.MEMORY):
+        _, opening = transition(model(), PanelPressed(panel))
+        assert Survey(listing=False, ranking=True) in tuple(opening)
+        ranking, _ = transition(model(), Opening(menu(model(), panel), 42))
+        _, closing = transition(ranking, PanelPressed(panel))
+        assert Survey(listing=False, ranking=False) in tuple(closing)

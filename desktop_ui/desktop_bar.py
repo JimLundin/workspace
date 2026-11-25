@@ -251,8 +251,8 @@ class DesktopBar:
                 self.shell.away.toggle()
             case OpenSettings(page):
                 os.startfile(page.value)
-            case Survey(listing=listing):
-                self.shell.status.survey(listing=listing)
+            case Survey(listing=listing, ranking=ranking):
+                self.shell.status.survey(listing=listing, ranking=ranking)
             case JoinNetwork(profile):
                 self.shell.status.join(profile)
             case SetVolume(level):

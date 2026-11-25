@@ -19,6 +19,7 @@ comctl32 = ctypes.WinDLL("comctl32", use_last_error=True)
 dxva2 = ctypes.WinDLL("dxva2", use_last_error=True)
 wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
 ole32 = ctypes.WinDLL("ole32", use_last_error=True)
+ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
 
 
 class NativeFunction[T](Protocol):

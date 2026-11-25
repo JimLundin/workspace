@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, replace
 from datetime import date
 
-from winapi.machine_status import Listing, Memory, Power, Speakers, Wifi
+from winapi.machine_status import AppUse, Listing, Memory, Power, Speakers, Wifi
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +33,8 @@ class SystemStatus:
     """Memory in use, in bytes."""
     networks: Listing = ()
     """The Wi-Fi networks in range, read only while their panel is open."""
+    apps: tuple[AppUse, ...] = ()
+    """What each app uses: read every two seconds while a panel shows it, every half minute otherwise."""
 
 
 @dataclass(frozen=True, slots=True)
