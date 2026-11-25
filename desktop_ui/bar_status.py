@@ -37,7 +37,7 @@ def ranked(
 ) -> SystemStatus:
     return replace(
         last,
-        apps=tuple(apps(before, after)),
+        apps=tuple(apps(before, after, os.getpid())),
         ranked_at=after.taken,
         processors=os.cpu_count() or 1,
     )

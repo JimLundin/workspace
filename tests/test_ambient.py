@@ -133,10 +133,27 @@ def test_an_apps_processes_add_up_under_its_name_without_the_exe() -> None:
             ProcessUse(4, "System", 1, 0),
         ),
     )
-    assert set(apps(None, sample)) == {
-        AppUse("msedge", 500, None),
-        AppUse("Code", 50, None),
-        AppUse("System", 1, None),
+    assert set(apps(None, sample, 0)) == {
+        AppUse("msedge", 500, None, frozenset({10, 11})),
+        AppUse("Code", 50, None, frozenset({12})),
+        AppUse("System", 1, None, frozenset({4})),
+    }
+
+
+def test_workspace_and_the_windows_shell_are_never_offered_to_close() -> None:
+    sample = ProcessSample(
+        0.0,
+        (
+            ProcessUse(20, "pythonw.exe", 1, 0),
+            ProcessUse(21, "pythonw.exe", 1, 0),
+            ProcessUse(30, "Explorer.EXE", 1, 0),
+            ProcessUse(40, "node.exe", 1, 0),
+        ),
+    )
+    assert {app.name: app.closes for app in apps(None, sample, 21)} == {
+        "pythonw": frozenset(),
+        "Explorer": frozenset(),
+        "node": frozenset({40}),
     }
 
 
@@ -158,8 +175,8 @@ def test_processor_use_counts_only_the_time_spent_since_the_previous_sample() ->
             ProcessUse(30, "msedge.exe", 0, 1 * SECOND),
         ),
     )
-    assert {app.name: app.cores for app in apps(before, after)} == {
+    assert {app.name: app.cores for app in apps(before, after, 0)} == {
         "msedge": 1.5,
         "new": 0.5,
     }
-    assert all(app.cores is None for app in apps(after, after))
+    assert all(app.cores is None for app in apps(after, after, 0))

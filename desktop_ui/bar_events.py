@@ -229,6 +229,11 @@ class Paged:
 
 
 @dataclass(frozen=True, slots=True)
+class CloseAsked:
+    processes: frozenset[int]
+
+
+@dataclass(frozen=True, slots=True)
 class Hovered:
     key: Key | None
 
@@ -338,6 +343,7 @@ type Event = (
     Pressed
     | PanelPressed
     | Paged
+    | CloseAsked
     | Hovered
     | Selected
     | Picked
@@ -430,6 +436,11 @@ class Survey:
 
 
 @dataclass(frozen=True, slots=True)
+class CloseApp:
+    processes: frozenset[int]
+
+
+@dataclass(frozen=True, slots=True)
 class JoinNetwork:
     profile: str
 
@@ -475,6 +486,7 @@ type Effect = (
     | ToggleAway
     | OpenSettings
     | Survey
+    | CloseApp
     | JoinNetwork
     | SetVolume
     | SetMute
@@ -675,6 +687,8 @@ def _folded(
             return _panel(model, panel, slot)
         case Paged(months):
             return _changed(model, _paged(model, months))
+        case CloseAsked(processes):
+            return model, (CloseApp(processes),)
         case Hovered(key):
             return _changed(model, replace(model, hovered=key))
         case Selected(index):

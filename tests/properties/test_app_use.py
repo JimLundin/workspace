@@ -64,7 +64,7 @@ def samples(draw: strategies.DrawFn) -> Samples:
 
 @property_test(cases(samples))
 def test_apps_account_for_every_process_once(case: Samples) -> None:
-    used = tuple(apps(case.before, case.after))
+    used = tuple(apps(case.before, case.after, 0))
     cores = [app.cores for app in used]
     assert all(core is not None and core >= 0 for core in cores)
     assert abs(sum(core or 0 for core in cores) * 2.0 * SECOND - case.spent) < 1

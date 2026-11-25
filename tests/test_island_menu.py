@@ -581,6 +581,18 @@ def test_a_ranking_lists_the_apps_using_the_most_first_and_leaves_out_the_unread
     assert ranking(used, lambda app: app.cores, 0, str) == ()
 
 
+def test_each_ranked_row_closes_its_own_apps_processes() -> None:
+    used = (
+        AppUse("small", 1, None, frozenset({1})),
+        AppUse("large", 9, None, frozenset({2, 3})),
+    )
+    ranked = ranking(used, lambda app: app.memory, 10, str)
+    assert {row.name: row.closes for row in ranked} == {
+        "large": frozenset({2, 3}),
+        "small": frozenset({1}),
+    }
+
+
 def test_a_ranking_takes_no_place_until_its_apps_have_been_read() -> None:
     def ranked(controls: Controls) -> list[Ranking]:
         return [

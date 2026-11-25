@@ -184,6 +184,8 @@ class Cells:
     """...and its line's width."""
     signal_bar: float
     """A network's signal bar's width; four span a symbol."""
+    rank_close: float
+    """A ranked app's close button, square, at the end of its line."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

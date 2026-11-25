@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from itertools import groupby
@@ -141,14 +141,26 @@ class AppUse:
     name: str
     memory: int
     cores: float | None
+    closes: frozenset[int] = frozenset()
+    """The processes closing the app ends; none for Workspace's own or the Windows shell, which are never offered."""
+
+
+SHELL: Final = "explorer.exe"
 
 
 def app_name(image: str) -> str:
     return image[: -len(".exe")] if image.lower().endswith(".exe") else image
 
 
+def closes(
+    name: str, members: Sequence[ProcessUse], own: int
+) -> frozenset[int]:
+    pids = frozenset(process.pid for process in members)
+    return frozenset() if name.lower() == SHELL or own in pids else pids
+
+
 def apps(
-    before: ProcessSample | None, after: ProcessSample
+    before: ProcessSample | None, after: ProcessSample, own: int
 ) -> Iterator[AppUse]:
     elapsed = after.taken - before.taken if before is not None else 0.0
     earlier = (
@@ -175,4 +187,5 @@ def apps(
             )
             / _TICKS_PER_SECOND
             / elapsed,
+            closes(name, members, own),
         )

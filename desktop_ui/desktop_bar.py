@@ -15,6 +15,7 @@ from desktop_ui.qt_runtime import prepare
 lazy import desktop_ui.components.appearance
 lazy import protocol
 lazy import winapi.ambient
+lazy import winapi.processes
 lazy from contracts.recording_state import RecordingAction
 lazy from desktop_ui.ambient import Ambient
 lazy from desktop_ui.application_observer import (
@@ -28,6 +29,7 @@ lazy from desktop_ui.bar_events import (
     BarModel,
     BarSpec,
     ClickTray,
+    CloseApp,
     Closing,
     Deactivated,
     Effect,
@@ -253,14 +255,10 @@ class DesktopBar:
                 self.shell.away.toggle()
             case OpenSettings(page):
                 os.startfile(page.value)
-            case Survey(listing=listing, ranking=ranking):
-                self.shell.status.survey(listing=listing, ranking=ranking)
-            case JoinNetwork(profile):
-                self.shell.status.join(profile)
-            case SetVolume(level):
-                self.shell.status.set_volume(level)
-            case SetMute(muted=muted):
-                self.shell.status.set_mute(muted=muted)
+            case (
+                Survey() | CloseApp() | JoinNetwork() | SetVolume() | SetMute()
+            ):
+                self._machine(effect)
             case ClickTray(slot, click):
                 entries = self.window.tray
                 if slot < len(entries):
@@ -271,6 +269,23 @@ class DesktopBar:
                 self._show_hints()
             case Warn(title, text):
                 self.actions.warn(title, text)
+            case _:
+                assert_never(effect)
+
+    def _machine(
+        self, effect: Survey | CloseApp | JoinNetwork | SetVolume | SetMute
+    ) -> None:
+        match effect:
+            case Survey(listing=listing, ranking=ranking):
+                self.shell.status.survey(listing=listing, ranking=ranking)
+            case CloseApp(processes):
+                winapi.processes.end(processes)
+            case JoinNetwork(profile):
+                self.shell.status.join(profile)
+            case SetVolume(level):
+                self.shell.status.set_volume(level)
+            case SetMute(muted=muted):
+                self.shell.status.set_mute(muted=muted)
             case _:
                 assert_never(effect)
 

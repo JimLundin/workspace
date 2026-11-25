@@ -147,6 +147,7 @@ SIZES: Final = Sizes(
         rank_row=20,
         rank_bar=3,
         signal_bar=2.5,
+        rank_close=20,
     ),
     type=BarType(
         reading=look.TYPE.reading,

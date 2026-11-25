@@ -114,6 +114,7 @@ BASE = Sizes(
         rank_row=20,
         rank_bar=3,
         signal_bar=2,
+        rank_close=20,
     ),
     type=BarType(
         reading=Font(11, Weight.MEDIUM),

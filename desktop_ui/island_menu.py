@@ -146,6 +146,15 @@ class Ranked:
     name: str
     reading: str
     share: float
+    closes: frozenset[int] = frozenset()
+    """The processes its close button ends; none draws no button."""
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class _Measured:
+    amount: float
+    name: str
+    closes: frozenset[int] = field(compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +174,7 @@ def ranking(
 ) -> tuple[Ranked, ...]:
     measured = sorted(
         (
-            (amount, app.name)
+            _Measured(amount, app.name, app.closes)
             for app in apps
             if (amount := measure(app)) is not None
         ),
@@ -174,8 +183,13 @@ def ranking(
     if whole <= 0:
         return ()
     return tuple(
-        Ranked(name, reading(amount), min(1.0, amount / whole))
-        for amount, name in measured
+        Ranked(
+            app.name,
+            reading(app.amount),
+            min(1.0, app.amount / whole),
+            app.closes,
+        )
+        for app in measured
     )
 
 

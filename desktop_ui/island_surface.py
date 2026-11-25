@@ -12,6 +12,7 @@ from desktop_ui import island_menu
 from desktop_ui.bar_control import Feedback, KeyboardFocus, paint_feedback
 from desktop_ui.bar_events import (
     BarSpec,
+    CloseAsked,
     Deactivated,
     Event,
     Hovered,
@@ -366,6 +367,30 @@ class MenuCell(QtWidgets.QAbstractButton):
             case _:
                 pass
 
+    def rank_line(self, place: int) -> QtCore.QRectF:
+        cells = self.sizes.cells
+        return QtCore.QRectF(
+            cells.lead,
+            cells.graph_head + place * cells.rank_row,
+            self.width() - cells.lead - cells.trail,
+            cells.rank_row - cells.rank_bar,
+        )
+
+    def close_button(self, place: int) -> QtCore.QRectF:
+        line, side = self.rank_line(place), self.sizes.cells.rank_close
+        return QtCore.QRectF(
+            line.right() - side, line.center().y() - side / 2, side, side
+        )
+
+    def ask_close(self, pos: QtCore.QPointF) -> None:
+        match self.tile.cell.entry:
+            case Ranking(rows=rows):
+                for place, row in enumerate(rows):
+                    if row.closes and self.close_button(place).contains(pos):
+                        self.capsule.window_.report(CloseAsked(row.closes))
+            case _:
+                pass
+
     def turn(self, pos: QtCore.QPointF) -> None:
         match self.tile.cell.entry:
             case Calendar():
@@ -384,6 +409,7 @@ class MenuCell(QtWidgets.QAbstractButton):
         super().mousePressEvent(event)
         self.slide(event.position())
         self.turn(event.position())
+        self.ask_close(event.position())
         event.accept()
 
     @override
@@ -850,11 +876,18 @@ class MenuCell(QtWidgets.QAbstractButton):
         track = color(Shade(lettering.ink.color, window.washes.track))
         filled = color(Shade(hue))
         painter.setFont(inter(text.reading))
+        half = self.sizes.capsule.icon / 2
         for place, row in enumerate(ranking.rows):
-            top = cells.graph_head + place * cells.rank_row
-            line = QtCore.QRectF(
-                cells.lead, top, width, cells.rank_row - cells.rank_bar
-            )
+            line = self.rank_line(place)
+            if row.closes:
+                button = self.close_button(place)
+                self.paint_icon(
+                    painter,
+                    "close",
+                    lettering.quiet,
+                    button.center() - QtCore.QPointF(half, half),
+                )
+                line.setRight(button.left())
             painter.setPen(color(lettering.ink))
             painter.drawText(
                 line,
