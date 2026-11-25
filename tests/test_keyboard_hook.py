@@ -603,7 +603,7 @@ def test_firmware_apps_thumb_reaches_navigation_and_swallows_the_letter_press_an
     shortcuts = [
         message
         for message in driver.messages
-        if message[0] in (Message.REQUEST, Message.CHORD)
+        if message[0] in {Message.REQUEST, Message.CHORD}
     ]
     assert shortcuts[-3:] == [
         (Message.REQUEST, 1000, 1),

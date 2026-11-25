@@ -465,7 +465,7 @@ class DesktopBar:
         self._draw(replace(model, motion=drawn.motion))
         if drawn.indicators:
             for key, capsule in self.window.capsules.items():
-                if key in (Key.ISLAND, Key.STATUS, Key.JOB):
+                if key in {Key.ISLAND, Key.STATUS, Key.JOB}:
                     capsule.update_indicators()
         self.resolution.update(active=drawn.running)
         self.loop.watch(visible=drawn.running)

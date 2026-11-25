@@ -310,7 +310,7 @@ class WindowSwitcher(QtWidgets.QDialog):
             event, QtGui.QKeyEvent
         ):
             key = event.key()
-            if key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+            if key in {Qt.Key.Key_Up, Qt.Key.Key_Down}:
                 count = self.items.count()
                 if count:
                     self.items.setCurrentRow(

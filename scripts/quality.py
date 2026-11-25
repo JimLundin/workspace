@@ -108,7 +108,7 @@ def scan(
         encoding="utf-8",
         check=False,
     )
-    if result.returncode not in (0, 1) or not result.stdout.strip():
+    if result.returncode not in {0, 1} or not result.stdout.strip():
         raise RuntimeError(
             "Signature lint did not complete: " + result.stderr.strip()
         )

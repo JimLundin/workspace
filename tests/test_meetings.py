@@ -371,7 +371,7 @@ def test_a_locked_journal_does_not_block_the_capture_thread(
         try:
             service.start()
             wait_for(
-                lambda: service.snapshot().phase in ("saved", "interrupted")
+                lambda: service.snapshot().phase in {"saved", "interrupted"}
             )
             state = service.snapshot()
             assert state.phase == "saved", state.detail
@@ -462,7 +462,7 @@ def test_recovered_capture_gaps_are_noted_without_ending_the_recording(
         try:
             service.start()
             wait_for(
-                lambda: service.snapshot().phase in ("saved", "interrupted")
+                lambda: service.snapshot().phase in {"saved", "interrupted"}
             )
             state = service.snapshot()
             assert state.phase == "saved" and state.seconds == 2, state.detail

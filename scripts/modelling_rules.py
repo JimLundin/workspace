@@ -85,7 +85,7 @@ def _bound(
 
 def _numeric(items: Iterable[ast.expr]) -> bool:
     return all(
-        isinstance(item, ast.Name) and item.id in ("int", "float")
+        isinstance(item, ast.Name) and item.id in {"int", "float"}
         for item in items
     )
 

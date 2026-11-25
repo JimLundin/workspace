@@ -128,15 +128,15 @@ def selected(
 def main(arguments: Sequence[str], workspace: Programs) -> None:
     command, *names = arguments or ["start"]
     entries = selected(names, workspace.catalogue)
-    if command not in ("start", "stop", "restart"):
+    if command not in {"start", "stop", "restart"}:
         raise SystemExit(__doc__)
     state = (
         Places.of(os.environ, workspace).directory / "state"
     )  # where the programs publish their endpoints and logs
-    if command in ("stop", "restart"):
+    if command in {"stop", "restart"}:
         for entry in reversed(entries):
             stop(entry, state)
-    if command in ("start", "restart"):
+    if command in {"start", "restart"}:
         for entry in entries:
             start(entry, state, workspace.state_variable)
 

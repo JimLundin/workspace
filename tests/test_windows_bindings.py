@@ -74,7 +74,7 @@ def test_overlay_refuses_mouse_activation_but_still_delivers_other_messages() ->
     def default_message(
         hwnd: int, message: int, wparam: int, lparam: int
     ) -> int | None:
-        if message in (0x0201, 0x0082):
+        if message in {0x0201, 0x0082}:
             delivered.append(message)
             return 7
         return None

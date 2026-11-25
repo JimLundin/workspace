@@ -457,7 +457,7 @@ class Microphone:
             )  # TIME_BYTES; drivers may return TIME_SAMPLES.
             if self._driver.position(capture.handle, position):
                 return None
-            if position.kind not in (2, 4):
+            if position.kind not in {2, 4}:
                 return None
             end = (
                 min(

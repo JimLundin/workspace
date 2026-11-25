@@ -219,7 +219,7 @@ def nearest(world: World, direction: Direction) -> int | None:
 
     def score(rect: Rect) -> tuple[bool, int, int, int] | None:
         """Prefer the window sharing the most edge with the origin, then the closest, then the best centred."""
-        horizontal = direction in (Direction.LEFT, Direction.RIGHT)
+        horizontal = direction in {Direction.LEFT, Direction.RIGHT}
         overlap = (
             min(rect.bottom, origin.bottom) - max(rect.top, origin.top)
             if horizontal

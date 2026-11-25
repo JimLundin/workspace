@@ -126,12 +126,12 @@ def window_event(
     """What a message to the control window reports."""
     if message == shell.TASKBAR_CREATED:
         return RestoreTray()
-    if message == WM_TRAY and lparam in (
+    if message == WM_TRAY and lparam in {
         system.WindowMessage.LBUTTONUP,
         system.WindowMessage.RBUTTONUP,
-    ):
+    }:
         return MenuRequested()
-    if message in (Message.KEY_STATE, Message.REQUEST):
+    if message in {Message.KEY_STATE, Message.REQUEST}:
         return Controlled(control_event(message, wparam, lparam, apps))
     if message == Message.INDICATOR:
         return Indicated(wparam)

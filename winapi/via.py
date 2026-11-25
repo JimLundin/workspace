@@ -211,7 +211,7 @@ def _exchange(handle: int, message: bytes) -> bytes | None:
             if moved is None:
                 return None
             reply = received.raw[1:moved]
-            if reply[:1] in (message[:1], bytes((_UNHANDLED,))):
+            if reply[:1] in {message[:1], bytes((_UNHANDLED,))}:
                 return reply
         return None
     finally:
@@ -228,7 +228,7 @@ def exchange(vendor: int, product: int, message: bytes) -> bytes | None:
         handle = CreateFileW(
             path, access, share, None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, None
         )
-        if handle in (None, ctypes.c_void_p(INVALID_HANDLE_VALUE).value):
+        if handle in {None, ctypes.c_void_p(INVALID_HANDLE_VALUE).value}:
             continue  # The keyboard and mouse collections refuse to open; only the raw interface matters.
         try:
             if _raw_hid(handle):

@@ -790,7 +790,7 @@ class Keyboard:
         ):
             state = self.observe_window()
         kind = route(key, state, self.routing, down=down)
-        if kind in (Route.NATIVE, Route.EXTENDED, Route.LAYOUT) and owes(
+        if kind in {Route.NATIVE, Route.EXTENDED, Route.LAYOUT} and owes(
             key, state, self.routing, down=down
         ):
             self._state.update(

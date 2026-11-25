@@ -75,7 +75,7 @@ class RecordingState:
 
     @property
     def capturing(self) -> bool:
-        return self.phase in ("starting", "recording", "stopping")
+        return self.phase in {"starting", "recording", "stopping"}
 
     @property
     def visible(self) -> bool:
@@ -172,7 +172,7 @@ def published(
         < round((current.seconds - current.pending_seconds) * RATE)
         or (
             not saved.finished
-            and current.phase in ("finishing", "paused", "saved", "interrupted")
+            and current.phase in {"finishing", "paused", "saved", "interrupted"}
         )
     ):
         return None

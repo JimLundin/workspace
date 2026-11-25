@@ -159,7 +159,7 @@ class MeetingStore:
         ) or (0, 0)
         if (
             row is None
-            or row[1] not in ("both", "microphone")
+            or row[1] not in {"both", "microphone"}
             or not isinstance(row[2], (int, float))
         ):
             raise ValueError("The local meeting journal is incomplete.")

@@ -157,11 +157,11 @@ the wire protocol and the plain-Python winapi value modules."""
 
 def _contract_may_import(target: str) -> bool:
     top, _, _ = target.partition(".")
-    if top in sys.stdlib_module_names or top in (
+    if top in sys.stdlib_module_names or top in {
         "pydantic",
         "contracts",
         "cell",
-    ):
+    }:
         return True
     # The graph also names imported attributes (`protocol.Tool`), so allowed modules match as prefixes.
     return target == "winapi" or within_any(

@@ -464,12 +464,12 @@ class MenuCell(QtWidgets.QAbstractButton):
                 )
             )
             painter.drawRoundedRect(bounds, corner, corner)
-        still = cell.face in (
+        still = cell.face in {
             Face.CARD,
             Face.CALENDAR,
             Face.GRAPH,
             Face.FACT,
-        )  # Nothing to press but a part of it.
+        }  # Nothing to press but a part of it.
         paint_feedback(
             painter,
             lettering,

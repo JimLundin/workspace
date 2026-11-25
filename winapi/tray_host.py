@@ -105,7 +105,7 @@ def position_reply(data: bytes, locations: tuple[Located, ...]) -> int | None:
         ),
         None,
     )
-    if located is None or operation not in (1, 2):
+    if located is None or operation not in {1, 2}:
         return None
     bounds = located.bounds
     x, y = (
@@ -125,7 +125,7 @@ def registration(data: bytes) -> Registration | None:
     )
     if (
         magic != 0x34753423
-        or operation not in (0, 1, 2, 4)
+        or operation not in {0, 1, 2, 4}
         or size < 288
         or size > len(data) - 8
         or not window
@@ -251,7 +251,7 @@ def _proxied(
             if observed is not None:
                 pixels = (
                     native_pixels(observed.icon)
-                    if observed.flags & 2 and observed.operation in (0, 1)
+                    if observed.flags & 2 and observed.operation in {0, 1}
                     else None
                 )
                 hosted.update(

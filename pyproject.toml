@@ -100,7 +100,6 @@ ignore = [
     "too-many-return-statements",
     "too-many-branches",
     "no-self-use",
-    "literal-membership",
     "import-private-name",
     "too-many-statements-in-try-clause",
     "too-many-locals",

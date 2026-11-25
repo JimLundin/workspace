@@ -66,7 +66,7 @@ def wifi_state(states: tuple[int, ...]) -> Wifi:
         return Wifi.UNKNOWN
     return (
         Wifi.CONNECTED
-        if any(state in (1, 2) for state in states)
+        if any(state in {1, 2} for state in states)
         else Wifi.DISCONNECTED
     )
 
@@ -252,7 +252,7 @@ def audio() -> Audio:
             muted, level = wintypes.BOOL(), ctypes.c_float()
             if FAILED(
                 volume.GetMute(ctypes.byref(muted))
-            ) or muted.value not in (0, 1):
+            ) or muted.value not in {0, 1}:
                 speakers = Speakers.UNKNOWN
             else:
                 speakers = Speakers.MUTED if muted.value else Speakers.AUDIBLE

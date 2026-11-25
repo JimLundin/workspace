@@ -120,10 +120,10 @@ class Key(VirtualKey):
 
     def continues_word(self) -> bool:
         """Keys that keep caps word going without being capitalised."""
-        return Key.N0.vk <= self.vk <= Key.N9.vk or self in (
+        return Key.N0.vk <= self.vk <= Key.N9.vk or self in {
             Key.BACKSPACE,
             Key.DELETE,
-        )
+        }
 
 
 class Mod(VirtualKey):

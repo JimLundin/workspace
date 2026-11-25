@@ -117,9 +117,9 @@ class Wasapi:
             handle == 1 and index == 4
         ):  # default endpoint: eRender=0, eCapture=1
             set_pointer(arguments[-1], 10 if arguments[1] == 1 else 11)
-        elif handle in (10, 11) and index == 3:  # device.Activate
+        elif handle in {10, 11} and index == 3:  # device.Activate
             set_pointer(arguments[-1], handle + 10)
-        elif handle in (20, 21):
+        elif handle in {20, 21}:
             if index == 8:  # client.GetMixFormat
                 set_pointer(arguments[-1], ctypes.addressof(self.format))
             elif index == 14:  # client.GetService
@@ -130,8 +130,8 @@ class Wasapi:
                 assert arguments[1] == 0 and arguments[3] == 30_000_000
                 assert arguments[2] == (0 if handle == 20 else 0x0002_0000)
             else:
-                assert index in (10, 11), (handle, index)
-        elif handle in (30, 31):
+                assert index in {10, 11}, (handle, index)
+        elif handle in {30, 31}:
             self.capture(handle, index, arguments)
         else:
             raise AssertionError((handle, index))
@@ -220,7 +220,7 @@ def test_microphone_only_never_opens_the_playback_device() -> None:
         stop, blocks.append, lambda: None, no_gap
     )
     assert b"".join(blocks) == array("h", [1000] * round(2.54 * RATE)).tobytes()
-    assert not any(handle in (11, 21, 31) for handle, _ in api.calls)
+    assert not any(handle in {11, 21, 31} for handle, _ in api.calls)
 
 
 def test_microphone_discontinuities_do_not_end_a_meeting() -> None:

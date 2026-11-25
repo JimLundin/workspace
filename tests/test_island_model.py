@@ -331,7 +331,7 @@ def test_dictation_takes_the_island_and_detaches_every_other_activity_beside_it(
         each for each in island(observed, SPEC) if each.zone is not Zone.RIGHT
     )
     assert tuple(each.key for each in dynamic) == tuple(
-        key for key in order(SPEC) if key not in (Key.STATUS, Key.PANEL)
+        key for key in order(SPEC) if key not in {Key.STATUS, Key.PANEL}
     )
     centre = next(each for each in dynamic if each.key is Key.ISLAND)
     assert centre.action is Action.STOP_DICTATION

@@ -102,7 +102,7 @@ TRAY: Final[tuple[TrayAction | Separator, ...]] = (
 
 def tray_item(item: TrayAction, state: MenuState) -> MenuItem:
     """One item as it reads in `state`: its words, hint, and whether it's enabled or checked."""
-    running = state.layout in (LayoutState.ON, LayoutState.OFF)
+    running = state.layout in {LayoutState.ON, LayoutState.OFF}
     hint = f"\t{item.key}" if item.key else ""
     match item.action:
         case Menu.TOGGLE_LAYOUT:
@@ -581,7 +581,7 @@ def recording_notice(
     )
     if (
         prior.phase != recording.phase
-        and recording.phase in ("paused", "interrupted")
+        and recording.phase in {"paused", "interrupted"}
     ) or failed_capture:
         return Notified(
             "Meeting transcript",

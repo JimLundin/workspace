@@ -766,7 +766,7 @@ def towards(cells: tuple[Cell, ...], index: int, key: Key) -> int | None:
 
     def offset(cell: Cell) -> int:
         # Centres in half units, so odd spans compare exactly.
-        if key in (Key.UP, Key.DOWN):
+        if key in {Key.UP, Key.DOWN}:
             return abs(
                 2 * cell.column + cell.span - 2 * here.column - here.span
             )
@@ -786,10 +786,10 @@ def move(menu: Menu, key: Key) -> Menu:
         return menu
     if menu.selected is None or menu.selected >= len(cells):
         return replace(
-            menu, selected=0 if key in (Key.DOWN, Key.RIGHT) else len(cells) - 1
+            menu, selected=0 if key in {Key.DOWN, Key.RIGHT} else len(cells) - 1
         )
     target = towards(cells, menu.selected, key)
-    if target is None and key in (Key.DOWN, Key.UP):
+    if target is None and key in {Key.DOWN, Key.UP}:
         target = (
             0 if key is Key.DOWN else len(cells) - 1
         )  # Up and Down wrap; Left and Right stop at the edge.

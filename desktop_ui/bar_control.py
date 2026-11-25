@@ -60,10 +60,10 @@ class KeyboardFocus(QtWidgets.QAbstractButton):
     @override
     def focusInEvent(self, event: QtGui.QFocusEvent) -> None:
         super().focusInEvent(event)
-        self.ringed = event.reason() in (
+        self.ringed = event.reason() in {
             Qt.FocusReason.TabFocusReason,
             Qt.FocusReason.BacktabFocusReason,
-        )
+        }
         self.update()
 
     @override

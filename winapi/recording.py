@@ -146,7 +146,7 @@ def _format(pointer: ctypes.c_void_p) -> PcmFormat:
             tag = 1
         elif subtype == uuid.UUID("00000003-0000-0010-8000-00aa00389b71"):
             tag = 3
-    if tag not in (1, 3):
+    if tag not in {1, 3}:
         raise OSError("The audio device does not provide supported PCM audio.")
     result = PcmFormat(
         int(format.nSamplesPerSec),
