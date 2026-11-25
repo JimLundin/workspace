@@ -51,11 +51,7 @@ COMPANION_TABS: Final = frozenset({"MSEdge.EdgeProfile.Default"})
 """Companion's own tabs, in the tabbed window of its profile, which it keeps minimized and out of the owner's way."""
 
 
-TERMINAL, CODE, EDGE = (
-    Program("windowsterminal.exe"),
-    Program("code.exe"),
-    Program("msedge.exe"),
-)
+TERMINAL, EDGE = (Program("windowsterminal.exe"), Program("msedge.exe"))
 """Ordinary Edge is every Edge window that isn't a pinned web app's."""
 
 
@@ -93,17 +89,15 @@ SETUPS: Final = Setups(
                             Position(1, Role.LAPTOP, LEFT_HALF),
                             Position(1, Role.LAPTOP, RIGHT_HALF),
                         ),
-                        CODE: (Position(2, Role.LAPTOP, FULL),),
-                        EDGE: (Position(3, Role.LAPTOP, FULL),),
+                        EDGE: (Position(2, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(4, Role.LAPTOP, FULL),
+                others=Position(3, Role.LAPTOP, FULL),
             ),
             Setup.HOME: Layout(
                 frozendict(
                     {
                         TERMINAL: (Position(0, Role.MAIN, FULL),),
-                        CODE: (Position(0, Role.MAIN, FULL),),
                         EDGE: (Position(0, Role.LAPTOP, FULL),),
                         PinnedApp.OUTLOOK: (Position(1, Role.MAIN, LEFT_HALF),),
                         PinnedApp.TEAMS: (Position(1, Role.MAIN, RIGHT_HALF),),
@@ -114,8 +108,10 @@ SETUPS: Final = Setups(
             Setup.WORK: Layout(
                 frozendict(
                     {
-                        CODE: (Position(0, Role.SIDE, FULL),),
-                        TERMINAL: (Position(0, Role.ABOVE, FULL),),
+                        TERMINAL: (
+                            Position(0, Role.ABOVE, FULL),
+                            Position(0, Role.SIDE, FULL),
+                        ),
                         EDGE: (Position(0, Role.LAPTOP, FULL),),
                         PinnedApp.OUTLOOK: (
                             Position(1, Role.ABOVE, LEFT_HALF),
