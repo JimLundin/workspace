@@ -85,9 +85,10 @@ class Voice:
         and meeting transcripts go to `transcripts`."""
         mic_event = system.create_event()
         mic = audio.Microphone.open(RATE, MAX_SECONDS, mic_event)
-        machine = WinDesktop.following(
+        machine = WinDesktop(
             owner,
             mic,
+            audio.DefaultFollower.start(mic),
             on_state=lambda shown: report(ShowVoice(shown)),
             on_job=lambda job: report(JobChanged(job)),
             on_notify=lambda title, text: report(Notified(title, text)),

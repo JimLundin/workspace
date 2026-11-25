@@ -21,29 +21,6 @@ class WinDesktop:
     on_notify: Callable[[str, str], None] = field(kw_only=True)
     on_problem: Callable[[str], None] = field(kw_only=True)
 
-    @classmethod
-    def following(  # noqa: PLR0913 - native owner, device and event callbacks
-        cls,
-        owner: int,
-        mic: audio.Microphone,
-        *,
-        on_state: Callable[[State], None],
-        on_job: Callable[[Job | None], None],
-        on_notify: Callable[[str, str], None],
-        on_problem: Callable[[str], None],
-    ) -> WinDesktop:
-        """The desktop over `mic`, with a follower that keeps it on the default capture device."""
-        follower = audio.DefaultFollower.start(mic)
-        return cls(
-            owner,
-            mic,
-            follower,
-            on_state=on_state,
-            on_job=on_job,
-            on_notify=on_notify,
-            on_problem=on_problem,
-        )
-
     # ---- the microphone ----------------------------------------------------------------
 
     def start_listening(self) -> str | None:
