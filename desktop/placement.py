@@ -79,31 +79,28 @@ SETUPS: Final = Setups(
             Setup.LAPTOP_ONLY: Layout(
                 frozendict(
                     {
-                        PinnedApp.OUTLOOK: (
-                            Position(0, Role.LAPTOP, LEFT_HALF),
-                        ),
+                        TERMINAL: (Position(0, Role.LAPTOP, LEFT_HALF),),
                         PinnedApp.TEAMS: (
                             Position(0, Role.LAPTOP, RIGHT_HALF),
                         ),
-                        TERMINAL: (
-                            Position(1, Role.LAPTOP, LEFT_HALF),
+                        EDGE: (Position(1, Role.LAPTOP, LEFT_HALF),),
+                        PinnedApp.OUTLOOK: (
                             Position(1, Role.LAPTOP, RIGHT_HALF),
                         ),
-                        EDGE: (Position(2, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(3, Role.LAPTOP, FULL),
+                others=Position(2, Role.LAPTOP, FULL),
             ),
             Setup.HOME: Layout(
                 frozendict(
                     {
                         TERMINAL: (Position(0, Role.MAIN, FULL),),
-                        EDGE: (Position(0, Role.LAPTOP, FULL),),
-                        PinnedApp.OUTLOOK: (Position(1, Role.MAIN, FULL),),
-                        PinnedApp.TEAMS: (Position(1, Role.LAPTOP, FULL),),
+                        PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
+                        EDGE: (Position(1, Role.MAIN, FULL),),
+                        PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(2, Role.LAPTOP, FULL),
+                others=Position(2, Role.MAIN, FULL),
             ),
             Setup.WORK: Layout(
                 frozendict(
@@ -112,14 +109,12 @@ SETUPS: Final = Setups(
                             Position(0, Role.ABOVE, FULL),
                             Position(0, Role.SIDE, FULL),
                         ),
-                        EDGE: (Position(0, Role.LAPTOP, FULL),),
-                        PinnedApp.OUTLOOK: (
-                            Position(1, Role.ABOVE, LEFT_HALF),
-                        ),
-                        PinnedApp.TEAMS: (Position(1, Role.ABOVE, RIGHT_HALF),),
+                        PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
+                        EDGE: (Position(1, Role.ABOVE, FULL),),
+                        PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(1, Role.LAPTOP, FULL),
+                others=Position(1, Role.SIDE, FULL),
             ),
         }
     ),
