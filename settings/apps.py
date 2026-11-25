@@ -2,7 +2,6 @@ from typing import Final
 
 from protocol import App, Installed, PinnedWeb
 
-
 APPS: Final[tuple[App, ...]] = (
     App("terminal", Installed("windowsterminal.exe", "wt.exe")),
     App("browser", Installed("msedge.exe", "msedge.exe")),

@@ -7,7 +7,6 @@ from keyboard.layout import Layout, Timings, UsbIdentity
 from keyboard.physical import Laptop
 from protocol import Slot, Tool
 
-
 TAPPING_TERM_MS: Final = 200
 """Hold a tap-hold key longer than this and it becomes its modifier or layer."""
 STREAK_MS: Final = 150

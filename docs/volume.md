@@ -6,50 +6,50 @@ lines are code lines. Product code averages 4.2 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 99,473 | 23,872 |
-| **support** | 63,107 | 13,939 |
+| **product** | 101,029 | 24,155 |
+| **support** | 64,420 | 14,156 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 54,876 | 12,509 |
-| tests | 46,221 | 9,852 |
-| winapi | 21,186 | 5,567 |
-| scripts | 12,814 | 2,985 |
-| keyboard | 8,723 | 1,891 |
-| assistant | 6,904 | 1,655 |
-| typings | 4,072 | 1,102 |
-| desktop | 2,520 | 1,100 |
-| contracts | 1,733 | 409 |
-| (top level) | 1,517 | 330 |
-| settings | 1,041 | 170 |
-| gateway | 973 | 241 |
+| desktop_ui | 56,472 | 12,829 |
+| tests | 47,475 | 10,069 |
+| winapi | 21,456 | 5,602 |
+| scripts | 12,816 | 2,986 |
+| keyboard | 8,731 | 1,878 |
+| assistant | 6,743 | 1,611 |
+| typings | 4,129 | 1,101 |
+| desktop | 2,577 | 1,133 |
+| (top level) | 1,517 | 328 |
+| contracts | 1,513 | 361 |
+| settings | 1,043 | 171 |
+| gateway | 977 | 242 |
 
 The 25 largest files:
 
 | file | nodes | lines |
 |---|---:|---:|
-| `desktop_ui/island_surface.py` | 8,194 | 1,721 |
-| `tests/test_keyboard_hook.py` | 4,006 | 744 |
-| `keyboard/win.py` | 3,764 | 862 |
-| `tests/test_engine.py` | 3,464 | 651 |
+| `desktop_ui/island_surface.py` | 8,545 | 1,781 |
+| `tests/test_keyboard_hook.py` | 4,006 | 736 |
+| `keyboard/win.py` | 3,764 | 854 |
+| `tests/test_engine.py` | 3,464 | 641 |
+| `desktop_ui/island_menu.py` | 3,230 | 734 |
 | `tests/test_meetings.py` | 3,106 | 680 |
-| `desktop_ui/island_menu.py` | 3,023 | 677 |
-| `desktop_ui/island_layout.py` | 2,790 | 619 |
-| `assistant/meetings.py` | 2,715 | 658 |
+| `desktop_ui/island_layout.py` | 2,851 | 639 |
+| `desktop_ui/bar_events.py` | 2,722 | 661 |
+| `assistant/meetings.py` | 2,717 | 658 |
 | `desktop_ui/keymap_views.py` | 2,672 | 573 |
-| `desktop_ui/desktop_bar.py` | 2,595 | 665 |
-| `desktop_ui/desktop_app.py` | 2,563 | 618 |
-| `desktop_ui/bar_events.py` | 2,524 | 615 |
-| `desktop_ui/desktop_control.py` | 2,287 | 593 |
+| `desktop_ui/desktop_bar.py` | 2,620 | 667 |
+| `desktop_ui/desktop_app.py` | 2,577 | 620 |
+| `desktop_ui/desktop_control.py` | 2,307 | 595 |
 | `desktop_ui/marker_window.py` | 2,248 | 456 |
-| `desktop_ui/application_observer.py` | 2,228 | 546 |
-| `keyboard/engine.py` | 2,218 | 472 |
-| `desktop_ui/shell_surface.py` | 2,108 | 425 |
-| `desktop_ui/island_model.py` | 2,001 | 475 |
-| `tests/test_island_menu.py` | 1,943 | 508 |
-| `winapi/composition.py` | 1,845 | 445 |
-| `winapi/audio.py` | 1,826 | 452 |
-| `tests/test_meeting_audio.py` | 1,795 | 312 |
-| `tests/test_features.py` | 1,781 | 351 |
+| `desktop_ui/application_observer.py` | 2,228 | 536 |
+| `keyboard/engine.py` | 2,224 | 472 |
+| `tests/test_island_menu.py` | 2,127 | 550 |
+| `desktop_ui/shell_surface.py` | 2,108 | 423 |
+| `desktop_ui/island_model.py` | 2,001 | 473 |
+| `winapi/composition.py` | 1,860 | 441 |
+| `winapi/audio.py` | 1,805 | 443 |
+| `tests/test_meeting_audio.py` | 1,795 | 304 |
+| `tests/test_features.py` | 1,781 | 349 |
 | `tests/test_island_layout.py` | 1,755 | 323 |
-| `winapi/recording.py` | 1,696 | 432 |
+| `winapi/recording.py` | 1,696 | 430 |
