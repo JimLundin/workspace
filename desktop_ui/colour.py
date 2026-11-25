@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Final
 
 _HEX: Final = re.compile(r"#([0-9a-fA-F]{6})")
+_CHANNEL_MAX: Final = 255
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +20,7 @@ class Rgb:
             ("green", self.green),
             ("blue", self.blue),
         ):
-            if isinstance(value, bool) or not 0 <= value <= 255:
+            if isinstance(value, bool) or not 0 <= value <= _CHANNEL_MAX:
                 raise ValueError(
                     f"A colour's {name} channel is a whole number from 0 to 255, not {value!r}."
                 )

@@ -5,6 +5,7 @@ select a saved source tree. Native hook/SendInput latency and OS scheduling need
 separate desktop measurements; this measures Engine.on_key and tap-hold timers.
 """
 
+from typing import Final
 import argparse
 import gc
 import hashlib
@@ -25,6 +26,8 @@ lazy from keyboard.keys import Key, Mod
 lazy from keyboard.physical import Scancode
 lazy from protocol import LayoutState, Request
 lazy from settings import layout
+
+FEWEST_EVENTS: Final = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +59,7 @@ def main() -> None:
             parser.error("Invalid benchmark arguments.")
     root = options.root.resolve()
     count, rounds = options.events, options.rounds
-    if count < 1000 or rounds < 1:
+    if count < FEWEST_EVENTS or rounds < 1:
         parser.error("Use at least 1000 events and one round.")
     sys.path.insert(0, str(root))
     run(root, count, rounds, options.output)

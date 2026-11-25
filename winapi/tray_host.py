@@ -8,6 +8,7 @@ cached registry icons. The hidden proxy is removed before Explorer is restored.
 import ctypes
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from typing import Final
 
 lazy from win32more.Windows.Win32.System.DataExchange import COPYDATASTRUCT
 lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
@@ -31,6 +32,27 @@ from winapi.dll import SetWindowPos
 from winapi.icon_pixels import Pixels, native_pixels
 from winapi.shapes import Point, Rect
 from winapi.shell import TASKBAR_CREATED, AppWindow
+
+NIM_DELETE: Final = 2
+NIM_SETVERSION: Final = 4
+NOTIFYICON_VERSION: Final = 3
+NOTIFYICON_VERSION_4: Final = 4
+NOTIFY_MAGIC: Final = 0x34753423
+"""The signature that opens every Shell_NotifyIcon record Explorer receives."""
+COPYDATA_REGISTRATION: Final = 1
+COPYDATA_POSITION: Final = 3
+REGISTRATION_BYTES: Final = 296
+"""A Shell_NotifyIcon record through its state and state mask, the last fields every sender writes."""
+REGISTRATION_LIMIT: Final = 4096
+ICON_DATA_BYTES: Final = 288
+VERSION_FIELD: Final = slice(808, 812)
+GUID_FIELD: Final = slice(944, 960)
+GUID_BYTES: Final = 16
+POSITION_BYTES: Final = 40
+"""A Shell_NotifyIconGetRect request through the icon's guid."""
+POSITION_LIMIT: Final = 128
+MOST_ICONS: Final = 128
+"""How many icons the host tracks; a registration beyond them is ignored."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +106,7 @@ class Located:
 
 def position_reply(data: bytes, locations: tuple[Located, ...]) -> int | None:
     """Shell_NotifyIconGetRect asks separately for the origin and extent."""
-    if len(data) < 40:
+    if len(data) < POSITION_BYTES:
         return None
     operation = int.from_bytes(data[4:8], "little")
     window, identity = (
@@ -117,16 +139,16 @@ def position_reply(data: bytes, locations: tuple[Located, ...]) -> int | None:
 
 
 def registration(data: bytes) -> Registration | None:
-    if len(data) < 296:
+    if len(data) < REGISTRATION_BYTES:
         return None
     magic, operation, size, window, identity, flags, callback, icon = (
         int.from_bytes(data[offset : offset + 4], "little")
         for offset in range(0, 32, 4)
     )
     if (
-        magic != 0x34753423
+        magic != NOTIFY_MAGIC
         or operation not in {0, 1, 2, 4}
-        or size < 288
+        or size < ICON_DATA_BYTES
         or size > len(data) - 8
         or not window
     ):
@@ -136,9 +158,17 @@ def registration(data: bytes) -> Registration | None:
         int.from_bytes(data[offset : offset + 4], "little")
         for offset in (288, 292)
     )
-    version = int.from_bytes(data[808:812], "little") if len(data) >= 812 else 0
-    guid = data[944:960] if flags & 0x20 and len(data) >= 960 else b""
-    if flags & 0x20 and len(guid) != 16:
+    version = (
+        int.from_bytes(data[VERSION_FIELD], "little")
+        if len(data) >= VERSION_FIELD.stop
+        else 0
+    )
+    guid = (
+        data[GUID_FIELD]
+        if flags & 0x20 and len(data) >= GUID_FIELD.stop
+        else b""
+    )
+    if flags & 0x20 and len(guid) != GUID_BYTES:
         return None
     return Registration(
         operation,
@@ -171,10 +201,10 @@ def update(
         ),
         None,
     )
-    if observed.operation == 2:
+    if observed.operation == NIM_DELETE:
         return tuple(entry for entry in entries if entry is not previous)
     if previous is None:
-        if observed.operation != 0 or len(entries) >= 128:
+        if observed.operation != 0 or len(entries) >= MOST_ICONS:
             return entries
         previous = Entry(
             observed.window, observed.identity, observed.guid, 0, None, ""
@@ -192,7 +222,7 @@ def update(
         else previous.hidden,
         version=0 if observed.operation == 0 else previous.version,
     )
-    if observed.operation == 4:
+    if observed.operation == NIM_SETVERSION:
         changed = replace(previous, version=observed.version)
     return tuple(changed if entry is previous else entry for entry in entries)
 
@@ -209,10 +239,10 @@ def callbacks(entry: Entry, click: Click, point: Point) -> tuple[Notify, ...]:
     messages = click.value
     events = (
         (*messages.mouse, *messages.selected)
-        if entry.version >= 3
+        if entry.version >= NOTIFYICON_VERSION
         else messages.mouse
     )
-    if entry.version >= 4:
+    if entry.version >= NOTIFYICON_VERSION_4:
         coordinates = (point.x & 0xFFFF) | ((point.y & 0xFFFF) << 16)
         return tuple(
             Notify(coordinates, event | ((entry.identity & 0xFFFF) << 16))
@@ -239,14 +269,22 @@ def _proxied(
         return None
     if message == WM_COPYDATA and lparam:
         copy = COPYDATASTRUCT.from_address(lparam)
-        if copy.dwData == 3 and copy.lpData and 40 <= copy.cbData <= 128:
+        if (
+            copy.dwData == COPYDATA_POSITION
+            and copy.lpData
+            and POSITION_BYTES <= copy.cbData <= POSITION_LIMIT
+        ):
             reply = position_reply(
                 ctypes.string_at(copy.lpData, copy.cbData),
                 hosted.get().locations,
             )
             if reply is not None:
                 return reply
-        if copy.dwData == 1 and copy.lpData and 296 <= copy.cbData <= 4096:
+        if (
+            copy.dwData == COPYDATA_REGISTRATION
+            and copy.lpData
+            and REGISTRATION_BYTES <= copy.cbData <= REGISTRATION_LIMIT
+        ):
             observed = registration(ctypes.string_at(copy.lpData, copy.cbData))
             if observed is not None:
                 pixels = (

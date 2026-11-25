@@ -1,11 +1,15 @@
 """Observe a potentially slow native microphone without waiting on Qt's thread."""
 
+from typing import Final
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from cell import Cell
+
+FRESH_S: Final = 0.25
+"""How long a reading stays the meter's level; an older one reads as no level."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +79,7 @@ class AudioMeter:
                 or sample is None
             ):
                 return None
-        return sample.level if self.clock() - sample.at <= 0.25 else None
+        return sample.level if self.clock() - sample.at <= FRESH_S else None
 
     def run(self) -> None:
         try:

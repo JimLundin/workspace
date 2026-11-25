@@ -977,6 +977,8 @@ class Lit:
 
 GLOW: Final = 160
 """Milliseconds a reading's pill takes to fade in or out."""
+CONTROLS_SHOWN: Final = 0.5
+"""How far the new content fades in before its controls show."""
 
 
 class Capsule(KeyboardFocus):
@@ -1162,7 +1164,7 @@ class Capsule(KeyboardFocus):
                 ),
             )
             button.setVisible(
-                self.drawn.fade > 0.5
+                self.drawn.fade > CONTROLS_SHOWN
                 and visibility(
                     self.drawn.framed.presence, self.window_.spec.timing
                 )

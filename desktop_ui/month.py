@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Final
 
+MONTHS: Final = 12
 WEEKS: Final = 6
 """Every month shows six weeks, so paging never changes the panel's height."""
 
@@ -15,7 +16,7 @@ class Month:
     month: int
 
     def __post_init__(self) -> None:
-        if not 1 <= self.month <= 12:
+        if not 1 <= self.month <= MONTHS:
             raise ValueError("A month runs from 1 to 12.")
         # A month's six weeks reach a week into the months on either side.
         if not date.min.year < self.year < date.max.year:

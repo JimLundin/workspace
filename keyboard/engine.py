@@ -189,6 +189,7 @@ class Modifiers:
 
 
 NO_KEYS: Final[tuple[Action | None, ...]] = (None,) * Board.SIZE
+BOTH_SHIFTS: Final = 2
 
 
 def _put(
@@ -562,7 +563,7 @@ def apply_caps_word(
 
 def press(state: EngineState, host: Host, a: Action, now: int) -> EngineState:
     # Both Shift keys held (this one is already recorded as pressed): toggle caps word.
-    if a == Mod.SHIFT and state.pressed.count(Mod.SHIFT) >= 2:
+    if a == Mod.SHIFT and state.pressed.count(Mod.SHIFT) >= BOTH_SHIFTS:
         state = replace(state, caps_word=not state.caps_word)
     state, a = apply_caps_word(state, a)
     match a:

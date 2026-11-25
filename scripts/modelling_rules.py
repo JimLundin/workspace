@@ -14,6 +14,9 @@ from scripts.policy import Finding
 from scripts.scope_rules import loop_accumulations, state_writes
 from scripts.source_analysis import parameters, qualified
 
+_FEWEST_CASES: Final = 2
+"""A translation `match` maps at least this many cases besides a wildcard."""
+
 
 def _constant(value: ast.expr, bound: frozenset[str]) -> bool:
     """A literal or a name from outside the function, or a call, tuple or attribute built only from those."""
@@ -98,7 +101,7 @@ def _translation(
 
     The function's assigned names are collected only once every pattern names members, the rare case that needs them."""
     named = tuple(case for case in cases if not _wildcard(case))
-    if len(named) < 2 or not all(
+    if len(named) < _FEWEST_CASES or not all(
         _members(case.pattern) and case.guard is None for case in named
     ):
         return False
@@ -173,6 +176,8 @@ def value_shapes(
         yield from value_shapes(child, module, declaration, function)
 
 
+_SCRIPT_LINES: Final = 2
+"""Script-like lines that mark a string as JavaScript."""
 _SCRIPT_MARKS: Final = re.compile(
     r"=>|\bfunction\s*\w*\(|\bdocument\.[a-z]|querySelector"
 )
@@ -187,5 +192,5 @@ def _script(text: str) -> bool:
             for line in text.splitlines()
             if line.rstrip().endswith((";", "{", "}"))
         )
-        >= 2
+        >= _SCRIPT_LINES
     )
