@@ -249,7 +249,7 @@ def duplicates(found: Iterable[Shape]) -> Iterator[Finding]:
 
 
 DECLARES: Final = frozenset({"fn"})
-"""winapi._core's foreign-function declarations: `fn(user32, "GetForegroundWindow", HWND)`."""
+"""winapi.dll's foreign-function declarations: `fn(user32, "GetForegroundWindow", HWND)`."""
 
 
 def natives(tree: ast.AST, module: str) -> Iterator[Finding]:
@@ -259,7 +259,7 @@ def natives(tree: ast.AST, module: str) -> Iterator[Finding]:
                 func=ast.Name(id=name),
                 args=[_, ast.Constant(value=str() as export), *_],
             ) if name in DECLARES:
-                detail = "Declare a Win32 function once, in winapi._core when more than one module calls it."
+                detail = "Declare a Win32 function once, in winapi.dll when more than one module calls it."
                 yield Finding(
                     "native-redeclaration",
                     module,

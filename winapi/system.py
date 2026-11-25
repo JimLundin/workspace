@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Final, NewType
 
-from winapi._core import (
+from winapi.dll import (
     ULONG_PTR,
     CloseHandle,
     CreateEventW,

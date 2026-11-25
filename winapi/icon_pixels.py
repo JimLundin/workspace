@@ -28,7 +28,7 @@ lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
     SendMessageTimeoutW,
 )
 
-from winapi._core import DeleteObject
+from winapi.dll import DeleteObject
 from winapi.screen import top_down
 
 

@@ -48,7 +48,7 @@ lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
     UnregisterClassW,
 )
 
-from winapi._core import (
+from winapi.dll import (
     CreateWindowExW,
     DeleteObject,
     DestroyWindow,

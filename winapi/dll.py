@@ -1,4 +1,4 @@
-"""The DLLs, and how a function prototype is declared. Internal to `winapi`."""
+"""The DLLs, and how a function prototype is declared. Shared by `winapi` and the launcher."""
 
 import ctypes
 import uuid

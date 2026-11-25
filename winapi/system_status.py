@@ -11,8 +11,7 @@ from contextlib import contextmanager
 from ctypes import wintypes
 from typing import Final
 
-lazy from win32more import FAILED
-lazy from win32more._win32 import Guid
+lazy from win32more import FAILED, Guid
 lazy from win32more.Windows.Win32.Media.Audio import (
     IMMDevice,
     IMMDeviceEnumerator,

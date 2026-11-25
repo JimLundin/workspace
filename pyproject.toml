@@ -100,7 +100,6 @@ ignore = [
     "too-many-return-statements",
     "too-many-branches",
     "no-self-use",
-    "import-private-name",
     "too-many-statements-in-try-clause",
     "too-many-locals",
     "too-many-public-methods",
@@ -311,8 +310,9 @@ ban-relative-imports = "all"
 "keyboard/physical.py" = ["ambiguous-variable-name"]
 # Meetings.open injects collaborators that tests replace one at a time.
 "assistant/meetings.py" = ["too-many-arguments"]
-# Dependency stubs preserve the pinned SDK's actual method and structure field names.
+# Dependency stubs preserve the pinned SDK's names and the private modules that define them.
 "typings/win32more/**/*.pyi" = [
+    "import-private-name",
     "invalid-class-name",
     "invalid-function-name",
     "invalid-argument-name",

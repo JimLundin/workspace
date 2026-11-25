@@ -10,7 +10,7 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Final
 
-lazy from win32more._win32 import Guid
+lazy from win32more import Guid
 lazy from win32more.Windows.Win32.Devices.DeviceAndDriverInstallation import (
     CM_GET_DEVICE_INTERFACE_LIST_PRESENT,
     CR_BUFFER_SMALL,
@@ -46,7 +46,7 @@ lazy from win32more.Windows.Win32.System.IO import (
     GetOverlappedResultEx,
 )
 
-from winapi._core import CloseHandle, CreateEventW, fn, kernel32, last_error
+from winapi.dll import CloseHandle, CreateEventW, fn, kernel32, last_error
 
 _REPORT: Final = 32
 """VIA's message size; Windows adds a leading report ID byte, always 0."""

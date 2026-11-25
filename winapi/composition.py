@@ -58,7 +58,7 @@ from win32more.Windows.Win32.UI.WindowsAndMessaging import (
 
 from cell import Cell
 from winapi import windows
-from winapi._core import NativeFunction, com_method
+from winapi.dll import NativeFunction, com_method
 from winapi.shapes import Lighting, Pane, Rect
 
 

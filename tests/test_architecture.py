@@ -798,8 +798,8 @@ def test_a_win32_function_is_declared_in_one_module(tmp_path: Path) -> None:
     # Defect: a second module declares a Win32 export again, so the two
     # prototypes drift apart; or one module's own repeated use of its single
     # declaration is reported.
-    first = 'from winapi._core import fn, kernel32, user32\nclose = fn(kernel32, "CloseHandle", None)\nfront = fn(user32, "GetForegroundWindow", None)\n'
-    second = 'from winapi._core import fn, kernel32\n_CloseHandle = fn(kernel32, "CloseHandle", None)\n'
+    first = 'from winapi.dll import fn, kernel32, user32\nclose = fn(kernel32, "CloseHandle", None)\nfront = fn(user32, "GetForegroundWindow", None)\n'
+    second = 'from winapi.dll import fn, kernel32\n_CloseHandle = fn(kernel32, "CloseHandle", None)\n'
     write_tree(tmp_path, {"winapi/first.py": first, "winapi/second.py": second})
     found = sorted(
         (finding.module, finding.expression)

@@ -20,7 +20,7 @@ lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
     AllowSetForegroundWindow,
 )
 
-from winapi._core import CoCreateInstance, com_method, guid_buffer
+from winapi.dll import CoCreateInstance, com_method, guid_buffer
 
 _CLSCTX_INPROC_SERVER, _CLSCTX_LOCAL_SERVER = 0x1, 0x4
 _IMMERSIVE_SHELL = guid_buffer("C2F03A33-21F5-47FA-B4BB-156362A2F239")

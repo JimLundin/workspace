@@ -13,8 +13,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-lazy from win32more import FAILED
-lazy from win32more._win32 import Guid
+lazy from win32more import FAILED, Guid
 lazy from win32more.Windows.Win32.Foundation import POINT, RECT
 lazy from win32more.Windows.Win32.Graphics.Gdi import ClientToScreen
 lazy from win32more.Windows.Win32.System.Com import (

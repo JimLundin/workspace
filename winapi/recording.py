@@ -22,8 +22,8 @@ lazy from win32more.Windows.Win32.System.Com import (
 )
 
 from cell import Cell
-from winapi._core import CoCreateInstance, com_method, guid_buffer
 from winapi.audio import WAVEFORMATEX
+from winapi.dll import CoCreateInstance, com_method, guid_buffer
 from winapi.pcm import (
     RATE,
     Converter,

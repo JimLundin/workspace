@@ -7,7 +7,7 @@ from ctypes import wintypes
 from pathlib import PureWindowsPath
 from typing import Final
 
-from winapi._core import (
+from winapi.dll import (
     LRESULT,
     ULONG_PTR,
     CloseHandle,

@@ -4,7 +4,7 @@ import ctypes
 from ctypes import wintypes
 from typing import Final
 
-from winapi._core import fn, last_error, user32
+from winapi.dll import fn, last_error, user32
 
 _KEYBOARD_USAGE: Final = (0x01, 0x06)  # HID generic desktop page, keyboard
 _RIDEV_REMOVE, _RIDEV_INPUTSINK = 0x0001, 0x0100

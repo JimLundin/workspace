@@ -24,7 +24,7 @@ from typing import Final
 
 from protocol import Component, Entry, Places, Programs, interpreter
 from settings import programs
-from winapi._core import (
+from winapi.dll import (
     CloseHandle,
     FindWindowW,
     GetWindowThreadProcessId,

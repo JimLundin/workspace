@@ -14,7 +14,7 @@ lazy from win32more.Windows.Win32.System.RemoteDesktop import (
     WTSSessionInfoEx,
 )
 
-from winapi._core import fn, last_error, wtsapi32
+from winapi.dll import fn, last_error, wtsapi32
 
 WM_WTSSESSION_CHANGE: Final = 0x02B1
 WM_DISPLAYCHANGE: Final = 0x007E

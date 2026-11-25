@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from cell import Cell
-from winapi._core import (
+from winapi.dll import (
     GetForegroundWindow,
     GetWindowThreadProcessId,
     PostMessageW,

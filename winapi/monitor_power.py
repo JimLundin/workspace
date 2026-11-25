@@ -21,7 +21,7 @@ lazy from win32more.Windows.Win32.Devices.Display import (
 )
 
 from cell import Cell
-from winapi._core import dxva2, fn
+from winapi.dll import dxva2, fn
 from winapi.screen import Monitor, attached
 
 # Windows reports a refused DDC/CI request through the thread's last error, which win32more's bindings don't keep.

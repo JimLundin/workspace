@@ -11,7 +11,7 @@ if sys.platform != "win32":
 
 
 from winapi import shell, system, windows
-from winapi._core import LRESULT, fn, user32
+from winapi.dll import LRESULT, fn, user32
 
 _SendMessage = fn(
     user32,

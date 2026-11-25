@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from typing import Final, Protocol
 
 from cell import Cell
-from winapi._core import ULONG_PTR, fn, winmm
+from winapi.dll import ULONG_PTR, fn, winmm
 from winapi.system import EventHandle, wait_any
 
 

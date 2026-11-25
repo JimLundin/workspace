@@ -49,7 +49,7 @@ lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
     SetProcessDPIAware,
 )
 
-from winapi._core import DeleteObject
+from winapi.dll import DeleteObject
 from winapi.shapes import Rect
 
 

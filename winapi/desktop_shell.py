@@ -9,7 +9,7 @@ lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
     GetPropW,
 )
 
-from winapi._core import (
+from winapi.dll import (
     CloseHandle,
     IsWindowVisible,
     OpenProcess,

@@ -134,7 +134,7 @@ def run(root: Path, count: int, rounds: int, output: Path | None) -> None:
         "settings/programs.py",
         "winapi/inputs.py",
         "winapi/windows.py",
-        "winapi/_core.py",
+        "winapi/dll.py",
     )
     report = {
         "python": sys.version,

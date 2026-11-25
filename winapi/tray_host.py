@@ -27,7 +27,7 @@ lazy from win32more.Windows.Win32.UI.WindowsAndMessaging import (
 
 from cell import Cell
 from winapi import desktop_shell, windows
-from winapi._core import SetWindowPos
+from winapi.dll import SetWindowPos
 from winapi.icon_pixels import Pixels, native_pixels
 from winapi.shapes import Point, Rect
 from winapi.shell import TASKBAR_CREATED, AppWindow

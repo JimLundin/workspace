@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import Final
 
-from winapi._core import (
+from winapi.dll import (
     LRESULT,
     ULONG_PTR,
     GetCursorPos,
