@@ -4,7 +4,7 @@ from enum import Enum, auto
 from fractions import Fraction
 
 from contracts.members import every_member
-from desktop_ui.shell_items import PinnedApp, Seats, Shelf
+from desktop_ui.shell_items import PinnedApp, Shelf
 from winapi.screen import Monitor
 from winapi.shapes import Point, Rect, Size, Window
 
@@ -160,18 +160,13 @@ class Layout:
         )
 
 
-def _apart(layout: Layout, titled: Titled) -> frozenset[int]:
-    shared = layout.places.get(titled.program, (layout.others,))
-    return frozenset(
-        place.desktop for place in layout.places[titled]
-    ) - frozenset(place.desktop for place in shared)
+def _titled(layout: Layout) -> Iterator[Titled]:
+    return (key for key in layout.places if isinstance(key, Titled))
 
 
-def claims(
-    layout: Layout, windows: Iterable[Window], seats: Seats, kept: Claims
-) -> Claims:
-    """Each window that joins a workstream: by its title, by sitting where only the workstream goes when first seen (a restart, or a window opened there), or by having joined before."""
-    titled = tuple(key for key in layout.places if isinstance(key, Titled))
+def claims(layout: Layout, windows: Iterable[Window], kept: Claims) -> Claims:
+    """The open windows in a workstream: those that joined before, and those whose title now shows its marker."""
+    titled = tuple(_titled(layout))
 
     def joined(window: Window) -> Titled | None:
         return kept.get(window.handle) or next(
@@ -179,13 +174,7 @@ def claims(
                 workstream
                 for workstream in titled
                 if window.exe == workstream.program.exe
-                and (
-                    workstream.marker.casefold() in window.title.casefold()
-                    or (
-                        (seat := seats.get(window.handle)) is not None
-                        and seat.desktop in _apart(layout, workstream)
-                    )
-                )
+                and workstream.marker.casefold() in window.title.casefold()
             ),
             None,
         )
@@ -194,6 +183,35 @@ def claims(
         (window.handle, workstream)
         for window in windows
         if (workstream := joined(window))
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Member:
+    """A workstream's window as Workspace remembers it across its own restarts."""
+
+    handle: int
+    exe: str
+    marker: str
+
+
+def members(claimed: Claims) -> tuple[Member, ...]:
+    return tuple(
+        Member(handle, workstream.program.exe, workstream.marker)
+        for handle, workstream in claimed.items()
+    )
+
+
+def recalled(layout: Layout, remembered: Iterable[Member]) -> Claims:
+    """The remembered windows of the workstreams the layout still names."""
+    titled = frozendict(
+        ((workstream.program.exe, workstream.marker), workstream)
+        for workstream in _titled(layout)
+    )
+    return frozendict(
+        (member.handle, workstream)
+        for member in remembered
+        if (workstream := titled.get((member.exe, member.marker)))
     )
 
 

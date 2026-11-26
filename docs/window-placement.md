@@ -16,32 +16,27 @@ its windows fill them in order and any beyond the last share that place.
 
 | Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 |
 | --- | --- | --- | --- | --- | --- |
-| Laptop only | None | Terminal, Teams | Edge, Outlook | Others | SMD terminal, SMD Edge |
-| Home | 3840×2160 (MAIN) | MAIN: Terminal. Laptop: Teams | MAIN: Edge. Laptop: Outlook | MAIN: others | MAIN: SMD terminal. Laptop: SMD Edge |
+| Laptop only | None | Terminal, Teams | Edge, Outlook | SMD terminal, SMD Edge | Others |
+| Home | 3840×2160 (MAIN) | MAIN: Terminal. Laptop: Teams | MAIN: Edge. Laptop: Outlook | MAIN: SMD terminal. Laptop: SMD Edge | MAIN: others |
 | Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | ABOVE: Terminal. SIDE: a second Terminal. Laptop: Teams | ABOVE: Edge. SIDE: others. Laptop: Outlook | ABOVE: SMD terminal. SIDE: SMD Edge | |
 
-`desktop/placement.py` declares these places.
+`desktop/placement.py` declares these places. Every app a layout doesn't name
+goes to its place for others, where the windows of all such apps share the
+region in their stable order, so an undeclared app never adds a desktop.
 
 ## Workstreams
 
 A workstream sets some of one program's windows apart on their own places; the
-SMD comp work's terminal and Edge window get the last desktop. A window joins
-a workstream (`Titled` in `desktop_ui/window_layout.py`) when:
-
-- its title contains the workstream's marker, in any case: `SMD comp` for the
-  terminal, `sm-decomp` for Edge, or
-- Workspace first sees it on a desktop only the workstream uses, which keeps
-  the windows in place across a restart of Workspace and takes in a window
-  opened there.
-
-It stays in the workstream while it is open, whatever its title becomes. Give
-the SMD terminal's tab the title `SMD comp` once (right-click the tab, **Rename
-tab**; clear it afterwards to see Claude Code's titles again), and show the
-sm-decomp repository once in the Edge window. A pinned web app's window never
-joins. The app chords and the pager still treat a workstream's windows as their
-program's. Every app a layout doesn't name
-goes to its place for others, where the windows of all such apps share the
-region in their stable order, so an undeclared app never adds a desktop.
+SMD comp work's terminal and Edge window get the third desktop. A window joins
+a workstream (`Titled` in `desktop_ui/window_layout.py`) when its title
+contains the workstream's marker, in any case: `SMD comp` for the terminal,
+`sm-decomp` for Edge. It stays in the workstream while it is open, whatever its
+title becomes, and across restarts of Workspace, which remembers the members in
+`workstreams.json`. Give the SMD terminal's tab the title `SMD comp` once
+(right-click the tab, **Rename tab**; clear it afterwards to see Claude Code's
+titles again), and show the sm-decomp repository once in the Edge window. A
+pinned web app's window never joins. The app chords and the pager still treat a
+workstream's windows as their program's.
 
 ## Rules
 

@@ -6,9 +6,13 @@ import time
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import assert_never
 
+from pydantic import TypeAdapter
+
 import protocol
+from contracts import stored
 from contracts.geometry import framed
 from desktop_ui.navigation import (
     Effect,
@@ -43,6 +47,7 @@ from desktop_ui.window_layout import (
     NOWHERE,
     App,
     Claims,
+    Member,
     Placement,
     Screens,
     Setups,
@@ -50,8 +55,10 @@ from desktop_ui.window_layout import (
     claims,
     groups,
     managed,
+    members,
     place,
     reading_order,
+    recalled,
     screens,
 )
 from winapi import app_user_model, screen, windows
@@ -61,6 +68,7 @@ from winapi.shapes import Window
 from winapi.virtual_desktops import Desktops, VirtualDesktops
 
 _CREATE_NO_WINDOW = 0x0800_0000
+_MEMBERS = TypeAdapter(tuple[Member, ...])
 RECENT = 32
 """Windows remembered as last in front, for landing on a desktop."""
 
@@ -297,6 +305,8 @@ EMPTY_ARRANGEMENT = Arrangement(EMPTY_SHELF, 0, 0)
 class ApplicationObserver:
     problem: Callable[[str], None]
     spec: PlacementSpec
+    memory: Path
+    """Where the workstreams' windows are remembered, so a restart of Workspace keeps them apart."""
     results: queue.Queue[Arrangement] = field(
         default_factory=lambda: queue.Queue[Arrangement](maxsize=1)
     )
@@ -310,9 +320,9 @@ class ApplicationObserver:
 
     @classmethod
     def start(
-        cls, problem: Callable[[str], None], spec: PlacementSpec
+        cls, problem: Callable[[str], None], spec: PlacementSpec, memory: Path
     ) -> ApplicationObserver:
-        observer = cls(problem, spec)
+        observer = cls(problem, spec, memory)
         threading.Thread(
             target=observer.run, name="application icons", daemon=True
         ).start()
@@ -340,6 +350,8 @@ class _Watched:
     previous: Arrangement = EMPTY_ARRANGEMENT
     placement: Placement = NOWHERE
     claimed: Claims = frozendict()
+    remembered: tuple[Member, ...] = ()
+    """The workstreams' windows as the previous run left them, until a layout recalls them."""
     paused: bool = False
     zoomed: int | None = None
     recent: tuple[int, ...] = ()
@@ -354,7 +366,9 @@ class Worker:
     observer: ApplicationObserver
 
     def run(self) -> None:
-        watched = _Watched()
+        watched = _Watched(
+            remembered=stored.read(self.observer.memory, _MEMBERS) or ()
+        )
         try:
             while not self.observer.stop.is_set():
                 watched = self.poll(watched)
@@ -383,12 +397,11 @@ class Worker:
             ),
         )
         own = os.getpid()
-        seated = seats(observed, watched.previous.shelf)
         grouped = shelf(
             observed.windows,
             app_ids,
             watched.previous.shelf,
-            seated,
+            seats(observed, watched.previous.shelf),
             self.observer.spec.web_apps,
         )
         slots = tuple(
@@ -400,11 +413,7 @@ class Worker:
         state = observed.state
         where = screens(screen.monitors(), self.observer.spec.setups)
         placement = watched.placement
-        claimed = (
-            claims(where.layout, observed.windows, seated, watched.claimed)
-            if where is not None
-            else watched.claimed
-        )
+        claimed = self.claimed(watched, where, observed.windows)
         if where is not None and state is not None:
             eligible = frozenset(
                 window.handle
@@ -464,6 +473,7 @@ class Worker:
                 where=where,
                 placement=placement,
                 claimed=claimed,
+                remembered=() if where is not None else watched.remembered,
                 framed=current,
                 recent=recent,
                 world=world,
@@ -471,6 +481,20 @@ class Worker:
             grouped,
             state,
         )
+
+    def claimed(
+        self, watched: _Watched, where: Screens | None, live: tuple[Window, ...]
+    ) -> Claims:
+        if where is None:
+            return watched.claimed
+        kept = frozendict(
+            {**recalled(where.layout, watched.remembered), **watched.claimed}
+        )
+        claimed = claims(where.layout, live, kept)
+        if claimed != watched.claimed:
+            with suppress(OSError):
+                stored.save(members(claimed), self.observer.memory, _MEMBERS)
+        return claimed
 
     @staticmethod
     def placed(watched: _Watched, desktops: int) -> tuple[tuple[App, ...], ...]:

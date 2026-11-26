@@ -1,6 +1,6 @@
 from fractions import Fraction
 
-from desktop_ui.shell_items import EMPTY_SHELF, PinnedApp, Seat, shelf
+from desktop_ui.shell_items import EMPTY_SHELF, PinnedApp, shelf
 from desktop_ui.window_layout import (
     NOWHERE,
     Group,
@@ -18,8 +18,10 @@ from desktop_ui.window_layout import (
     dark_when_away,
     groups,
     managed,
+    members,
     place,
     reading_order,
+    recalled,
     screens,
 )
 from tests import test_shell_items
@@ -338,7 +340,7 @@ APART = Layout(
 )
 
 
-def test_a_workstream_takes_windows_by_title_or_first_seat_and_keeps_them_while_open() -> (
+def test_a_workstream_takes_windows_only_by_title_and_keeps_them_while_open() -> (
     None
 ):
     windows = (
@@ -346,15 +348,17 @@ def test_a_workstream_takes_windows_by_title_or_first_seat_and_keeps_them_while_
         Window(2, "Untitled", "shell.exe", minimized=False),
         Window(3, "Project notes", "editor.exe", minimized=False),
         Window(4, "Renamed since", "shell.exe", minimized=False),
-        Window(5, "Opened there", "shell.exe", minimized=False),
     )
-    seated = frozendict({2: Seat(0, 0, 0), 5: Seat(1, 0, 0)})
     kept = frozendict({4: PROJECT, 99: PROJECT})
-    assert claims(APART, windows, seated, kept) == {
-        1: PROJECT,
-        4: PROJECT,
-        5: PROJECT,
-    }
+    assert claims(APART, windows, kept) == {1: PROJECT, 4: PROJECT}
+
+
+def test_remembered_windows_return_only_to_workstreams_the_layout_still_names() -> (
+    None
+):
+    gone = Titled(EDITOR, "Project")
+    remembered = members(frozendict({4: PROJECT, 6: gone}))
+    assert recalled(APART, remembered) == {4: PROJECT}
 
 
 def test_claimed_windows_leave_their_apps_place_but_a_pinned_apps_window_never_joins() -> (
