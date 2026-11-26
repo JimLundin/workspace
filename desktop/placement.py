@@ -13,6 +13,7 @@ from desktop_ui.window_layout import (
     Role,
     Setup,
     Setups,
+    Titled,
 )
 from winapi.shapes import Size
 
@@ -55,6 +56,13 @@ TERMINAL, EDGE = (Program("windowsterminal.exe"), Program("msedge.exe"))
 """Ordinary Edge is every Edge window that isn't a pinned web app's."""
 
 
+SMD_TERMINAL, SMD_EDGE = (
+    Titled(TERMINAL, "SMD comp"),
+    Titled(EDGE, "sm-decomp"),
+)
+"""The SMD comp work on a desktop of its own: the terminal whose tab is once titled SMD comp, and the Edge window once showing the sm-decomp repository."""
+
+
 FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
 
 
@@ -87,6 +95,8 @@ SETUPS: Final = Setups(
                         PinnedApp.OUTLOOK: (
                             Position(1, Role.LAPTOP, RIGHT_HALF),
                         ),
+                        SMD_TERMINAL: (Position(3, Role.LAPTOP, LEFT_HALF),),
+                        SMD_EDGE: (Position(3, Role.LAPTOP, RIGHT_HALF),),
                     }
                 ),
                 others=Position(2, Role.LAPTOP, FULL),
@@ -98,6 +108,8 @@ SETUPS: Final = Setups(
                         PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
                         EDGE: (Position(1, Role.MAIN, FULL),),
                         PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
+                        SMD_TERMINAL: (Position(3, Role.MAIN, FULL),),
+                        SMD_EDGE: (Position(3, Role.LAPTOP, FULL),),
                     }
                 ),
                 others=Position(2, Role.MAIN, FULL),
@@ -112,6 +124,8 @@ SETUPS: Final = Setups(
                         PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
                         EDGE: (Position(1, Role.ABOVE, FULL),),
                         PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
+                        SMD_TERMINAL: (Position(2, Role.ABOVE, FULL),),
+                        SMD_EDGE: (Position(2, Role.SIDE, FULL),),
                     }
                 ),
                 others=Position(1, Role.SIDE, FULL),

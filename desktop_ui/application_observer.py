@@ -42,10 +42,12 @@ from desktop_ui.shell_items import (
 from desktop_ui.window_layout import (
     NOWHERE,
     App,
+    Claims,
     Placement,
     Screens,
     Setups,
     Target,
+    claims,
     groups,
     managed,
     place,
@@ -337,6 +339,7 @@ class _Watched:
     framed: frozenset[int] = frozenset()
     previous: Arrangement = EMPTY_ARRANGEMENT
     placement: Placement = NOWHERE
+    claimed: Claims = frozendict()
     paused: bool = False
     zoomed: int | None = None
     recent: tuple[int, ...] = ()
@@ -380,11 +383,12 @@ class Worker:
             ),
         )
         own = os.getpid()
+        seated = seats(observed, watched.previous.shelf)
         grouped = shelf(
             observed.windows,
             app_ids,
             watched.previous.shelf,
-            seats(observed, watched.previous.shelf),
+            seated,
             self.observer.spec.web_apps,
         )
         slots = tuple(
@@ -396,6 +400,11 @@ class Worker:
         state = observed.state
         where = screens(screen.monitors(), self.observer.spec.setups)
         placement = watched.placement
+        claimed = (
+            claims(where.layout, observed.windows, seated, watched.claimed)
+            if where is not None
+            else watched.claimed
+        )
         if where is not None and state is not None:
             eligible = frozenset(
                 window.handle
@@ -406,7 +415,7 @@ class Worker:
                     own=windows.process_id(window.handle) == own,
                 )
             )
-            placement = place(where, groups(grouped, eligible))
+            placement = place(where, groups(grouped, eligible), claimed)
             if not watched.paused and not windows.dragging():
                 kept = frozendict(
                     (handle, target)
@@ -454,6 +463,7 @@ class Worker:
                 zoomed=zoomed,
                 where=where,
                 placement=placement,
+                claimed=claimed,
                 framed=current,
                 recent=recent,
                 world=world,

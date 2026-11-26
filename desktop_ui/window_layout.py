@@ -4,7 +4,7 @@ from enum import Enum, auto
 from fractions import Fraction
 
 from contracts.members import every_member
-from desktop_ui.shell_items import PinnedApp, Shelf
+from desktop_ui.shell_items import PinnedApp, Seats, Shelf
 from winapi.screen import Monitor
 from winapi.shapes import Point, Rect, Size, Window
 
@@ -110,6 +110,22 @@ type App = PinnedApp | Program
 
 
 @dataclass(frozen=True, slots=True)
+class Titled:
+    """A program's windows of one workstream, kept apart from the program's other windows."""
+
+    program: Program
+    marker: str
+    """Text, in any case, a window's title shows once to join; the window then stays while it is open, whatever its title becomes."""
+
+
+type Key = App | Titled
+"""What a layout gives places: an application, or a workstream of one program's windows."""
+
+type Claims = frozendict[int, Titled]
+"""The windows that joined a workstream, by handle."""
+
+
+@dataclass(frozen=True, slots=True)
 class Region:
     left: Fraction
     top: Fraction
@@ -131,7 +147,7 @@ type Places = tuple[Position, ...]
 
 @dataclass(frozen=True, slots=True)
 class Layout:
-    places: frozendict[App, Places]
+    places: frozendict[Key, Places]
     others: Position
     """The place every application the layout doesn't name shares, in their stable order."""
 
@@ -142,6 +158,43 @@ class Layout:
             for places in (*self.places.values(), (self.others,))
             for position in places
         )
+
+
+def _apart(layout: Layout, titled: Titled) -> frozenset[int]:
+    shared = layout.places.get(titled.program, (layout.others,))
+    return frozenset(
+        place.desktop for place in layout.places[titled]
+    ) - frozenset(place.desktop for place in shared)
+
+
+def claims(
+    layout: Layout, windows: Iterable[Window], seats: Seats, kept: Claims
+) -> Claims:
+    """Each window that joins a workstream: by its title, by sitting where only the workstream goes when first seen (a restart, or a window opened there), or by having joined before."""
+    titled = tuple(key for key in layout.places if isinstance(key, Titled))
+
+    def joined(window: Window) -> Titled | None:
+        return kept.get(window.handle) or next(
+            (
+                workstream
+                for workstream in titled
+                if window.exe == workstream.program.exe
+                and (
+                    workstream.marker.casefold() in window.title.casefold()
+                    or (
+                        (seat := seats.get(window.handle)) is not None
+                        and seat.desktop in _apart(layout, workstream)
+                    )
+                )
+            ),
+            None,
+        )
+
+    return frozendict(
+        (window.handle, workstream)
+        for window in windows
+        if (workstream := joined(window))
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,14 +265,32 @@ type Placement = frozendict[int, Target]
 NOWHERE: Placement = frozendict()
 
 
-def place(where: Screens, apps: Sequence[Group]) -> Placement:
+def _keyed(
+    apps: Sequence[Group], claimed: Claims
+) -> frozendict[Key, tuple[int, ...]]:
+    def key(app: App, handle: int) -> Key:
+        workstream = claimed.get(handle)
+        return workstream if workstream and workstream.program == app else app
+
+    keyed = tuple(
+        (key(group.app, handle), handle)
+        for group in apps
+        for handle in group.windows
+    )
+    return frozendict(
+        (wanted, tuple(handle for found, handle in keyed if found == wanted))
+        for wanted in dict.fromkeys(found for found, _ in keyed)
+    )
+
+
+def place(where: Screens, apps: Sequence[Group], claimed: Claims) -> Placement:
     declared = where.layout.places
-    windows = frozendict((group.app, group.windows) for group in apps)
+    windows = _keyed(apps, claimed)
     others = tuple(
         handle
-        for group in apps
-        if group.app not in declared
-        for handle in group.windows
+        for key, handles in windows.items()
+        if key not in declared
+        for handle in handles
     )
     alone = (
         (
@@ -288,7 +359,8 @@ def _declared_corners(where: Screens, desktop: int) -> frozendict[App, Point]:
     return frozendict(
         (app, corner)
         for app, places in where.layout.places.items()
-        if (
+        if not isinstance(app, Titled)
+        and (
             corner := _corner(
                 pixels(where.roles[place.role], place.region)
                 for place in places
