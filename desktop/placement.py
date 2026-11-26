@@ -87,19 +87,15 @@ SETUPS: Final = Setups(
             Setup.LAPTOP_ONLY: Layout(
                 frozendict(
                     {
-                        TERMINAL: (Position(0, Role.LAPTOP, LEFT_HALF),),
-                        PinnedApp.TEAMS: (
-                            Position(0, Role.LAPTOP, RIGHT_HALF),
-                        ),
-                        EDGE: (Position(1, Role.LAPTOP, LEFT_HALF),),
-                        PinnedApp.OUTLOOK: (
-                            Position(1, Role.LAPTOP, RIGHT_HALF),
-                        ),
+                        TERMINAL: (Position(0, Role.LAPTOP, FULL),),
+                        EDGE: (Position(1, Role.LAPTOP, FULL),),
                         SMD_TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF),),
                         SMD_EDGE: (Position(2, Role.LAPTOP, RIGHT_HALF),),
+                        PinnedApp.TEAMS: (Position(3, Role.LAPTOP, FULL),),
+                        PinnedApp.OUTLOOK: (Position(4, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(3, Role.LAPTOP, FULL),
+                others=Position(5, Role.LAPTOP, FULL),
             ),
             Setup.HOME: Layout(
                 frozendict(

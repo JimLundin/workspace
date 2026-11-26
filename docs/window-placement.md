@@ -14,11 +14,11 @@ by physical size. Any other set of monitors counts as the laptop alone.
 Desktops count from the first in Task View. An app can have several places;
 its windows fill them in order and any beyond the last share that place.
 
-| Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 |
-| --- | --- | --- | --- | --- | --- |
-| Laptop only | None | Terminal, Teams | Edge, Outlook | SMD terminal, SMD Edge | Others |
-| Home | 3840×2160 (MAIN) | MAIN: Terminal. Laptop: Teams | MAIN: Edge. Laptop: Outlook | MAIN: SMD terminal. Laptop: SMD Edge | MAIN: others |
-| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | ABOVE: Terminal. SIDE: a second Terminal. Laptop: Teams | ABOVE: Edge. SIDE: others. Laptop: Outlook | ABOVE: SMD terminal. SIDE: SMD Edge | |
+| Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 | Desktop 5 | Desktop 6 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Laptop only | None | Terminal | Edge | SMD terminal, SMD Edge | Teams | Outlook | Others |
+| Home | 3840×2160 (MAIN) | MAIN: Terminal. Laptop: Teams | MAIN: Edge. Laptop: Outlook | MAIN: SMD terminal. Laptop: SMD Edge | MAIN: others | | |
+| Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | ABOVE: Terminal. SIDE: a second Terminal. Laptop: Teams | ABOVE: Edge. SIDE: others. Laptop: Outlook | ABOVE: SMD terminal. SIDE: SMD Edge | | | |
 
 `desktop/placement.py` declares these places. Every app a layout doesn't name
 goes to its place for others, where the windows of all such apps share the
