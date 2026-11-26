@@ -56,11 +56,11 @@ TERMINAL, EDGE = (Program("windowsterminal.exe"), Program("msedge.exe"))
 """Ordinary Edge is every Edge window that isn't a pinned web app's."""
 
 
-SMD_TERMINAL, SMD_EDGE = (
-    Titled(TERMINAL, "SMD comp"),
+SM_DECOMP_TERMINAL, SM_DECOMP_EDGE = (
+    Titled(TERMINAL, "sm-decomp"),
     Titled(EDGE, "sm-decomp"),
 )
-"""The SMD comp work on the third desktop: the terminal whose tab is once titled SMD comp, and the Edge window once showing the sm-decomp repository."""
+"""The sm-decomp work on the third desktop: the terminal whose tab is once titled sm-decomp, and the Edge window once showing the sm-decomp repository."""
 
 
 FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
@@ -89,8 +89,10 @@ SETUPS: Final = Setups(
                     {
                         TERMINAL: (Position(0, Role.LAPTOP, FULL),),
                         EDGE: (Position(1, Role.LAPTOP, FULL),),
-                        SMD_TERMINAL: (Position(2, Role.LAPTOP, LEFT_HALF),),
-                        SMD_EDGE: (Position(2, Role.LAPTOP, RIGHT_HALF),),
+                        SM_DECOMP_TERMINAL: (
+                            Position(2, Role.LAPTOP, LEFT_HALF),
+                        ),
+                        SM_DECOMP_EDGE: (Position(2, Role.LAPTOP, RIGHT_HALF),),
                         PinnedApp.TEAMS: (Position(3, Role.LAPTOP, FULL),),
                         PinnedApp.OUTLOOK: (Position(4, Role.LAPTOP, FULL),),
                     }
@@ -104,8 +106,8 @@ SETUPS: Final = Setups(
                         PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
                         EDGE: (Position(1, Role.MAIN, FULL),),
                         PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
-                        SMD_TERMINAL: (Position(2, Role.MAIN, FULL),),
-                        SMD_EDGE: (Position(2, Role.LAPTOP, FULL),),
+                        SM_DECOMP_TERMINAL: (Position(2, Role.MAIN, FULL),),
+                        SM_DECOMP_EDGE: (Position(2, Role.LAPTOP, FULL),),
                     }
                 ),
                 others=Position(3, Role.MAIN, FULL),
@@ -120,8 +122,8 @@ SETUPS: Final = Setups(
                         PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
                         EDGE: (Position(1, Role.ABOVE, FULL),),
                         PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
-                        SMD_TERMINAL: (Position(2, Role.ABOVE, FULL),),
-                        SMD_EDGE: (Position(2, Role.SIDE, FULL),),
+                        SM_DECOMP_TERMINAL: (Position(2, Role.ABOVE, FULL),),
+                        SM_DECOMP_EDGE: (Position(2, Role.SIDE, FULL),),
                     }
                 ),
                 others=Position(1, Role.SIDE, FULL),
