@@ -690,11 +690,7 @@ def _start_shell(
         controls,
         away,
         TrayHost.start(),
-        ApplicationObserver.start(
-            errors.put,
-            settings.placement,
-            settings.places.directory / "workstreams.json",
-        ),
+        ApplicationObserver.start(errors.put, settings.placement),
         KeyHintOverlay(settings.badges),
         worker,
     )

@@ -8,7 +8,6 @@ from desktop_ui.window_layout import (
     Placement,
     Program,
     Screens,
-    Titled,
     place,
     screens,
 )
@@ -19,10 +18,7 @@ from winapi.shapes import Rect
 
 DECLARED = tuple(
     dict.fromkeys(
-        app
-        for layout in SETUPS.layouts.values()
-        for app in layout.places
-        if not isinstance(app, Titled)
+        app for layout in SETUPS.layouts.values() for app in layout.places
     )
 )
 OTHERS = (Program("python.exe"), Program("notepad.exe"), Program("mspaint.exe"))
@@ -108,7 +104,7 @@ def overlapping(placement: Placement) -> tuple[tuple[int, int], ...]:
 def test_placed_windows_never_overlap_and_each_gets_one_place(
     case: PlacementCase,
 ) -> None:
-    placement = place(case.where, case.apps, frozendict())
+    placement = place(case.where, case.apps)
     assert not overlapping(placement)
     assert set(placement) == {
         handle for group in case.apps for handle in group.windows

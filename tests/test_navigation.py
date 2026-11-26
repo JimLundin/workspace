@@ -115,7 +115,7 @@ TERMINAL_KEY = App("terminal", Installed("windowsterminal.exe", "wt.exe"))
 def world(
     apps: tuple[Group, ...], *, work: bool = False, foreground: int = 1
 ) -> World:
-    placement = place(WORK if work else HOME, apps, frozendict())
+    placement = place(WORK if work else HOME, apps)
     return World(
         4,
         1,

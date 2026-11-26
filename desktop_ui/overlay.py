@@ -5,7 +5,6 @@ from pathlib import Path
 
 from pydantic import StrictBool, TypeAdapter
 
-from contracts import stored
 from desktop_ui.keymap import PHYSICAL_NAMES, indicator_text
 from keyboard.actions import Layer
 from keyboard.physical import Scancode
@@ -21,21 +20,38 @@ _PREFERENCE = TypeAdapter(Preference)
 _POSITION = TypeAdapter(Point)
 
 
+def _read[T](path: Path, adapter: TypeAdapter[T]) -> T | None:
+    try:
+        return adapter.validate_json(path.read_bytes(), strict=True)
+    except OSError, ValueError:
+        return None
+
+
+def _save[T](data: T, path: Path, adapter: TypeAdapter[T]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    try:
+        temporary.write_bytes(adapter.dump_json(data) + b"\n")
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def load_enabled(path: Path) -> bool:
-    preference = stored.read(path, _PREFERENCE)
+    preference = _read(path, _PREFERENCE)
     return preference.enabled if preference is not None else True
 
 
 def save_enabled(*, enabled: bool, path: Path) -> None:
-    stored.save(Preference(enabled=enabled), path, _PREFERENCE)
+    _save(Preference(enabled=enabled), path, _PREFERENCE)
 
 
 def load_position(path: Path) -> Point | None:
-    return stored.read(path, _POSITION)
+    return _read(path, _POSITION)
 
 
 def save_position(position: Point, path: Path) -> None:
-    stored.save(position, path, _POSITION)
+    _save(position, path, _POSITION)
 
 
 def nearest_work_area(position: Point, areas: Sequence[Rect]) -> Rect:

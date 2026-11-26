@@ -13,7 +13,6 @@ from desktop_ui.window_layout import (
     Role,
     Setup,
     Setups,
-    Titled,
 )
 from winapi.shapes import Size
 
@@ -56,20 +55,11 @@ TERMINAL, EDGE = (Program("windowsterminal.exe"), Program("msedge.exe"))
 """Ordinary Edge is every Edge window that isn't a pinned web app's."""
 
 
-SM_DECOMP_TERMINAL, SM_DECOMP_EDGE = (
-    Titled(TERMINAL, "sm-decomp"),
-    Titled(EDGE, "sm-decomp"),
-)
-"""The sm-decomp work on the third desktop: the terminal whose tab is once titled sm-decomp, and the Edge window once showing the sm-decomp repository."""
+CLAUDE: Final = Program("claude.exe")
+"""The Claude desktop app."""
 
 
 FULL = Region(Fraction(0), Fraction(0), Fraction(1), Fraction(1))
-
-
-LEFT_HALF = Region(Fraction(0), Fraction(0), Fraction(1, 2), Fraction(1))
-
-
-RIGHT_HALF = Region(Fraction(1, 2), Fraction(0), Fraction(1, 2), Fraction(1))
 
 
 SETUPS: Final = Setups(
@@ -89,15 +79,11 @@ SETUPS: Final = Setups(
                     {
                         TERMINAL: (Position(0, Role.LAPTOP, FULL),),
                         EDGE: (Position(1, Role.LAPTOP, FULL),),
-                        SM_DECOMP_TERMINAL: (
-                            Position(2, Role.LAPTOP, LEFT_HALF),
-                        ),
-                        SM_DECOMP_EDGE: (Position(2, Role.LAPTOP, RIGHT_HALF),),
-                        PinnedApp.TEAMS: (Position(3, Role.LAPTOP, FULL),),
-                        PinnedApp.OUTLOOK: (Position(4, Role.LAPTOP, FULL),),
+                        PinnedApp.TEAMS: (Position(2, Role.LAPTOP, FULL),),
+                        PinnedApp.OUTLOOK: (Position(3, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(5, Role.LAPTOP, FULL),
+                others=Position(4, Role.LAPTOP, FULL),
             ),
             Setup.HOME: Layout(
                 frozendict(
@@ -106,27 +92,21 @@ SETUPS: Final = Setups(
                         PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
                         EDGE: (Position(1, Role.MAIN, FULL),),
                         PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
-                        SM_DECOMP_TERMINAL: (Position(2, Role.MAIN, FULL),),
-                        SM_DECOMP_EDGE: (Position(2, Role.LAPTOP, FULL),),
                     }
                 ),
-                others=Position(3, Role.MAIN, FULL),
+                others=Position(2, Role.MAIN, FULL),
             ),
             Setup.WORK: Layout(
                 frozendict(
                     {
-                        TERMINAL: (
-                            Position(0, Role.ABOVE, FULL),
-                            Position(0, Role.SIDE, FULL),
-                        ),
-                        PinnedApp.TEAMS: (Position(0, Role.LAPTOP, FULL),),
-                        EDGE: (Position(1, Role.ABOVE, FULL),),
-                        PinnedApp.OUTLOOK: (Position(1, Role.LAPTOP, FULL),),
-                        SM_DECOMP_TERMINAL: (Position(2, Role.ABOVE, FULL),),
-                        SM_DECOMP_EDGE: (Position(2, Role.SIDE, FULL),),
+                        TERMINAL: (Position(0, Role.SIDE, FULL),),
+                        EDGE: (Position(0, Role.ABOVE, FULL),),
+                        CLAUDE: (Position(0, Role.LAPTOP, FULL),),
+                        PinnedApp.OUTLOOK: (Position(1, Role.ABOVE, FULL),),
+                        PinnedApp.TEAMS: (Position(1, Role.SIDE, FULL),),
                     }
                 ),
-                others=Position(1, Role.SIDE, FULL),
+                others=Position(1, Role.LAPTOP, FULL),
             ),
         }
     ),

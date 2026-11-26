@@ -13,15 +13,11 @@ from desktop_ui.window_layout import (
     Setup,
     Setups,
     Target,
-    Titled,
-    claims,
     dark_when_away,
     groups,
     managed,
-    members,
     place,
     reading_order,
-    recalled,
     screens,
 )
 from tests import test_shell_items
@@ -177,15 +173,13 @@ def test_windows_beyond_an_apps_places_share_its_last_place_and_fewer_leave_plac
 ):
     alone = screens((LAPTOP,), SETUPS)
     assert alone is not None
-    assert targets(
-        place(alone, (Group(SHELL, (3, 6, 7, 8)),), frozendict())
-    ) == {
+    assert targets(place(alone, (Group(SHELL, (3, 6, 7, 8)),))) == {
         3: (0, Rect(0, 0, 960, 1200)),
         6: (0, Rect(960, 0, 1920, 400)),
         7: (0, Rect(960, 400, 1920, 800)),
         8: (0, Rect(960, 800, 1920, 1200)),
     }
-    assert targets(place(alone, (Group(SHELL, (3,)),), frozendict())) == {
+    assert targets(place(alone, (Group(SHELL, (3,)),))) == {
         3: (0, Rect(0, 0, 960, 1200))
     }
 
@@ -198,7 +192,6 @@ def test_undeclared_apps_share_the_place_for_others_and_add_no_desktops() -> (
     placed = place(
         alone,
         (Group(PYTHON, (1, 2)), Group(EDITOR, (5,)), Group(NOTEPAD, (3,))),
-        frozendict(),
     )
     assert targets(placed) == {
         5: (1, Rect(0, 0, 1920, 1200)),
@@ -231,12 +224,10 @@ def test_apps_given_the_same_place_share_it_equally_in_the_layouts_order() -> (
         ),
     )
     assert targets(
-        place(together, (Group(EDITOR, (5,)), Group(SHELL, (3,))), frozendict())
+        place(together, (Group(EDITOR, (5,)), Group(SHELL, (3,))))
     ) == {3: (0, Rect(0, 0, 1920, 2160)), 5: (0, Rect(1920, 0, 3840, 2160))}
     assert targets(
-        place(
-            together, (Group(EDITOR, (5, 6)), Group(SHELL, (3,))), frozendict()
-        )
+        place(together, (Group(EDITOR, (5, 6)), Group(SHELL, (3,))))
     ) == {
         3: (0, Rect(0, 0, 1280, 2160)),
         5: (0, Rect(1280, 0, 2560, 2160)),
@@ -250,9 +241,7 @@ def test_windows_stack_in_a_portrait_region() -> None:
         frozendict({Role.LAPTOP: Rect(0, 0, 1200, 1920)}),
         Layout(frozendict(), others=Position(0, Role.LAPTOP, FULL)),
     )
-    assert targets(
-        place(portrait, (Group(PYTHON, (1, 2, 3)),), frozendict())
-    ) == {
+    assert targets(place(portrait, (Group(PYTHON, (1, 2, 3)),))) == {
         1: (0, Rect(0, 0, 1200, 640)),
         2: (0, Rect(0, 640, 1200, 1280)),
         3: (0, Rect(0, 1280, 1200, 1920)),
@@ -306,7 +295,7 @@ def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() 
         Group(SHELL, (3,)),
         Group(CHAT, (1,)),
     )
-    placement = place(work, apps, frozendict())
+    placement = place(work, apps)
     windows = frozendict((group.app, group.windows) for group in apps)
     assert reading_order(work, windows, placement, 0) == (
         EDITOR,
@@ -325,56 +314,3 @@ def test_a_desktops_apps_read_left_to_right_then_top_to_bottom_running_or_not() 
     assert reading_order(alone, frozendict(), NOWHERE, 1) == (EDITOR,)
     assert reading_order(alone, frozendict(), NOWHERE, OTHERS) == ()
     assert reading_order(None, frozendict(), NOWHERE, 1) == ()
-
-
-PROJECT = Titled(SHELL, "Project")
-"""A workstream of the shell's windows, on a desktop of its own."""
-APART = Layout(
-    frozendict(
-        {
-            SHELL: (Position(0, Role.LAPTOP, FULL),),
-            PROJECT: (Position(1, Role.LAPTOP, FULL),),
-        }
-    ),
-    others=Position(2, Role.LAPTOP, FULL),
-)
-
-
-def test_a_workstream_takes_windows_only_by_title_and_keeps_them_while_open() -> (
-    None
-):
-    windows = (
-        Window(1, "build: project x", "shell.exe", minimized=False),
-        Window(2, "Untitled", "shell.exe", minimized=False),
-        Window(3, "Project notes", "editor.exe", minimized=False),
-        Window(4, "Renamed since", "shell.exe", minimized=False),
-    )
-    kept = frozendict({4: PROJECT, 99: PROJECT})
-    assert claims(APART, windows, kept) == {1: PROJECT, 4: PROJECT}
-
-
-def test_remembered_windows_return_only_to_workstreams_the_layout_still_names() -> (
-    None
-):
-    gone = Titled(EDITOR, "Project")
-    remembered = members(frozendict({4: PROJECT, 6: gone}))
-    assert recalled(APART, remembered) == {4: PROJECT}
-
-
-def test_claimed_windows_leave_their_apps_place_but_a_pinned_apps_window_never_joins() -> (
-    None
-):
-    alone = Screens(
-        Setup.LAPTOP_ONLY, frozendict({Role.LAPTOP: LAPTOP.work}), APART
-    )
-    placed = place(
-        alone,
-        (Group(SHELL, (1, 2)), Group(PinnedApp.TEAMS, (3,))),
-        frozendict({2: PROJECT, 3: Titled(Program("msedge.exe"), "x")}),
-    )
-    assert {handle: target.desktop for handle, target in placed.items()} == {
-        1: 0,
-        2: 1,
-        3: OTHERS,
-    }
-    assert reading_order(alone, frozendict(), NOWHERE, 1) == ()
