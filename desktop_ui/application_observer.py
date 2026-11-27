@@ -7,6 +7,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import assert_never
+from uuid import UUID
 
 import protocol
 from contracts.geometry import framed
@@ -235,6 +236,14 @@ def fit(
     )
 
 
+def relocated(connection: VirtualDesktops, handle: int, desktop: UUID) -> bool:
+    try:
+        connection.move(handle, desktop)
+    except OSError:
+        return False
+    return True
+
+
 def arrange(
     connection: Connection,
     observed: Observed,
@@ -247,14 +256,19 @@ def arrange(
     if connection is None or state is None:
         return connection
     ids = state.ids
+    current = ids.index(state.current)
     followed: int | None = None
     for handle, target in placement.items():
-        with suppress(OSError):
-            if observed.desktops.get(handle) != target.desktop:
-                connection.move(handle, ids[target.desktop])
-                if handle == follow:
-                    followed = target.desktop
-            resize(handle, target, slot=handle in slots)
+        at = observed.desktops.get(handle, current)
+        if at != target.desktop and relocated(
+            connection, handle, ids[target.desktop]
+        ):
+            at = target.desktop
+            if handle == follow:
+                followed = target.desktop
+        if at == target.desktop:
+            with suppress(OSError):
+                resize(handle, target, slot=handle in slots)
     if followed is not None and ids[followed] != state.current:
         with suppress(OSError):
             connection.switch(ids[followed])
