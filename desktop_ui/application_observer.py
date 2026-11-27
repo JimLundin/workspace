@@ -246,7 +246,7 @@ def lost_track(
     return (
         f"Windows lost track of a {exe} window's desktop, so Workspace "
         "minimizes it while you're on another desktop. "
-        f"Restart {exe} to fix it."
+        "Restart Windows Explorer to fix it."
         for exe in exes
     )
 

@@ -125,14 +125,14 @@ using interface IDs for Windows build 26100. On another build it fails to
 connect, and placement stops while the bar keeps working. Windows of elevated
 programs can't be moved.
 
-If Explorer restarts, Windows can lose track of the desktop of windows from
-programs that were already running, including windows those programs open
-later: Windows shows such a window on every desktop and it can't be moved to
-another. Workspace stands in for the desktop: it sizes the window while you're
-on its desktop, minimizes it when you leave (unless it's in front), and an app
-chord switches to its desktop first. The tray warns once for each program
-that has one, naming it. Restarting that program fixes it; moving a tab to a
-new window doesn't, since the program stays the same.
+Explorer can stop tracking which desktop a window is on, for windows of any
+program, new ones included (seen after Explorer had restarted once). Windows
+shows such a window on every desktop and it can't be moved to another.
+Workspace stands in for the desktop: it sizes the window while you're on its
+desktop, minimizes it when you leave (unless it's in front), and an app chord
+switches to its desktop first. The tray warns once for each program that has
+one. Restarting the program or moving a tab to a new window doesn't help;
+restarting Explorer does, since it rebuilds the list of every open window.
 
 Key hint badges sit at each window's placed rectangle; while placement is
 paused, or for a zoomed window, that can differ from where the window is.
