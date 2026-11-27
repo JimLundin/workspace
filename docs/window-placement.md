@@ -1,7 +1,7 @@
 # Window placement
 
 Workspace gives every managed window a declared place for the connected
-monitors. Windows never overlap. Each setup uses exactly the Windows virtual
+monitors. Windows never overlap, except in [layers](#layers). Each setup uses exactly the Windows virtual
 desktops its layout names: Workspace creates any that are missing and removes
 any after them, whose leftover windows fall back to the last one kept.
 
@@ -16,13 +16,36 @@ its windows fill them in order and any beyond the last share that place.
 
 | Setup | Screens besides the laptop | Desktop 1 | Desktop 2 | Desktop 3 | Desktop 4 | Desktop 5 |
 | --- | --- | --- | --- | --- | --- | --- |
-| Laptop only | None | Terminal | Edge | Teams | Outlook | Others |
+| Laptop only (two side by side, then layers) | None | Terminal | Edge | Teams | Outlook | Others |
 | Home | 3840×2160 (MAIN) | MAIN: Terminal. Laptop: Teams | MAIN: Edge. Laptop: Outlook | MAIN: others | | |
 | Work | 2560×1440 (ABOVE), 1440×2560 (SIDE) | ABOVE: Edge. SIDE: Terminal, its windows stacked. Laptop: Claude | ABOVE: Outlook. SIDE: Teams. Laptop: others | | | |
 
 `desktop/placement.py` declares these places. Every app a layout doesn't name
 goes to its place for others, where the windows of all such apps share the
 region in their stable order, so an undeclared app never adds a desktop.
+
+## Layers
+
+A setup's layout can cap how many windows a place shows side by side
+(`side_by_side` in `desktop/placement.py`): two on the laptop alone, no cap at
+home or work. A place holding more windows stacks them in layers on the same
+desktop, each layer sharing the whole place again: with four terminals on the
+laptop, terminals 1 and 2 split the screen, and 3 and 4 lie on top of them at
+the same halves. A last layer with a single window fills the place.
+
+A layer always comes up whole: whenever Workspace focuses a window, by chord,
+pager or desktop switch, or you click or Alt-Tab to one, the other windows of
+its layer are raised with it.
+
+- **Apps K** and **Apps ,** bring up the layer below or above the focused
+  window's, at the same spot (or the nearest one on a shorter layer), wrapping
+  round the stack.
+- **Focus ↑** and **Focus ↓** step to the layer above or below where no window
+  lies in that direction, without wrapping.
+- An app chord cycles the app's windows as before, raising each one's layer.
+
+Focus ←/→ and the key hints see only the layer showing in each place: the
+layer of the window last in front there, or the bottom one.
 
 ## Rules
 

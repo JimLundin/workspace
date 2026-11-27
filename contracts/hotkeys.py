@@ -25,6 +25,8 @@ ROUTES: Final = every_member(
         Tool.FOCUS_DOWN: Route.NAVIGATE,
         Tool.FOCUS_UP: Route.NAVIGATE,
         Tool.FOCUS_RIGHT: Route.NAVIGATE,
+        Tool.LAYER_DOWN: Route.NAVIGATE,
+        Tool.LAYER_UP: Route.NAVIGATE,
         Tool.DESKTOP_1: Route.NAVIGATE,
         Tool.DESKTOP_2: Route.NAVIGATE,
         Tool.DESKTOP_3: Route.NAVIGATE,

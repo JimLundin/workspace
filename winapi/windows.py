@@ -210,6 +210,7 @@ _SWP_NOSIZE, _SWP_NOMOVE, _SWP_NOZORDER, _SWP_NOACTIVATE = (
 )
 _SW_HIDE, _SW_SHOWNA = 0, 8
 _HWND_TOPMOST: Final = -1
+_HWND_TOP: Final = 0
 _WM_MOUSEACTIVATE, _WM_NCDESTROY = 0x0021, 0x0082
 _MA_NOACTIVATE: Final = 3
 
@@ -431,6 +432,12 @@ def move(hwnd: int, to: Rect) -> None:
         to.width,
         to.height,
         _SWP_NOZORDER | _SWP_NOACTIVATE,
+    )
+
+
+def lift(hwnd: int) -> None:
+    SetWindowPos(
+        hwnd, _HWND_TOP, 0, 0, 0, 0, _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOACTIVATE
     )
 
 

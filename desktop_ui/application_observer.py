@@ -48,6 +48,7 @@ from desktop_ui.window_layout import (
     Target,
     groups,
     managed,
+    mates,
     place,
     reading_order,
     screens,
@@ -103,6 +104,17 @@ def resize(handle: int, target: Target, *, slot: bool) -> None:
     wanted = framed(target.rect, outer, drawn)
     if wanted != outer:
         windows.move(handle, wanted)
+
+
+def lift_layer(placement: Placement, handle: int) -> None:
+    for mate in mates(placement, handle):
+        with suppress(OSError):
+            windows.lift(mate)
+
+
+def bring(placement: Placement, handle: int) -> None:
+    lift_layer(placement, handle)
+    focus(handle)
 
 
 def focus(handle: int) -> None:
@@ -246,11 +258,11 @@ def arrange(
     if followed is not None and ids[followed] != state.current:
         with suppress(OSError):
             connection.switch(ids[followed])
-            focus(follow)
+            bring(placement, follow)
     return connection
 
 
-def show(connection: Connection, handle: int) -> None:
+def show(connection: Connection, placement: Placement, handle: int) -> None:
     if connection is not None:
         with suppress(OSError):
             current, place_id = (
@@ -259,7 +271,7 @@ def show(connection: Connection, handle: int) -> None:
             )
             if place_id is not None and place_id != current:
                 connection.switch(place_id)
-    focus(handle)
+    bring(placement, handle)
 
 
 def switch(connection: Connection, index: int) -> tuple[Connection, bool]:
@@ -434,6 +446,8 @@ class Worker:
             for index, handle in enumerate(candidates)
             if handle not in candidates[:index]
         )[:RECENT]
+        if recent[:1] != watched.recent[:1] and not watched.paused:
+            lift_layer(placement, foreground)
         world = World(
             len(state.ids) if state is not None else 1,
             state.ids.index(state.current) if state is not None else 0,
@@ -526,12 +540,12 @@ class Worker:
     def effect(self, watched: _Watched, chosen: Effect) -> _Watched:
         match chosen:
             case Focus(window=window):
-                show(watched.connection, window)
+                show(watched.connection, watched.placement, window)
                 return watched
             case Switch(desktop=index, then=then):
                 connection, switched = switch(watched.connection, index)
                 if switched and then is not None:
-                    focus(then)
+                    bring(watched.placement, then)
                 return replace(watched, connection=connection)
             case Launch(app=app):
                 return self.start(watched, app)

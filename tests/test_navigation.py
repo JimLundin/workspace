@@ -7,6 +7,7 @@ from desktop_ui.navigation import (
     JumpDesktop,
     Launch,
     SpatialFocus,
+    StepLayer,
     Switch,
     World,
     Zoom,
@@ -198,3 +199,55 @@ def test_app_keys_cycle_the_apps_windows_or_launch_it() -> None:
     assert effect(AppKey(TERMINAL_KEY), empty) == Launch(
         Installed("windowsterminal.exe", "wt.exe")
     )
+
+
+LAYERED = Screens(
+    Setup.LAPTOP_ONLY,
+    frozendict({Role.LAPTOP: LAPTOP.work}),
+    Layout(frozendict(), others=Position(0, Role.LAPTOP, FULL), side_by_side=2),
+)
+"""Five windows in two-wide layers: 1 and 2 at the bottom, 3 and 4 above them, 5 alone on top."""
+
+
+def layered(foreground: int) -> World:
+    placement = place(LAYERED, (Group(TERMINAL, (1, 2, 3, 4, 5)),))
+    return World(
+        1,
+        0,
+        foreground,
+        frozendict({TERMINAL: (1, 2, 3, 4, 5)}),
+        frozendict((handle, 0) for handle in placement),
+        placement,
+        (),
+        None,
+    )
+
+
+def stepped(at: World, step: int) -> int | None:
+    match effect(StepLayer(step), at):
+        case Focus(window=window):
+            return window
+        case None:
+            return None
+        case other:
+            raise AssertionError(other)
+
+
+def test_layer_keys_land_on_the_same_spot_a_layer_away_and_wrap_round() -> None:
+    assert stepped(layered(1), 1) == 3
+    assert stepped(layered(2), 1) == 4
+    assert stepped(layered(4), 1) == 5
+    assert stepped(layered(5), 1) == 1
+    assert stepped(layered(1), -1) == 5
+    assert stepped(world(HOME_APPS), 1) is None
+
+
+def test_focus_up_and_down_climb_layers_where_no_window_lies_that_way() -> None:
+    assert focused(layered(2), Direction.UP) == 4
+    assert focused(layered(4), Direction.DOWN) == 2
+    assert focused(layered(1), Direction.DOWN) is None
+    assert focused(layered(5), Direction.UP) is None
+
+
+def test_spatial_focus_skips_windows_a_higher_layer_covers() -> None:
+    assert focused(layered(3), Direction.RIGHT) == 4

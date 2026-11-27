@@ -122,7 +122,7 @@ LAYERS: Final[frozendict[Layer, Board[Binding]]] = frozendict({
         home=     Row((BLANK,           _R,                    BLANK,                 BLANK,                 BLANK),
                       (Tool.ZOOM,       Tool.FOCUS_LEFT,       Tool.FOCUS_DOWN,       Tool.FOCUS_UP,         Tool.FOCUS_RIGHT)),
         bottom=   Row((BLANK,           BLANK,                 Tool.WINDOW_SWITCHER,  Tool.PLACE_NOW,        BLANK),
-                      (BLANK,           Tool.DICTATE,          BLANK,                 Tool.COPY_TRANSCRIPT,  Tool.DICTATE_TOGGLE)),
+                      (Tool.LAYER_DOWN, Tool.DICTATE,          Tool.LAYER_UP,         Tool.COPY_TRANSCRIPT,  Tool.DICTATE_TOGGLE)),
         thumbs=Thumbs((                                        BLANK,                 Tool.MEETING_TOGGLE,   BLANK),
                       (BLANK,           BLANK,                 BLANK)),
     ),

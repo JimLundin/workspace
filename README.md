@@ -65,7 +65,8 @@ cycled.
 | **2 3 4 5 6**, **W** | The apps in `APPS`, in order |
 | **8 9 0 + ´** | Desktops 1 to 5 |
 | **I** | Zoom |
-| **O P Å ¨** | Focus ← ↓ ↑ → |
+| **O P Å ¨** | Focus ← ↓ ↑ → (↑ and ↓ step through layers where no window lies that way) |
+| **K Ö** | Layer ↓, Layer ↑ (wrapping round) |
 | **A S D** | Pause placement, switch windows, re-place |
 | **L** | Hold to dictate; the text is typed at the cursor on release |
 | **Ä** | Copy the latest transcript |
@@ -104,6 +105,8 @@ App keys focus the app, cycle its windows, or start it.
 | Apps **E** | Focus ↓ |
 | Apps **I** | Focus ↑ |
 | Apps **O** | Focus → |
+| Apps **K** | Layer ↓ |
+| Apps **,** | Layer ↑ |
 | Apps **X** | Pause place |
 | Apps **C** | Windows |
 | Apps **D** | Re-place |
@@ -134,7 +137,8 @@ folder, restarts the layout or the desktop, and quits Workspace. The tray menu's
 items and their order are `TRAY` in `desktop_ui/desktop_control.py`.
 
 Workspace places each app's windows without overlap for the connected monitors
-and creates virtual desktops as needed. See
+and creates virtual desktops as needed. On the laptop alone a place shows at
+most two windows side by side; more stack in layers on top of them. See
 [window placement](docs/window-placement.md).
 
 ## Logs and data

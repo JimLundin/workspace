@@ -5,6 +5,7 @@ from desktop_ui.keymap import KeyboardView
 from desktop_ui.navigation import Direction, Focus, SpatialFocus, World, effect
 from desktop_ui.window_layout import Target
 from tests import layouts
+from tests.test_navigation import layered
 from tests.test_window_layout import CODE, EDGE, TERMINAL
 from winapi.shapes import Rect
 
@@ -95,3 +96,8 @@ def test_direction_letters_name_the_window_spatial_focus_reaches() -> None:
 def test_only_placed_windows_on_the_current_desktop_get_badges() -> None:
     assert set(badges(WORLD)) == {1, 5, 2, 3}
     assert set(badges(replace(WORLD, current=1, foreground=4))) == {4}
+
+
+def test_windows_a_higher_layer_covers_get_no_badges() -> None:
+    assert set(badges(layered(3))) == {3, 4}
+    assert set(badges(replace(layered(5), recent=(5, 1)))) == {5}

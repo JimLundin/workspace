@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, replace
 from itertools import combinations
 
 from hypothesis import strategies
@@ -8,6 +9,7 @@ from desktop_ui.window_layout import (
     Placement,
     Program,
     Screens,
+    Target,
     place,
     screens,
 )
@@ -81,7 +83,20 @@ def placement_cases(draw: strategies.DrawFn) -> PlacementCase:
     )
     where = screens((laptop, *externals), SETUPS)
     assert where is not None
-    return PlacementCase(where, apps(draw, range(1, 100)))
+    side_by_side = draw(strategies.sampled_from((None, 1, 2, 3)))
+    layout = replace(where.layout, side_by_side=side_by_side)
+    return PlacementCase(
+        replace(where, layout=layout), apps(draw, range(1, 100))
+    )
+
+
+def stacked(a: Target, b: Target) -> bool:
+    return bool(
+        (above := a.layer)
+        and (below := b.layer)
+        and above.place == below.place
+        and above.depth != below.depth
+    )
 
 
 def overlapping(placement: Placement) -> tuple[tuple[int, int], ...]:
@@ -96,16 +111,28 @@ def overlapping(placement: Placement) -> tuple[tuple[int, int], ...]:
     return tuple(
         (first, second)
         for (first, a), (second, b) in combinations(placement.items(), 2)
-        if a.desktop == b.desktop and meet(a.rect, b.rect)
+        if a.desktop == b.desktop and not stacked(a, b) and meet(a.rect, b.rect)
+    )
+
+
+def too_wide(placement: Placement, side_by_side: int | None) -> bool:
+    shown = Counter(
+        (target.desktop, target.layer)
+        for target in placement.values()
+        if target.layer
+    )
+    return side_by_side is not None and any(
+        count > side_by_side for count in shown.values()
     )
 
 
 @property_test(cases(placement_cases))
-def test_placed_windows_never_overlap_and_each_gets_one_place(
+def test_placed_windows_overlap_only_across_layers_and_each_gets_one_place(
     case: PlacementCase,
 ) -> None:
     placement = place(case.where, case.apps)
     assert not overlapping(placement)
+    assert not too_wide(placement, case.where.layout.side_by_side)
     assert set(placement) == {
         handle for group in case.apps for handle in group.windows
     }

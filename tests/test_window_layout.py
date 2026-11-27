@@ -4,6 +4,7 @@ from desktop_ui.shell_items import EMPTY_SHELF, PinnedApp, shelf
 from desktop_ui.window_layout import (
     NOWHERE,
     Group,
+    Layer,
     Layout,
     Position,
     Program,
@@ -245,6 +246,31 @@ def test_windows_stack_in_a_portrait_region() -> None:
         1: (0, Rect(0, 0, 1200, 640)),
         2: (0, Rect(0, 640, 1200, 1280)),
         3: (0, Rect(0, 1280, 1200, 1920)),
+    }
+
+
+def test_windows_beyond_the_side_by_side_limit_stack_in_layers_each_sharing_the_whole_place() -> (
+    None
+):
+    layered = Screens(
+        Setup.LAPTOP_ONLY,
+        frozendict({Role.LAPTOP: Rect(0, 0, 1920, 1200)}),
+        Layout(
+            frozendict(), others=Position(0, Role.LAPTOP, FULL), side_by_side=2
+        ),
+    )
+    whole = Rect(0, 0, 1920, 1200)
+    left, right = Rect(0, 0, 960, 1200), Rect(960, 0, 1920, 1200)
+    assert place(layered, (Group(PYTHON, (1, 2, 3, 4, 5)),)) == {
+        1: Target(0, left, Layer(whole, 0)),
+        2: Target(0, right, Layer(whole, 0)),
+        3: Target(0, left, Layer(whole, 1)),
+        4: Target(0, right, Layer(whole, 1)),
+        5: Target(0, whole, Layer(whole, 2)),
+    }
+    assert place(layered, (Group(PYTHON, (1, 2)),)) == {
+        1: Target(0, left),
+        2: Target(0, right),
     }
 
 

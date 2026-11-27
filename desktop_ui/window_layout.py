@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from fractions import Fraction
 
@@ -134,6 +134,12 @@ class Layout:
     places: frozendict[App, Places]
     others: Position
     """The place every application the layout doesn't name shares, in their stable order."""
+    side_by_side: int | None = field(default=None, kw_only=True)
+    """The most windows a place shows at once; more stack in layers on top, each layer sharing the place again. None shows them all."""
+
+    def __post_init__(self) -> None:
+        if self.side_by_side is not None and self.side_by_side < 1:
+            raise ValueError("A place shows at least one window per layer.")
 
     @property
     def desktops(self) -> int:
@@ -202,10 +208,20 @@ def groups(shelf: Shelf, eligible: frozenset[int]) -> tuple[Group, ...]:
 
 
 @dataclass(frozen=True, slots=True)
+class Layer:
+    place: Rect
+    """The whole place whose layers stack, in physical pixels; it tells one stack from another."""
+    depth: int
+    """Zero for the bottom layer, counting up."""
+
+
+@dataclass(frozen=True, slots=True)
 class Target:
     desktop: int
     rect: Rect
     """Where the window's drawn edges go, in physical pixels."""
+    layer: Layer | None = None
+    """Its layer, when its place holds more windows than one layer shows."""
 
 
 type Placement = frozendict[int, Target]
@@ -257,12 +273,21 @@ def place(where: Screens, apps: Sequence[Group]) -> Placement:
     def split_up(
         position: Position, handles: Sequence[int]
     ) -> Iterator[tuple[int, Target]]:
-        for handle, rect in zip(
-            handles,
-            split(where.roles[position.role], position.region, len(handles)),
-            strict=True,
-        ):
-            yield handle, Target(position.desktop, rect)
+        work = where.roles[position.role]
+        stacked = layers(handles, where.layout.side_by_side)
+        whole = pixels(work, position.region)
+        for depth, layer in enumerate(stacked):
+            for handle, rect in zip(
+                layer, split(work, position.region, len(layer)), strict=True
+            ):
+                yield (
+                    handle,
+                    Target(
+                        position.desktop,
+                        rect,
+                        Layer(whole, depth) if len(stacked) > 1 else None,
+                    ),
+                )
 
     return frozendict(
         (
@@ -273,6 +298,16 @@ def place(where: Screens, apps: Sequence[Group]) -> Placement:
                 for pair in split_up(position, handles)
             ),
         )
+    )
+
+
+def layers(
+    handles: Sequence[int], side_by_side: int | None
+) -> tuple[tuple[int, ...], ...]:
+    width = side_by_side or max(len(handles), 1)
+    return tuple(
+        tuple(handles[start : start + width])
+        for start in range(0, len(handles), width)
     )
 
 
@@ -332,6 +367,35 @@ def reading_order(
     )
     return tuple(
         sorted(corners, key=lambda app: (corners[app].x, corners[app].y))
+    )
+
+
+def stack(placement: Placement, window: int) -> tuple[tuple[int, ...], ...]:
+    """The window's stack, its layers bottom first, each in placement order; empty when its place isn't layered."""
+    if not (target := placement.get(window)) or not (layer := target.layer):
+        return ()
+    members = tuple(
+        (handle, below.depth)
+        for handle, other in placement.items()
+        if (below := other.layer)
+        and other.desktop == target.desktop
+        and below.place == layer.place
+    )
+    return tuple(
+        tuple(handle for handle, at in members if at == depth)
+        for depth in range(1 + max(at for _, at in members))
+    )
+
+
+def mates(placement: Placement, window: int) -> tuple[int, ...]:
+    """The other windows of the window's layer, which come up with it."""
+    return next(
+        (
+            tuple(handle for handle in shown if handle != window)
+            for shown in stack(placement, window)
+            if window in shown
+        ),
+        (),
     )
 
 

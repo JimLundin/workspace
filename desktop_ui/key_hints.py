@@ -12,6 +12,7 @@ from desktop_ui.navigation import (
     identity,
     keyed,
     launcher,
+    shown,
 )
 from protocol import Target, Tool
 from winapi.shapes import Rect
@@ -99,6 +100,7 @@ def rank(keycap: Keycap) -> int:
 
 
 def hints(world: World, letters: frozendict[Target, str]) -> tuple[Badge, ...]:
+    visible = shown(world)
     drawn = tuple(
         each
         for request, letter in letters.items()
@@ -116,6 +118,6 @@ def hints(world: World, letters: frozendict[Target, str]) -> tuple[Badge, ...]:
             ),
         )
         for handle, target in world.placement.items()
-        if target.desktop == world.current
+        if handle in visible
     )
     return tuple(badge for badge in badges if badge.keycaps)

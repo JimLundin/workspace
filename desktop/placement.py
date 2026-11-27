@@ -84,6 +84,7 @@ SETUPS: Final = Setups(
                     }
                 ),
                 others=Position(4, Role.LAPTOP, FULL),
+                side_by_side=2,
             ),
             Setup.HOME: Layout(
                 frozendict(

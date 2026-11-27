@@ -123,6 +123,9 @@ class Tool(Enum):
     FOCUS_DOWN = 51
     FOCUS_UP = 52
     FOCUS_RIGHT = 53
+    LAYER_DOWN = 54
+    """Bring up the layer below the focused window's, in a place stacked in layers; from the bottom, the top."""
+    LAYER_UP = 55
     PLACEMENT_PAUSE = 58
     """Pause or resume automatic window placement."""
     PLACE_NOW = 59

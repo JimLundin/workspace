@@ -4,7 +4,7 @@ from typing import Final, assert_never
 
 import protocol
 from desktop_ui.shell_items import PinnedApp, next_window
-from desktop_ui.window_layout import App, Placement, Program
+from desktop_ui.window_layout import App, Placement, Program, stack
 from winapi.shapes import Rect
 
 
@@ -36,6 +36,12 @@ class SpatialFocus:
 
 
 @dataclass(frozen=True, slots=True)
+class StepLayer:
+    step: int
+    """Layers up (positive) or down; it wraps round the stack."""
+
+
+@dataclass(frozen=True, slots=True)
 class JumpDesktop:
     desktop: int
 
@@ -45,7 +51,13 @@ class Zoom: ...
 
 
 type Navigation = (
-    AppKey | CycleApp | ShowWindow | SpatialFocus | JumpDesktop | Zoom
+    AppKey
+    | CycleApp
+    | ShowWindow
+    | SpatialFocus
+    | StepLayer
+    | JumpDesktop
+    | Zoom
 )
 
 
@@ -64,6 +76,8 @@ KEYED: Final[frozendict[protocol.Tool, Order]] = frozendict(
         protocol.Tool.FOCUS_RIGHT: SpatialFocus(Direction.RIGHT),
         protocol.Tool.FOCUS_UP: SpatialFocus(Direction.UP),
         protocol.Tool.FOCUS_DOWN: SpatialFocus(Direction.DOWN),
+        protocol.Tool.LAYER_UP: StepLayer(1),
+        protocol.Tool.LAYER_DOWN: StepLayer(-1),
         protocol.Tool.DESKTOP_1: JumpDesktop(0),
         protocol.Tool.DESKTOP_2: JumpDesktop(1),
         protocol.Tool.DESKTOP_3: JumpDesktop(2),
@@ -185,11 +199,57 @@ def arrive(world: World, desktop: int) -> Effect:
     return Switch(desktop, remembered(world, desktop))
 
 
+def shown(world: World) -> frozenset[int]:
+    """The placed windows on the current desktop that no layer covers: each stack shows the layer of its window last in front, or its bottom one."""
+    order = (world.foreground, *world.recent)
+
+    def front(handle: int) -> int:
+        layers = stack(world.placement, handle)
+        return next(
+            (
+                depth
+                for window in order
+                for depth, layer in enumerate(layers)
+                if window in layer
+            ),
+            0,
+        )
+
+    return frozenset(
+        handle
+        for handle, target in world.placement.items()
+        if target.desktop == world.current
+        and (not (layer := target.layer) or layer.depth == front(handle))
+    )
+
+
+def climb(world: World, step: int, *, wrap: bool) -> int | None:
+    """The window at the focused one's spot, or the nearest to it, on the layer `step` layers up."""
+    layers = stack(world.placement, world.foreground)
+    here = next(
+        (
+            (depth, layer.index(world.foreground))
+            for depth, layer in enumerate(layers)
+            if world.foreground in layer
+        ),
+        None,
+    )
+    if here is None:
+        return None
+    depth, spot = here
+    to = (depth + step) % len(layers) if wrap else depth + step
+    if to == depth or not 0 <= to < len(layers):
+        return None
+    above = layers[to]
+    return above[min(spot, len(above) - 1)]
+
+
 def nearest(world: World, direction: Direction) -> int | None:
+    visible = shown(world)
     here = tuple(
         (handle, target.rect)
         for handle, target in world.placement.items()
-        if target.desktop == world.current
+        if handle in visible
     )
     origin = next(
         (rect for handle, rect in here if handle == world.foreground), None
@@ -241,6 +301,12 @@ def effect(navigation: Navigation, world: World) -> Effect:
             return Focus(window)
         case SpatialFocus(direction=direction):
             target = nearest(world, direction)
+            if target is None and direction in (Direction.UP, Direction.DOWN):
+                upward = direction is Direction.UP
+                target = climb(world, 1 if upward else -1, wrap=False)
+            return Focus(target) if target is not None else None
+        case StepLayer(step=step):
+            target = climb(world, step, wrap=True)
             return Focus(target) if target is not None else None
         case JumpDesktop(desktop=desktop):
             return arrive(world, desktop)
