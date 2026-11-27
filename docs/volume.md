@@ -6,14 +6,14 @@ lines are code lines. Product code averages 4.2 nodes a line.
 
 | | nodes | lines |
 |---|---:|---:|
-| **product** | 102,310 | 24,386 |
-| **support** | 65,270 | 14,295 |
+| **product** | 102,468 | 24,425 |
+| **support** | 65,335 | 14,303 |
 
 | area | nodes | lines |
 |---|---:|---:|
-| desktop_ui | 57,545 | 13,027 |
-| tests | 48,325 | 10,208 |
-| winapi | 21,727 | 5,650 |
+| desktop_ui | 57,701 | 13,066 |
+| tests | 48,390 | 10,216 |
+| winapi | 21,729 | 5,650 |
 | scripts | 12,816 | 2,986 |
 | keyboard | 8,731 | 1,878 |
 | assistant | 6,743 | 1,611 |
@@ -39,8 +39,8 @@ The 25 largest files:
 | `assistant/meetings.py` | 2,717 | 658 |
 | `desktop_ui/desktop_bar.py` | 2,676 | 681 |
 | `desktop_ui/keymap_views.py` | 2,672 | 573 |
+| `desktop_ui/application_observer.py` | 2,595 | 617 |
 | `desktop_ui/desktop_app.py` | 2,577 | 620 |
-| `desktop_ui/application_observer.py` | 2,439 | 578 |
 | `desktop_ui/desktop_control.py` | 2,305 | 594 |
 | `desktop_ui/marker_window.py` | 2,248 | 456 |
 | `keyboard/engine.py` | 2,224 | 472 |

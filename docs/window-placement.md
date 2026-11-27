@@ -51,7 +51,7 @@ layer of the window last in front there, or the bottom one.
 
 - Workspace manages resizable top-level windows of other programs. Dialogs and
   fixed-size windows keep their places.
-- Nothing is ever minimized: every app has a place in every setup, in the
+- Nothing is ever minimized, except a window Windows lost track of (below): every app has a place in every setup, in the
   place for others if need be. A minimized window is restored into its place, on
   whichever desktop it belongs, so a change of monitors sorts every window.
   There is no minimize key.
@@ -127,10 +127,12 @@ programs can't be moved.
 
 If Explorer restarts, Windows can lose track of the desktop of windows from
 programs that were already running, including windows those programs open
-later: such a window shows on every desktop and can't be moved to another.
-Workspace still sizes it on the desktop you're on, and the tray warns once
-for each program that has one, naming it. Restarting that program fixes it;
-moving a tab to a new window doesn't, since the program stays the same.
+later: Windows shows such a window on every desktop and it can't be moved to
+another. Workspace stands in for the desktop: it sizes the window while you're
+on its desktop, minimizes it when you leave (unless it's in front), and an app
+chord switches to its desktop first. The tray warns once for each program
+that has one, naming it. Restarting that program fixes it; moving a tab to a
+new window doesn't, since the program stays the same.
 
 Key hint badges sit at each window's placed rectangle; while placement is
 paused, or for a zoomed window, that can differ from where the window is.

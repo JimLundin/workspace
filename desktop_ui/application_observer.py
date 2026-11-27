@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from enum import Enum, auto
 from typing import assert_never
 from uuid import UUID
 
@@ -243,8 +244,9 @@ def lost_track(
         {window.exe for window in windows if window.handle in lost - warned}
     )
     return (
-        f"Windows lost track of a {exe} window's desktop, so it shows on "
-        f"every desktop. Restart {exe} to fix it."
+        f"Windows lost track of a {exe} window's desktop, so Workspace "
+        "minimizes it while you're on another desktop. "
+        f"Restart {exe} to fix it."
         for exe in exes
     )
 
@@ -255,6 +257,32 @@ def relocated(connection: VirtualDesktops, handle: int, desktop: UUID) -> bool:
     except OSError:
         return False
     return True
+
+
+class Seating(Enum):
+    PLACE = auto()
+    """On its desktop: size it."""
+    MOVE = auto()
+    """On another desktop: move it to its own, then size it."""
+    TUCK = auto()
+    """Shown on every desktop since the shell lost it, and not on its own: minimize it until its desktop is back."""
+    LEAVE = auto()
+    """Lost, but in front: leave it until focus moves on."""
+
+
+def seating(
+    at: int | None, wanted: int, current: int, *, front: bool
+) -> Seating:
+    if at is not None:
+        return Seating.PLACE if at == wanted else Seating.MOVE
+    if wanted == current:
+        return Seating.PLACE
+    return Seating.LEAVE if front else Seating.TUCK
+
+
+def tuck(handle: int) -> None:
+    if not windows.is_minimized(handle):
+        windows.show(handle, windows.SW_SHOWMINNOACTIVE)
 
 
 def arrange(
@@ -272,14 +300,27 @@ def arrange(
     current = ids.index(state.current)
     followed: int | None = None
     for handle, target in placement.items():
-        at = observed.desktops.get(handle, current)
-        if at != target.desktop and relocated(
-            connection, handle, ids[target.desktop]
+        match seating(
+            observed.desktops.get(handle),
+            target.desktop,
+            current,
+            front=handle == follow,
         ):
-            at = target.desktop
-            if handle == follow:
-                followed = target.desktop
-        if at == target.desktop:
+            case Seating.PLACE:
+                arrived = True
+            case Seating.MOVE:
+                arrived = relocated(connection, handle, ids[target.desktop])
+                if arrived and handle == follow:
+                    followed = target.desktop
+            case Seating.TUCK:
+                with suppress(OSError):
+                    tuck(handle)
+                arrived = False
+            case Seating.LEAVE:
+                arrived = False
+            case unknown:
+                assert_never(unknown)
+        if arrived:
             with suppress(OSError):
                 resize(handle, target, slot=handle in slots)
     if followed is not None and ids[followed] != state.current:
@@ -292,11 +333,15 @@ def arrange(
 def show(connection: Connection, placement: Placement, handle: int) -> None:
     if connection is not None:
         with suppress(OSError):
-            current, place_id = (
-                connection.observe().current,
-                connection.window_desktop(handle),
-            )
-            if place_id is not None and place_id != current:
+            state = connection.observe()
+            place_id = connection.window_desktop(handle)
+            if (
+                place_id is None
+                and (target := placement.get(handle))
+                and target.desktop < len(state.ids)
+            ):
+                place_id = state.ids[target.desktop]
+            if place_id is not None and place_id != state.current:
                 connection.switch(place_id)
     bring(placement, handle)
 
