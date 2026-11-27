@@ -3,7 +3,7 @@ import queue
 import subprocess
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from typing import assert_never
@@ -236,6 +236,19 @@ def fit(
     )
 
 
+def lost_track(
+    windows: Iterable[Window], lost: frozenset[int], warned: frozenset[int]
+) -> Iterator[str]:
+    exes = sorted(
+        {window.exe for window in windows if window.handle in lost - warned}
+    )
+    return (
+        f"Windows lost track of a {exe} window's desktop, so it shows on "
+        f"every desktop. Restart {exe} to fix it."
+        for exe in exes
+    )
+
+
 def relocated(connection: VirtualDesktops, handle: int, desktop: UUID) -> bool:
     try:
         connection.move(handle, desktop)
@@ -365,6 +378,8 @@ class _Watched:
     placement: Placement = NOWHERE
     paused: bool = False
     zoomed: int | None = None
+    lost: frozenset[int] = frozenset()
+    """Placed windows the shell no longer tracks, already warned about."""
     recent: tuple[int, ...] = ()
     launches: Launches = frozendict()
     world: World | None = None
@@ -422,6 +437,7 @@ class Worker:
         state = observed.state
         where = screens(screen.monitors(), self.observer.spec.setups)
         placement = watched.placement
+        lost = watched.lost
         if where is not None and state is not None:
             eligible = frozenset(
                 window.handle
@@ -433,6 +449,11 @@ class Worker:
                 )
             )
             placement = place(where, groups(grouped, eligible))
+            lost = frozenset(
+                handle for handle in eligible if handle not in observed.desktops
+            )
+            for warning in lost_track(observed.windows, lost, watched.lost):
+                self.observer.problem(warning)
             if not watched.paused and not windows.dragging():
                 kept = frozendict(
                     (handle, target)
@@ -480,6 +501,7 @@ class Worker:
                 connection=connection,
                 launches=outstanding(watched.launches, grouped),
                 zoomed=zoomed,
+                lost=lost,
                 where=where,
                 placement=placement,
                 framed=current,
